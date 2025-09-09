@@ -8,18 +8,82 @@ const nextConfig: NextConfig = {
   experimental: {
     inlineCss: true,
   },
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
+    // Ensure handlebars is bundled properly
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      handlebars: require.resolve('handlebars'),
+    };
+    
+    // For server-side, ensure proper module resolution
+    if (isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        handlebars: require.resolve('handlebars'),
+      };
+    }
+    
+    // Exclude Web3 packages from server-side bundling to prevent IndexedDB errors
+    if (isServer) {
+      config.externals = [
+        ...(config.externals || []),
+        '@rainbow-me/rainbowkit',
+        'wagmi',
+        '@tanstack/react-query',
+        'viem'
+      ];
+    }
+    
+    // Configure webpack to ignore files that shouldn't trigger rebuilds
+    config.watchOptions = {
+      ...config.watchOptions,
+      ignored: [
+        '**/node_modules/**',
+        '**/.next/**',
+        '**/.git/**',
+        '**/*.log',
+        '**/*.pid',
+        '**/dist/**',
+        '**/contracts/artifacts/**',
+        '**/contracts/cache/**',
+        '**/typechain-types/**',
+        '**/cypress/screenshots/**',
+        '**/cypress/videos/**',
+        '**/prisma/**',
+        '**/*.db',
+        '**/*.db-journal',
+        '**/*.sqlite',
+        '**/*.sqlite-journal',
+        '**/data/**',
+        '**/.eliza/**',
+        '**/.elizadb/**',
+        '**/.elizaos-cache/**',
+        '**/.eliza-runtime/**',
+        '**/eliza-data/**',
+        '**/logs/**',
+        '**/tmp/**',
+        '**/.cache/**',
+        '**/agent/**',
+        '**/agent.js',
+        '**/agent.js.map',
+        '**/chunk-*.js',
+        '**/chunk-*.js.map'
+      ],
+    };
+
+
     config.plugins.push(
       new webpack.IgnorePlugin({
         resourceRegExp: /^pg-native$|^cloudflare:sockets$/,
       }),
-      // Ignore the elizaos directory using checkResource
-      new webpack.IgnorePlugin({
-        checkResource(resource, context) {
-          // Ignore anything within the elizaos directory
-          return /elizaos\//.test(context);
-        },
-      })
+      // Ignore IndexedDB related imports on server
+      ...(isServer ? [
+        new webpack.DefinePlugin({
+          'typeof window': JSON.stringify('undefined'),
+          'typeof indexedDB': JSON.stringify('undefined')
+        })
+      ] : [])
     );
     // Return modified config
     return {

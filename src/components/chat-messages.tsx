@@ -6,7 +6,6 @@ import { ChatMessage } from "@/components/chat-message";
 import { USER_NAME } from "@/constants";
 import { Citation } from "@/types/chat";
 import { ChatMessage as ChatMessageType } from "@/types/chat-message";
-import { assert } from "@/utils/assert";
 
 interface ChatMessagesProps {
   messages: ChatMessageType[];
@@ -21,54 +20,18 @@ export function ChatMessages({
   followUpPromptsMap,
   onFollowUpClick,
 }: ChatMessagesProps) {
-  assert(
-    Array.isArray(messages),
-    `[ChatMessages] 'messages' prop is not an array: ${typeof messages}`,
-  );
-  assert(
-    typeof citationsMap === "object" && citationsMap !== null,
-    `[ChatMessages] 'citationsMap' prop is not an object: ${typeof citationsMap}`,
-  );
-  assert(
-    typeof followUpPromptsMap === "object" && followUpPromptsMap !== null,
-    `[ChatMessages] 'followUpPromptsMap' prop is not an object: ${typeof followUpPromptsMap}`,
-  );
-  assert(
-    typeof onFollowUpClick === "function",
-    `[ChatMessages] 'onFollowUpClick' prop is not a function: ${typeof onFollowUpClick}`,
-  );
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageRef = useRef<string>("");
-  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const scrollToBottom = (behavior: ScrollBehavior = "instant") => {
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
-
-    scrollTimeoutRef.current = setTimeout(() => {
-      window.scrollTo({
-        top: document.documentElement.scrollHeight + 400,
-        behavior,
-      });
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior });
     }, 100);
   };
 
   useEffect(() => {
     if (messages.length === 0) return;
     const lastMessage = messages[messages.length - 1];
-    assert(
-      lastMessage && typeof lastMessage === "object",
-      `[ChatMessages Effect 1] Invalid lastMessage (index ${messages.length - 1})`,
-    );
-    if (!lastMessage) return;
-    assert(
-      typeof lastMessage.text === "string" ||
-        lastMessage.text === null ||
-        lastMessage.text === undefined,
-      `[ChatMessages Effect 1] Invalid lastMessage.text (index ${messages.length - 1}): ${typeof lastMessage.text}`,
-    );
 
     const currentText = lastMessage.text ?? "";
     const isNewMessage = currentText !== lastMessageRef.current;
@@ -79,68 +42,26 @@ export function ChatMessages({
     }
   }, [messages]);
 
+  const lastMessageName = messages[messages.length - 1]?.name;
+  const lastMessageText = messages[messages.length - 1]?.text;
+
   useEffect(() => {
     if (!messages.length) return;
     const lastMessage = messages[messages.length - 1];
-    assert(
-      lastMessage && typeof lastMessage === "object",
-      `[ChatMessages Effect 2] Invalid lastMessage (index ${messages.length - 1})`,
-    );
-    if (!lastMessage) return;
-    assert(
-      typeof lastMessage.name === "string",
-      `[ChatMessages Effect 2] Invalid lastMessage.name (index ${messages.length - 1}): ${typeof lastMessage.name}`,
-    );
-    assert(
-      typeof lastMessage.text === "string" ||
-        lastMessage.text === null ||
-        lastMessage.text === undefined,
-      `[ChatMessages Effect 2] Invalid lastMessage.text (index ${messages.length - 1}): ${typeof lastMessage.text}`,
-    );
 
-    if (lastMessage.name !== USER_NAME) {
-      const isAtBottom =
-        window.innerHeight + window.scrollY >=
-        document.documentElement.scrollHeight - 100;
+    const isUserMessage = lastMessage.name === USER_NAME;
+    const hasContent = lastMessage.text && lastMessage.text.trim() !== "";
 
-      if (isAtBottom) {
-        scrollToBottom();
-      }
+    if (isUserMessage && hasContent) {
+      scrollToBottom("smooth");
     }
-  }, [messages[messages.length - 1]?.text]);
+  }, [lastMessageName, lastMessageText]);
 
-  useEffect(() => {
-    return () => {
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  console.log({
-    messages,
-    citationsMap,
-    followUpPromptsMap,
-  });
-
-  console.log("[ChatMessages Render] Rendering with messages prop:", messages);
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col">
       {messages.map((message, i) => {
-        assert(
-          message && typeof message === "object",
-          `[ChatMessages Map] Invalid message at index ${i}`,
-        );
-        if (!message) return null;
-        const messageKey = message.id || message.createdAt;
-        assert(
-          messageKey,
-          `[ChatMessages Map] Message at index ${i} lacks id and createdAt for key.`,
-        );
-        assert(
-          typeof message.name === "string",
-          `[ChatMessages Map] Invalid message.name at index ${i}: ${typeof message.name}`,
-        );
+        // Use a combination of message id/timestamp and index to ensure uniqueness
+        const messageKey = `${message.id || message.createdAt || i}_${i}`;
 
         const assistantIndex =
           message.name !== USER_NAME

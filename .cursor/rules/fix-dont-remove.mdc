@@ -1,0 +1,38 @@
+---
+alwaysApply: true
+---
+# Fix Problems - Never Remove Functionality
+
+## Core Principle
+**NEVER** reduce or remove existing functionality to work around a problem. **ALWAYS** fix the underlying issue properly.
+
+## Rules
+
+### When Encountering Errors or Issues
+- **DO NOT** comment out problematic code
+- **DO NOT** remove features that are "causing issues"
+- **DO NOT** simplify complex logic to avoid dealing with edge cases
+- **DO NOT** delete functionality to make something "work"
+- **DO NOT** bypass validation or security checks
+
+### Instead, You MUST
+- Debug and understand the root cause
+- Fix the actual problem in the code
+- Preserve all existing features while resolving issues
+- Enhance error handling rather than removing the feature
+- Refactor if needed, but maintain all capabilities
+- Add proper fixes that address the core issue
+
+### Examples
+
+❌ **WRONG**: "The payment processing is failing, so I'll remove it temporarily"
+✅ **RIGHT**: Debug why payment processing fails and fix the integration
+
+❌ **WRONG**: "This validation is causing errors, let me disable it"
+✅ **RIGHT**: Fix the validation logic or the data causing validation to fail
+
+❌ **WRONG**: "The WebSocket connection is unstable, I'll remove real-time features"
+✅ **RIGHT**: Implement proper reconnection logic and error recovery
+
+### Development Philosophy
+Every feature exists for a reason. If it's broken, fix it. If it's complex, that complexity likely serves a purpose. Your job is to make everything work correctly, not to make it simpler by removing capabilities.

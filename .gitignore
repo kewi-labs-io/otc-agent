@@ -63,3 +63,32 @@ elizaos/
 .elizadb/
 
 bun.lock
+/generated/prisma
+
+# Log files
+*.log
+*.pid
+dev.log
+hardhat.log
+nextjs.log
+deploy.log
+
+# Hardhat/Contract artifacts
+contracts/artifacts/
+contracts/cache/
+contracts/typechain-types/
+typechain-types/
+
+# Cypress test artifacts
+cypress/screenshots/
+cypress/videos/
+
+# Database files
+prisma/dev.db
+prisma/dev.db-journal
+
+# ElizaOS Runtime
+.eliza-runtime/
+
+
+data/

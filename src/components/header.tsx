@@ -3,17 +3,15 @@
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Dialog } from "@/components/dialog";
 import { DiscordIcon, XIcon } from "@/components/icons";
 import { Logo } from "@/components/logo";
+import { WalletConnector } from "./wallet-connector";
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
 
   const NavLinks = ({ mobile = false }) => (
     <>
@@ -75,7 +73,7 @@ export function Header() {
   );
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-10 bg-white dark:bg-black">
+    <header className="left-0 right-0 z-10 bg-white dark:bg-black">
       <nav className="px-4 lg:px-6 w-full" aria-label="Global">
         <div className="flex items-center justify-between py-4">
           <div className="flex">
@@ -86,6 +84,9 @@ export function Header() {
 
           <div className="gap-x-4 flex ml-auto items-center">
             <NavLinks />
+            <div className="ml-4 pl-4 border-l border-zinc-200 dark:border-zinc-800">
+              <WalletConnector onConnectionChange={() => {}} />
+            </div>
           </div>
         </div>
       </nav>

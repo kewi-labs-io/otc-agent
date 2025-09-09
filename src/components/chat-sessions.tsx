@@ -72,7 +72,6 @@ export const ChatSessions = ({
 
         setSessions(data.data?.sessions || []);
       } catch (err) {
-        console.error("[ChatSessions] Error:", err);
         setError(
           err instanceof Error ? err.message : "Failed to load chat sessions",
         );

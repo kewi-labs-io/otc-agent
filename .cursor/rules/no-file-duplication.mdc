@@ -1,0 +1,28 @@
+---
+alwaysApply: true
+---
+# File Management Rules
+
+## CRITICAL: No File Duplication or Simplification
+
+### Absolute Requirements
+- **NEVER** create duplicate files with variations like:
+  - `file-simple.ts` when `file.ts` exists
+  - `file-enhanced.ts` when `file.ts` exists  
+  - `file-v2.ts` when `file.ts` exists
+  - `component-basic.tsx` when `component.tsx` exists
+- **ALWAYS** edit existing files directly
+- **NEVER** create "simplified" versions of existing functionality
+- **NEVER** create parallel implementations
+
+### File Editing Protocol
+1. Always use `search_replace` or `MultiEdit` tools to modify existing files
+2. Read the full file context before making changes
+3. Preserve all existing functionality when adding features
+4. Maintain production-grade code quality at all times
+
+### Production Code Standards
+- All code must be production-ready, not prototypes
+- Include proper error handling, logging, and edge cases
+- Maintain existing patterns and conventions in the codebase
+- Keep complex logic when it serves a purpose - do not simplify for simplicity's sake

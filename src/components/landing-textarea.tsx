@@ -8,7 +8,6 @@ import { useCallback, useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 
 import { Button } from "@/components/button";
-import { ExamplePrompts } from "@/components/example-prompts";
 
 export const LandingTextarea = () => {
   const [input, setInput] = useState("");
@@ -41,15 +40,11 @@ export const LandingTextarea = () => {
   const createNewSession = useCallback(
     async (initialMessage: string) => {
       if (!userEntity) {
-        console.error("User entity not available");
-        return;
+        throw new Error("User entity not available");
       }
 
       try {
         setIsLoading(true);
-        console.log(
-          `[Landing] Creating new session with message: "${initialMessage}"`,
-        );
 
         const response = await fetch("/api/chat-session/create", {
           method: "POST",
@@ -69,12 +64,10 @@ export const LandingTextarea = () => {
         const result = await response.json();
         const sessionId = result.data.sessionId;
 
-        console.log(`[Landing] Created new session: ${sessionId}`);
 
         // Navigate to the new session
         push(`/chat/${sessionId}`);
       } catch (error) {
-        console.error("[Landing] Failed to create new session:", error);
         setIsLoading(false);
       }
     },
@@ -93,21 +86,20 @@ export const LandingTextarea = () => {
 
         createNewSession(input.trim());
       } catch (error) {
-        console.error(error);
         setIsLoading(false);
       }
     },
     [input, userEntity, createNewSession],
   );
 
-  const handlePromptSelect = useCallback(
-    (prompt: string) => {
-      if (userEntity) {
-        createNewSession(prompt);
-      }
-    },
-    [userEntity, createNewSession],
-  );
+  // const handlePromptSelect = useCallback(
+  //   (prompt: string) => {
+  //     if (userEntity) {
+  //       createNewSession(prompt);
+  //     }
+  //   },
+  //   [userEntity, createNewSession],
+  // );
 
   return (
     <div className="flex flex-col w-full gap-4">
@@ -144,7 +136,7 @@ export const LandingTextarea = () => {
                 aria-label="Prompt"
                 value={input}
                 onChange={handleInputChange}
-                placeholder="Ask a question about Eliza..."
+                placeholder="Negotiate a better rate..."
                 className={clsx([
                   "size-full bg-transparent",
                   "relative block size-full appearance-none",
@@ -186,8 +178,6 @@ export const LandingTextarea = () => {
           </form>
         </div>
       </span>
-
-      <ExamplePrompts onPromptSelect={handlePromptSelect} />
     </div>
   );
 };

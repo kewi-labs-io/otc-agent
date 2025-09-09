@@ -13,7 +13,6 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "types": ["@hapi/shot"],
     "plugins": [
       {
         "name": "next"
@@ -25,5 +24,13 @@
     "baseUrl": "."
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "elizaos/**/*"]
+  "exclude": [
+    "node_modules", 
+    "elizaos/**/*",
+    "src/agent.ts",
+    "src/lib/plugin-otc-desk/**/*",
+    "src/plugin-groq.ts",
+    "src/services/quoteApprovalWorker.ts",
+    "dist/**/*"
+  ]
 }

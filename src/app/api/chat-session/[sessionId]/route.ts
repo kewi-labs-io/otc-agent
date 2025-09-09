@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:3000";
-const AGENT_ID = process.env.NEXT_PUBLIC_AGENT_ID;
+import { agentRuntime } from "../../../../lib/agent-runtime";
 
 interface RouteParams {
   params: Promise<{
@@ -14,121 +11,104 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { sessionId } = await params;
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
+    const limit = parseInt(searchParams.get("limit") || "50");
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: "userId parameter is required" },
-        { status: 400 },
-      );
-    }
+    console.log(`[API] Fetching messages for session: ${sessionId}`);
 
-    if (!AGENT_ID) {
-      return NextResponse.json(
-        { error: "Agent ID not configured" },
-        { status: 500 },
-      );
-    }
-
-    console.log(`[API] Fetching session: ${sessionId} for user: ${userId}`);
-
-    // Get all channels from the correct ElizaOS API endpoint
-    const channelsResponse = await fetch(
-      `${API_BASE_URL}/api/messaging/central-servers/00000000-0000-0000-0000-000000000000/channels`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      },
-    );
-
-    if (!channelsResponse.ok) {
-      const errorText = await channelsResponse.text();
-      console.error(`[API] Failed to fetch channels:`, errorText);
+    // Get conversation details
+    const conversation = await agentRuntime.getConversation(sessionId);
+    
+    if (!conversation) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    const channelsData = await channelsResponse.json();
-    const channels = channelsData.data?.channels || channelsData.channels || [];
+    // Get messages for this conversation
+    const messages = await agentRuntime.getConversationMessages(sessionId, limit);
 
-    // Find the channel with matching sessionId ONLY
-    const sessionChannel = channels.find((channel: any) => {
-      const metadata = channel.metadata || {};
-      return (
-        channel.id === sessionId ||
-        metadata.sessionId === sessionId
-      );
+    // Transform messages to the expected format
+    const formattedMessages = messages.map(msg => {
+      const content = JSON.parse(msg.content);
+      return {
+        id: msg.id,
+        content: content.text || "",
+        isAgent: msg.isAgent,
+        userId: msg.userId,
+        createdAt: msg.createdAt,
+        metadata: content,
+      };
     });
-
-    if (!sessionChannel) {
-      return NextResponse.json({ error: "Session not found" }, { status: 404 });
-    }
-
-    // Fetch messages for this session using the correct API endpoint
-    let messages: any[] = [];
-    let messageCount = 0;
-
-    try {
-      const messagesResponse = await fetch(
-        `${API_BASE_URL}/api/messaging/central-channels/${sessionChannel.id}/messages?limit=100`,
-        {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-
-      if (messagesResponse.ok) {
-        const messagesData = await messagesResponse.json();
-        messages = messagesData.data?.messages || messagesData.messages || [];
-        messageCount = messages.length;
-      }
-    } catch (error) {
-      console.error(
-        `[API] Error fetching messages for session ${sessionId}:`,
-        error,
-      );
-    }
-
-    // Find the first user message to use as session title
-    const firstUserMessage = messages
-      .sort(
-        (a, b) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      )
-      .find(
-        (msg: any) =>
-          msg.authorId === userId || msg.rawMessage?.senderId === userId,
-      );
-
-    const lastMessage = messages[messages.length - 1];
-
-    const sessionData = {
-      id: sessionId,
-      channelId: sessionChannel.id,
-      title: sessionChannel.name || "New Chat", // Use the channel name (timestamp-based)
-      messageCount,
-      lastActivity:
-        lastMessage?.createdAt ||
-        sessionChannel.updatedAt ||
-        sessionChannel.createdAt,
-      preview: lastMessage?.content?.substring(0, 100) || "",
-      isFromAgent: lastMessage?.authorId === AGENT_ID,
-      createdAt: sessionChannel.createdAt,
-      userId,
-      agentId: AGENT_ID,
-      metadata: sessionChannel.metadata,
-    };
 
     return NextResponse.json({
       success: true,
-      data: sessionData,
+      conversation,
+      messages: formattedMessages,
+      messageCount: formattedMessages.length,
     });
   } catch (error) {
     console.error(`[API] Error fetching session:`, error);
     return NextResponse.json(
       {
         error: "Failed to fetch session",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+export async function POST(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { sessionId } = await params;
+    const body = await request.json();
+    const { message, userId } = body;
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "userId is required" },
+        { status: 400 },
+      );
+    }
+
+    if (!message || !message.text) {
+      return NextResponse.json(
+        { error: "message.text is required" },
+        { status: 400 },
+      );
+    }
+
+    console.log(
+      `[API] Sending message to session: ${sessionId} from user: ${userId}`,
+    );
+
+    // Handle the message using our agent runtime
+    const result = await agentRuntime.handleMessage(
+      sessionId,
+      userId,
+      message,
+    );
+
+    // Wait a moment for the agent response to be generated
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Get the latest messages including the agent response
+    const messages = await agentRuntime.getConversationMessages(sessionId, 10);
+    const latestMessages = messages.slice(-2); // Get last 2 messages (user + agent)
+
+    return NextResponse.json({
+      success: true,
+      message: {
+        id: result.id,
+        content: message.text,
+        userId,
+        createdAt: result.createdAt,
+      },
+      agentResponse: latestMessages.find(m => m.isAgent) || null,
+    });
+  } catch (error) {
+    console.error("[API] Error sending message:", error);
+    return NextResponse.json(
+      {
+        error: "Failed to send message",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },

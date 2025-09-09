@@ -31,7 +31,7 @@ This starter implements the complete ElizaOS messaging flow:
 ## 📋 Prerequisites
 
 - **Node.js 18+** or **Bun**
-- **ElizaOS Server** running on localhost:3000 (or configured URL)
+- **ElizaOS Server** running on localhost:3137 (or configured URL)
 - **Active ElizaOS Agent** with valid agent ID
 
 ## 🛠️ Setup
@@ -50,8 +50,8 @@ Create a `.env` file:
 
 ```env
 # Next.js Configuration
-NEXT_PUBLIC_APP_URL=http://localhost:4000
-NEXT_PUBLIC_SERVER_URL=http://localhost:3000
+NEXT_PUBLIC_APP_URL=http://localhost:2222
+NEXT_PUBLIC_SERVER_URL=http://localhost:3137
 NEXT_TELEMETRY_DISABLED=true
 NEXT_PUBLIC_NODE_ENV="development"
 
@@ -88,7 +88,7 @@ ANTHROPIC_API_KEY=your-anthropic-api-key
 bun run dev  # or npm run dev
 ```
 
-Visit [http://localhost:4000](http://localhost:4000)
+Visit [http://localhost:2222](http://localhost:2222)
 
 ## 🔧 How It Works
 

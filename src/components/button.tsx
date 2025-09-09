@@ -156,7 +156,6 @@ export const styles = {
   },
 };
 
-
 type ButtonProps = (
   | { color?: keyof typeof styles.colors; outline?: never; plain?: never }
   | { color?: never; outline: true; plain?: never }
