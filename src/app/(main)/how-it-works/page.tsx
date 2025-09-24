@@ -9,7 +9,7 @@ export default function Page() {
   const { isConnected, networkLabel } = useMultiWallet();
   return (
     <>
-      <main className="flex-1 px-4 sm:px-6 py-10">
+      <main className="flex-1 px-4 bg-[#101010] sm:px-6 py-10">
         <div className="max-w-4xl mx-auto space-y-10">
           <div className="text-center space-y-3">
             <h1 className="text-3xl font-semibold">How It Works</h1>

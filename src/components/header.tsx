@@ -97,7 +97,7 @@ export function Header() {
         <div className="flex items-center justify-between py-4 gap-4 flex-nowrap">
           <div className="flex shrink-0">
             <Link href="/" className="-m-1.5 p-1.5">
-              <Logo width={128} height={32} />
+              <Logo width={290} height={22} />
             </Link>
           </div>
 
