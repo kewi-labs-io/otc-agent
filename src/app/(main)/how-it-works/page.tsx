@@ -1,15 +1,14 @@
 "use client";
-
-import Link from "next/link";
 import { Footer } from "@/components/footer";
 import { WalletConnector } from "@/components/wallet-connector";
 import { useMultiWallet } from "@/components/multiwallet";
 import Image from "next/image";
+import Card from "@/components/Card";
 
 export default function Page() {
   const { isConnected, networkLabel } = useMultiWallet();
   return (
-    <div className="relative flex flex-col px-4 sm:px-6 py-10 min-h-screen">
+    <div className="relative flex flex-col px-4 sm:px-6 py-10 h-screen">
       {/* Background with gradient overlay */}
       <div className="absolute inset-0">
         {/* Black background */}
@@ -38,26 +37,47 @@ export default function Page() {
       </div>
 
       {/* Content */}
-      <div className="relative z-10 flex flex-col items-start justify-start h-full">
-        <div className="flex items-center mb-8">
+      <div className="z-10 flex flex-col items-start justify-center h-full">
+        <div className="flex items-center mb-12">
           {/* Temporary replacement text */}
           <Image
             src="/how-it-works/text.svg"
             alt="How it works text"
-            height={120}
-            width={800}
+            height={220}
+            width={950}
             draggable={false}
             className="select-none"
           />
         </div>
 
         {/* New heading text */}
-        <h1 className="text-white text-4xl md:text-5xl lg:text-6xl font-bold text-start text-[25px] max-w-4xl leading-tight">
+        <h1 className="text-white font-bold text-start text-3xl max-w-4xl leading-tight">
           Buy discounted ELIZA with a time-based lockup.{" "}
-          <span className="text-orange-500">
+          <span className="text-[#F75B1E]">
+            {" "}
             Simple, transparent, on-chain.
           </span>
         </h1>
+        <div className="flex gap-4 mt-8 flex-row">
+          <Card
+            number="1"
+            title="Getting Started"
+            description="Learn the basics of our platform and how to get up and running quickly with your first project."
+            button="Start Tutorial"
+          />
+          <Card
+            number="2"
+            title="Getting Started"
+            description="Learn the basics of our platform and how to get up and running quickly with your first project."
+            button="Start Tutorial"
+          />
+          <Card
+            number="3"
+            title="Getting Started"
+            description="Learn the basics of our platform and how to get up and running quickly with your first project."
+            button="Start Tutorial"
+          />
+        </div>
       </div>
     </div>
   );
