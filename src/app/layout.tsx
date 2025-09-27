@@ -1,19 +1,25 @@
 import type { Metadata, Viewport } from "next";
 
 import { siteConfig } from "@/app/constants";
-import { inter } from "@/app/fonts";
 import "@/app/globals.css";
 import { ProgressBar } from "@/app/progress-bar";
 import { Toaster } from "@/app/toaster";
 import { Header } from "@/components/header";
 import { Providers } from "@/components/providers";
 import { XShareResume } from "@/components/x-share-resume";
+import { IBM_Plex_Mono } from "next/font/google";
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "white",
 };
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-ibm-plex-mono",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
@@ -45,7 +51,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html suppressHydrationWarning lang="en" className={inter.className}>
+    <html suppressHydrationWarning lang="en" className={ibmPlexMono.className}>
       <body className="min-h-dvh antialiased bg-white text-black scheme-light dark:bg-black dark:text-white dark:scheme-dark selection:!bg-[#fff0dd] dark:selection:!bg-[#3d2b15] overscroll-none">
         <Providers>
           <div className="flex h-dvh w-full flex-col overflow-hidden">
