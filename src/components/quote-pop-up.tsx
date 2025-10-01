@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { useState } from "react";
+import AmountSlider from "./amount-slider";
 
 export default function QuotePopUp() {
   return (
@@ -9,8 +10,10 @@ export default function QuotePopUp() {
       </h1>
       <div className="flex justify-between flex-row items-center w-full mt-4">
         <h1 className="font-medium text-[18px]">Pay with</h1>
-
         <TokenSelecter />
+      </div>
+      <div className="mt-6">
+        <AmountSlider />
       </div>
     </div>
   );
