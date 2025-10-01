@@ -80,7 +80,6 @@ export default function Page() {
             note={true}
           />
         </div>
-      <QuotePopUp />
       </div>
       <div
         className="absolute bottom-0 right-0 w-full h-2/3 z-20 pointer-events-none"
