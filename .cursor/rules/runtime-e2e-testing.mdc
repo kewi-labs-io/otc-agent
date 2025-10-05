@@ -1,0 +1,56 @@
+---
+alwaysApply: true
+---
+### Runtime E2E Testing Standard
+
+- **Principle**: All tests are runtime end-to-end. No unit tests, no mocks, no shallow checks, no trivial or "obvious" assertions.
+- **Scope**: Tests must exercise the real application by launching the local server, real agents, and a real game round, validating observable outcomes and invariants.
+
+### What "runtime" means
+
+- **Boot real dependencies**:
+  - Start local chain/server/agents using project scripts:
+    - [start-anvil.sh](mdc:amongus-8004/scripts/start-anvil.sh)
+    - [start-all.sh](mdc:amongus-8004/scripts/start-all.sh)
+    - [smoke-runtime.ts](mdc:amongus-8004/scripts/smoke-runtime.ts)
+    - [test-all.sh](mdc:amongus-8004/scripts/test-all.sh)
+  - Configure environment from examples when needed:
+    - [env.local.example](mdc:amongus-8004/server/env.local.example)
+
+- **Use Bun CLI** to run scripts and tests (not npm):
+```bash
+bash amongus-8004/scripts/start-anvil.sh &
+bash amongus-8004/scripts/start-all.sh &
+bun run amongus-8004/scripts/smoke-runtime.ts
+```
+
+- **Real data**: Prefer JSON assets and files over stubbed databases. Do not construct artificial "mock DB" layers.
+
+### Structural guidance
+
+- **Location**: Put E2E tests under `amongus-8004/tests` or a package-local `tests/`. Name scenarios clearly.
+- **Setup/Teardown**:
+  - Start required processes, wait for readiness (ports/log lines), then run the scenario.
+  - Assert on domain outcomes via public APIs/events/logs; avoid implementation-detail assertions.
+  - Clean up processes deterministically after each scenario.
+
+- **Minimize bloat**:
+  - Consolidate flows into a few high-signal scenarios instead of many small tests.
+  - Share boot helpers; do not duplicate boot logic across files.
+
+### Anti-patterns (never do)
+
+- **No mocks**: No mocking frameworks, spies on internal modules, or fake timers.
+- **No unit tests**: Do not write isolated unit/spec tests; everything must be runtime E2E.
+- **No trivial assertions**: Avoid testing language/runtime behaviors or obvious framework behavior.
+
+### References
+
+- Agents entry: [agents/src/index.ts](mdc:amongus-8004/agents/src/index.ts)
+- Server env example: [env.local.example](mdc:amongus-8004/server/env.local.example)
+- Orchestration scripts:
+  - [start-anvil.sh](mdc:amongus-8004/scripts/start-anvil.sh)
+  - [start-all.sh](mdc:amongus-8004/scripts/start-all.sh)
+  - [test-all.sh](mdc:amongus-8004/scripts/test-all.sh)
+  - [smoke-runtime.ts](mdc:amongus-8004/scripts/smoke-runtime.ts)
+

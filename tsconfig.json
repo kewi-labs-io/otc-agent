@@ -31,6 +31,8 @@
     "src/lib/plugin-otc-desk/**/*",
     "src/plugin-groq.ts",
     "src/services/quoteApprovalWorker.ts",
-    "dist/**/*"
+    "dist/**/*",
+    "solana/**/*",
+    "contracts/**/*"
   ]
 }

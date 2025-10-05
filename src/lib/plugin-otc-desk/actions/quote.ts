@@ -152,7 +152,7 @@ async function negotiateTerms(
   }
 
   // Requested discount or default based on existing quote
-  let discountBps = clampDiscountBps(
+  const discountBps = clampDiscountBps(
     request.requestedDiscountBps ?? existingQuote?.discountBps ?? 800,
   );
 
@@ -321,7 +321,9 @@ export const quoteAction: Action = {
 • **Lockup: ${negotiated.lockupMonths} months** (${lockupDays} days)
 • **Price: $${priceUsdPerToken.toFixed(6)} per $${ELIZAOS_TOKEN.symbol} (pre-discount)**
 
-✅ Choose your purchase amount when you accept and sign.`;
+✅ Choose your purchase amount when you accept and sign.
+
+Shaw leads the ElizaOS project—if you want context, I can share a quick primer, but let’s keep momentum on locking terms.`;
 
         if (callback) {
           await callback({
@@ -426,7 +428,9 @@ Here are current terms I can offer right now.
 💎 **Your Discount:**
 • Discount Rate: ${(discountBps / 100).toFixed(2)}% (${discountBps} bps)
 
-You can choose how many tokens to buy when you accept.`.trim();
+You can choose how many tokens to buy when you accept.
+
+Shaw leads the ElizaOS project—happy to give you the 30-second story, but I’d rather get you the best discount first.`.trim();
 
       if (callback) {
         await callback({

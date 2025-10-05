@@ -25,8 +25,7 @@ export async function createQuoteShareImage(
   ctx.fillRect(0, 0, width, height);
   ctx.globalAlpha = 1;
 
-  // Title
-  ctx.fillStyle = "#ffffff";
+  // Titleds
   ctx.font = "bold 64px Inter, Arial, sans-serif";
   ctx.fillText("ElizaOS OTC QUOTE", 60, 120);
 

@@ -85,6 +85,10 @@ async function main() {
   );
   console.log("  ✓ Limits configured");
 
+  // Enforce approver-only fulfillment by default
+  await deal.setRequireApproverToFulfill(true);
+  console.log("  ✓ Approver-only fulfillment enabled");
+
   // 6. Fund OTC Contract with ElizaOS tokens
   console.log("\n6️⃣ Funding OTC Contract with ElizaOS tokens...");
   const fundAmount = ethers.parseEther("10000000"); // 10M ElizaOS
@@ -110,6 +114,11 @@ async function main() {
   // Send some USDC to test wallet
   await usdcToken.transfer(testWallet.address, BigInt(10000) * BigInt(10 ** 6)); // 10k USDC
   console.log("  ✓ Funded with 10,000 USDC");
+
+  // 7a. Grant approver role to the test wallet for automated approvals in tests
+  console.log("\n7️⃣ Adding test wallet as approver...");
+  await deal.setApprover(testWallet.address, true);
+  console.log("  ✓ Test wallet added as approver");
 
   // 8. Save deployment info
   console.log("\n8️⃣ Saving deployment configuration...");

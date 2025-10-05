@@ -177,11 +177,12 @@ export const ChatMessage = memo(function ChatMessage({
         {!isUser && (
           <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center overflow-hidden">
             <Image
-              src="/eliza-white.png"
+              src="/tokens/eliza.svg"
               alt="Eliza"
               width={20}
               height={20}
               className="object-contain"
+              unoptimized
             />
           </div>
         )}

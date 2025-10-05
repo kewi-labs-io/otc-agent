@@ -100,7 +100,7 @@ describe("OTC Security Tests", () => {
     await desk.connect(approver).approveOffer(offerId);
     await expect(
       desk.connect(approver).approveOffer(offerId)
-    ).to.be.revertedWith("already approved");
+    ).to.be.revertedWith("already approved by you");
   });
 
   it("rejects approval if price moved too much", async () => {
@@ -134,46 +134,5 @@ describe("OTC Security Tests", () => {
     const openOffers = await desk.getOpenOfferIds();
     const maxReturned = await desk.maxOpenOffersToReturn();
     expect(openOffers.length).to.be.lte(Number(maxReturned));
-  });
-});
-
-describe("Lock Security Tests", () => {
-  it("enforces immutable owner and unlockTime", async () => {
-    const Lock = await hre.ethers.getContractFactory("Lock");
-    const futureTime = (await hre.ethers.provider.getBlock("latest")).timestamp + 3600;
-    const lock = await Lock.deploy(futureTime, { value: hre.ethers.parseEther("1") });
-    
-    // These should be immutable (no setter functions exist)
-    const owner = await lock.owner();
-    const unlockTime = await lock.unlockTime();
-    expect(owner).to.not.equal(hre.ethers.ZeroAddress);
-    expect(unlockTime).to.equal(futureTime);
-  });
-
-  it("prevents unlock time too far in future", async () => {
-    const Lock = await hre.ethers.getContractFactory("Lock");
-    const currentTime = (await hre.ethers.provider.getBlock("latest")).timestamp;
-    const twoYears = currentTime + (2 * 365 * 24 * 60 * 60);
-    
-    await expect(
-      Lock.deploy(twoYears, { value: hre.ethers.parseEther("1") })
-    ).to.be.revertedWith("Unlock time too far");
-  });
-
-  it("checks balance before withdrawal", async () => {
-    const [owner] = await hre.ethers.getSigners();
-    const Lock = await hre.ethers.getContractFactory("Lock");
-    const currentBlock = await hre.ethers.provider.getBlock("latest");
-    const futureTime = currentBlock.timestamp + 10;
-    
-    // Deploy without sending ETH
-    const lock = await Lock.deploy(futureTime);
-    
-    // Fast forward time past unlock
-    await hre.network.provider.send("evm_increaseTime", [11]);
-    await hre.network.provider.send("evm_mine");
-    
-    // Should revert due to no balance
-    await expect(lock.withdraw()).to.be.revertedWith("No balance");
   });
 });

@@ -1,0 +1,36 @@
+---
+alwaysApply: true
+description: "Avoid doc bloat; only README.md for docs. Prefer updating existing files; consolidate and delete duplicates instead of adding new files."
+---
+
+### Documentation and File-Consolidation Policy
+
+- **Documentation lives only in README.md**
+  - Do not create new markdown files (e.g., `FINAL_REVIEW.md`, `FIXES_IMPLEMENTED.md`, `CHANGELOG.md`).
+  - If new documentation is needed, update the root `README.md` (add or extend sections with anchors/headings as needed).
+  - PRs that add any non-README `.md` files must replace them with `README.md` edits.
+
+- **Prefer updating existing files over creating new ones**
+  - Add or change functionality by editing existing files when a natural home already exists.
+  - Avoid adding new scripts, tests, or helpers if an adjacent file can be extended.
+  - Consolidate duplicate or overlapping scripts/tests into a single entrypoint.
+
+- **Examples to consolidate**
+  - The following can be merged into a single test/verification entrypoint instead of maintaining separate scripts:
+    - [amongus-8004/agents/test-join-correct.ts](mdc:amongus-8004/agents/test-join-correct.ts)
+    - [amongus-8004/agents/test-join.ts](mdc:amongus-8004/agents/test-join.ts)
+    - [amongus-8004/agents/verify-setup.ts](mdc:amongus-8004/agents/verify-setup.ts)
+
+- **Exceptions (rare)**
+  - Create a new file only if functionality is genuinely novel and no suitable file exists.
+  - When an exception is made, include a short justification in the PR description and cross-link the decision in `README.md`.
+
+- **Cleanup and consolidation**
+  - When touching an area, delete stale/unused files and remove dead scripts.
+  - Prefer moving/renaming over duplicating when refactoring.
+  - Keep the workspace lean: fewer, clearer entrypoints are preferred (e.g., a single `agents/tests.ts` over many ad-hoc scripts).
+
+- **Review gates**
+  - Block changes that add any non-`README.md` markdown files.
+  - Flag PRs that add multiple new files where an existing file should be updated instead.
+

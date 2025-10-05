@@ -128,6 +128,7 @@ export const Chat = ({
 
         const response = await fetch(
           `/api/conversations/${conversationId}/messages`,
+          { cache: "no-store" },
         );
 
         if (response.ok) {
@@ -154,7 +155,9 @@ export const Chat = ({
               text: messageText,
               senderId: msg.userId,
               roomId: conversationId,
-              createdAt: new Date(msg.createdAt).getTime(),
+              createdAt: typeof msg.createdAt === "number"
+                ? msg.createdAt
+                : new Date(msg.createdAt || Date.now()).getTime(),
               source: CHAT_SOURCE,
               isLoading: false,
             };
@@ -191,8 +194,10 @@ export const Chat = ({
     // Poll every second for new messages
     pollingIntervalRef.current = setInterval(async () => {
       try {
+        // Append a cache-busting param to avoid any intermediary caching
         const response = await fetch(
-          `/api/conversations/${conversationId}/messages?afterTimestamp=${lastMessageTimestampRef.current}`,
+          `/api/conversations/${conversationId}/messages?afterTimestamp=${lastMessageTimestampRef.current}&_=${Date.now()}`,
+          { cache: "no-store" },
         );
 
         if (response.ok) {
@@ -219,7 +224,9 @@ export const Chat = ({
                 text: messageText,
                 senderId: msg.userId,
                 roomId: conversationId,
-                createdAt: new Date(msg.createdAt).getTime(),
+                createdAt: typeof msg.createdAt === "number"
+                  ? msg.createdAt
+                  : new Date(msg.createdAt || Date.now()).getTime(),
                 source: CHAT_SOURCE,
                 isLoading: false,
               };
@@ -302,24 +309,23 @@ export const Chat = ({
       setIsAgentThinking(true);
       setInputDisabled(true);
 
-      try {
-        // Send message via API
-        const response = await fetch(
-          `/api/conversations/${conversationId}/messages`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              userId,
-              text: messageText,
-              clientMessageId,
-            }),
-          },
-        );
+      const doPost = async () =>
+        fetch(`/api/conversations/${conversationId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, text: messageText, clientMessageId }),
+          cache: "no-store",
+          keepalive: true,
+        });
 
+      try {
+        let response = await doPost();
         if (!response.ok) {
-          throw new Error("Failed to send message");
+          // Retry once on transient server errors
+          await new Promise((r) => setTimeout(r, 800));
+          response = await doPost();
         }
+        if (!response.ok) throw new Error("Failed to send message");
 
         // Prefer server timestamp to avoid client/server clock skew missing agent replies
         try {
@@ -331,7 +337,6 @@ export const Chat = ({
             typeof serverCreatedAt === "number" &&
             !Number.isNaN(serverCreatedAt)
           ) {
-            // Subtract 1ms to include any agent messages written at the same DB timestamp second
             lastMessageTimestampRef.current = Math.max(
               lastMessageTimestampRef.current,
               serverCreatedAt - 1,
@@ -341,10 +346,25 @@ export const Chat = ({
           // If parsing fails, fall back to previous timestamp; polling will still pick up messages
         }
       } catch (error) {
-        setIsAgentThinking(false);
-        setInputDisabled(false);
-        setMessages((prev) => prev.filter((msg) => msg.id !== userMessage.id));
-        throw error;
+        // On network errors, try one delayed retry before failing
+        const isNetworkError = error instanceof TypeError;
+        if (isNetworkError) {
+          try {
+            await new Promise((r) => setTimeout(r, 1200));
+            const retryRes = await doPost();
+            if (!retryRes.ok) throw new Error("Failed to send message");
+          } catch (finalErr) {
+            setIsAgentThinking(false);
+            setInputDisabled(false);
+            setMessages((prev) => prev.filter((msg) => msg.id !== userMessage.id));
+            throw finalErr;
+          }
+        } else {
+          setIsAgentThinking(false);
+          setInputDisabled(false);
+          setMessages((prev) => prev.filter((msg) => msg.id !== userMessage.id));
+          throw error;
+        }
       }
     },
     [userId, conversationId, inputDisabled, unifiedConnected],
@@ -352,14 +372,28 @@ export const Chat = ({
 
   // Handle form submit
   const handleSubmit = useCallback(
-    (e: React.FormEvent) => {
+    async (e: React.FormEvent) => {
       e.preventDefault();
-      if (input.trim()) {
-        sendMessage(input.trim());
-        setInput("");
+      const trimmed = input.trim();
+      if (!trimmed) return;
+
+      // Ensure user is connected and conversation exists before sending
+      if (!unifiedConnected || !userId) {
+        setShowConnectOverlay(true);
+        return;
       }
+
+      let activeConversationId = conversationId;
+      if (!activeConversationId) {
+        activeConversationId = await createNewConversation();
+        if (!activeConversationId) return; // creation failed
+        setConversationId(activeConversationId);
+      }
+
+      await sendMessage(trimmed);
+      setInput("");
     },
-    [input, sendMessage],
+    [input, unifiedConnected, userId, conversationId, createNewConversation, sendMessage],
   );
 
   // Handle creating a new conversation when there isn't one

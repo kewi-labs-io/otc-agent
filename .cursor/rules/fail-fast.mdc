@@ -1,0 +1,59 @@
+---
+alwaysApply: true
+description: Fail-fast programming (no defensive code), minimal nesting, strong typing, and shared types across files
+---
+
+### Fail-fast, clean code, and strong typing
+
+- **Fail-fast, not defensive**: Prefer guard clauses and early returns. Validate only at the edges (I/O, HTTP handlers, RPC, filesystem, blockchain calls). Let unexpected errors surface; do not paper over failures.
+- **Avoid try/catch except at boundaries**: Catch at entrypoints and integration boundaries only; otherwise avoid. Never catch just to log and continue.
+- **Minimal nesting**: Keep conditional nesting ≤ 2 levels. Use early returns and function extraction to flatten control flow.
+- **Strong type assumptions**: Rely on compile-time types instead of runtime `typeof`/property-existence checks. Inside domain logic, assume valid, well-typed inputs.
+- **No loose types**: Avoid `any` and `unknown`. Prefer precise types, generics, and discriminated unions over broad unions or assertions.
+- **Shared types over local duplicates**: If a type is used in more than one file, move it to a shared module and import it. Prefer central packages like `amongus-8004/shared` or `A2A/types` for cross-package types; for app-local reuse, prefer `amongus-8004/src/types`.
+
+### Shared type locations
+
+- [amongus-8004/shared/src/types.ts](mdc:amongus-8004/shared/src/types.ts)
+- [A2A/types/src/types.ts](mdc:A2A/types/src/types.ts)
+- App-local reusable types:
+  - [amongus-8004/src/types/chat.ts](mdc:amongus-8004/src/types/chat.ts)
+  - [amongus-8004/src/types/chat-message.ts](mdc:amongus-8004/src/types/chat-message.ts)
+  - [amongus-8004/src/types/solana-wallet-adapter.d.ts](mdc:amongus-8004/src/types/solana-wallet-adapter.d.ts)
+
+### Examples (TypeScript)
+
+Bad (nested, defensive checks):
+```ts
+function handle(input: Thing | null | undefined) {
+  if (input) {
+    if (input.kind === 'ok') {
+      doWork(input);
+    } else {
+      throw new Error('bad');
+    }
+  }
+}
+```
+
+Good (early returns, strong assumptions):
+```ts
+function handle(input: Thing) {
+  if (input.kind !== 'ok') throw new Error('bad');
+  doWork(input);
+}
+```
+
+Catch only at edges:
+```ts
+export async function httpHandler(req: Request): Promise<Response> {
+  try {
+    const payload = await req.json();
+    const result = await processRequest(payload); // no try/catch inside
+    return new Response(JSON.stringify(result), { status: 200 });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: 'invalid request' }), { status: 400 });
+  }
+}
+```
+

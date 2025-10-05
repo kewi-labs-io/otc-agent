@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/button";
 import { useRouter } from "next/navigation";
-import { DealCompletionService } from "@/services/database";
 import { createDealShareImage } from "@/utils/share-card";
 
 interface DealCompletionProps {
@@ -48,13 +47,23 @@ export function DealCompletion({ quote }: DealCompletionProps) {
 
   const recordDealCompletion = async () => {
     try {
-      await DealCompletionService.recordDealCompletion({
-        userId: quote.userId,
-        quoteId: quote.quoteId,
-        transactionHash: quote.transactionHash || "pending",
-        volumeUsd: quote.totalUsd,
-        savedUsd: quote.discountUsd,
+      const response = await fetch("/api/deal-completion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "complete",
+          quoteId: quote.quoteId,
+          tokenAmount: quote.tokenAmount,
+          paymentCurrency: quote.paymentCurrency,
+          transactionHash: quote.transactionHash || "pending",
+          blockNumber: undefined, // Add if available
+          offerId: undefined, // Add if available
+        }),
       });
+      
+      if (!response.ok) {
+        throw new Error("Failed to record deal completion");
+      }
     } catch (error) {
       console.error("Failed to record deal completion:", error);
     }
@@ -107,7 +116,15 @@ export function DealCompletion({ quote }: DealCompletionProps) {
       }
 
       // Track share
-      await DealCompletionService.incrementShareCount(quote.quoteId, "twitter");
+      await fetch("/api/deal-completion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "share",
+          quoteId: quote.quoteId,
+          platform: "twitter",
+        }),
+      });
       setShareCount(shareCount + 1);
     } catch (error) {
       console.error("Failed to share:", error);

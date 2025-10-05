@@ -96,6 +96,13 @@ export function AcceptQuoteModal({
   const [step, setStep] = useState<StepState>("amount");
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [requireApprover, setRequireApprover] = useState(false);
+  const [lastSignedMessage, setLastSignedMessage] = useState<string | undefined>(
+    undefined,
+  );
+  const [lastSignature, setLastSignature] = useState<`0x${string}` | undefined>(
+    undefined,
+  );
   const isSolanaActive = activeFamily === "solana";
   const SOLANA_RPC =
     (process.env.NEXT_PUBLIC_SOLANA_RPC_URL as string | undefined) ||
@@ -150,6 +157,22 @@ export function AcceptQuoteModal({
       }
     } catch {}
   }, [isOpen, activeFamily]);
+
+  // Read approver-only mode flag
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!isOpen || !otcAddress) return;
+        const flag = (await publicClient.readContract({
+          address: otcAddress as `0x${string}`,
+          abi,
+          functionName: "requireApproverToFulfill",
+          args: [],
+        } as any)) as boolean;
+        setRequireApprover(Boolean(flag));
+      } catch {}
+    })();
+  }, [isOpen, otcAddress, publicClient, abi]);
 
   const discountBps = useMemo(() => {
     const fromQuote = initialQuote?.discountBps;
@@ -209,7 +232,7 @@ export function AcceptQuoteModal({
       abi,
       functionName: "nextOfferId",
       args: [],
-    })) as bigint;
+    } as any)) as bigint;
     return id;
   }
 
@@ -220,7 +243,7 @@ export function AcceptQuoteModal({
       abi,
       functionName: "offers",
       args: [offerId],
-    })) as any;
+    } as any)) as any;
   }
 
   async function wait(ms: number) {
@@ -251,14 +274,20 @@ export function AcceptQuoteModal({
 
       const { wei, usdc } = computePayment(offer);
       try {
-        if (wei && wei > 0n) {
-          await fulfillOffer(offerId, wei);
-        } else if (usdc && usdc > 0n) {
-          await approveUsdc(usdc);
-          await fulfillOffer(offerId);
-        } else {
-          throw new Error("Unable to compute payment amount");
-        }
+        // Always route fulfillment through backend approver wallet
+        const res = await fetch("/api/otc/fulfill", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            offerId: offerId.toString(),
+            currency: wei ? "ETH" : "USDC",
+            valueWei: wei ? wei.toString() : undefined,
+            beneficiary: address,
+            signature: lastSignature,
+            message: lastSignedMessage,
+          }),
+        });
+        if (!res.ok) throw new Error(await res.text());
         // After sending, wait briefly and confirm state
         await wait(3000);
         const after = await readOffer(offerId);
@@ -441,10 +470,12 @@ export function AcceptQuoteModal({
         2,
       )}% discount with ${lockupDays} days lockup, paying in ${currency}. Wallet: ${address}`;
       try {
-        await signMessageAsync({
+        const sig = await signMessageAsync({
           account: address as `0x${string}`,
           message: msg,
         });
+        setLastSignedMessage(msg);
+        setLastSignature(sig);
       } catch {
         // user may reject; continue without signature but record intent
       }
@@ -736,6 +767,12 @@ export function AcceptQuoteModal({
             </div>
           </div>
         </div>
+
+        {requireApprover && (
+          <div className="px-5 pb-1 text-xs text-zinc-400">
+            Payment will be executed by the desk's whitelisted approver wallet on your behalf after approval.
+          </div>
+        )}
 
         {(error || validationError || insufficientFunds) && (
           <div className="px-5 pt-2 text-xs text-red-400">

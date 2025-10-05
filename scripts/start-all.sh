@@ -14,28 +14,23 @@ HARDHAT_PID=$!
 echo "   Hardhat PID: $HARDHAT_PID"
 sleep 5
 
-# Deploy contracts
+# Deploy contracts (single deploy script handles token, feeds, OTC, funding)
 echo "📝 Deploying contracts..."
-cd contracts && npx hardhat ignition deploy ./ignition/modules/OTCDesk.ts --network localhost > ../deploy.log 2>&1
+(cd /Users/shawwalters/eliza-nextjs-starter/contracts && npx hardhat run scripts/deploy-eliza-otc.ts --network localhost > ../deploy.log 2>&1)
 if [ $? -ne 0 ]; then
     echo "   ❌ Contract deployment failed. Check deploy.log"
     exit 1
 fi
-echo "   ✅ Contracts deployed"
+echo "   ✅ Contracts deployed and funded"
 
-# Deploy TestToken
-echo "🪙 Deploying TestToken..."
-(cd contracts && npx hardhat run deploy-test-token.ts --network localhost >> ../deploy.log 2>&1)
-if [ $? -ne 0 ]; then
-    echo "   ❌ TestToken deployment failed. Check deploy.log"
-    exit 1
-fi
-echo "   ✅ TestToken deployed and OTC contract funded"
-
-# Initialize database
+# Initialize database (optional)
 echo "🗄️ Setting up database..."
-npx prisma migrate dev --name init > prisma.log 2>&1
-echo "   ✅ Database initialized"
+if [ -z "$POSTGRES_URL" ]; then
+  echo "   ℹ️  POSTGRES_URL not set; skipping Prisma migrate (using default SQLite/drizzle flows)" | tee -a prisma.log
+else
+  npx prisma migrate dev --name init > prisma.log 2>&1 || echo "   ⚠️  Prisma migrate may have failed; continuing (see prisma.log)"
+  echo "   ✅ Database initialized (or skipped)"
+fi
 
 # Build the project first to avoid routes-manifest issues
 echo "🏗️ Building project..."

@@ -1,6 +1,6 @@
 // Serverless-compatible agent runtime with Drizzle ORM for Next.js
 import { v4 as uuidv4 } from "uuid";
-import { eq, desc, gt, and, asc, sql } from "drizzle-orm";
+import { eq, desc, gt, gte, and, asc, sql } from "drizzle-orm";
 // DO NOT replace with an agent-simple.ts, it won't work!
 import agent from "./agent";
 import {
@@ -189,17 +189,35 @@ class AgentRuntimeManager {
         );
       }
 
-      // Always run plugin migrations once (idempotent) so required tables like 'memories' exist
-      const { DatabaseMigrationService } = await import("@elizaos/plugin-sql");
-      const migrationService = new DatabaseMigrationService();
-      await migrationService.initializeWithDatabase(db as unknown as any);
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore - plugin typing is not critical here
-      migrationService.discoverAndRegisterPluginSchemas(agent.plugins || []);
-      await migrationService.runAllPluginMigrations();
-      console.log(
-        "[AgentRuntime] Ensured built-in plugin tables via migrations",
-      );
+      // Run plugin migrations only when a compatible database adapter is detected.
+      // The @elizaos/plugin-sql package also self-manages migrations when its adapter is registered,
+      // so we skip our manual path when running with libsql/SQLite or when no execute method exists.
+      try {
+        const hasExecute = typeof (db as any)?.execute === "function";
+        const usingSqlite =
+          process.env.DRIZZLE_SQLITE === "true" || process.env.USE_SQLITE === "true";
+        if (hasExecute && !usingSqlite) {
+          const { DatabaseMigrationService } = await import("@elizaos/plugin-sql");
+          const migrationService = new DatabaseMigrationService();
+          await migrationService.initializeWithDatabase(db as unknown as any);
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore - plugin typing is not critical here
+          migrationService.discoverAndRegisterPluginSchemas(agent.plugins || []);
+          await migrationService.runAllPluginMigrations();
+          console.log(
+            "[AgentRuntime] Ensured built-in plugin tables via migrations",
+          );
+        } else {
+          console.log(
+            "[AgentRuntime] Skipping manual plugin migrations (adapter will self-manage or not compatible)",
+          );
+        }
+      } catch (pluginMigErr) {
+        console.warn(
+          "[AgentRuntime] Plugin migration step skipped due to adapter constraints:",
+          pluginMigErr,
+        );
+      }
 
       // Ensure app tables (quotes, user_sessions) exist (idempotent)
       try {
@@ -367,6 +385,7 @@ class AgentRuntimeManager {
       agentId: agentId || "otc-desk-agent",
       content: JSON.stringify(content),
       isAgent: false,
+      createdAt: new Date(),
     };
 
     // Store user message in database
@@ -390,6 +409,7 @@ class AgentRuntimeManager {
     // Emit MESSAGE_RECEIVED and delegate handling to plugins
     console.log("[AgentRuntime] Emitting MESSAGE_RECEIVED event to plugins");
 
+    let agentResponded = false;
     try {
       await runtime.emitEvent(EventType.MESSAGE_RECEIVED, {
         runtime,
@@ -417,6 +437,7 @@ class AgentRuntimeManager {
               type: "agent",
             }),
             isAgent: true,
+            createdAt: new Date(),
           };
 
           try {
@@ -426,6 +447,7 @@ class AgentRuntimeManager {
             );
             await db.insert(messages).values(agentMessage);
             console.log("[AgentRuntime] Agent message inserted successfully");
+            agentResponded = true;
           } catch (error) {
             console.error(
               "[AgentRuntime] Error inserting agent message:",
@@ -451,6 +473,32 @@ class AgentRuntimeManager {
       );
     }
 
+    // If no plugin produced a response, provide a helpful default agent reply
+    if (!agentResponded) {
+      const fallbackText =
+        "I’m here to help you with an OTC quote for ElizaOS. Shaw leads the ElizaOS project; tell me your lockup (weeks or months) and target discount and I’ll propose terms.";
+
+      const fallbackMessage: NewMessage = {
+        id: uuidv4(),
+        conversationId,
+        userId: "otc-desk-agent",
+        agentId: "otc-desk-agent",
+        content: JSON.stringify({ text: fallbackText, type: "agent" }),
+        isAgent: true,
+        createdAt: new Date(),
+      };
+
+      try {
+        await db.insert(messages).values(fallbackMessage);
+        await db
+          .update(conversations)
+          .set({ lastMessageAt: new Date(), updatedAt: new Date() })
+          .where(eq(conversations.id, conversationId));
+      } catch (err) {
+        console.warn("[AgentRuntime] Failed to insert fallback agent reply:", err);
+      }
+    }
+
     return insertedUserMessage;
   }
 
@@ -462,7 +510,7 @@ class AgentRuntimeManager {
   ): Promise<Message[]> {
     const baseWhere = eq(messages.conversationId, conversationId);
     const whereClause = afterTimestamp
-      ? and(baseWhere, gt(messages.createdAt, new Date(afterTimestamp)))
+      ? and(baseWhere, gte(messages.createdAt, new Date(afterTimestamp)))
       : baseWhere;
 
     const results = await db

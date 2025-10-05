@@ -59,7 +59,7 @@ export default function DealPage() {
             Deal Not Found
           </h1>
           <p className="text-zinc-600 dark:text-zinc-400">
-            This deal may have expired or doesn't exist.
+            This deal may have expired or doesn&apos;t exist.
           </p>
         </div>
       </div>

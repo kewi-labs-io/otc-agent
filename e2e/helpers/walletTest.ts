@@ -1,0 +1,50 @@
+import { BrowserContext, test as baseTest } from "@playwright/test";
+import dappwright, { Dappwright, MetaMaskWallet } from "@tenkeylabs/dappwright";
+
+let sharedContext: BrowserContext | undefined;
+let sharedWallet: Dappwright | undefined;
+
+export const test = baseTest.extend<{
+  context: BrowserContext;
+  wallet: Dappwright;
+}>({
+  // Provide a browser context that has the wallet extension loaded
+  context: async ({}, use) => {
+    if (!sharedContext) {
+      const [wallet, _page, context] = await dappwright.bootstrap("", {
+        wallet: "metamask",
+        version: MetaMaskWallet.recommendedVersion,
+        seed: "test test test test test test test test test test test junk",
+        headless: false,
+        // Speed up extension boot
+        args: ["--disable-features=IsolateOrigins,site-per-process"],
+      } as any);
+
+      // Ensure Hardhat local network exists in wallet
+      await wallet.addNetwork({
+        networkName: "Hardhat",
+        rpc: "http://127.0.0.1:8545",
+        chainId: 31337,
+        symbol: "ETH",
+      });
+
+      // Ensure wallet is unlocked and on the right network
+      await wallet.signin();
+      await wallet.switchNetwork("Hardhat");
+
+      sharedContext = context;
+      sharedWallet = wallet;
+    }
+
+    await use(sharedContext);
+  },
+
+  wallet: async ({}, use) => {
+    if (!sharedWallet) throw new Error("Wallet not initialized");
+    await use(sharedWallet);
+  },
+});
+
+export const expect = baseTest.expect;
+
+

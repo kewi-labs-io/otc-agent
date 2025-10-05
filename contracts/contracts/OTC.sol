@@ -55,6 +55,12 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
   // Chainlink price feeds
   AggregatorV3Interface public tokenUsdFeed; // token/USD (8 decimals)
   AggregatorV3Interface public ethUsdFeed;   // ETH/USD   (8 decimals)
+  
+  // Fallback price overrides (only used when oracle fails)
+  uint256 public manualTokenPrice; // 8 decimals
+  uint256 public manualEthPrice; // 8 decimals
+  uint256 public manualPriceTimestamp;
+  bool public useManualPrices = false;
 
   // Limits and controls
   uint256 public minUsdAmount = 5 * 1e8; // $5 with 8 decimals
@@ -67,6 +73,8 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
 
   // Optional restriction: if true, only beneficiary/agent/approver may fulfill
   bool public restrictFulfillToBeneficiaryOrApprover = false;
+  // If true, only the agent or an approver may fulfill. Takes precedence over restrictFulfillToBeneficiaryOrApprover.
+  bool public requireApproverToFulfill = false;
 
   // Treasury tracking
   uint256 public tokenDeposited;   // total tokens ever deposited
@@ -75,6 +83,9 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
   // Roles
   address public agent;
   mapping(address => bool) public isApprover; // distributors/approvers
+  uint256 public requiredApprovals = 1; // Number of approvals needed (for multi-sig)
+  mapping(uint256 => mapping(address => bool)) public offerApprovals; // offerId => approver => approved
+  mapping(uint256 => uint256) public approvalCount; // offerId => count
 
   // Offers
   uint256 public nextOfferId = 1;
@@ -84,7 +95,7 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
   
   // Emergency recovery
   bool public emergencyRefundsEnabled = false;
-  uint256 public emergencyRefundDeadline = 90 days; // Time after creation when emergency refund is allowed
+  uint256 public emergencyRefundDeadline = 30 days; // Time after creation when emergency refund is allowed (reduced from 90d for better UX)
 
   // Events
   event AgentUpdated(address indexed previous, address indexed newAgent);
@@ -101,6 +112,7 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
   event LimitsUpdated(uint256 minUsdAmount, uint256 maxTokenPerOrder, uint256 quoteExpirySeconds, uint256 defaultUnlockDelaySeconds);
   event MaxFeedAgeUpdated(uint256 maxFeedAgeSeconds);
   event RestrictFulfillUpdated(bool enabled);
+  event RequireApproverFulfillUpdated(bool enabled);
   event EmergencyRefundEnabled(bool enabled);
   event EmergencyRefund(uint256 indexed offerId, address indexed recipient, uint256 amount, PaymentCurrency currency);
   event StorageCleaned(uint256 offersRemoved);
@@ -140,6 +152,10 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
     agent = newAgent; 
   }
   function setApprover(address a, bool allowed) external onlyOwner { isApprover[a] = allowed; emit ApproverUpdated(a, allowed); }
+  function setRequiredApprovals(uint256 required) external onlyOwner {
+    require(required > 0 && required <= 10, "invalid required approvals");
+    requiredApprovals = required;
+  }
   function setFeeds(AggregatorV3Interface tokenUsd, AggregatorV3Interface ethUsd) external onlyOwner {
     require(tokenUsd.decimals() == 8, "token feed decimals");
     require(ethUsd.decimals() == 8, "eth feed decimals");
@@ -156,8 +172,16 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
     maxLockupSeconds = maxSecs; 
   }
   function setRestrictFulfill(bool enabled) external onlyOwner { restrictFulfillToBeneficiaryOrApprover = enabled; emit RestrictFulfillUpdated(enabled); }
+  function setRequireApproverToFulfill(bool enabled) external onlyOwner { requireApproverToFulfill = enabled; emit RequireApproverFulfillUpdated(enabled); }
   function setEmergencyRefund(bool enabled) external onlyOwner { emergencyRefundsEnabled = enabled; emit EmergencyRefundEnabled(enabled); }
   function setEmergencyRefundDeadline(uint256 days_) external onlyOwner { emergencyRefundDeadline = days_ * 1 days; }
+  function setManualPrices(uint256 tokenPrice, uint256 ethPrice, bool useManual) external onlyOwner {
+    require(tokenPrice > 0 && ethPrice > 0, "invalid prices");
+    manualTokenPrice = tokenPrice;
+    manualEthPrice = ethPrice;
+    manualPriceTimestamp = block.timestamp;
+    useManualPrices = useManual;
+  }
   function pause() external onlyOwner { _pause(); }
   function unpause() external onlyOwner { _unpause(); }
 
@@ -228,20 +252,28 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
     Offer storage o = offers[offerId];
     require(o.beneficiary != address(0), "no offer");
     require(!o.cancelled && !o.paid, "bad state");
-    require(!o.approved, "already approved"); // Prevent duplicate approvals
+    require(!offerApprovals[offerId][msg.sender], "already approved by you");
     
-    // Re-validate price hasn't moved too much (optional safety check)
+    // Re-validate price hasn't moved too much (safety check)
     uint256 currentPrice = _readTokenUsdPrice();
     uint256 priceDiff = currentPrice > o.priceUsdPerToken ? 
       currentPrice - o.priceUsdPerToken : o.priceUsdPerToken - currentPrice;
     // Allow up to 20% price movement
     require(priceDiff <= o.priceUsdPerToken / 5, "price moved too much");
     
-    o.approved = true;
+    // Record approval
+    offerApprovals[offerId][msg.sender] = true;
+    approvalCount[offerId]++;
+    
+    // Mark as approved if threshold reached
+    if (approvalCount[offerId] >= requiredApprovals) {
+      o.approved = true;
+    }
+    
     emit OfferApproved(offerId, msg.sender);
   }
 
-  function cancelOffer(uint256 offerId) external whenNotPaused {
+  function cancelOffer(uint256 offerId) external nonReentrant whenNotPaused {
     Offer storage o = offers[offerId];
     require(o.beneficiary != address(0), "no offer");
     require(!o.paid && !o.fulfilled, "already paid");
@@ -269,7 +301,9 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
     require(!o.cancelled && !o.paid && !o.fulfilled, "bad state");
     require(block.timestamp <= o.createdAt + quoteExpirySeconds, "expired");
     require(availableTokenInventory() >= o.tokenAmount, "insuff token inv");
-    if (restrictFulfillToBeneficiaryOrApprover) {
+    if (requireApproverToFulfill) {
+      require(msg.sender == agent || isApprover[msg.sender], "fulfill approver only");
+    } else if (restrictFulfillToBeneficiaryOrApprover) {
       require(msg.sender == o.beneficiary || msg.sender == agent || isApprover[msg.sender], "fulfill restricted");
     }
 
@@ -279,17 +313,7 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
       uint256 ethUsd = o.ethUsdPrice > 0 ? o.ethUsdPrice : _readEthUsdPrice(); // 8d
       uint256 weiAmount = _mulDivRoundingUp(usd, 1e18, ethUsd); // 18d, round up to avoid underpay
       require(msg.value >= weiAmount, "insufficient eth");
-      // Attempt to refund excess ETH if any, but don't fail if refund fails
-      // This prevents griefing attacks where a malicious contract could make fulfillOffer fail
-      if (msg.value > weiAmount) {
-        uint256 refundAmount = msg.value - weiAmount;
-        (bool refunded, ) = payable(msg.sender).call{ value: refundAmount }("");
-        if (!refunded) {
-          // Log failed refund but continue - prevents griefing attack
-          // The sender chose to send excess ETH and rejected the refund
-          emit RefundFailed(msg.sender, refundAmount);
-        }
-      }
+      // Record payment before any external interactions to prevent state races
       o.amountPaid = weiAmount;
       o.payer = msg.sender;
       o.paid = true;
@@ -303,6 +327,16 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
     }
     // reserve tokens for later claim
     tokenReserved += o.tokenAmount;
+    // For ETH payments, attempt to refund any excess ETH after state changes
+    if (o.currency == PaymentCurrency.ETH) {
+      uint256 refundAmount = msg.value - o.amountPaid;
+      if (refundAmount > 0) {
+        (bool refunded, ) = payable(msg.sender).call{ value: refundAmount }("");
+        if (!refunded) {
+          emit RefundFailed(msg.sender, refundAmount);
+        }
+      }
+    }
     emit OfferPaid(offerId, msg.sender, o.amountPaid);
   }
 
@@ -359,20 +393,49 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
 
   function getOffersForBeneficiary(address who) external view returns (uint256[] memory) { return _beneficiaryOfferIds[who]; }
 
-  // Pricing helpers
+  // Pricing helpers with fallback support
   function _readTokenUsdPrice() internal view returns (uint256) {
-    (uint80 roundId, int256 answer, , uint256 updatedAt, uint80 answeredInRound) = tokenUsdFeed.latestRoundData();
-    require(answer > 0, "bad price");
-    require(answeredInRound >= roundId, "stale round");
-    require(updatedAt > 0 && block.timestamp - updatedAt <= maxFeedAgeSeconds, "stale price");
-    return uint256(answer);
+    // Use manual price if enabled (emergency fallback)
+    if (useManualPrices) {
+      require(manualTokenPrice > 0, "manual price not set");
+      require(block.timestamp - manualPriceTimestamp <= maxFeedAgeSeconds, "manual price too old");
+      return manualTokenPrice;
+    }
+    
+    // Try oracle first
+    try tokenUsdFeed.latestRoundData() returns (
+      uint80 roundId, int256 answer, uint256, uint256 updatedAt, uint80 answeredInRound
+    ) {
+      require(answer > 0, "bad price");
+      require(answeredInRound >= roundId, "stale round");
+      require(updatedAt > 0 && block.timestamp - updatedAt <= maxFeedAgeSeconds, "stale price");
+      return uint256(answer);
+    } catch {
+      // Oracle failed - revert (owner must enable manual mode)
+      revert("oracle unavailable - enable manual prices");
+    }
   }
+  
   function _readEthUsdPrice() internal view returns (uint256) {
-    (uint80 roundId, int256 answer, , uint256 updatedAt, uint80 answeredInRound) = ethUsdFeed.latestRoundData();
-    require(answer > 0, "bad price");
-    require(answeredInRound >= roundId, "stale round");
-    require(updatedAt > 0 && block.timestamp - updatedAt <= maxFeedAgeSeconds, "stale price");
-    return uint256(answer);
+    // Use manual price if enabled (emergency fallback)
+    if (useManualPrices) {
+      require(manualEthPrice > 0, "manual eth price not set");
+      require(block.timestamp - manualPriceTimestamp <= maxFeedAgeSeconds, "manual price too old");
+      return manualEthPrice;
+    }
+    
+    // Try oracle first
+    try ethUsdFeed.latestRoundData() returns (
+      uint80 roundId, int256 answer, uint256, uint256 updatedAt, uint80 answeredInRound
+    ) {
+      require(answer > 0, "bad price");
+      require(answeredInRound >= roundId, "stale round");
+      require(updatedAt > 0 && block.timestamp - updatedAt <= maxFeedAgeSeconds, "stale price");
+      return uint256(answer);
+    } catch {
+      // Oracle failed - revert (owner must enable manual mode)
+      revert("oracle unavailable - enable manual prices");
+    }
   }
 
   function _mulDiv(uint256 a, uint256 b, uint256 d) internal pure returns (uint256) {

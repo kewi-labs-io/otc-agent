@@ -1,6 +1,7 @@
 #![allow(deprecated)]
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer as SplTransfer};
+use pyth_solana_receiver_sdk::price_update::PriceUpdateV2;
 
 declare_id!("EPqRoaDur9VtTKABWK3QQArV2wCYKoN3Zu8kErhrtUxp");
 
@@ -59,6 +60,7 @@ pub mod otc {
         desk.token_decimals = ctx.accounts.token_mint.decimals;
         desk.usdc_decimals = ctx.accounts.usdc_mint.decimals;
         require!(desk.usdc_decimals == 6, OtcError::UsdcDecimals);
+        require!(desk.token_decimals as u32 <= 18, OtcError::AmountRange);
         desk.min_usd_amount_8d = min_usd_amount_8d;
         desk.max_token_per_order = max_token_per_order;
         desk.quote_expiry_secs = quote_expiry_secs;
@@ -72,16 +74,88 @@ pub mod otc {
         desk.token_usd_price_8d = 0;
         desk.sol_usd_price_8d = 0;
         desk.prices_updated_at = 0;
+        desk.token_price_feed_id = [0u8; 32];
+        desk.sol_price_feed_id = [0u8; 32];
         Ok(())
     }
 
-    pub fn set_prices(ctx: Context<OnlyOwnerDesk>, token_usd_8d: u64, sol_usd_8d: u64, updated_at: i64, max_age: i64) -> Result<()> {
+    pub fn set_prices(ctx: Context<OnlyOwnerDesk>, token_usd_8d: u64, sol_usd_8d: u64, _updated_at: i64, max_age: i64) -> Result<()> {
+        require!(max_age >= 0, OtcError::AmountRange);
+        let now = Clock::get()?.unix_timestamp;
         let desk = &mut ctx.accounts.desk;
         desk.token_usd_price_8d = token_usd_8d;
         desk.sol_usd_price_8d = sol_usd_8d;
-        desk.prices_updated_at = updated_at;
+        desk.prices_updated_at = now;
         desk.max_price_age_secs = max_age;
-        emit!(PricesUpdated { token_usd_8d, sol_usd_8d, updated_at, max_age });
+        emit!(PricesUpdated { token_usd_8d, sol_usd_8d, updated_at: now, max_age });
+        Ok(())
+    }
+
+    pub fn set_pyth_feeds(ctx: Context<OnlyOwnerDesk>, token_feed_id: [u8; 32], sol_feed_id: [u8; 32]) -> Result<()> {
+        let desk = &mut ctx.accounts.desk;
+        desk.token_price_feed_id = token_feed_id;
+        desk.sol_price_feed_id = sol_feed_id;
+        Ok(())
+    }
+
+    pub fn update_prices_from_pyth(
+        ctx: Context<UpdatePricesFromPyth>,
+        token_feed_id: [u8; 32],
+        sol_feed_id: [u8; 32],
+        max_price_deviation_bps: u16,
+    ) -> Result<()> {
+        let desk = &mut ctx.accounts.desk;
+        // Enforce configured feed IDs and ignore arbitrary input
+        require!(desk.token_price_feed_id != [0u8; 32] && desk.sol_price_feed_id != [0u8; 32], OtcError::FeedNotConfigured);
+        require!(desk.token_price_feed_id == token_feed_id && desk.sol_price_feed_id == sol_feed_id, OtcError::BadState);
+        let clock = Clock::get()?;
+        let current_time = clock.unix_timestamp;
+        let max_age = desk.max_price_age_secs as u64;
+
+        // Get prices from Pyth with feed ID validation
+        let token_price = ctx.accounts.token_price_feed
+            .get_price_no_older_than(&clock, max_age, &desk.token_price_feed_id)
+            .map_err(|_| OtcError::StalePrice)?;
+        
+        let sol_price = ctx.accounts.sol_price_feed
+            .get_price_no_older_than(&clock, max_age, &desk.sol_price_feed_id)
+            .map_err(|_| OtcError::StalePrice)?;
+
+        // Convert Pyth prices to our 8-decimal format
+        let token_usd_8d = convert_pyth_price(token_price.price, token_price.exponent)?;
+        let sol_usd_8d = convert_pyth_price(sol_price.price, sol_price.exponent)?;
+
+        // Price deviation check (prevent manipulation/oracle attacks)
+        if desk.token_usd_price_8d > 0 && max_price_deviation_bps > 0 {
+            let old_price = desk.token_usd_price_8d;
+            let price_diff = if token_usd_8d > old_price {
+                token_usd_8d - old_price
+            } else {
+                old_price - token_usd_8d
+            };
+            let max_deviation = (old_price as u128 * max_price_deviation_bps as u128) / 10000u128;
+            require!(price_diff as u128 <= max_deviation, OtcError::PriceDeviationTooLarge);
+        }
+
+        // Also enforce deviation bound for SOL price if previously set
+        if desk.sol_usd_price_8d > 0 && max_price_deviation_bps > 0 {
+            let old_price = desk.sol_usd_price_8d;
+            let price_diff = if sol_usd_8d > old_price { sol_usd_8d - old_price } else { old_price - sol_usd_8d };
+            let max_deviation = (old_price as u128 * max_price_deviation_bps as u128) / 10000u128;
+            require!(price_diff as u128 <= max_deviation, OtcError::PriceDeviationTooLarge);
+        }
+
+        desk.token_usd_price_8d = token_usd_8d;
+        desk.sol_usd_price_8d = sol_usd_8d;
+        desk.prices_updated_at = current_time;
+
+        emit!(PricesUpdated {
+            token_usd_8d,
+            sol_usd_8d,
+            updated_at: current_time,
+            max_age: desk.max_price_age_secs
+        });
+
         Ok(())
     }
 
@@ -149,7 +223,7 @@ pub mod otc {
         Ok(())
     }
 
-    pub fn create_offer(ctx: Context<CreateOffer>, offer_id: u64, token_amount: u64, discount_bps: u16, currency: u8, lockup_secs: i64) -> Result<()> {
+    pub fn create_offer(ctx: Context<CreateOffer>, token_amount: u64, discount_bps: u16, currency: u8, lockup_secs: i64) -> Result<()> {
         msg!("enter create_offer");
         let desk = &mut ctx.accounts.desk;
         require!(!desk.paused, OtcError::Paused);
@@ -165,9 +239,11 @@ pub mod otc {
         let available = available_inventory(desk, ctx.accounts.desk_token_treasury.amount);
         require!(available >= token_amount, OtcError::InsuffInv);
 
-        require!(offer_id == desk.next_offer_id, OtcError::BadState);
-        let id = offer_id; desk.next_offer_id = desk.next_offer_id.checked_add(1).ok_or(OtcError::Overflow)?;
+        let id = desk.next_offer_id;
+        let next = desk.next_offer_id.checked_add(1).ok_or(OtcError::Overflow)?;
+        desk.next_offer_id = next;
         let offer_key = ctx.accounts.offer.key();
+
         let offer = &mut ctx.accounts.offer;
         offer.desk = desk.key();
         offer.id = id;
@@ -177,7 +253,7 @@ pub mod otc {
         offer.created_at = now;
         let lockup = if lockup_secs > 0 { lockup_secs } else { desk.default_unlock_delay_secs };
         require!(lockup <= desk.max_lockup_secs, OtcError::LockupTooLong);
-        offer.unlock_time = now + lockup;
+        offer.unlock_time = now.checked_add(lockup).ok_or(OtcError::Overflow)?;
         offer.price_usd_per_token_8d = price_8d;
         offer.sol_usd_price_8d = if currency == 0 { desk.sol_usd_price_8d } else { 0 };
         offer.currency = currency; // 0 SOL, 1 USDC
@@ -208,7 +284,8 @@ pub mod otc {
         let caller = ctx.accounts.caller.key();
         let now = Clock::get()?.unix_timestamp;
         if caller == offer.beneficiary {
-            require!(now >= offer.created_at + desk.quote_expiry_secs, OtcError::NotExpired);
+            let expiry = offer.created_at.checked_add(desk.quote_expiry_secs).ok_or(OtcError::Overflow)?;
+            require!(now >= expiry, OtcError::NotExpired);
         } else if caller == desk.owner || caller == desk.agent || desk.approvers.contains(&caller) {
         } else {
             return err!(OtcError::NotApprover);
@@ -223,9 +300,12 @@ pub mod otc {
         require!(!desk.paused, OtcError::Paused);
         validate_offer_pda(&desk.key(), &ctx.accounts.offer.key(), ctx.accounts.offer.id)?;
         let offer = &mut ctx.accounts.offer;
+        require!(offer.currency == 1, OtcError::BadState);
         require!(offer.approved, OtcError::NotApproved);
         require!(!offer.cancelled && !offer.paid && !offer.fulfilled, OtcError::BadState);
-        let now = Clock::get()?.unix_timestamp; require!(now <= offer.created_at + desk.quote_expiry_secs, OtcError::Expired);
+        let now = Clock::get()?.unix_timestamp;
+        let expiry = offer.created_at.checked_add(desk.quote_expiry_secs).ok_or(OtcError::Overflow)?;
+        require!(now <= expiry, OtcError::Expired);
         let available = available_inventory(desk, ctx.accounts.desk_token_treasury.amount); require!(available >= offer.token_amount, OtcError::InsuffInv);
         if desk.restrict_fulfill {
             let caller = ctx.accounts.payer.key();
@@ -251,9 +331,12 @@ pub mod otc {
         require!(!desk.paused, OtcError::Paused);
         validate_offer_pda(&desk.key(), &ctx.accounts.offer.key(), ctx.accounts.offer.id)?;
         let offer = &mut ctx.accounts.offer;
+        require!(offer.currency == 0, OtcError::BadState);
         require!(offer.approved, OtcError::NotApproved);
         require!(!offer.cancelled && !offer.paid && !offer.fulfilled, OtcError::BadState);
-        let now = Clock::get()?.unix_timestamp; require!(now <= offer.created_at + desk.quote_expiry_secs, OtcError::Expired);
+        let now = Clock::get()?.unix_timestamp;
+        let expiry = offer.created_at.checked_add(desk.quote_expiry_secs).ok_or(OtcError::Overflow)?;
+        require!(now <= expiry, OtcError::Expired);
         let available = available_inventory(desk, ctx.accounts.desk_token_treasury.amount); require!(available >= offer.token_amount, OtcError::InsuffInv);
         if desk.restrict_fulfill {
             let caller = ctx.accounts.payer.key();
@@ -312,6 +395,9 @@ pub mod otc {
         let bump_bytes = [bump];
         let seeds: [&[u8]; 3] = [b"desk", ctx.accounts.desk.owner.as_ref(), &bump_bytes];
         let signer_seeds: &[&[&[u8]]] = &[&seeds];
+        // Prevent withdrawing below reserved
+        let after_amount = ctx.accounts.desk_token_treasury.amount.checked_sub(amount).ok_or(OtcError::Overflow)?;
+        require!(after_amount >= ctx.accounts.desk.token_reserved, OtcError::InsuffInv);
         let cpi_accounts = SplTransfer { from: ctx.accounts.desk_token_treasury.to_account_info(), to: ctx.accounts.owner_token_ata.to_account_info(), authority: desk_ai };
         let cpi_ctx = CpiContext::new_with_signer(ctx.accounts.token_program.to_account_info(), cpi_accounts, signer_seeds);
         token::transfer(cpi_ctx, amount)?;
@@ -339,6 +425,12 @@ pub mod otc {
         let bump_bytes = [bump];
         let seeds: [&[u8]; 3] = [b"desk", ctx.accounts.desk.owner.as_ref(), &bump_bytes];
         let signer_seeds: &[&[&[u8]]] = &[&seeds];
+        // keep rent-exempt minimum
+        let rent = Rent::get()?;
+        let min_rent = rent.minimum_balance(8 + Desk::SIZE);
+        let current = ctx.accounts.desk.to_account_info().lamports();
+        let after = current.checked_sub(lamports).ok_or(OtcError::Overflow)?;
+        require!(after >= min_rent, OtcError::BadState);
         let ix = anchor_lang::solana_program::system_instruction::transfer(&ctx.accounts.desk.key(), &ctx.accounts.to.key(), lamports);
         anchor_lang::solana_program::program::invoke_signed(&ix, &[
             ctx.accounts.desk.to_account_info(),
@@ -349,6 +441,27 @@ pub mod otc {
     }
 }
 
+#[cfg(feature = "idl-build")]
+#[derive(Accounts)]
+pub struct InitDesk<'info> {
+    pub owner: Signer<'info>,
+    pub agent: UncheckedAccount<'info>,
+    pub token_mint: Account<'info, Mint>,
+    pub usdc_mint: Account<'info, Mint>,
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    // Simpler init for IDL build (no dynamic seeds to avoid macro resolution issues)
+    #[account(init, payer = payer, space = 8 + Desk::SIZE)]
+    pub desk: Account<'info, Desk>,
+    #[account(mut, constraint = desk_token_treasury.mint == token_mint.key(), constraint = desk_token_treasury.owner == desk.key())]
+    pub desk_token_treasury: Account<'info, TokenAccount>,
+    #[account(mut, constraint = desk_usdc_treasury.mint == usdc_mint.key(), constraint = desk_usdc_treasury.owner == desk.key())]
+    pub desk_usdc_treasury: Account<'info, TokenAccount>,
+}
+
+#[cfg(not(feature = "idl-build"))]
 #[derive(Accounts)]
 pub struct InitDesk<'info> {
     pub owner: Signer<'info>,
@@ -369,9 +482,21 @@ pub struct InitDesk<'info> {
 
 #[derive(Accounts)]
 pub struct OnlyOwnerDesk<'info> {
+    pub owner: Signer<'info>,
     #[account(mut, has_one = owner)]
     pub desk: Account<'info, Desk>,
-    pub owner: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct UpdatePricesFromPyth<'info> {
+    #[account(mut)]
+    pub desk: Account<'info, Desk>,
+    /// Pyth price feed account for token/USD
+    pub token_price_feed: Account<'info, PriceUpdateV2>,
+    /// Pyth price feed account for SOL/USD
+    pub sol_price_feed: Account<'info, PriceUpdateV2>,
+    /// Anyone can update prices from oracle
+    pub payer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -386,15 +511,38 @@ pub struct DepositTokens<'info> {
     pub token_program: Program<'info, Token>,
 }
 
+#[cfg(feature = "idl-build")]
 #[derive(Accounts)]
 pub struct CreateOffer<'info> {
     #[account(mut)]
     pub desk: Account<'info, Desk>,
-    #[account(mut, constraint = desk_token_treasury.mint == desk.token_mint)]
+    #[account(mut, constraint = desk_token_treasury.mint == desk.token_mint, constraint = desk_token_treasury.owner == desk.key())]
     pub desk_token_treasury: Account<'info, TokenAccount>,
     #[account(mut)]
     pub beneficiary: Signer<'info>,
-    #[account(init, payer = beneficiary, space = 8 + Offer::SIZE, seeds = [b"offer", desk.key().as_ref(), &desk.next_offer_id.to_le_bytes()], bump)]
+    // Simple init without PDA seeds for IDL build
+    #[account(init_if_needed, payer = beneficiary, space = 8 + Offer::SIZE)]
+    pub offer: Account<'info, Offer>,
+    pub system_program: Program<'info, System>,
+}
+
+#[cfg(not(feature = "idl-build"))]
+#[derive(Accounts)]
+pub struct CreateOffer<'info> {
+    #[account(mut)]
+    pub desk: Account<'info, Desk>,
+    #[account(mut, constraint = desk_token_treasury.mint == desk.token_mint, constraint = desk_token_treasury.owner == desk.key())]
+    pub desk_token_treasury: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub beneficiary: Signer<'info>,
+    #[account(
+        init_if_needed,
+        payer = beneficiary,
+        space = 8 + Offer::SIZE,
+        // Use next_offer_id from desk for deterministic PDA (avoids relying on instruction args)
+        seeds = [b"offer", desk.key().as_ref(), &desk.next_offer_id.to_le_bytes()],
+        bump
+    )]
     pub offer: Account<'info, Offer>,
     pub system_program: Program<'info, System>,
 }
@@ -417,10 +565,11 @@ pub struct CancelOffer<'info> {
 
 #[derive(Accounts)]
 pub struct FulfillOfferUsdc<'info> {
+    #[account(mut)]
     pub desk: Account<'info, Desk>,
     #[account(mut)]
     pub offer: Account<'info, Offer>,
-    #[account(mut, constraint = desk_token_treasury.mint == desk.token_mint)]
+    #[account(mut, constraint = desk_token_treasury.mint == desk.token_mint, constraint = desk_token_treasury.owner == desk.key())]
     pub desk_token_treasury: Account<'info, TokenAccount>,
     #[account(mut, constraint = desk_usdc_treasury.mint == desk.usdc_mint, constraint = desk_usdc_treasury.owner == desk.key())]
     pub desk_usdc_treasury: Account<'info, TokenAccount>,
@@ -434,10 +583,11 @@ pub struct FulfillOfferUsdc<'info> {
 
 #[derive(Accounts)]
 pub struct FulfillOfferSol<'info> {
+    #[account(mut)]
     pub desk: Account<'info, Desk>,
     #[account(mut)]
     pub offer: Account<'info, Offer>,
-    #[account(mut, constraint = desk_token_treasury.mint == desk.token_mint)]
+    #[account(mut, constraint = desk_token_treasury.mint == desk.token_mint, constraint = desk_token_treasury.owner == desk.key())]
     pub desk_token_treasury: Account<'info, TokenAccount>,
     #[account(mut)]
     pub payer: Signer<'info>,
@@ -446,6 +596,7 @@ pub struct FulfillOfferSol<'info> {
 
 #[derive(Accounts)]
 pub struct Claim<'info> {
+    #[account(mut)]
     pub desk: Account<'info, Desk>,
     #[account(mut)]
     pub offer: Account<'info, Offer>,
@@ -459,8 +610,9 @@ pub struct Claim<'info> {
 
 #[derive(Accounts)]
 pub struct WithdrawTokens<'info> {
-    pub desk: Account<'info, Desk>,
     pub owner: Signer<'info>,
+    #[account(mut, has_one = owner)]
+    pub desk: Account<'info, Desk>,
     #[account(mut, constraint = desk_token_treasury.mint == desk.token_mint, constraint = desk_token_treasury.owner == desk.key())]
     pub desk_token_treasury: Account<'info, TokenAccount>,
     #[account(mut, constraint = owner_token_ata.mint == desk.token_mint, constraint = owner_token_ata.owner == owner.key())]
@@ -470,8 +622,9 @@ pub struct WithdrawTokens<'info> {
 
 #[derive(Accounts)]
 pub struct WithdrawUsdc<'info> {
-    pub desk: Account<'info, Desk>,
     pub owner: Signer<'info>,
+    #[account(mut, has_one = owner)]
+    pub desk: Account<'info, Desk>,
     #[account(mut, constraint = desk_usdc_treasury.mint == desk.usdc_mint, constraint = desk_usdc_treasury.owner == desk.key())]
     pub desk_usdc_treasury: Account<'info, TokenAccount>,
     #[account(mut, constraint = to_usdc_ata.mint == desk.usdc_mint, constraint = to_usdc_ata.owner == owner.key())]
@@ -481,6 +634,7 @@ pub struct WithdrawUsdc<'info> {
 
 #[derive(Accounts)]
 pub struct WithdrawSol<'info> {
+    #[account(mut)]
     pub desk: Account<'info, Desk>,
     pub owner: Signer<'info>,
     /// CHECK: system account
@@ -512,9 +666,11 @@ pub struct Desk {
     pub approvers: Vec<Pubkey>,
     pub next_offer_id: u64,
     pub paused: bool,
+    pub token_price_feed_id: [u8; 32],
+    pub sol_price_feed_id: [u8; 32],
 }
 
-impl Desk { pub const SIZE: usize = 32+32+32+32+1+1+8+8+8+8+8+8+8+8+8+1+4+(32*32)+8+1; }
+impl Desk { pub const SIZE: usize = 32+32+32+32+1+1+8+8+8+8+8+8+8+8+8+1+4+(32*32)+8+1+32+32; }
 
 #[account]
 pub struct Offer {
@@ -536,7 +692,7 @@ pub struct Offer {
     pub amount_paid: u64,
 }
 
-impl Offer { pub const SIZE: usize = 32+8+32+8+2+8+8+8+8+1+1+1+1+32+8; }
+impl Offer { pub const SIZE: usize = 32+8+32+8+2+8+8+8+8+1+1+1+1+32+8+1; }
 
 fn available_inventory(desk: &Desk, treasury_amount: u64) -> u64 { if treasury_amount < desk.token_reserved { 0 } else { treasury_amount - desk.token_reserved } }
 fn only_owner(desk: &Desk, who: &Pubkey) -> Result<()> { require!(*who == desk.owner, OtcError::NotOwner); Ok(()) }
@@ -549,6 +705,29 @@ fn validate_offer_pda(desk_key: &Pubkey, offer_key: &Pubkey, offer_id: u64) -> R
 fn pow10(exp: u32) -> u128 { 10u128.pow(exp) }
 fn mul_div_u128(a: u128, b: u128, d: u128) -> Result<u128> { a.checked_mul(b).and_then(|x| x.checked_div(d)).ok_or(OtcError::Overflow.into()) }
 fn mul_div_ceil_u128(a: u128, b: u128, d: u128) -> Result<u128> { let prod = a.checked_mul(b).ok_or(OtcError::Overflow)?; let q = prod / d; let r = prod % d; Ok(if r == 0 { q } else { q + 1 }) }
+
+/// Convert Pyth price to our 8-decimal USD format
+/// Pyth prices are i64 with exponent (e.g., price=50000000, expo=-8 means $0.50)
+fn convert_pyth_price(price: i64, exponent: i32) -> Result<u64> {
+    require!(price > 0, OtcError::BadPrice);
+    
+    // Target: 8 decimals (1e8 = $1)
+    let target_exp = 8i32;
+    let exp_diff = target_exp - exponent;
+    // Prevent overflow in pow for extreme exponents
+    require!(exp_diff <= 38 && exp_diff >= -38, OtcError::BadPrice);
+    
+    let price_u128 = price as u128;
+    let result = if exp_diff >= 0 {
+        // Scale up
+        price_u128.checked_mul(10u128.pow(exp_diff as u32)).ok_or(OtcError::Overflow)?
+    } else {
+        // Scale down
+        price_u128.checked_div(10u128.pow((-exp_diff) as u32)).ok_or(OtcError::Overflow)?
+    };
+    
+    u64::try_from(result).map_err(|_| OtcError::Overflow.into())
+}
 
 #[error_code]
 pub enum OtcError {
@@ -573,6 +752,9 @@ pub enum OtcError {
     #[msg("Unsupported currency")] UnsupportedCurrency,
     #[msg("Paused")] Paused,
     #[msg("Not expired")] NotExpired,
+    #[msg("Bad price from oracle")] BadPrice,
+    #[msg("Price deviation too large")] PriceDeviationTooLarge,
+    #[msg("Oracle feed IDs not configured")] FeedNotConfigured,
 }
 
 

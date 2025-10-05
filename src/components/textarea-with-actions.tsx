@@ -23,7 +23,10 @@ const ChatForm = memo(function ChatForm({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      onSubmit(e);
+      // Prevent submit while loading/disabled to avoid race conditions
+      if (!isLoading && input.trim().length > 0) {
+        onSubmit(e);
+      }
     }
   };
 
@@ -54,6 +57,7 @@ const ChatForm = memo(function ChatForm({
             "overflow-y-auto",
             "bg-transparent",
           ])}
+          disabled={isLoading}
           onKeyDown={handleKeyDown}
         />
       </div>

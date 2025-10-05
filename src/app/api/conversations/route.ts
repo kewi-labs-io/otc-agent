@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
           agentId: "otc-desk-agent",
           content: JSON.stringify({ text: agentResponseText, type: "agent" }),
           isAgent: true,
+          createdAt: new Date(),
         } as any;
 
         await db.insert(messages).values(agentMessage);

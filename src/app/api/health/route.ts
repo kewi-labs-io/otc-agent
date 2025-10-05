@@ -6,6 +6,7 @@ export async function GET() {
     const isReady = agentRuntime.isReady();
 
     return NextResponse.json({
+      pong: true,
       status: "ok",
       agentReady: isReady,
       timestamp: new Date().toISOString(),

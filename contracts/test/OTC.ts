@@ -27,7 +27,7 @@ describe("OTC", () => {
   }
 
   it("create -> approve -> fulfill (USDC) -> claim after unlock", async () => {
-    const { user, approver, usdc, desk, token } = await deploy();
+    const { owner, user, approver, usdc, desk, token } = await deploy();
 
     // Reduce token price to something realistic: $0.001 per ElizaOS (8 decimals)
     const tokenUsdAddr = await desk.tokenUsdFeed();
@@ -35,7 +35,7 @@ describe("OTC", () => {
     await tokenUsd.setAnswer(100_000n); // $0.001 with 8 decimals
 
     // Fund user with USDC to pay
-    await usdc.transfer(user.address, 1_000_000n * 10n ** 6n);
+    await usdc.connect(owner).transfer(user.address, 1_000_000n * 10n ** 6n);
 
     // Create offer: 10,000 tokens, 10% discount, USDC
     await desk.connect(user).createOffer(hre.ethers.parseEther("10000"), 1000, 1, 0);
@@ -76,14 +76,14 @@ describe("OTC", () => {
   });
 
   it("0 lockup allows immediate claim after fulfill", async () => {
-    const { user, approver, usdc, desk, token } = await deploy();
+    const { owner, user, approver, usdc, desk, token } = await deploy();
     // Set reasonable token price
     const tokenUsdAddr = await desk.tokenUsdFeed();
     const tokenUsd = (await hre.ethers.getContractAt("MockAggregatorV3", tokenUsdAddr)) as any;
     await tokenUsd.setAnswer(10_000_000n); // $0.1 ensures >= $5 for 1000 tokens
 
     // Fund user
-    await usdc.transfer(user.address, 1_000_000n * 10n ** 6n);
+    await usdc.connect(owner).transfer(user.address, 1_000_000n * 10n ** 6n);
 
     // Create, approve, fulfill
     await desk.connect(user).createOffer(hre.ethers.parseEther("1000"), 0, 1, 0); // 0 lockup
@@ -101,12 +101,12 @@ describe("OTC", () => {
   });
 
   it("claim reverts before unlock for non-zero lockup", async () => {
-    const { user, approver, usdc, desk } = await deploy();
+    const { owner, user, approver, usdc, desk } = await deploy();
     const tokenUsdAddr2 = await desk.tokenUsdFeed();
     const tokenUsd2 = (await hre.ethers.getContractAt("MockAggregatorV3", tokenUsdAddr2)) as any;
     await tokenUsd2.setAnswer(10_000_000n); // $0.1 ensures >= $5
 
-    await usdc.transfer(user.address, 1_000_000n * 10n ** 6n);
+    await usdc.connect(owner).transfer(user.address, 1_000_000n * 10n ** 6n);
     // 30-day lockup
     await desk.connect(user).createOffer(hre.ethers.parseEther("1000"), 0, 1, 30n * 24n * 60n * 60n);
     const ids = await desk.getOpenOfferIds();
@@ -130,11 +130,11 @@ describe("OTC", () => {
   });
 
   it("autoClaim by approver distributes matured tokens in batch", async () => {
-    const { user, approver, usdc, desk, token } = await deploy();
+    const { owner, user, approver, usdc, desk, token } = await deploy();
     const tokenUsdAddr3 = await desk.tokenUsdFeed();
     const tokenUsd3 = (await hre.ethers.getContractAt("MockAggregatorV3", tokenUsdAddr3)) as any;
     await tokenUsd3.setAnswer(10_000_000n); // $0.1 ensures >= $5
-    await usdc.transfer(user.address, 1_000_000n * 10n ** 6n);
+    await usdc.connect(owner).transfer(user.address, 1_000_000n * 10n ** 6n);
 
     // Create two offers with 1-day lockup
     for (let i = 0; i < 2; i++) {
@@ -178,7 +178,7 @@ describe("OTC", () => {
   });
 
   it("rounds up USDC amount when converting from USD 8d", async () => {
-    const { user, approver, usdc, desk } = await deploy();
+    const { owner, user, approver, usdc, desk } = await deploy();
     const tokenUsdAddr = await desk.tokenUsdFeed();
     const tokenUsd = (await hre.ethers.getContractAt("MockAggregatorV3", tokenUsdAddr)) as any;
     // Set price so USD total is not multiple of 100 (8d), e.g., $5.00123 per token for 1 token
@@ -193,7 +193,7 @@ describe("OTC", () => {
     const required = await desk.requiredUsdcAmount(offerId); // ceil
     expect(required === floorUsdc || required === floorUsdc + 1n).to.be.true; // depending on exact divisibility
 
-    await usdc.transfer(user.address, 1_000_000n * 10n ** 6n);
+    await usdc.connect(owner).transfer(user.address, 1_000_000n * 10n ** 6n);
     await usdc.connect(user).approve(await desk.getAddress(), required);
     await expect(desk.connect(user).fulfillOffer(offerId)).to.not.be.reverted;
   });
@@ -206,7 +206,7 @@ describe("OTC", () => {
     const tokenUsd4 = (await hre.ethers.getContractAt("MockAggregatorV3", tokenUsdAddr4)) as any;
     await tokenUsd4.setAnswer(10_000_000n); // $0.1 ensures >= $5
 
-    await usdc.transfer(user.address, 1_000_000n * 10n ** 6n);
+    await usdc.connect(owner).transfer(user.address, 1_000_000n * 10n ** 6n);
     await desk.connect(user).createOffer(hre.ethers.parseEther("1000"), 0, 1, 0);
     const [offerId] = await desk.getOpenOfferIds();
     await desk.connect(approver).approveOffer(offerId);
@@ -217,6 +217,29 @@ describe("OTC", () => {
 
     await usdc.connect(user).approve(await desk.getAddress(), required);
     await expect(desk.connect(user).fulfillOffer(offerId)).to.not.be.reverted;
+  });
+
+  it("enforces approver-only fulfillment when requireApproverToFulfill is true", async () => {
+    const { owner, user, approver, usdc, desk } = await deploy();
+    await desk.connect(owner).setRequireApproverToFulfill(true);
+
+    const tokenUsdAddr = await desk.tokenUsdFeed();
+    const tokenUsd = (await hre.ethers.getContractAt("MockAggregatorV3", tokenUsdAddr)) as any;
+    await tokenUsd.setAnswer(10_000_000n); // $0.1 ensures >= $5
+
+    // No need to fund user; backend approver pays on behalf
+    await desk.connect(user).createOffer(hre.ethers.parseEther("1000"), 0, 1, 0);
+    const [offerId] = await desk.getOpenOfferIds();
+    await desk.connect(approver).approveOffer(offerId);
+
+    const required = await desk.requiredUsdcAmount(offerId);
+    await usdc.connect(user).approve(await desk.getAddress(), required);
+    await expect(desk.connect(user).fulfillOffer(offerId)).to.be.revertedWith("fulfill approver only");
+
+    // Fund approver with the required amount and fulfill
+    await usdc.connect(owner).transfer(approver.address, required);
+    await usdc.connect(approver).approve(await desk.getAddress(), required);
+    await expect(desk.connect(approver).fulfillOffer(offerId)).to.not.be.reverted;
   });
 });
 

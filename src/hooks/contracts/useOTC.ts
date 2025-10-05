@@ -363,7 +363,7 @@ export function useOTC(): {
         abi,
         functionName,
         args: [offerId],
-      });
+      } as any);
       return result as bigint;
     } catch (error) {
       console.error("Error getting required payment:", error);

@@ -20,25 +20,37 @@ export async function GET(
       );
     }
 
-    const messages = await agentRuntime.getConversationMessages(
+    const rawMessages = await agentRuntime.getConversationMessages(
       conversationId,
       limit ? parseInt(limit) : 50,
       afterTimestamp ? parseInt(afterTimestamp) : undefined,
     );
-
-    return NextResponse.json({
-      success: true,
-      conversationId,
-      messages: messages.map((msg) => ({
+    const simple = rawMessages.map((msg) => {
+      let parsedContent: any = msg.content;
+      try {
+        if (typeof msg.content === "string") parsedContent = JSON.parse(msg.content);
+      } catch {
+        parsedContent = msg.content;
+      }
+      return {
         id: msg.id,
         userId: msg.userId,
         agentId: msg.agentId,
-        content: msg.content,
-        createdAt: msg.createdAt,
+        content: parsedContent,
+        createdAt: (msg as any).createdAt,
         isAgent: msg.isAgent || msg.userId === "otc-desk-agent",
-      })),
-      count: messages.length,
+      };
     });
+
+    return NextResponse.json(
+      {
+        success: true,
+        conversationId,
+        messages: simple,
+        count: simple.length,
+      },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
   } catch (error) {
     console.error("[Conversation API] Error getting conversation:", error);
     return NextResponse.json(

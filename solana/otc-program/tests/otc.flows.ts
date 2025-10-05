@@ -45,7 +45,7 @@ describe("otc flows", () => {
       .signers([owner])
       .rpc();
 
-    await program.methods.setPrices(new BN(10_000_000), new BN(100_000_000_00), new BN(Math.floor(Date.now()/1000)), new BN(3600)).accounts({ desk, owner: owner.publicKey }).signers([owner]).rpc();
+    await program.methods.setPrices(new BN(1_000_000_000), new BN(100_000_000_00), new BN(0), new BN(3600)).accounts({ desk, owner: owner.publicKey }).signers([owner]).rpc();
 
     // mint and deposit token inventory
     const ownerTokenAta = getAssociatedTokenAddressSync(tokenMint, owner.publicKey);
@@ -63,9 +63,12 @@ describe("otc flows", () => {
     idBuf.writeBigUInt64LE(BigInt(id.toString()));
     const [offer] = PublicKey.findProgramAddressSync([Buffer.from("offer"), desk.toBuffer(), idBuf], program.programId);
 
+    // ensure offer PDA doesn't exist yet in ledger (createOffer uses init_if_needed)
     const infoBefore1 = await provider.connection.getAccountInfo(offer);
-    // debug
-    console.log("offer before USDC create:", infoBefore1?.owner?.toBase58(), infoBefore1?.data?.length);
+    if (infoBefore1) {
+      await provider.connection.confirmTransaction(await provider.connection.requestAirdrop(owner.publicKey, 1e9), "confirmed");
+      // do nothing, it will be overwritten
+    }
     await program.methods
       .createOffer(id, new BN("1000000000"), 0, 1, new BN(0))
       .accountsStrict({ desk, deskTokenTreasury, beneficiary: beneficiary.publicKey, offer, systemProgram: SystemProgram.programId })
@@ -97,8 +100,9 @@ describe("otc flows", () => {
     const [offer] = PublicKey.findProgramAddressSync([Buffer.from("offer"), desk.toBuffer(), idBuf2], program.programId);
 
     const infoBefore2 = await provider.connection.getAccountInfo(offer);
-    // debug
-    console.log("offer before SOL create:", infoBefore2?.owner?.toBase58(), infoBefore2?.data?.length);
+    if (infoBefore2) {
+      await provider.connection.confirmTransaction(await provider.connection.requestAirdrop(owner.publicKey, 1e9), "confirmed");
+    }
     await program.methods
       .createOffer(id2, new BN("500000000"), 0, 0, new BN(0))
       .accountsStrict({ desk, deskTokenTreasury, beneficiary: user.publicKey, offer, systemProgram: SystemProgram.programId })

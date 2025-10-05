@@ -29,7 +29,8 @@ export async function GET(_request: NextRequest) {
       address: OTC_ADDRESS,
       abi,
       functionName: "getOpenOfferIds",
-    })) as bigint[];
+      args: [],
+    } as any)) as bigint[];
 
     const offers = await Promise.all(
       openOfferIds.map(async (id) => {
@@ -38,7 +39,7 @@ export async function GET(_request: NextRequest) {
           abi,
           functionName: "offers",
           args: [id],
-        })) as any;
+        } as any)) as any;
         const now = Math.floor(Date.now() / 1000);
         const unlocksInSeconds = Math.max(0, Number(o.unlockTime) - now);
         return {

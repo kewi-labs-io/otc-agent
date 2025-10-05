@@ -42,6 +42,13 @@ async function main() {
   const deal = await ethers.getContractAt("OTC", deployment.contracts.deal);
   const elizaToken = await ethers.getContractAt("MockERC20", deployment.contracts.elizaToken);
   const usdcToken = await ethers.getContractAt("MockERC20", deployment.contracts.usdcToken);
+  const tokenUsdFeed = await ethers.getContractAt("MockAggregatorV3", deployment.contracts.elizaUsdFeed);
+  const ethUsdFeed = await ethers.getContractAt("MockAggregatorV3", deployment.contracts.ethUsdFeed);
+  
+  // Refresh price feeds to prevent stale price errors
+  const currentBlock = await ethers.provider.getBlock("latest");
+  await tokenUsdFeed.setRoundData(1, 50000, currentBlock!.timestamp, currentBlock!.timestamp);
+  await ethUsdFeed.setRoundData(1, 350000000000, currentBlock!.timestamp, currentBlock!.timestamp);
   
   // Import test wallet
   const testWallet = new ethers.Wallet(deployment.testWalletPrivateKey, ethers.provider);

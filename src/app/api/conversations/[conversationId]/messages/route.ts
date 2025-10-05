@@ -123,41 +123,32 @@ export async function GET(
       afterTimestamp ? parseInt(afterTimestamp) : undefined,
     );
 
-    return NextResponse.json({
-      success: true,
-      messages: messages.map((msg) => {
-        let parsedContent: any = msg.content;
-        try {
-          // Parse content if it's a JSON string
-          if (typeof msg.content === "string") {
-            parsedContent = JSON.parse(msg.content);
-          }
-        } catch {
-          // If parsing fails, wrap string in text property
-          parsedContent = { text: msg.content };
-        }
-
-        return {
-          id: msg.id,
-          userId: msg.userId,
-          agentId: msg.agentId,
-          content: parsedContent,
-          createdAt: msg.createdAt,
-          isAgent: msg.isAgent,
-        };
-      }),
-      hasMore: false, // You could implement pagination logic here
-      lastTimestamp:
-        messages.length > 0
-          ? Math.max(
-              ...messages.map((m) =>
-                m.createdAt ? new Date(m.createdAt).getTime() : 0,
-              ),
-            )
-          : afterTimestamp
-            ? parseInt(afterTimestamp)
-            : Date.now(),
+    const simple = messages.map((msg) => {
+      let parsedContent: any = msg.content;
+      try {
+        if (typeof msg.content === "string") parsedContent = JSON.parse(msg.content);
+      } catch {
+        parsedContent = msg.content;
+      }
+      return {
+        id: msg.id,
+        userId: msg.userId,
+        agentId: msg.agentId,
+        content: parsedContent,
+        createdAt: (msg as any).createdAt,
+        isAgent: msg.isAgent,
+      };
     });
+
+    return NextResponse.json(
+      {
+        success: true,
+        messages: simple,
+        hasMore: false,
+        lastTimestamp: Date.now(),
+      },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
   } catch (error) {
     console.error("[Messages API] Error getting messages:", error);
     return NextResponse.json(

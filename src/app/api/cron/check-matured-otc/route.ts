@@ -3,10 +3,10 @@ import {
   createPublicClient,
   createWalletClient,
   http,
-  privateKeyToAccount,
   type Abi,
   type Address,
 } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { hardhat, base, baseSepolia } from "viem/chains";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 
@@ -68,7 +68,8 @@ export async function GET(request: NextRequest) {
       address: OTC_ADDRESS,
       abi,
       functionName: "nextOfferId",
-    })) as bigint;
+      args: [],
+    } as any)) as bigint;
 
     const now = Math.floor(Date.now() / 1000);
     const maturedOffers: bigint[] = [];
@@ -79,7 +80,7 @@ export async function GET(request: NextRequest) {
         abi,
         functionName: "offers",
         args: [i],
-      })) as any;
+      } as any)) as any;
 
       // Matured = paid, not fulfilled, not cancelled, and unlockTime passed
       if (
