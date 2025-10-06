@@ -1,13 +1,8 @@
 "use client";
-import { Footer } from "@/components/footer";
-import { WalletConnector } from "@/components/wallet-connector";
-import { useMultiWallet } from "@/components/multiwallet";
-import Image from "next/image";
 import Card from "@/components/Card";
-import QuotePopUp from "@/components/quote-pop-up";
+import Image from "next/image";
 
 export default function Page() {
-  const { isConnected, networkLabel } = useMultiWallet();
   return (
     <div className="relative flex flex-col px-4 sm:px-6 py-10 h-screen">
       {/* Background with gradient overlay */}
@@ -22,7 +17,7 @@ export default function Page() {
             alt="How it works background"
             width={1200}
             height={900}
-            className=" object-cover"
+            className="object-cover h-auto"
             priority
           />
         </div>
@@ -47,7 +42,7 @@ export default function Page() {
             height={220}
             width={950}
             draggable={false}
-            className="select-none"
+            className="select-none w-auto"
           />
         </div>
 

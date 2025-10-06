@@ -9,6 +9,7 @@ import {
   type IAgentRuntime,
   logger,
   type Media,
+  type Memory,
   type MessagePayload,
   type MessageReceivedHandlerParams,
   ModelType,
@@ -17,7 +18,6 @@ import {
   type WorldPayload,
 } from "@elizaos/core";
 import { v4 } from "uuid";
-import { acceptQuoteAction } from "./actions/acceptQuote";
 import { quoteAction } from "./actions/quote";
 import { tokenProvider as ai16zProvider } from "./providers/ai16z";
 import { otcDeskProvider } from "./providers/otcDesk";
@@ -25,6 +25,8 @@ import { quoteProvider } from "./providers/quote";
 import { recentMessagesProvider } from "./providers/recentMessages";
 import { tokenProvider as shawProvider } from "./providers/shaw";
 import { tokenProvider as elizaTokenProvider } from "./providers/token";
+import QuoteService from "./services/quoteService";
+import { UserSessionStorageService } from "./services/userSessionStorage";
 
 /**
  * Extracts the text content from within a <response> XML tag.
@@ -103,7 +105,31 @@ type MediaData = {
   mediaType: string;
 };
 
-const latestResponseIds = new Map<string, Map<string, string>>();
+// Helper functions for response ID tracking in serverless environment
+async function getLatestResponseId(runtime: IAgentRuntime, roomId: string): Promise<string | null> {
+  return await runtime.getCache<string>(`response_id:${runtime.agentId}:${roomId}`) ?? null;
+}
+
+async function setLatestResponseId(runtime: IAgentRuntime, roomId: string, responseId: string): Promise<void> {
+  if (!responseId || typeof responseId !== 'string') {
+    console.error("[setLatestResponseId] Invalid responseId:", responseId);
+    throw new Error(`Invalid responseId: ${responseId}`);
+  }
+  const key = `response_id:${runtime.agentId}:${roomId}`;
+  console.log("[setLatestResponseId] Setting cache:", { key, responseId: responseId.substring(0, 8) });
+  try {
+    await runtime.setCache(key, responseId);
+  } catch (error) {
+    console.error("[setLatestResponseId] Error setting cache:", error);
+    throw error;
+  }
+}
+
+async function clearLatestResponseId(runtime: IAgentRuntime, roomId: string): Promise<void> {
+  const key = `response_id:${runtime.agentId}:${roomId}`;
+  console.log("[clearLatestResponseId] Deleting cache key:", key);
+  await runtime.deleteCache(key);
+}
 
 /**
  * Fetches media data from a list of attachments, supporting both HTTP URLs and local file paths.
@@ -157,17 +183,10 @@ const messageReceivedHandler = async ({
 }: MessageReceivedHandlerParams): Promise<void> => {
   // Generate a new response ID
   const responseId = v4();
-  // Get or create the agent-specific map
-  if (!latestResponseIds.has(runtime.agentId)) {
-    latestResponseIds.set(runtime.agentId, new Map<string, string>());
-  }
-  const agentResponses = latestResponseIds.get(runtime.agentId);
-  if (!agentResponses) {
-    throw new Error("Agent responses map not found");
-  }
-
-  // Set this as the latest response ID for this agent+room
-  agentResponses.set(message.roomId, responseId);
+  console.log("[MessageHandler] Generated response ID:", responseId.substring(0, 8));
+  
+  // Set this as the latest response ID for this room (using runtime cache for serverless)
+  await setLatestResponseId(runtime, message.roomId, responseId);
 
   // Generate a unique run ID for tracking this message handler execution
   const runId = asUUID(v4());
@@ -256,8 +275,8 @@ const messageReceivedHandler = async ({
         retries++;
       }
 
-      // Check if this is still the latest response ID for this agent+room
-      const currentResponseId = agentResponses.get(message.roomId);
+      // Check if this is still the latest response ID for this room
+      const currentResponseId = await getLatestResponseId(runtime, message.roomId);
       if (currentResponseId !== responseId) {
         logger.info(
           `Response discarded - newer message being processed for agent: ${runtime.agentId}, room: ${message.roomId}`,
@@ -266,14 +285,57 @@ const messageReceivedHandler = async ({
       }
 
       // Clean up the response ID
-      agentResponses.delete(message.roomId);
-      if (agentResponses.size === 0) {
-        latestResponseIds.delete(runtime.agentId);
-      }
+      await clearLatestResponseId(runtime, message.roomId);
 
-      await callback({
-        text: responseContent,
-      });
+      // Parse actions from response - support both XML tags and function-call syntax
+      const xmlActionMatch = responseContent.match(/<action>(.*?)<\/action>/gi);
+      const functionActionMatch = responseContent.match(/\b(CREATE_OTC_QUOTE|ACCEPT_ELIZAOS_QUOTE|SHOW_ELIZAOS_HISTORY)\s*\(/gi);
+      
+      const actionNames: string[] = [];
+      
+      // Parse XML format: <action>CREATE_OTC_QUOTE</action>
+      if (xmlActionMatch) {
+        actionNames.push(...xmlActionMatch.map(match => match.replace(/<\/?action>/gi, '').trim()));
+      }
+      
+      // Parse function-call format: CREATE_OTC_QUOTE({...})
+      if (functionActionMatch) {
+        actionNames.push(...functionActionMatch.map(match => match.replace(/\s*\(.*/g, '').trim()));
+      }
+      
+      console.log("[MessageHandler] Detected actions:", actionNames);
+
+      // Create response memory with parsed actions
+      const responseMemory: Memory = {
+        id: createUniqueUuid(runtime, message.id),
+        entityId: runtime.agentId,
+        roomId: message.roomId,
+        worldId: message.worldId,
+        content: {
+          text: responseContent,
+          source: "agent",
+          inReplyTo: message.id,
+          actions: actionNames.length > 0 ? actionNames : undefined,
+        },
+      };
+
+      // Process actions if any were found
+      if (actionNames.length > 0) {
+        console.log("[MessageHandler] Processing actions:", actionNames);
+        
+        await runtime.processActions(message, [responseMemory], state, async (content) => {
+          console.log("[MessageHandler] Action callback:", content.action);
+          if (callback) {
+            return callback(content);
+          }
+          return [];
+        });
+      } else {
+        // No actions - just send the response
+        await callback({
+          text: responseContent,
+        });
+      }
 
       // Emit run ended event on successful completion
       await runtime.emitEvent(EventType.RUN_ENDED, {
@@ -638,7 +700,8 @@ export const otcDeskPlugin: Plugin = {
     shawProvider,
     elizaTokenProvider,
   ],
-  actions: [quoteAction, acceptQuoteAction],
+  actions: [quoteAction],
+  services: [QuoteService, UserSessionStorageService],
 };
 
 export default otcDeskPlugin;

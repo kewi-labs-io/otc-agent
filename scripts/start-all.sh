@@ -23,31 +23,32 @@ if [ $? -ne 0 ]; then
 fi
 echo "   ✅ Contracts deployed and funded"
 
-# Initialize database (optional)
-echo "🗄️ Setting up database..."
-if [ -z "$POSTGRES_URL" ]; then
-  echo "   ℹ️  POSTGRES_URL not set; skipping Prisma migrate (using default SQLite/drizzle flows)" | tee -a prisma.log
-else
-  npx prisma migrate dev --name init > prisma.log 2>&1 || echo "   ⚠️  Prisma migrate may have failed; continuing (see prisma.log)"
-  echo "   ✅ Database initialized (or skipped)"
+# Optional: production build before dev (disabled by default)
+# Enable by running: NEXT_BUILD_BEFORE_DEV=1 ./scripts/start-all.sh
+if [ "${NEXT_BUILD_BEFORE_DEV:-}" = "1" ]; then
+  echo "🏗️ Building project (explicit)..."
+  npm run build > build.log 2>&1
+  if [ $? -ne 0 ]; then
+      echo "   ❌ Build failed. Check build.log"
+      exit 1
+  fi
 fi
 
-# Build the project first to avoid routes-manifest issues
-echo "🏗️ Building project..."
-yarn build > build.log 2>&1
-if [ $? -ne 0 ]; then
-    echo "   ⚠️  Build had warnings, continuing..."
-fi
-
-# Start ElizaOS agent
+# Start ElizaOS agent (via project script if CLI not present)
 echo "🤖 Starting ElizaOS agent..."
-elizaos dev --port 3137 > elizaos.log 2>&1 &
-ELIZAOS_PID=$!
+if command -v elizaos >/dev/null 2>&1; then
+  elizaos dev --port 3137 > elizaos.log 2>&1 &
+  ELIZAOS_PID=$!
+else
+  echo "   elizaos CLI not found; starting via npm script (eliza:start)"
+  npm run eliza:start > elizaos.log 2>&1 &
+  ELIZAOS_PID=$!
+fi
 echo "   ElizaOS PID: $ELIZAOS_PID"
 
 # Start Next.js dev server
 echo "🌐 Starting Next.js dev server..."
-next dev -p 2222 > nextjs.log 2>&1 &
+npx next dev -p 2222 > nextjs.log 2>&1 &
 NEXT_PID=$!
 echo "   Next.js PID: $NEXT_PID"
 

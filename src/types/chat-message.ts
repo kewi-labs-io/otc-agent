@@ -8,5 +8,6 @@ export interface ChatMessage {
   source: string;
   isLoading?: boolean;
   thought?: string;
+  isUserMessage?: boolean;
   actions?: any[]; // Consider defining a more specific type if the structure is known
 }

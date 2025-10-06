@@ -10,19 +10,17 @@ export async function GET() {
       "otc-program",
       "target",
       "idl",
-      "otc.json"
+      "otc.json",
     );
     const data = await fs.readFile(idlPath, "utf8");
     return new NextResponse(data, {
       status: 200,
       headers: { "content-type": "application/json" },
     });
-  } catch (e) {
+  } catch {
     return NextResponse.json(
       { error: "IDL not found. Build the Solana program to generate it." },
-      { status: 404 }
+      { status: 404 },
     );
   }
 }
-
-

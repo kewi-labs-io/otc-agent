@@ -6,11 +6,11 @@ import { NextRequest, NextResponse } from "next/server";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, message } = body || {};
+    const { entityId, message } = body || {};
 
-    if (!userId || !message || typeof message !== "string") {
+    if (!entityId || !message || typeof message !== "string") {
       return NextResponse.json(
-        { error: "userId and message are required" },
+        { error: "entityId and message are required" },
         { status: 400 },
       );
     }
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const createRes = await fetch(`${origin}/api/rooms`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({ entityId }),
       cache: "no-store",
     });
     if (!createRes.ok) {
@@ -34,15 +34,12 @@ export async function POST(request: NextRequest) {
     const roomId = createData.roomId;
 
     // Send message
-    const msgRes = await fetch(
-      `${origin}/api/rooms/${roomId}/messages`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, text: message }),
-        cache: "no-store",
-      },
-    );
+    const msgRes = await fetch(`${origin}/api/rooms/${roomId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entityId, text: message }),
+      cache: "no-store",
+    });
     if (!msgRes.ok) {
       const text = await msgRes.text();
       return NextResponse.json(

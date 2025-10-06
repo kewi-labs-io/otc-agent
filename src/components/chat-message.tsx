@@ -17,7 +17,6 @@ import { ChatMessage as ChatMessageType } from "@/types/chat-message";
 
 // Define constants if needed, or use literals directly
 const USER_NAME = "User";
-const ASSISTANT_NAME = "Eliza";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -129,7 +128,6 @@ export const ChatMessage = memo(function ChatMessage({
   const isUser =
     safeMessage.name === USER_NAME ||
     safeMessage.name?.toLowerCase() === "user";
-  const displayName = isUser ? USER_NAME : ASSISTANT_NAME;
 
   // Parse message text - handle both raw text and structured content
   let messageText = "";

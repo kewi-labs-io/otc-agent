@@ -2,14 +2,14 @@
 
 // Custom commands for OTC desk testing
 
-Cypress.Commands.add('createQuote', (tokenAmount: string, userId = 'cypress-test-user') => {
+Cypress.Commands.add('createQuote', (tokenAmount: string, entityId = 'cypress-test-user') => {
   return cy.request({
     method: 'POST',
     url: '/api/eliza/message',
     timeout: 60000,
     body: {
       message: `I want to buy ${tokenAmount} ElizaOS tokens`,
-      userId,
+      entityId,
     },
     headers: {
       'Content-Type': 'application/json',
@@ -54,14 +54,14 @@ Cypress.Commands.add('stopWorker', () => {
   });
 });
 
-Cypress.Commands.add('sendAgentMessage', (message: string, userId = 'cypress-test-user') => {
+Cypress.Commands.add('sendAgentMessage', (message: string, entityId = 'cypress-test-user') => {
   return cy.request({
     method: 'POST',
     url: '/api/eliza/message',
     timeout: 60000,
     body: {
       message,
-      userId,
+      entityId,
     },
     headers: {
       'Content-Type': 'application/json',

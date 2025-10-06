@@ -1,25 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/button";
 import { Dialog } from "@/components/dialog";
-import { useOTC } from "@/hooks/contracts/useOTC";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import * as anchor from "@coral-xyz/anchor";
-import type { Idl } from "@coral-xyz/anchor";
-import { PublicKey as SolPubkey, SystemProgram as SolSystemProgram, Connection } from "@solana/web3.js";
-import { getAssociatedTokenAddress } from "@solana/spl-token";
-import { NetworkConnectButton } from "@/components/network-connect";
-import { useAccount, useChainId, useBalance } from "wagmi";
-import { useSignMessage } from "wagmi";
 import { useMultiWallet } from "@/components/multiwallet";
-import { useRouter } from "next/navigation";
+import { NetworkConnectButton } from "@/components/network-connect";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
+import { useOTC } from "@/hooks/contracts/useOTC";
+import type { OTCQuote } from "@/utils/xml-parser";
+import type { Idl } from "@coral-xyz/anchor";
+import * as anchor from "@coral-xyz/anchor";
+import { getAssociatedTokenAddress } from "@solana/spl-token";
+import {
+  Connection,
+  PublicKey as SolPubkey,
+  SystemProgram as SolSystemProgram,
+} from "@solana/web3.js";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import type { Abi } from "viem";
 import { createPublicClient, http } from "viem";
 import { base, hardhat } from "viem/chains";
-import type { Abi } from "viem";
-import type { OTCQuote } from "@/utils/xml-parser";
+import { useAccount, useBalance, useChainId, useSignMessage } from "wagmi";
 
 interface AcceptQuoteModalProps {
   isOpen: boolean;
@@ -46,18 +47,12 @@ export function AcceptQuoteModal({
   onComplete,
 }: AcceptQuoteModalProps) {
   const { isConnected, address } = useAccount();
-  const {
-    activeFamily,
-    paymentPairLabel,
-    isConnected: unifiedConnected,
-  } = useMultiWallet();
+  const { activeFamily, isConnected: unifiedConnected } = useMultiWallet();
   const chainId = useChainId();
   const router = useRouter();
   const {
     otcAddress,
     createOffer,
-    fulfillOffer,
-    approveUsdc,
     defaultUnlockDelaySeconds,
     usdcAddress,
     minUsdAmount,
@@ -97,9 +92,9 @@ export function AcceptQuoteModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requireApprover, setRequireApprover] = useState(false);
-  const [lastSignedMessage, setLastSignedMessage] = useState<string | undefined>(
-    undefined,
-  );
+  const [lastSignedMessage, setLastSignedMessage] = useState<
+    string | undefined
+  >(undefined);
   const [lastSignature, setLastSignature] = useState<`0x${string}` | undefined>(
     undefined,
   );
@@ -110,12 +105,15 @@ export function AcceptQuoteModal({
   const SOLANA_PROGRAM_ID =
     (process.env.NEXT_PUBLIC_SOLANA_PROGRAM_ID as string | undefined) ||
     "EPqRoaDur9VtTKABWK3QQArV2wCYKoN3Zu8kErhrtUxp";
-  const SOLANA_DESK_OWNER = process.env
-    .NEXT_PUBLIC_SOLANA_DESK_OWNER as string | undefined;
-  const SOLANA_TOKEN_MINT = process.env
-    .NEXT_PUBLIC_SOLANA_TOKEN_MINT as string | undefined;
-  const SOLANA_USDC_MINT = process.env
-    .NEXT_PUBLIC_SOLANA_USDC_MINT as string | undefined;
+  const SOLANA_DESK_OWNER = process.env.NEXT_PUBLIC_SOLANA_DESK_OWNER as
+    | string
+    | undefined;
+  const SOLANA_TOKEN_MINT = process.env.NEXT_PUBLIC_SOLANA_TOKEN_MINT as
+    | string
+    | undefined;
+  const SOLANA_USDC_MINT = process.env.NEXT_PUBLIC_SOLANA_USDC_MINT as
+    | string
+    | undefined;
 
   // Wallet balances for display and MAX calculation
   const ethBalance = useBalance({ address });
@@ -143,7 +141,7 @@ export function AcceptQuoteModal({
         ),
       );
     }
-  }, [isOpen, initialQuote]);
+  }, [isOpen, initialQuote, activeFamily]);
 
   // Prefer EVM when both are connected and modal opens
   useEffect(() => {
@@ -214,11 +212,6 @@ export function AcceptQuoteModal({
   const clampAmount = (value: number) =>
     Math.min(contractMaxTokens, Math.max(MIN_TOKENS, Math.floor(value)));
 
-  const handleProceed = () => {
-    if (!unifiedConnected) return;
-    setStep("sign");
-  };
-
   async function fetchSolanaIdl(): Promise<Idl> {
     const res = await fetch("/api/solana/idl");
     if (!res.ok) throw new Error("Failed to load Solana IDL");
@@ -252,12 +245,29 @@ export function AcceptQuoteModal({
 
   async function waitForApproval(offerId: bigint, timeoutMs = 60_000) {
     const start = Date.now();
+    console.log(`[waitForApproval] Starting poll for offer ${offerId}, timeout: ${timeoutMs}ms`);
+    
     // Poll every 2s until approved
     while (Date.now() - start < timeoutMs) {
+      const elapsed = Date.now() - start;
+      console.log(`[waitForApproval] Checking offer ${offerId} (${Math.floor(elapsed / 1000)}s elapsed)`);
+      
       const offer = await readOffer(offerId);
-      if (offer?.approved) return offer;
+      console.log(`[waitForApproval] Offer state:`, {
+        approved: offer?.approved,
+        paid: offer?.paid,
+        cancelled: offer?.cancelled,
+      });
+      
+      if (offer?.approved) {
+        console.log(`[waitForApproval] ✅ Offer approved after ${Math.floor(elapsed / 1000)}s`);
+        return offer;
+      }
+      
       await wait(2000);
     }
+    
+    console.error(`[waitForApproval] ❌ Timed out after ${timeoutMs}ms`);
     throw new Error("Offer approval timed out");
   }
 
@@ -272,7 +282,7 @@ export function AcceptQuoteModal({
       const offer = await readOffer(offerId);
       if (offer?.paid || offer?.fulfilled) return;
 
-      const { wei, usdc } = computePayment(offer);
+      const { wei } = computePayment(offer);
       try {
         // Always route fulfillment through backend approver wallet
         const res = await fetch("/api/otc/fulfill", {
@@ -292,7 +302,7 @@ export function AcceptQuoteModal({
         await wait(3000);
         const after = await readOffer(offerId);
         if (after?.paid || after?.fulfilled) return;
-      } catch (e) {
+      } catch {
         // continue to retry
       }
       await wait(1000 * Math.pow(2, attempt));
@@ -317,7 +327,7 @@ export function AcceptQuoteModal({
         // Basic config checks
         if (!SOLANA_DESK_OWNER || !SOLANA_TOKEN_MINT) {
           throw new Error(
-            "Missing Solana configuration (DESK_OWNER or TOKEN_MINT)."
+            "Missing Solana configuration (DESK_OWNER or TOKEN_MINT).",
           );
         }
 
@@ -332,17 +342,21 @@ export function AcceptQuoteModal({
           connection,
           // Anchor expects an object with signTransaction / signAllTransactions
           wallet,
-          { commitment: "confirmed" }
+          { commitment: "confirmed" },
         );
         const programId = new SolPubkey(SOLANA_PROGRAM_ID);
         const idl = await fetchSolanaIdl();
-        const program = new (anchor as any).Program(idl as Idl, programId, provider) as any;
+        const program = new (anchor as any).Program(
+          idl as Idl,
+          programId,
+          provider,
+        ) as any;
 
         // Derive PDAs
         const deskOwnerPk = new SolPubkey(SOLANA_DESK_OWNER);
         const [desk] = SolPubkey.findProgramAddressSync(
           [Buffer.from("desk"), deskOwnerPk.toBuffer()],
-          programId
+          programId,
         );
         const tokenMintPk = new SolPubkey(SOLANA_TOKEN_MINT);
         const usdcMintPk = SOLANA_USDC_MINT
@@ -351,25 +365,27 @@ export function AcceptQuoteModal({
         const deskTokenTreasury = await getAssociatedTokenAddress(
           tokenMintPk,
           desk,
-          true
+          true,
         );
         const deskUsdcTreasury = usdcMintPk
           ? await getAssociatedTokenAddress(usdcMintPk, desk, true)
           : undefined;
 
         // Read nextOfferId from desk account
-        const deskAccount: any = await (program.account as any).desk.fetch(desk);
+        const deskAccount: any = await (program.account as any).desk.fetch(
+          desk,
+        );
         const nextOfferId = new anchor.BN(deskAccount.nextOfferId.toString());
         const idBuf = Buffer.alloc(8);
         idBuf.writeBigUInt64LE(BigInt(nextOfferId.toString()));
         const [offer] = SolPubkey.findProgramAddressSync(
           [Buffer.from("offer"), desk.toBuffer(), idBuf],
-          programId
+          programId,
         );
 
         // Create offer on Solana
         const tokenAmountWei = new anchor.BN(
-          (BigInt(tokenAmount) * 10n ** 18n).toString()
+          (BigInt(tokenAmount) * 10n ** 18n).toString(),
         );
         const lockupSeconds = new anchor.BN(lockupDays * 24 * 60 * 60);
         const paymentCurrencySol = currency === "USDC" ? 1 : 0; // 0 SOL, 1 USDC
@@ -379,7 +395,7 @@ export function AcceptQuoteModal({
             tokenAmountWei,
             discountBps,
             paymentCurrencySol,
-            lockupSeconds
+            lockupSeconds,
           )
           .accountsStrict({
             desk,
@@ -422,7 +438,7 @@ export function AcceptQuoteModal({
           const payerUsdcAta = await getAssociatedTokenAddress(
             usdcMintPk,
             wallet.publicKey,
-            false
+            false,
           );
           await program.methods
             .fulfillOfferUsdc(nextOfferId)
@@ -435,7 +451,7 @@ export function AcceptQuoteModal({
               payer: wallet.publicKey,
               tokenProgram: new SolPubkey(
                 // spl-token program id
-                "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
               ),
               systemProgram: SolSystemProgram.programId,
             })
@@ -495,8 +511,34 @@ export function AcceptQuoteModal({
         lockupSeconds,
       });
 
+      console.log(`[AcceptQuote] Offer created: ${newOfferId}`);
+
       setStep("await_approval");
-      const approvedOffer = await waitForApproval(newOfferId, 90_000);
+      
+      // Call approval API - it will block until approved and may also fulfill
+      console.log(`[AcceptQuote] Requesting approval for offer:`, newOfferId.toString());
+      const approveRes = await fetch("/api/otc/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offerId: newOfferId.toString() }),
+      });
+      
+      if (!approveRes.ok) {
+        const errorText = await approveRes.text();
+        throw new Error(`Approval failed: ${errorText}`);
+      }
+      
+      const approveData = await approveRes.json();
+      console.log(`[AcceptQuote] ✅ Offer approved:`, approveData.approvedTx || approveData.txHash);
+
+      // If backend already fulfilled synchronously, skip payment step
+      if (approveData.fulfillTx || approveData.fulfilled) {
+        console.log(`[AcceptQuote] ✅ Offer fulfilled by backend:`, approveData.fulfillTx);
+        setStep("complete");
+        setIsProcessing(false);
+        onComplete?.({ offerId: newOfferId, txHash: approveData.fulfillTx });
+        return;
+      }
 
       setStep("paying");
       // Compute payment from on-chain captured pricing
@@ -770,7 +812,8 @@ export function AcceptQuoteModal({
 
         {requireApprover && (
           <div className="px-5 pb-1 text-xs text-zinc-400">
-            Payment will be executed by the desk's whitelisted approver wallet on your behalf after approval.
+            Payment will be executed by the desk&apos;s whitelisted approver
+            wallet on your behalf after approval.
           </div>
         )}
 
@@ -806,7 +849,9 @@ export function AcceptQuoteModal({
                       Get discounted ElizaOS tokens. Let’s deal, anon.
                     </p>
                     <div className="inline-flex gap-2">
-                      <NetworkConnectButton className="!h-9">Connect</NetworkConnectButton>
+                      <NetworkConnectButton className="!h-9">
+                        Connect
+                      </NetworkConnectButton>
                     </div>
                   </div>
                 </div>
@@ -840,9 +885,7 @@ export function AcceptQuoteModal({
               color="orange"
               className="bg-orange-600 border-orange-700 hover:brightness-110"
               disabled={
-                Boolean(validationError) ||
-                insufficientFunds ||
-                isProcessing
+                Boolean(validationError) || insufficientFunds || isProcessing
               }
             >
               {isSolanaActive ? "Buy Now on Solana" : "Buy Now on EVM"}

@@ -21,12 +21,19 @@ function getChain() {
 
 export async function POST(request: NextRequest) {
   try {
-    const OTC_ADDRESS = process.env.NEXT_PUBLIC_OTC_ADDRESS as Address | undefined;
-    const APPROVER_PRIVATE_KEY = process.env.APPROVER_PRIVATE_KEY as `0x${string}` | undefined;
+    const OTC_ADDRESS = process.env.NEXT_PUBLIC_OTC_ADDRESS as
+      | Address
+      | undefined;
+    const APPROVER_PRIVATE_KEY = process.env.APPROVER_PRIVATE_KEY as
+      | `0x${string}`
+      | undefined;
     const API_KEY = process.env.API_SECRET_KEY || process.env.ADMIN_API_KEY;
 
     if (!OTC_ADDRESS || !APPROVER_PRIVATE_KEY) {
-      return NextResponse.json({ error: "Server not configured" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Server not configured" },
+        { status: 500 },
+      );
     }
 
     // Require auth in production
@@ -37,22 +44,37 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { offerId, currency, valueWei, beneficiary, signature, message } = await request.json();
-    if (typeof offerId !== "string" && typeof offerId !== "number" && typeof offerId !== "bigint") {
+    const { offerId, signature, message } = await request.json();
+    if (
+      typeof offerId !== "string" &&
+      typeof offerId !== "number" &&
+      typeof offerId !== "bigint"
+    ) {
       return NextResponse.json({ error: "Invalid offerId" }, { status: 400 });
     }
 
     const chain = getChain();
     const publicClient = createPublicClient({ chain, transport: http() });
     const account = privateKeyToAccount(APPROVER_PRIVATE_KEY);
-    const walletClient = createWalletClient({ account, chain, transport: http() });
+    const walletClient = createWalletClient({
+      account,
+      chain,
+      transport: http(),
+    });
     const abi = otcArtifact.abi as Abi;
 
     // Optional: enforce contract flag for approver-only fulfill
-    const requireApprover = (await publicClient.readContract({ address: OTC_ADDRESS, abi, functionName: "requireApproverToFulfill", args: [] as any })) as boolean;
+    const requireApprover = (await (publicClient as any).readContract({
+      address: OTC_ADDRESS,
+      abi,
+      functionName: "requireApproverToFulfill",
+      args: [],
+    })) as boolean;
     if (!requireApprover) {
       // Soft guard: proceed but log warning
-      console.warn("[OTC Fulfill API] requireApproverToFulfill is false; proceeding anyway");
+      console.warn(
+        "[OTC Fulfill API] requireApproverToFulfill is false; proceeding anyway",
+      );
     }
 
     const id = BigInt(offerId as any);
@@ -72,8 +94,13 @@ export async function POST(request: NextRequest) {
     try {
       if (message && signature) {
         const recovered = await recoverMessageAddress({ message, signature });
-        if (recovered.toLowerCase() !== String(offer.beneficiary).toLowerCase()) {
-          return NextResponse.json({ error: "Signature does not match beneficiary" }, { status: 401 });
+        if (
+          recovered.toLowerCase() !== String(offer.beneficiary).toLowerCase()
+        ) {
+          return NextResponse.json(
+            { error: "Signature does not match beneficiary" },
+            { status: 401 },
+          );
         }
       }
     } catch {}
@@ -167,8 +194,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, txHash });
   } catch (error) {
     console.error("[OTC Fulfill API] Error:", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : String(error) },
+      { status: 500 },
+    );
   }
 }
-
-

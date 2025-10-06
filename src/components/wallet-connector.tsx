@@ -1,13 +1,13 @@
 "use client";
 
-import { useAccount } from "wagmi";
-import { useEffect, useMemo, useState } from "react";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import { useWallet } from "@solana/wallet-adapter-react";
-import { useMultiWallet } from "@/components/multiwallet";
 import { Button } from "@/components/button";
+import { useMultiWallet } from "@/components/multiwallet";
 import { NetworkConnectButton } from "@/components/network-connect";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { useEffect, useState } from "react";
+import { useAccount } from "wagmi";
 
 interface WalletConnectorProps {
   onConnectionChange: (connected: boolean, address?: string) => void;
@@ -31,13 +31,6 @@ const WalletConnectorInner = ({
 
   const bothConnected = evmConnected && solanaConnected;
 
-  const displayAddress = useMemo(() => {
-    const evm = address;
-    const solAddr = sol.publicKey?.toBase58();
-    const a = activeFamily === "solana" ? solAddr : evm;
-    return a ? `${a.slice(0, 6)}...${a.slice(-4)}` : "";
-  }, [activeFamily, address, sol.publicKey]);
-
   // Notify parent component of connection changes
   useEffect(() => {
     const a = activeFamily === "solana" ? sol.publicKey?.toBase58() : address;
@@ -52,11 +45,19 @@ const WalletConnectorInner = ({
 
   if (showAsButton) {
     if (unifiedConnected) return null;
-    return <NetworkConnectButton className="!h-9">Connect Wallet</NetworkConnectButton>;
+    return (
+      <NetworkConnectButton className="!h-9">
+        Connect Wallet
+      </NetworkConnectButton>
+    );
   }
 
   if (!evmConnected && !solanaConnected) {
-    return <NetworkConnectButton className="!h-9 bg-[#FF5800] !px-3">Connect Wallet</NetworkConnectButton>;
+    return (
+      <NetworkConnectButton className="!h-9 bg-[#FF5800] !px-3">
+        Connect Wallet
+      </NetworkConnectButton>
+    );
   }
 
   return (
@@ -88,7 +89,7 @@ const WalletConnectorInner = ({
 
       {activeFamily === "evm" ? (
         <ConnectButton.Custom>
-          {({ openAccountModal, openConnectModal, account, mounted }) => (
+          {({ openAccountModal, openConnectModal, account }) => (
             <Button
               onClick={account ? openAccountModal : openConnectModal}
               color="orange"

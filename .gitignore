@@ -44,9 +44,6 @@ next-env.d.ts
 .worker-next
 .wrangler
 
-# db
-db*
-
 # xata
 .xata
 # clerk configuration (can include secrets)
@@ -94,3 +91,5 @@ data/
 
 .anchor
 test-results/
+eliza/
+.pids

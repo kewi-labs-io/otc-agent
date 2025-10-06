@@ -1,22 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Button } from "@/components/button";
 import { AcceptQuoteModal } from "@/components/accept-quote-modal";
+import { Button } from "@/components/button";
 import { useOTC } from "@/hooks/contracts/useOTC";
 import { type OTCQuote } from "@/utils/xml-parser";
-import { useAccount } from "wagmi";
+import { useEffect, useState } from "react";
 
 interface InitialQuoteDisplayProps {
-  onAccept?: (tokenAmount: number) => Promise<void>;
   quote?: Partial<OTCQuote> | null;
 }
 
 export function InitialQuoteDisplay({
-  onAccept,
   quote: propQuote,
 }: InitialQuoteDisplayProps) {
-  const { minUsdAmount, maxTokenPerOrder, createOffer } = useOTC();
+  const { minUsdAmount, maxTokenPerOrder } = useOTC();
   const [showModal, setShowModal] = useState(false);
   // Partial OTCQuote for when properties might be missing
   type ActiveQuote = Partial<OTCQuote> & {
@@ -25,34 +22,11 @@ export function InitialQuoteDisplay({
   };
   const [quote, setQuote] = useState<ActiveQuote | null>(null);
 
-  // Load the current quote from API or use prop
+  // Use prop quote directly
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      if (propQuote) {
-        setQuote(propQuote);
-        return;
-      }
-      try {
-        const userId =
-          typeof window !== "undefined"
-            ? localStorage.getItem("otc-desk-user-id")
-            : null;
-        if (!userId) return;
-        const res = await fetch(
-          `/api/quote/latest?userId=${encodeURIComponent(userId)}`,
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled) setQuote(data.quote ?? null);
-      } catch {
-        // ignore
-      }
+    if (propQuote) {
+      setQuote(propQuote);
     }
-    load();
-    return () => {
-      cancelled = true;
-    };
   }, [propQuote]);
 
   // Default fallback if quote is not loaded yet
@@ -79,43 +53,6 @@ export function InitialQuoteDisplay({
     // Assuming 8 decimals for USD amounts from contract
     const num = Number(amount) / 10 ** 8;
     return `$${num.toFixed(2)}`;
-  };
-
-  const { address } = useAccount();
-
-  const handleAcceptQuote = async (tokenAmount: number) => {
-    try {
-      // Ensure current quote exists and associate wallet address as beneficiary for verification
-      if (quote?.quoteId && address) {
-        await fetch(`/api/quote/latest`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            quoteId: quote.quoteId,
-            beneficiary: address,
-          }),
-        });
-      }
-
-      // Use terms from current quote where possible
-      const discountBps = quote?.discountBps ?? defaultQuote.discountBps ?? 800;
-      const lockupMonthsForOffer = (quote?.lockupMonths ?? lockupMonths) || 5;
-      const lockupSeconds = BigInt(lockupMonthsForOffer * 30 * 24 * 60 * 60);
-      const tokenAmountWei = BigInt(tokenAmount) * BigInt(10 ** 18);
-
-      await createOffer({
-        tokenAmountWei,
-        discountBps,
-        paymentCurrency: quote?.paymentCurrency === "ETH" ? 0 : 1,
-        lockupSeconds,
-      });
-
-      if (onAccept) {
-        await onAccept(tokenAmount);
-      }
-    } catch (error) {
-      throw error;
-    }
   };
 
   return (

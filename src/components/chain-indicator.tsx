@@ -35,8 +35,16 @@ export function ChainIndicator() {
   }
 
   return (
-    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border ${chainColor}`}>
-      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <div
+      className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border ${chainColor}`}
+    >
+      <svg
+        className="w-4 h-4"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
         <path d="M12 2L2 7l10 5 10-5-10-5z" />
         <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
       </svg>
@@ -44,5 +52,3 @@ export function ChainIndicator() {
     </div>
   );
 }
-
-

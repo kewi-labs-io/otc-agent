@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { Button } from "@/components/button";
-import { useRouter } from "next/navigation";
 import { createDealShareImage } from "@/utils/share-card";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 interface DealCompletionProps {
   quote: {
     quoteId: string;
-    userId: string;
+    entityId: string;
     beneficiary: string;
     tokenAmount: string;
     lockupMonths: number;
@@ -24,14 +24,11 @@ interface DealCompletionProps {
 
 export function DealCompletion({ quote }: DealCompletionProps) {
   const router = useRouter();
-  const [shareImageUrl, setShareImageUrl] = useState<string>("");
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [shareCount, setShareCount] = useState(0);
 
   // Calculate discount-derived metrics
   const discountPercent = quote.discountBps / 100;
   const projectedYield = 0; // No yield; discount-only instrument
-  const breakEvenDays = Math.ceil(0);
   const roi = (quote.discountUsd / quote.discountedUsd) * 100;
 
   const maturityDate = new Date();
@@ -60,7 +57,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
           offerId: undefined, // Add if available
         }),
       });
-      
+
       if (!response.ok) {
         throw new Error("Failed to record deal completion");
       }
@@ -70,26 +67,22 @@ export function DealCompletion({ quote }: DealCompletionProps) {
   };
 
   const generateShareImage = async () => {
-    setIsGeneratingImage(true);
     try {
-      const { dataUrl } = await createDealShareImage({
+      await createDealShareImage({
         tokenAmount: parseFloat(quote.tokenAmount),
         discountBps: quote.discountBps,
         lockupMonths: quote.lockupMonths,
         paymentCurrency: quote.paymentCurrency as "ETH" | "USDC",
       });
-      setShareImageUrl(dataUrl);
     } catch (error) {
       console.error("Failed to generate share image:", error);
-    } finally {
-      setIsGeneratingImage(false);
     }
   };
 
   const shareToTwitter = async () => {
     try {
       // Generate fresh share image
-      const { file, dataUrl } = await createDealShareImage({
+      const { file } = await createDealShareImage({
         tokenAmount: parseFloat(quote.tokenAmount),
         discountBps: quote.discountBps,
         lockupMonths: quote.lockupMonths,

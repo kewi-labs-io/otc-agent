@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     console.log(
       `📨 [Notifications API] Received ${notification.type} notification:`,
       {
-        userId: notification.userId,
+        entityId: notification.entityId,
         quoteId: notification.quoteId,
         offerId: notification.offerId,
         type: notification.type,
@@ -57,18 +57,18 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const userId = searchParams.get("userId");
+    const entityId = searchParams.get("entityId");
     const since = searchParams.get("since"); // ISO timestamp to get notifications after
 
-    if (!userId) {
+    if (!entityId) {
       return NextResponse.json(
-        { error: "userId parameter is required" },
+        { error: "entityId parameter is required" },
         { status: 400 },
       );
     }
 
     // Fetch notifications for this user
-    const notifications = await getNotificationsForUser(userId, since);
+    const notifications = await getNotificationsForUser(entityId, since);
 
     return NextResponse.json({
       notifications,
@@ -87,12 +87,12 @@ export async function GET(request: NextRequest) {
 const notificationStore = new Map<string, any[]>();
 
 async function storeNotification(notification: any) {
-  const userId = notification.userId;
-  if (!notificationStore.has(userId)) {
-    notificationStore.set(userId, []);
+  const entityId = notification.entityId;
+  if (!notificationStore.has(entityId)) {
+    notificationStore.set(entityId, []);
   }
 
-  const userNotifications = notificationStore.get(userId)!;
+  const userNotifications = notificationStore.get(entityId)!;
   userNotifications.push({
     ...notification,
     id: `notif_${Date.now()}_${Math.random().toString(36).substring(7)}`,
@@ -106,10 +106,10 @@ async function storeNotification(notification: any) {
 }
 
 async function getNotificationsForUser(
-  userId: string,
+  entityId: string,
   since?: string | null,
 ): Promise<any[]> {
-  const userNotifications = notificationStore.get(userId) || [];
+  const userNotifications = notificationStore.get(entityId) || [];
 
   if (since) {
     const sinceDate = new Date(since);
@@ -124,16 +124,16 @@ async function getNotificationsForUser(
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId, notificationId } = await request.json();
+    const { entityId, notificationId } = await request.json();
 
-    if (!userId || !notificationId) {
+    if (!entityId || !notificationId) {
       return NextResponse.json(
-        { error: "userId and notificationId are required" },
+        { error: "entityId and notificationId are required" },
         { status: 400 },
       );
     }
 
-    const userNotifications = notificationStore.get(userId);
+    const userNotifications = notificationStore.get(entityId);
     if (userNotifications) {
       const index = userNotifications.findIndex((n) => n.id === notificationId);
       if (index !== -1) {

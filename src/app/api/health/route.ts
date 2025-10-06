@@ -12,7 +12,7 @@ export async function GET() {
       timestamp: new Date().toISOString(),
       environment: {
         hasGroqKey: !!process.env.GROQ_API_KEY,
-        database: "SQLite (Drizzle)",
+        database: "Postgres",
       },
     });
   } catch (error) {

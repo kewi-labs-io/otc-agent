@@ -1,15 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { agentRuntime } from "@/lib/agent-runtime";
 
 // POST /api/rooms/[roomId]/messages - Send a message
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { roomId: string } },
-) {
+export async function POST(request: Request, ctx: any) {
   try {
-    const { roomId } = params;
+    const { roomId } = await ctx.params;
     const body = await request.json();
-    const { userId, text, attachments, clientMessageId } = body;
+    const { entityId, text, attachments } = body;
 
     if (!roomId) {
       console.error("[Messages API] Missing roomId");
@@ -19,10 +16,10 @@ export async function POST(
       );
     }
 
-    if (!userId) {
-      console.error("[Messages API] Missing userId");
+    if (!entityId) {
+      console.error("[Messages API] Missing entityId");
       return NextResponse.json(
-        { error: "userId is required" },
+        { error: "entityId is required" },
         { status: 400 },
       );
     }
@@ -35,21 +32,16 @@ export async function POST(
       );
     }
 
-    // Handle the message
-    const message = await agentRuntime.handleMessage(
-      roomId,
-      userId,
-      {
-        text,
-        attachments: attachments || [],
-      },
-      undefined,
-      clientMessageId,
-    );
+    // Handle the message - pass wallet address directly
+    // The action handlers will convert to UUID for cache storage when needed
+    const message = await agentRuntime.handleMessage(roomId, entityId as any, {
+      text,
+      attachments: attachments || [],
+    });
 
     console.log(`[Messages API] Message sent successfully`, {
       roomId,
-      userId,
+      entityId,
       messageId: message.id,
     });
 
@@ -58,8 +50,8 @@ export async function POST(
       success: true,
       message: {
         id: message.id,
-        userId:
-          (message as any).userId ||
+        entityId:
+          (message as any).entityId ||
           (message as any).userID ||
           (message as any).user_id ||
           "",
@@ -98,15 +90,12 @@ export async function POST(
 }
 
 // GET /api/rooms/[roomId]/messages - Get messages (for polling)
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { roomId: string } },
-) {
+export async function GET(request: Request, ctx: any) {
   try {
-    const { roomId } = params;
+    const { roomId } = await ctx.params;
     const { searchParams } = new URL(request.url);
-    const afterTimestamp = searchParams.get("afterTimestamp");
     const limit = searchParams.get("limit");
+    const afterTimestamp = searchParams.get("afterTimestamp");
 
     if (!roomId) {
       return NextResponse.json(
@@ -115,26 +104,38 @@ export async function GET(
       );
     }
 
-    const messages = await agentRuntime.getConversationMessages(
-      roomId,
-      limit ? parseInt(limit) : 10,
-      afterTimestamp ? parseInt(afterTimestamp) : undefined,
-    );
+    const runtime = await agentRuntime.getRuntime();
+    const messages = await runtime.getMemories({
+      tableName: "messages",
+      roomId: roomId as any,
+      count: limit ? parseInt(limit) : 100, // Higher count for polling to catch all new messages
+      unique: false,
+    });
 
-    const simple = messages.map((msg) => {
+    // Filter messages by timestamp if provided (for polling)
+    const afterTimestampNum = afterTimestamp ? parseInt(afterTimestamp) : 0;
+    const filteredMessages = afterTimestamp
+      ? messages.filter((msg) => {
+          const msgTime = (msg as any).createdAt;
+          return msgTime > afterTimestampNum;
+        })
+      : messages;
+
+    const simple = filteredMessages.map((msg) => {
       let parsedContent: any = msg.content;
       try {
-        if (typeof msg.content === "string") parsedContent = JSON.parse(msg.content);
+        if (typeof msg.content === "string")
+          parsedContent = JSON.parse(msg.content);
       } catch {
         parsedContent = msg.content;
       }
       return {
         id: msg.id,
-        userId: msg.userId,
+        entityId: msg.entityId,
         agentId: msg.agentId,
         content: parsedContent,
         createdAt: (msg as any).createdAt,
-        isAgent: msg.isAgent,
+        isAgent: msg.entityId === msg.agentId,
       };
     });
 
@@ -143,9 +144,10 @@ export async function GET(
         success: true,
         messages: simple,
         hasMore: false,
-        lastTimestamp: Date.now(),
+        lastTimestamp:
+          simple.length > 0 ? simple[simple.length - 1].createdAt : Date.now(),
       },
-      { headers: { 'Cache-Control': 'no-store' } },
+      { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
     console.error("[Messages API] Error getting messages:", error);

@@ -1,71 +1,93 @@
 import { NextRequest, NextResponse } from "next/server";
-import { QuoteService } from "@/services/database";
 import { agentRuntime } from "@/lib/agent-runtime";
+import { walletToEntityId } from "@/lib/entityId";
+import QuoteService from "@/lib/plugin-otc-desk/services/quoteService";
 
 export async function GET(request: NextRequest) {
-  try {
-    // Ensure runtime init has run to create required tables
-    try {
-      await agentRuntime.getRuntime();
-    } catch {}
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
+  const runtime = await agentRuntime.getRuntime();
+  const quoteService = runtime.getService<QuoteService>("QuoteService");
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: "userId parameter is required" },
-        { status: 400 },
-      );
-    }
-
-    // Pull the latest active quote for this user from DB
-    const active = await QuoteService.getActiveQuotes();
-    const quote = active.find((q) => q.userId === userId) || null;
-
-    return NextResponse.json({ success: true, quote });
-  } catch (error) {
-    console.error("[Quote API] Error fetching latest quote:", error);
-    return NextResponse.json(
-      {
-        error: "Failed to fetch latest quote",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    );
+  if (!quoteService) {
+    return NextResponse.json({ error: "QuoteService not available" }, { status: 500 });
   }
+
+  const { searchParams } = new URL(request.url);
+  const wallet = searchParams.get("entityId");
+
+  if (!wallet) {
+    return NextResponse.json({ error: "entityId parameter required" }, { status: 400 });
+  }
+
+  console.log('[Quote API] GET - wallet:', wallet);
+
+  let quote = await quoteService.getQuoteByWallet(wallet);
+  console.log('[Quote API] Found:', quote ? quote.quoteId : 'null');
+  
+  if (!quote) {
+    console.log('[Quote API] Creating default quote');
+    const { getElizaPriceUsd } = await import("@/lib/plugin-otc-desk/services/priceFeed");
+    const priceUsdPerToken = await getElizaPriceUsd();
+    const entityId = walletToEntityId(wallet);
+    
+    await quoteService.createQuote({
+      entityId,
+      beneficiary: wallet.toLowerCase(),
+      tokenAmount: "0",
+      discountBps: 1000,
+      apr: 0,
+      lockupMonths: 5,
+      paymentCurrency: "USDC",
+      priceUsdPerToken,
+      totalUsd: 0,
+      discountUsd: 0,
+      discountedUsd: 0,
+      paymentAmount: "0",
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+    });
+    
+    quote = await quoteService.getQuoteByWallet(wallet);
+  }
+
+  const formattedQuote = quote ? {
+    quoteId: quote.quoteId,
+    entityId: quote.entityId,
+    beneficiary: quote.beneficiary,
+    tokenAmount: quote.tokenAmount,
+    discountBps: quote.discountBps,
+    apr: quote.apr,
+    lockupMonths: quote.lockupMonths,
+    lockupDays: quote.lockupDays,
+    paymentCurrency: quote.paymentCurrency,
+    priceUsdPerToken: quote.priceUsdPerToken,
+    totalUsd: quote.totalUsd,
+    discountUsd: quote.discountUsd,
+    discountedUsd: quote.discountedUsd,
+    paymentAmount: quote.paymentAmount,
+    status: quote.status,
+    createdAt: quote.createdAt,
+    expiresAt: quote.expiresAt,
+  } : null;
+
+  console.log('[Quote API] Returning:', formattedQuote?.quoteId ?? 'null');
+  return NextResponse.json({ success: true, quote: formattedQuote });
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    // Ensure runtime init has run to create required tables
-    try {
-      await agentRuntime.getRuntime();
-    } catch {}
-    const body = await request.json();
-    const { quoteId, beneficiary } = body;
+  const runtime = await agentRuntime.getRuntime();
+  const quoteService = runtime.getService<QuoteService>("QuoteService");
 
-    if (!quoteId || !beneficiary) {
-      return NextResponse.json(
-        { error: "quoteId and beneficiary are required" },
-        { status: 400 },
-      );
-    }
-
-    // Update the beneficiary and signature for this quote
-    const updated = await QuoteService.setQuoteBeneficiary(
-      quoteId,
-      beneficiary,
-    );
-
-    return NextResponse.json({ success: true, quote: updated });
-  } catch (error) {
-    console.error("[Quote API] Error storing quote:", error);
-    return NextResponse.json(
-      {
-        error: "Failed to store quote",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    );
+  if (!quoteService) {
+    return NextResponse.json({ error: "QuoteService not available" }, { status: 500 });
   }
+
+  const body = await request.json();
+  const { quoteId, beneficiary } = body;
+
+  if (!quoteId || !beneficiary) {
+    return NextResponse.json({ error: "quoteId and beneficiary required" }, { status: 400 });
+  }
+
+  const updated = await quoteService.setQuoteBeneficiary(quoteId, beneficiary);
+
+  return NextResponse.json({ success: true, quote: updated });
 }

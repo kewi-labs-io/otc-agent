@@ -20,7 +20,7 @@ type MultiWalletContextValue = {
 
   // Unified status
   isConnected: boolean;
-  userId: string | null;
+  entityId: string | null;
   networkLabel: string; // e.g. "EVM Mainnet" or "Solana Devnet"
 
   // EVM
@@ -104,8 +104,16 @@ export function MultiWalletProvider({
     if (evmConnected) return `EVM ${evmNetworkName}`;
     if (solanaConnected) return `Solana ${solanaNetworkName}`;
     return "Not connected";
-  }, [activeFamily, evmConnected, solanaConnected, evmNetworkName, solanaNetworkName]);
-  const userId = useMemo(() => {
+  }, [
+    activeFamily,
+    evmConnected,
+    solanaConnected,
+    evmNetworkName,
+    solanaNetworkName,
+  ]);
+  const entityId = useMemo(() => {
+    // Return wallet address directly (not UUID) for entity ID
+    // Backend APIs will convert to UUID when needed for cache keys
     if (activeFamily === "evm" && evmConnected && evmAddress)
       return evmAddress.toLowerCase();
     if (activeFamily === "solana" && solanaConnected && solanaPublicKey)
@@ -128,7 +136,7 @@ export function MultiWalletProvider({
     activeFamily,
     setActiveFamily,
     isConnected,
-    userId,
+    entityId,
     networkLabel,
     evmConnected,
     evmAddress: evmAddress ?? undefined,
@@ -151,7 +159,7 @@ export function useMultiWallet(): MultiWalletContextValue {
       activeFamily: "none",
       setActiveFamily: () => {},
       isConnected: false,
-      userId: null,
+      entityId: null,
       networkLabel: "Not connected",
       evmConnected: false,
       evmAddress: undefined,

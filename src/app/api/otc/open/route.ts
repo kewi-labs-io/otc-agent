@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createPublicClient, http, type Abi, type Address } from "viem";
 import { hardhat, base, baseSepolia } from "viem/chains";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
@@ -11,7 +11,7 @@ function getChain() {
   return hardhat;
 }
 
-export async function GET(_request: NextRequest) {
+export async function GET() {
   try {
     const OTC_ADDRESS = process.env.NEXT_PUBLIC_OTC_ADDRESS as
       | Address

@@ -27,6 +27,7 @@
   "exclude": [
     "node_modules", 
     "elizaos/**/*",
+    "eliza/**/*",
     "src/agent.ts",
     "src/lib/plugin-otc-desk/**/*",
     "src/plugin-groq.ts",

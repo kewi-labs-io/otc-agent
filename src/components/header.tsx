@@ -7,14 +7,11 @@ import { useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { Dialog } from "@/components/dialog";
-import { DiscordIcon, XIcon } from "@/components/icons";
 import { Logo } from "@/components/logo";
 import { WalletConnector } from "./wallet-connector";
-import { useMultiWallet } from "@/components/multiwallet";
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { paymentPairLabel } = useMultiWallet();
   const pathname = usePathname();
 
   const NavLinks = ({ mobile = false }) => (
@@ -92,7 +89,7 @@ export function Header() {
   );
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-20 bg-transparent">
+    <header className="z-20 bg-transparent">
       <nav className="px-4 lg:px-6 w-full" aria-label="Global">
         <div className="flex items-center justify-between py-4 gap-4 flex-nowrap">
           <div className="flex shrink-0">

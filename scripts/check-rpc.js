@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawn } from 'child_process';
 import http from 'http';
 
 function checkRPC() {
@@ -40,27 +41,33 @@ function checkRPC() {
 
 async function main() {
   console.log('🔍 Checking if Hardhat RPC is running on localhost:8545...');
-  
   const isRunning = await checkRPC();
-  
+
   if (isRunning) {
     console.log('✅ Hardhat RPC is running!');
     console.log('📝 You can interact with the OTC Desk contract.');
-  } else {
-    console.log('⚠️  Hardhat RPC is not running!');
-    console.log('');
-    console.log('To start the local blockchain and deploy contracts, run:');
-    console.log('');
-    console.log('  npm run dev:with-rpc');
-    console.log('');
-    console.log('Or run these commands in separate terminals:');
-    console.log('  1. cd contracts && npm run start');
-    console.log('  2. cd contracts && npm run deploy:local');
-    console.log('  3. npm run dev');
-    console.log('');
+    process.exit(0);
+    return;
   }
-  
-  process.exit(isRunning ? 0 : 1);
+
+  console.log('❌ Hardhat RPC is not running. Starting in background...');
+  try {
+    const child = spawn('npm', ['run', 'rpc:start'], { stdio: 'ignore', shell: true, detached: true });
+    child.unref();
+    // Give it a moment to boot
+    await new Promise((r) => setTimeout(r, 4000));
+  } catch (e) {
+    console.log('⚠️  Failed to auto-start Hardhat. Please run: cd contracts && npm run start');
+  }
+
+  // Re-check but do not fail the whole dev script
+  const ok = await checkRPC();
+  if (ok) {
+    console.log('✅ Hardhat RPC started.');
+  } else {
+    console.log('⚠️  Hardhat still not responding; continuing dev server startup.');
+  }
+  process.exit(0);
 }
 
 main();

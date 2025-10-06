@@ -2,30 +2,22 @@
 
 import { AcceptQuoteModal } from "@/components/accept-quote-modal";
 import { Button } from "@/components/button";
+import { useMultiWallet } from "@/components/multiwallet";
+import { NetworkConnectButton } from "@/components/network-connect";
 import {
   extractXMLFromMessage,
   parseOTCQuoteXML,
   type OTCQuote,
 } from "@/utils/xml-parser";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useEffect, useState } from "react";
-import { useAccount } from "wagmi";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import { NetworkConnectButton } from "@/components/network-connect";
-import { useMultiWallet } from "@/components/multiwallet";
 // Sharing is disabled at the quote stage. Users can share after completing a deal.
 
 interface OTCQuoteDisplayProps {
   messageText: string;
-  onAccept?: (quote: OTCQuote) => void;
 }
 
-export function OTCQuoteDisplay({
-  messageText,
-  onAccept,
-}: OTCQuoteDisplayProps) {
+export function OTCQuoteDisplay({ messageText }: OTCQuoteDisplayProps) {
   const [quote, setQuote] = useState<OTCQuote | null>(null);
-  const { isConnected } = useAccount();
   const { isConnected: unifiedConnected } = useMultiWallet();
   const [showModal, setShowModal] = useState(false);
 
@@ -82,7 +74,9 @@ export function OTCQuoteDisplay({
       <div className="mt-4 flex gap-2">
         {!unifiedConnected ? (
           <div className="inline-flex gap-2">
-            <NetworkConnectButton className="!h-9">Connect</NetworkConnectButton>
+            <NetworkConnectButton className="!h-9">
+              Connect
+            </NetworkConnectButton>
           </div>
         ) : (
           <>

@@ -176,7 +176,7 @@ export NEXT_PUBLIC_SOLANA_RPC=https://api.devnet.solana.com
 
 ## Troubleshooting
 - App builds but APIs fail: ensure local chain is running and contracts are deployed (`rpc:start`, `rpc:deploy`).
-- DB errors: run `npm run db:push` and verify `POSTGRES_URL` or use the included SQLite/Drizzle defaults.
+- DB errors: run `npm run db:push` and verify `POSTGRES_URL` or use the included Drizzle defaults.
 - Quotes look off: confirm you’re using week-based lockups (1–52w) and discounts (not APR).
 - Solana program failing to deploy: verify Anchor CLI is installed, correct Rust nightly is active, and `solana-test-validator` is running.
 - X sharing: ensure `NEXT_PUBLIC_API_URL` points to your app origin and that the `/api/share/*` routes are implemented and configured with X credentials.

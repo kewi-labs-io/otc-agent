@@ -3,7 +3,7 @@
 // Client-side helpers for X (Twitter) sharing via our backend endpoints
 
 export type XCredentials = {
-  userId?: string;
+  entityId?: string;
   username?: string;
   screen_name?: string;
   oauth1Token?: string;

@@ -9,7 +9,7 @@ type OAuthResponse = {
   access_token?: string;
   refresh_token?: string;
   expires_in?: number;
-  userId?: string;
+  entityId?: string;
   username?: string;
   profileImageUrl?: string;
   oauth1_token?: string;
@@ -60,7 +60,7 @@ export default function CallbackPage() {
             throw new Error("Missing oauth1 tokens in response");
           }
           const credentials = {
-            userId: data.user_id || data.userId || "default_user",
+            entityId: data.user_id || data.entityId || "default_user",
             accessToken: data.access_token || "",
             refreshToken: data.refresh_token || "",
             expiresAt: Date.now() + 86400000,
@@ -89,7 +89,7 @@ export default function CallbackPage() {
             throw new Error("Incomplete OAuth 2.0 token data");
           }
           const creds = {
-            userId: tok.user_id,
+            entityId: tok.user_id,
             accessToken: tok.access_token,
             refreshToken: tok.refresh_token,
             expiresAt: Date.now() + (tok.expires_in || 3600) * 1000,

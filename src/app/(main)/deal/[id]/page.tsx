@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { DealCompletion } from "@/components/deal-completion";
 
+// Force dynamic rendering for this route
+export const dynamic = "force-dynamic";
+
 export default function DealPage() {
   const params = useParams();
   const router = useRouter();

@@ -1,9 +1,9 @@
 "use client";
 
-import { ThemeProvider } from "next-themes";
-import { RainbowKitProvider, darkTheme, lightTheme } from "@rainbow-me/rainbowkit";
-import { WagmiProvider } from "wagmi";
-import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
+import { MultiWalletProvider } from "@/components/multiwallet";
+import { APP_INFO } from "@/config/app";
+import { config } from "@/lib/wagmi-client";
+import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import {
   ConnectionProvider,
   WalletProvider,
@@ -13,10 +13,10 @@ import {
   PhantomWalletAdapter,
   SolflareWalletAdapter,
 } from "@solana/wallet-adapter-wallets";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
 import { useEffect, useMemo, useState } from "react";
-import { config } from "@/lib/wagmi-client";
-import { APP_INFO } from "@/config/app";
-import { MultiWalletProvider } from "@/components/multiwallet";
+import { WagmiProvider } from "wagmi";
 
 // Required by wallet-adapter-react-ui styles
 import "@solana/wallet-adapter-react-ui/styles.css";

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 
 export interface Notification {
   id: string;
-  userId: string;
+  entityId: string;
   type: "offer_approved" | "deal_completed" | "info" | "error";
   message: string;
   timestamp: string;
@@ -20,7 +20,7 @@ export interface Notification {
 }
 
 interface UseNotificationPollingOptions {
-  userId?: string | null;
+  entityId?: string | null;
   pollInterval?: number; // milliseconds
   enabled?: boolean;
 }
@@ -30,7 +30,7 @@ interface UseNotificationPollingOptions {
  * Replaces socket.io real-time notifications in serverless architecture
  */
 export function useNotificationPolling({
-  userId,
+  entityId,
   pollInterval = 5000, // Poll every 5 seconds by default
   enabled = true,
 }: UseNotificationPollingOptions = {}) {
@@ -41,14 +41,14 @@ export function useNotificationPolling({
   const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchNotifications = useCallback(async () => {
-    if (!userId || !enabled) return;
+    if (!entityId || !enabled) return;
 
     try {
       setIsPolling(true);
       setError(null);
 
       const params = new URLSearchParams({
-        userId,
+        entityId,
         ...(lastPollTimeRef.current && { since: lastPollTimeRef.current }),
       });
 
@@ -85,11 +85,11 @@ export function useNotificationPolling({
     } finally {
       setIsPolling(false);
     }
-  }, [userId, enabled]);
+  }, [entityId, enabled]);
 
   const markAsRead = useCallback(
     async (notificationId: string) => {
-      if (!userId) return;
+      if (!entityId) return;
 
       try {
         const response = await fetch("/api/notifications", {
@@ -97,7 +97,7 @@ export function useNotificationPolling({
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ userId, notificationId }),
+          body: JSON.stringify({ entityId, notificationId }),
         });
 
         if (response.ok) {
@@ -109,7 +109,7 @@ export function useNotificationPolling({
         console.error("Error marking notification as read:", err);
       }
     },
-    [userId],
+    [entityId],
   );
 
   const clearAll = useCallback(() => {
@@ -119,7 +119,7 @@ export function useNotificationPolling({
 
   // Set up polling interval
   useEffect(() => {
-    if (!userId || !enabled) {
+    if (!entityId || !enabled) {
       if (intervalIdRef.current) {
         clearInterval(intervalIdRef.current);
         intervalIdRef.current = null;
@@ -127,7 +127,7 @@ export function useNotificationPolling({
       return;
     }
 
-    // Fetch immediately on mount or when userId changes
+    // Fetch immediately on mount or when entityId changes
     fetchNotifications();
 
     // Set up polling interval
@@ -139,12 +139,12 @@ export function useNotificationPolling({
         intervalIdRef.current = null;
       }
     };
-  }, [userId, enabled, pollInterval, fetchNotifications]);
+  }, [entityId, enabled, pollInterval, fetchNotifications]);
 
   // Handle visibility change - poll immediately when tab becomes visible
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible" && userId && enabled) {
+      if (document.visibilityState === "visible" && entityId && enabled) {
         fetchNotifications();
       }
     };
@@ -153,7 +153,7 @@ export function useNotificationPolling({
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [fetchNotifications, userId, enabled]);
+  }, [fetchNotifications, entityId, enabled]);
 
   return {
     notifications,

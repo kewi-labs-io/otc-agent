@@ -21,10 +21,12 @@ declare module "@solana/wallet-adapter-react-ui" {
     ImgHTMLAttributes,
   } from "react";
   import type { Adapter } from "@solana/wallet-adapter-base";
-  export function useWalletModal(): { visible: boolean; setVisible: (v: boolean) => void };
+  export function useWalletModal(): {
+    visible: boolean;
+    setVisible: (v: boolean) => void;
+  };
 
-  export interface WalletIconProps
-    extends ImgHTMLAttributes<HTMLImageElement> {
+  export interface WalletIconProps extends ImgHTMLAttributes<HTMLImageElement> {
     wallet: null | { adapter: Pick<Adapter, "name" | "icon"> };
   }
 

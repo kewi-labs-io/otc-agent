@@ -5,7 +5,6 @@ interface PriceCache {
   timestamp: number;
 }
 
-// ElizaOS token configuration
 export const ELIZAOS_TOKEN = {
   symbol: "ElizaOS",
   name: "ElizaOS",
@@ -13,13 +12,22 @@ export const ELIZAOS_TOKEN = {
   coingeckoId: "eliza",
 } as const;
 
-// Price cache with 60-second TTL
-const priceCache = new Map<string, PriceCache>();
 const CACHE_TTL = 60 * 1000; // 60 seconds
+const FALLBACK_ELIZAOS_PRICE = 0.00005;
+const FALLBACK_ETH_PRICE = 3500;
 
-// Fallback price for development/testing
-const FALLBACK_ELIZAOS_PRICE = 0.00005; // $0.00005 per ElizaOS
-const FALLBACK_ETH_PRICE = 3500; // $3500 per ETH
+// Helper to get runtime cache (works in serverless)
+async function getCachedPrice(key: string): Promise<PriceCache | null> {
+  const { agentRuntime } = await import("../../agent-runtime");
+  const runtime = await agentRuntime.getRuntime();
+  return await runtime.getCache<PriceCache>(`price:${key}`) ?? null;
+}
+
+async function setCachedPrice(key: string, value: PriceCache): Promise<void> {
+  const { agentRuntime } = await import("../../agent-runtime");
+  const runtime = await agentRuntime.getRuntime();
+  await runtime.setCache(`price:${key}`, value);
+}
 
 /**
  * Fetch ElizaOS price from CoinGecko API
@@ -61,8 +69,8 @@ async function fetchElizaPriceFromCoinGecko(): Promise<number | null> {
 export async function getElizaPriceUsd(): Promise<number> {
   const cacheKey = "ElizaOS";
 
-  // Check cache first
-  const cached = priceCache.get(cacheKey);
+  // Check runtime cache first
+  const cached = await getCachedPrice(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.price;
   }
@@ -71,8 +79,8 @@ export async function getElizaPriceUsd(): Promise<number> {
   const price = await fetchElizaPriceFromCoinGecko();
 
   if (price !== null) {
-    // Update cache
-    priceCache.set(cacheKey, {
+    // Update runtime cache
+    await setCachedPrice(cacheKey, {
       price,
       timestamp: Date.now(),
     });
@@ -90,8 +98,8 @@ export async function getElizaPriceUsd(): Promise<number> {
 export async function getEthPriceUsd(): Promise<number> {
   const cacheKey = "ETH";
 
-  // Check cache
-  const cached = priceCache.get(cacheKey);
+  // Check runtime cache
+  const cached = await getCachedPrice(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.price;
   }
@@ -112,7 +120,7 @@ export async function getEthPriceUsd(): Promise<number> {
       const price = data.ethereum?.usd;
 
       if (typeof price === "number") {
-        priceCache.set(cacheKey, {
+        await setCachedPrice(cacheKey, {
           price,
           timestamp: Date.now(),
         });
@@ -162,6 +170,10 @@ export async function getElizaValueUsd(
 /**
  * Clear price cache (useful for testing or forcing refresh)
  */
-export function clearPriceCache(): void {
-  priceCache.clear();
+export async function clearPriceCache(): Promise<void> {
+  const { agentRuntime } = await import("../../agent-runtime");
+  const runtime = await agentRuntime.getRuntime();
+  await runtime.setCache("price:ElizaOS", null);
+  await runtime.setCache("price:ETH", null);
+  console.log("[PriceFeed] Price cache cleared");
 }

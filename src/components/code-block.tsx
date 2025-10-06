@@ -102,7 +102,7 @@ export function CodeBlock({ className, children }) {
       setTimeout(() => {
         setCopySuccess("");
       }, 500);
-    } catch (err: any) {
+    } catch {
       setCopySuccess("Failed to copy.");
     }
   };

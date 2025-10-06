@@ -48,9 +48,7 @@
     "@tailwindcss/postcss": "^4.1.13",
     "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5.90.2",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/chai": "^5.2.2",
-    "@types/sqlite3": "^5.1.0",
     "@types/uuid": "^11.0.0",
     "@uiw/codemirror-theme-github": "4.25.2",
     "ai": "^5.0.53",
@@ -118,7 +116,7 @@
   "scripts": {
     "start": "next start -p 2222",
     "dev": "npm run dev:full",
-    "dev:full": "concurrently --continue-on-error -k -n rpc,sol,next \"npm run rpc:start >/dev/null 2>&1\" \"npm run sol:dev >/dev/null 2>&1\" \"sh -c 'lsof -t -i:2222 | xargs kill -9 2>/dev/null || true; sleep 1 && next dev -p 2222'\"",
+    "dev:full": "concurrently --continue-on-error --success=all --names rpc,sol,next --restart-tries 3 --restart-after 2000 \"npm run rpc:start >/dev/null 2>&1\" \"npm run sol:dev >/dev/null 2>&1\" \"sh -c 'lsof -t -i:2222 | xargs kill -9 2>/dev/null || true; sleep 1 && next dev -p 2222'\"",
     "db:push": "drizzle-kit push --config=drizzle.config.ts",
     "dev:with-db": "npm run predev && npm run db:push && npm run dev:full",
     "agent": "./start-agent.sh",

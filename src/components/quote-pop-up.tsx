@@ -1,8 +1,5 @@
-import Image from "next/image";
-import { useState } from "react";
 import AmountSlider from "./amount-slider";
 import TokenSelecter from "./token-selector";
-import { Button } from "./button";
 
 export default function QuotePopUp() {
   const info = [

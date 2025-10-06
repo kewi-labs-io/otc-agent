@@ -55,7 +55,7 @@ export function ChatMessages({
     if (isUserMessage && hasContent) {
       scrollToBottom("smooth");
     }
-  }, [lastMessageName, lastMessageText]);
+  }, [lastMessageName, lastMessageText, messages]);
 
   return (
     <div className="flex flex-col">

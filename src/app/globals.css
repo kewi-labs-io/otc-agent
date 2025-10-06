@@ -3,7 +3,6 @@
 @tailwind utilities;
 @import "@rainbow-me/rainbowkit/styles.css";
 
-
 .prose :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
   padding: 0 !important;
 }

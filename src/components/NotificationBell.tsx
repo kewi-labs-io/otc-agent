@@ -4,21 +4,21 @@ import { useNotificationPolling } from "@/hooks/useNotificationPolling";
 import { useState } from "react";
 
 interface NotificationBellProps {
-  userId?: string | null;
+  entityId?: string | null;
 }
 
 /**
  * Example notification bell component using HTTP polling
  * This replaces real-time socket.io notifications in the serverless architecture
  */
-export function NotificationBell({ userId }: NotificationBellProps) {
+export function NotificationBell({ entityId }: NotificationBellProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const { notifications, unreadCount, markAsRead, clearAll, isPolling, error } =
     useNotificationPolling({
-      userId,
+      entityId,
       pollInterval: 3000, // Poll every 3 seconds for more responsive updates
-      enabled: !!userId,
+      enabled: !!entityId,
     });
 
   const handleNotificationClick = (notificationId: string) => {
@@ -51,7 +51,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
     return date.toLocaleDateString();
   };
 
-  if (!userId) return null;
+  if (!entityId) return null;
 
   return (
     <div className="relative">

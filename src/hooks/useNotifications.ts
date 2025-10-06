@@ -12,7 +12,7 @@ interface Notification {
   read: boolean;
 }
 
-export function useNotifications(userId?: string) {
+export function useNotifications(entityId?: string) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [connected, setConnected] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -132,7 +132,7 @@ export function useNotifications(userId?: string) {
 
   // Initialize socket connection
   useEffect(() => {
-    if (!userId) return;
+    if (!entityId) return;
 
     const socketUrl =
       process.env.NEXT_PUBLIC_SOCKET_URL || window.location.origin;
@@ -151,7 +151,7 @@ export function useNotifications(userId?: string) {
       reconnectAttempts.current = 0;
 
       // Identify user
-      newSocket.emit("identify", { userId });
+      newSocket.emit("identify", { entityId });
     });
 
     newSocket.on("disconnect", () => {
@@ -192,7 +192,7 @@ export function useNotifications(userId?: string) {
       newSocket.disconnect();
     };
   }, [
-    userId,
+    entityId,
     handleOfferApproved,
     handleDealCompleted,
     handleQuoteExpired,

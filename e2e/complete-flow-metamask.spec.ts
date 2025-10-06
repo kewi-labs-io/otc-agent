@@ -81,7 +81,7 @@ test.describe('Complete E2E Flow with Real Wallet', () => {
     // Step 2: Seed a quote via API for deterministic E2E
     console.log('2️⃣  Seeding quote via API...');
     await page.request.post('/api/eliza/message', {
-      data: { userId: 'pw-user', message: 'create quote for 10000 ElizaOS at 15% discount payable in USDC' },
+      data: { entityId: 'pw-user', message: 'create quote for 10000 ElizaOS at 15% discount payable in USDC' },
       headers: { 'Content-Type': 'application/json' },
     });
     // Reload to let InitialQuoteDisplay pick up the quote

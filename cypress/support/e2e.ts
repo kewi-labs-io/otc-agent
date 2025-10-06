@@ -21,7 +21,7 @@ declare global {
       /**
        * Custom command to create a quote via API
        */
-      createQuote(tokenAmount: string, userId?: string): Chainable<any>;
+      createQuote(tokenAmount: string, entityId?: string): Chainable<any>;
       
       /**
        * Custom command to start the quote approval worker
@@ -36,7 +36,7 @@ declare global {
       /**
        * Custom command to send a message to the agent
        */
-      sendAgentMessage(message: string, userId?: string): Chainable<any>;
+      sendAgentMessage(message: string, entityId?: string): Chainable<any>;
       
       /**
        * Custom command to wait for quote to appear in UI

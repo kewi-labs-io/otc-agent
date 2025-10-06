@@ -30,7 +30,7 @@ export const styles = {
     // Shim/overlay, inset to match button foreground and used for hover state + highlight shadow
     "after:absolute after:inset-0 after:-z-10 after:rounded-[calc(var(--radius-lg)-1px)]",
     // Inner highlight shadow
-    "after:shadow-[shadow:inset_0_1px_theme(--color-white/15%)]",
+    "after:shadow-[inset_0_1px_theme(colors.white/15%)]",
     // White overlay on hover
     "enabled:hover:after:bg-(--btn-hover-overlay) enabled:active:after:bg-(--btn-hover-overlay)",
     // Dark mode: `after` layer expands to cover entire button

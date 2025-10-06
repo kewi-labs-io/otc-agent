@@ -217,11 +217,11 @@ describe('Quote System Tests', () => {
       
       // Get session ID
       cy.url().then(() => {
-        // Validate latest quote endpoint with userId in local storage (if present)
+        // Validate latest quote endpoint with entityId in local storage (if present)
         cy.window().then((win) => {
-          const userId = win.localStorage.getItem('userId') || win.localStorage.getItem('otc-desk-user-id');
-          if (userId) {
-            cy.request(`/api/quote/latest?userId=${encodeURIComponent(userId)}`).then((response) => {
+          const entityId = win.localStorage.getItem('entityId') || win.localStorage.getItem('otc-desk-user-id');
+          if (entityId) {
+            cy.request(`/api/quote/latest?entityId=${encodeURIComponent(entityId)}`).then((response) => {
               expect(response.status).to.equal(200);
               // response.body.quote may be null if none active; this is fine
             });
