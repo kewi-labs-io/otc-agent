@@ -69,7 +69,7 @@ class AgentRuntimeManager {
       // Force fresh initialization - don't use cached runtime
       // This ensures services are properly registered
       console.log("[AgentRuntime] Creating fresh runtime instance");
-      
+
       // Clear any cached runtime
       (globalThis as any).__elizaRuntime = null;
 
@@ -84,8 +84,7 @@ class AgentRuntimeManager {
           GROQ_API_KEY: process.env.GROQ_API_KEY,
           SMALL_GROQ_MODEL:
             process.env.SMALL_GROQ_MODEL || "llama-3.1-8b-instant",
-          LARGE_GROQ_MODEL:
-            process.env.LARGE_GROQ_MODEL || "qwen/qwen3-32b",
+          LARGE_GROQ_MODEL: process.env.LARGE_GROQ_MODEL || "qwen/qwen3-32b",
           POSTGRES_URL:
             process.env.POSTGRES_URL ||
             process.env.POSTGRES_DATABASE_URL ||
@@ -116,7 +115,7 @@ class AgentRuntimeManager {
       // Initialize runtime - this calls ensureAgentExists internally (runtime.ts:405)
       // which creates both the agent record AND its entity record
       await this.runtime.initialize();
-      
+
       // Log registered services
       const services = Array.from(this.runtime.getAllServices().keys());
       console.log("[AgentRuntime] Registered services:", services);

@@ -1,19 +1,15 @@
 // Database service layer using Eliza runtime services
 
-import { ServiceType } from "@elizaos/core";
 import { agentRuntime } from "@/lib/agent-runtime";
+import type QuoteService from "@/lib/plugin-otc-desk/services/quoteService";
 import type {
+  PaymentCurrency,
   QuoteMemory,
   QuoteStatus,
-  PaymentCurrency,
-  UserSessionMemory,
 } from "@/lib/plugin-otc-desk/types";
-import type { UserSessionStorageService } from "@/lib/plugin-otc-desk/services/userSessionStorage";
-import type QuoteService from "@/lib/plugin-otc-desk/services/quoteService";
 
 export type Quote = QuoteMemory;
-export type UserSession = UserSessionMemory;
-export type { QuoteStatus, PaymentCurrency };
+export type { PaymentCurrency, QuoteStatus };
 
 export class QuoteDB {
   static async createQuote(data: {

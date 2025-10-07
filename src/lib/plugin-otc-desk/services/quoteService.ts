@@ -2,7 +2,7 @@
 // Single source of truth registered with runtime.getService("QuoteService")
 
 import type { IAgentRuntime } from "@elizaos/core";
-import { Service, ServiceType } from "@elizaos/core";
+import { Service } from "@elizaos/core";
 import crypto from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import { walletToEntityId } from "../../entityId";

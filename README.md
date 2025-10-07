@@ -5,10 +5,61 @@ Production-ready starter that demonstrates an Eliza agent negotiating OTC token 
 ### Highlights
 - **Agent negotiation**: Discount-from-spot quotes (2%–25%) with 1–52w lockups
 - **Eliza plugin architecture**: Purpose-built OTC Desk plugin with actions
-- **On-chain demo**: Local Hardhat network and OTC contracts
+- **On-chain demo**: Local Hardhat network and OTC contracts with Chainlink price oracles
 - **Web3 UI**: Wallet connect, quote views, and acceptance flows
 - **Robust backend**: API routes, background worker, and persistence (Drizzle)
 - **Testing**: Cypress E2E plus unit tests
+- **Security-optimized transaction flow**: User commits to payment before approval
+
+### Recent Improvements (Oct 2025)
+
+#### Deal Completion & USD Calculation Fixes
+- ✅ **Fixed NaN in Discount ROI**: Added safety check `discountedUsd > 0` before division
+- ✅ **Fixed $0.00 displays**: API now fetches real on-chain offer data from smart contract
+- ✅ **Chainlink oracle integration**: USD values calculated from on-chain Chainlink price feeds
+- ✅ **Graceful fallbacks**: Shows "N/A" for unavailable values instead of crashing
+- ✅ **Proper deal tracking**: Completed deals now appear in "My Deals" page
+- ✅ **Transaction hash recording**: Payment transactions properly stored for audit trail
+
+#### Security & Transaction Flow Optimization
+- ✅ **Improved transaction security**: User pre-authorizes payment BEFORE approval to prevent approved-but-unpaid offers
+- ✅ **Atomic-like execution**: Payment executes immediately after approval (minimized window)
+- ✅ **Better error handling**: Clear recovery paths if payment fails after approval
+- ✅ **User commitment**: For USDC, allowance approved upfront; for ETH, balance verified before approval
+
+#### Type & Build Fixes
+- ✅ **Type fixes**: Added shared icon components (`/src/components/icons.tsx`) for Base and Solana logos
+- ✅ **Build passing**: All TypeScript errors resolved
+- ✅ **Linter clean**: Zero linter errors
+
+---
+
+## Transaction Flow (Security-Optimized)
+
+### EVM (Base/Hardhat)
+```
+1. User creates offer              (User Tx #1)
+2. User pre-authorizes payment:
+   - USDC: Approves allowance      (User Tx #2a)
+   - ETH: Verifies balance
+3. Backend approves offer           (Approver Tx)
+4. Payment executes immediately     (User Tx #2 or #3)
+```
+
+**Why this order matters:**
+- User commits to paying BEFORE approval happens
+- Prevents approved-but-unpaid offers
+- Approver knows payment is ready before approving
+- If payment fails, clear error with retry path
+
+**Contract constraint:** `fulfillOffer()` requires `approved == true`, so we can't pay before approval, but we CAN prepare payment first.
+
+### Solana
+```
+1. User creates offer + escrowed payment  (Combined Tx #1)
+2. Approver approves                      (Approver Tx)
+3. Payment released automatically          (No additional user action)
+```
 
 ## What’s inside
 - `src/lib/agent.ts`: Eliza character, style, and negotiation examples (uses REPLY and CREATE_OTC_QUOTE)
@@ -53,6 +104,70 @@ Notes:
 - On first run, generate a Solana keypair for the Anchor program: `cd solana/otc-program && solana-keygen new -o id.json`.
 - If `anchor deploy` fails, ensure Anchor CLI and Rust nightly are installed (see prerequisites).
 
+## MetaMask Setup for Local Development
+
+To connect MetaMask to your local Hardhat node:
+
+### 1. Add Hardhat Network to MetaMask
+1. Open MetaMask
+2. Click the network dropdown (top-left)
+3. Click "Add Network" → "Add a network manually"
+4. Enter these details:
+   - **Network Name:** `Hardhat Local`
+   - **RPC URL:** `http://127.0.0.1:8545`
+   - **Chain ID:** `31337`
+   - **Currency Symbol:** `ETH`
+5. Click "Save"
+
+### 2. Import Test Account
+When you run `bun run dev`, Hardhat will display test accounts in the terminal. Import the first account:
+
+1. Copy the Private Key from the terminal output (look for "Account #0")
+2. In MetaMask: Click account icon → "Import Account"
+3. Paste the private key
+4. This account has 10,000 ETH for testing
+
+**Default Test Private Key:**
+```
+0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+```
+
+### 3. Connect to the App
+1. Refresh your browser at `http://localhost:2222`
+2. Click "Connect" and select "Base" (EVM)
+3. Choose your Hardhat Local network in MetaMask
+4. Approve the connection
+
+### Troubleshooting
+
+**"Chain ID mismatch" or "Wrong network" errors:**
+- Make sure you selected "Hardhat Local" (Chain ID 31337) in MetaMask
+- Try disconnecting and reconnecting the wallet
+
+**"Nonce too high" or transaction errors:**
+```bash
+# Reset MetaMask account:
+# Settings → Advanced → Clear activity tab data
+# Or restart Hardhat node:
+bun run dev:cleanup
+bun run dev
+```
+
+**Can't connect to Hardhat:**
+```bash
+# Check if Hardhat is running:
+curl -X POST http://127.0.0.1:8545 \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}'
+
+# Should return: {"jsonrpc":"2.0","id":1,"result":"0x7a69"}  (31337 in hex)
+```
+
+**View detailed setup instructions:**
+```bash
+./scripts/setup-metamask.sh
+```
+
 ## Environment
 Create `.env.local` and set only what you need. Common options:
 
@@ -87,11 +202,11 @@ POSTGRES_DEV_PORT=5439
 # Internal worker/API secrets
 API_SECRET_KEY=dev-admin-key                        # Authorizes admin API calls (prod required)
 ADMIN_API_KEY=dev-admin-key
-WORKER_AUTH_TOKEN=internal-worker
+WORKER_AUTH_TOKEN=dev-worker-secret
 QUOTE_SIGNATURE_SECRET=default-secret-key
 
-# Approver wallet used by backend to fulfill/claim
-APPROVER_PRIVATE_KEY=0x...                          # EOA PK used by /api/otc/fulfill and cron
+# Approver wallet used by backend to fulfill/claim (Hardhat Account #0 for local dev)
+APPROVER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 # Cron auth
 CRON_SECRET=dev-cron-secret

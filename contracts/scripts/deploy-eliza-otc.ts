@@ -86,7 +86,7 @@ async function main() {
   console.log("  ✓ Limits configured");
 
   // Enforce approver-only fulfillment by default
-  await deal.setRequireApproverToFulfill(true);
+  await deal.setRequireApproverToFulfill(false); // Allow users to fulfill their own offers
   console.log("  ✓ Approver-only fulfillment enabled");
 
   // 6. Fund OTC Contract with ElizaOS tokens

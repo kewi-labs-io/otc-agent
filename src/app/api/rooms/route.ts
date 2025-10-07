@@ -82,8 +82,11 @@ export async function POST(request: NextRequest) {
 
     // Create initial welcome message with default quote
     try {
-      console.log("[Rooms API] Creating initial welcome message for wallet:", entityId);
-      
+      console.log(
+        "[Rooms API] Creating initial welcome message for wallet:",
+        entityId,
+      );
+
       // Ensure entity exists in database to prevent foreign key errors
       const userEntityId = walletToEntityId(entityId);
       await runtime.ensureConnection({
@@ -97,7 +100,7 @@ export async function POST(request: NextRequest) {
         type: "DM" as any,
         worldId: stringToUuid("otc-desk-world") as any,
       });
-      
+
       // Save initial quote to cache
       const initialQuoteId = `OTC-${userEntityId.substring(0, 12).toUpperCase()}`;
       const initialQuoteData = {
@@ -128,10 +131,10 @@ export async function POST(request: NextRequest) {
         rejectionReason: "",
         approvalNote: "",
       };
-      
+
       await runtime.setCache(`quote:${initialQuoteId}`, initialQuoteData);
       console.log("[Rooms API] Initial quote saved to cache:", initialQuoteId);
-      
+
       // Create a welcome message with default quote terms
       const welcomeMessage = `I can offer a 10.00% discount with a 5-month lockup.
 

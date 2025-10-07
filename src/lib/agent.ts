@@ -906,11 +906,11 @@ const character: Character = {
 const agent = {
   character,
   plugins: [
-    groqPlugin, 
+    groqPlugin,
     // Temporarily disable SQL plugin to prevent database logging errors
-    sqlPlugin, 
-    /* openaiPlugin, */ 
-    otcDeskPlugin
+    sqlPlugin,
+    /* openaiPlugin, */
+    otcDeskPlugin,
   ],
   providers: [otcDeskPlugin.providers].flat(),
   actions: [otcDeskPlugin.actions].flat(),

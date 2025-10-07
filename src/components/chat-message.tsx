@@ -6,12 +6,11 @@ import {
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import clsx from "clsx";
-import { memo, useState } from "react";
 import Image from "next/image";
+import { memo, useState } from "react";
 
 import { CodeBlock } from "@/components/code-block";
 import { MemoizedMarkdown } from "@/components/memoized-markdown";
-import { OTCQuoteDisplay } from "@/components/quote-display";
 import { Citation } from "@/types/chat";
 import { ChatMessage as ChatMessageType } from "@/types/chat-message";
 

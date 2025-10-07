@@ -62,7 +62,9 @@ export async function GET() {
         };
       }),
     );
-    const items = (offers || []).filter((x): x is NonNullable<typeof x> => x !== null);
+    const items = (offers || []).filter(
+      (x): x is NonNullable<typeof x> => x !== null,
+    );
     return NextResponse.json({ offers: items });
   } catch (error) {
     return NextResponse.json(

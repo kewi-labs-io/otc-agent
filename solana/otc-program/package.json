@@ -4,8 +4,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build": "RUSTUP_TOOLCHAIN=nightly-2025-04-14 anchor build",
-    "test": "RUSTUP_TOOLCHAIN=nightly-2025-04-14 anchor test"
+    "build": "RUSTUP_TOOLCHAIN=nightly-2024-12-31 anchor build",
+    "test": "RUSTUP_TOOLCHAIN=nightly-2024-12-31 anchor test"
   },
   "devDependencies": {
     "@coral-xyz/anchor": "0.31.1",

@@ -134,17 +134,31 @@ type MediaData = {
 };
 
 // Helper functions for response ID tracking in serverless environment
-async function getLatestResponseId(runtime: IAgentRuntime, roomId: string): Promise<string | null> {
-  return await runtime.getCache<string>(`response_id:${runtime.agentId}:${roomId}`) ?? null;
+async function getLatestResponseId(
+  runtime: IAgentRuntime,
+  roomId: string,
+): Promise<string | null> {
+  return (
+    (await runtime.getCache<string>(
+      `response_id:${runtime.agentId}:${roomId}`,
+    )) ?? null
+  );
 }
 
-async function setLatestResponseId(runtime: IAgentRuntime, roomId: string, responseId: string): Promise<void> {
-  if (!responseId || typeof responseId !== 'string') {
+async function setLatestResponseId(
+  runtime: IAgentRuntime,
+  roomId: string,
+  responseId: string,
+): Promise<void> {
+  if (!responseId || typeof responseId !== "string") {
     console.error("[setLatestResponseId] Invalid responseId:", responseId);
     throw new Error(`Invalid responseId: ${responseId}`);
   }
   const key = `response_id:${runtime.agentId}:${roomId}`;
-  console.log("[setLatestResponseId] Setting cache:", { key, responseId: responseId.substring(0, 8) });
+  console.log("[setLatestResponseId] Setting cache:", {
+    key,
+    responseId: responseId.substring(0, 8),
+  });
   try {
     await runtime.setCache(key, responseId);
   } catch (error) {
@@ -153,7 +167,10 @@ async function setLatestResponseId(runtime: IAgentRuntime, roomId: string, respo
   }
 }
 
-async function clearLatestResponseId(runtime: IAgentRuntime, roomId: string): Promise<void> {
+async function clearLatestResponseId(
+  runtime: IAgentRuntime,
+  roomId: string,
+): Promise<void> {
   const key = `response_id:${runtime.agentId}:${roomId}`;
   console.log("[clearLatestResponseId] Deleting cache key:", key);
   await runtime.deleteCache(key);
@@ -211,8 +228,11 @@ const messageReceivedHandler = async ({
 }: MessageReceivedHandlerParams): Promise<void> => {
   // Generate a new response ID
   const responseId = v4();
-  console.log("[MessageHandler] Generated response ID:", responseId.substring(0, 8));
-  
+  console.log(
+    "[MessageHandler] Generated response ID:",
+    responseId.substring(0, 8),
+  );
+
   // Set this as the latest response ID for this room (using runtime cache for serverless)
   await setLatestResponseId(runtime, message.roomId, responseId);
 
@@ -286,12 +306,15 @@ const messageReceivedHandler = async ({
           prompt,
         });
 
-      logger.debug(`*** Raw LLM Response ***\n${response}`);
-      console.log("[MessageHandler] LLM response length:", response.length);
-      console.log("[MessageHandler] LLM response preview:", response.substring(0, 500));
+        logger.debug(`*** Raw LLM Response ***\n${response}`);
+        console.log("[MessageHandler] LLM response length:", response.length);
+        console.log(
+          "[MessageHandler] LLM response preview:",
+          response.substring(0, 500),
+        );
 
-      // Attempt to parse the XML response
-      const extractedContent = extractResponseText(response);
+        // Attempt to parse the XML response
+        const extractedContent = extractResponseText(response);
 
         if (!extractedContent) {
           logger.warn(
@@ -306,7 +329,10 @@ const messageReceivedHandler = async ({
       }
 
       // Check if this is still the latest response ID for this room
-      const currentResponseId = await getLatestResponseId(runtime, message.roomId);
+      const currentResponseId = await getLatestResponseId(
+        runtime,
+        message.roomId,
+      );
       if (currentResponseId !== responseId) {
         logger.info(
           `Response discarded - newer message being processed for agent: ${runtime.agentId}, room: ${message.roomId}`,
@@ -319,41 +345,55 @@ const messageReceivedHandler = async ({
 
       // Parse actions from response - support both XML tags and function-call syntax
       const xmlActionMatch = responseContent.match(/<action>(.*?)<\/action>/gi);
-      const functionActionMatch = responseContent.match(/\b(CREATE_OTC_QUOTE|ACCEPT_ELIZAOS_QUOTE|SHOW_ELIZAOS_HISTORY)\s*\(/gi);
-      
+      const functionActionMatch = responseContent.match(
+        /\b(CREATE_OTC_QUOTE|ACCEPT_ELIZAOS_QUOTE|SHOW_ELIZAOS_HISTORY)\s*\(/gi,
+      );
+
       const actionNames: string[] = [];
-      
+
       // Parse XML format: <action>CREATE_OTC_QUOTE</action>
       if (xmlActionMatch) {
-        actionNames.push(...xmlActionMatch.map(match => match.replace(/<\/?action>/gi, '').trim()));
+        actionNames.push(
+          ...xmlActionMatch.map((match) =>
+            match.replace(/<\/?action>/gi, "").trim(),
+          ),
+        );
       }
-      
+
       // Parse function-call format: CREATE_OTC_QUOTE({...})
       if (functionActionMatch) {
-        actionNames.push(...functionActionMatch.map(match => match.replace(/\s*\(.*/g, '').trim()));
+        actionNames.push(
+          ...functionActionMatch.map((match) =>
+            match.replace(/\s*\(.*/g, "").trim(),
+          ),
+        );
       }
-      
+
       // Parse and save quote if present in response (don't trigger action handler)
       const quoteMatch = responseContent.match(/<quote>([\s\S]*?)<\/quote>/i);
       if (quoteMatch) {
-        console.log("[MessageHandler] Detected <quote> XML in response, parsing and saving");
+        console.log(
+          "[MessageHandler] Detected <quote> XML in response, parsing and saving",
+        );
         try {
           // Simple regex-based parsing (server-side compatible)
           const quoteXml = quoteMatch[0];
           const getTag = (tag: string) => {
-            const match = quoteXml.match(new RegExp(`<${tag}>([^<]*)<\/${tag}>`, 'i'));
+            const match = quoteXml.match(
+              new RegExp(`<${tag}>([^<]*)<\/${tag}>`, "i"),
+            );
             return match ? match[1].trim() : "";
           };
           const getNumTag = (tag: string) => {
             const val = getTag(tag);
             return val ? parseFloat(val) : 0;
           };
-          
+
           const quoteId = getTag("quoteId");
           if (quoteId) {
             const { walletToEntityId } = await import("@/lib/entityId");
             const entityId = message.entityId.toString();
-            
+
             const quoteData = {
               id: (await import("uuid")).v4(),
               quoteId,
@@ -382,7 +422,7 @@ const messageReceivedHandler = async ({
               rejectionReason: "",
               approvalNote: "",
             };
-            
+
             await runtime.setCache(`quote:${quoteId}`, quoteData);
             console.log("[MessageHandler] Quote saved to cache:", quoteId);
           }
@@ -390,7 +430,7 @@ const messageReceivedHandler = async ({
           console.error("[MessageHandler] Failed to parse/save quote:", e);
         }
       }
-      
+
       console.log("[MessageHandler] Detected actions:", actionNames);
 
       // Create response memory with parsed actions
@@ -410,44 +450,51 @@ const messageReceivedHandler = async ({
       // Process actions if any were found
       if (actionNames.length > 0) {
         console.log("[MessageHandler] Processing actions:", actionNames);
-        
+
         // Process actions first, which will call the action handler
-        await runtime.processActions(message, [responseMemory], state, async (content) => {
-          console.log("[MessageHandler] Action callback received:", { 
-            action: content.action,
-            hasText: !!content.text 
-          });
-          
-          // The action handler provides the actual response text
-          const finalResponseText = content.text || responseContent;
-          
-          // Save the response to database
-          const finalResponseMemory: Memory = {
-            id: responseMemory.id,
-            entityId: runtime.agentId,
-            roomId: message.roomId,
-            worldId: message.worldId,
-            content: {
-              text: finalResponseText,
-              source: "agent",
-              inReplyTo: message.id,
-            },
-          };
-          
-          await runtime.createMemory(finalResponseMemory, "messages");
-          console.log("[MessageHandler] Response saved to database");
-          
-          // Send to frontend
-          if (callback) {
-            await callback({
-              text: finalResponseText,
+        await runtime.processActions(
+          message,
+          [responseMemory],
+          state,
+          async (content) => {
+            console.log("[MessageHandler] Action callback received:", {
+              action: content.action,
+              hasText: !!content.text,
             });
-          }
-          return [];
-        });
+
+            // The action handler provides the actual response text
+            const finalResponseText = content.text || responseContent;
+
+            // Save the response to database
+            const finalResponseMemory: Memory = {
+              id: responseMemory.id,
+              entityId: runtime.agentId,
+              roomId: message.roomId,
+              worldId: message.worldId,
+              content: {
+                text: finalResponseText,
+                source: "agent",
+                inReplyTo: message.id,
+              },
+            };
+
+            await runtime.createMemory(finalResponseMemory, "messages");
+            console.log("[MessageHandler] Response saved to database");
+
+            // Send to frontend
+            if (callback) {
+              await callback({
+                text: finalResponseText,
+              });
+            }
+            return [];
+          },
+        );
       } else {
         // No actions - save and send the response
-        console.log("[MessageHandler] No actions, saving response and calling callback");
+        console.log(
+          "[MessageHandler] No actions, saving response and calling callback",
+        );
         await runtime.createMemory(responseMemory, "messages");
         console.log("[MessageHandler] Response saved, sending to frontend");
         await callback({

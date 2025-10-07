@@ -3,7 +3,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer as SplTransfer};
 use pyth_solana_receiver_sdk::price_update::PriceUpdateV2;
 
-declare_id!("EPqRoaDur9VtTKABWK3QQArV2wCYKoN3Zu8kErhrtUxp");
+declare_id!("8X2wDShtcJ5mFrcsJPjK8tQCD16zBqzsUGwhSCM4ggko");
 
 #[event]
 pub struct OfferCreated {
@@ -441,38 +441,17 @@ pub mod otc {
     }
 }
 
-#[cfg(feature = "idl-build")]
 #[derive(Accounts)]
 pub struct InitDesk<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
     pub owner: Signer<'info>,
     pub agent: UncheckedAccount<'info>,
     pub token_mint: Account<'info, Mint>,
     pub usdc_mint: Account<'info, Mint>,
-    #[account(mut)]
-    pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
-    // Simpler init for IDL build (no dynamic seeds to avoid macro resolution issues)
     #[account(init, payer = payer, space = 8 + Desk::SIZE)]
-    pub desk: Account<'info, Desk>,
-    #[account(mut, constraint = desk_token_treasury.mint == token_mint.key(), constraint = desk_token_treasury.owner == desk.key())]
-    pub desk_token_treasury: Account<'info, TokenAccount>,
-    #[account(mut, constraint = desk_usdc_treasury.mint == usdc_mint.key(), constraint = desk_usdc_treasury.owner == desk.key())]
-    pub desk_usdc_treasury: Account<'info, TokenAccount>,
-}
-
-#[cfg(not(feature = "idl-build"))]
-#[derive(Accounts)]
-pub struct InitDesk<'info> {
-    pub owner: Signer<'info>,
-    pub agent: UncheckedAccount<'info>,
-    pub token_mint: Account<'info, Mint>,
-    pub usdc_mint: Account<'info, Mint>,
-    #[account(mut)]
-    pub payer: Signer<'info>,
-    pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
-    #[account(init, payer = payer, space = 8 + Desk::SIZE, seeds = [b"desk", owner.key().as_ref()], bump)]
     pub desk: Account<'info, Desk>,
     #[account(mut, constraint = desk_token_treasury.mint == token_mint.key(), constraint = desk_token_treasury.owner == desk.key())]
     pub desk_token_treasury: Account<'info, TokenAccount>,

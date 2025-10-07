@@ -89,6 +89,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.55.1",
+    "@synthetixio/synpress": "^4.1.1",
     "@tenkeylabs/dappwright": "^2.11.3",
     "@testing-library/cypress": "^10.1.0",
     "@types/bun": "^1.2.22",
@@ -116,14 +117,17 @@
   "scripts": {
     "start": "next start -p 2222",
     "dev": "npm run dev:full",
-    "dev:full": "concurrently --continue-on-error --success=all --names rpc,sol,next --restart-tries 3 --restart-after 2000 \"npm run rpc:start >/dev/null 2>&1\" \"npm run sol:dev >/dev/null 2>&1\" \"sh -c 'lsof -t -i:2222 | xargs kill -9 2>/dev/null || true; sleep 1 && next dev -p 2222'\"",
+    "dev:full": "sh -c 'npm run dev:cleanup && sleep 2 && concurrently --kill-others --success=first --names \"rpc,sol,next\" \"npm run rpc:start\" \"npm run sol:dev\" \"sh -c \\\"sleep 8 && next dev -p 2222\\\"\"'",
+    "dev:cleanup": "sh -c 'echo \"🧹 Cleaning up processes and ports...\"; pkill -9 -f \"hardhat node\" 2>/dev/null || true; pkill -9 -f anvil 2>/dev/null || true; pkill -9 -f \"solana-test-validator\" 2>/dev/null || true; pkill -9 -f \"next dev\" 2>/dev/null || true; lsof -t -i:8545 | xargs kill -9 2>/dev/null || true; lsof -t -i:2222 | xargs kill -9 2>/dev/null || true; lsof -t -i:8899 | xargs kill -9 2>/dev/null || true; echo \"✅ Cleanup complete\"'",
     "db:push": "drizzle-kit push --config=drizzle.config.ts",
     "dev:with-db": "npm run predev && npm run db:push && npm run dev:full",
     "agent": "./start-agent.sh",
-    "rpc:start": "sh -c 'pkill -f anvil || true; pkill -f \"hardhat node\" || true; cd contracts && npm run dev:contracts'",
+    "rpc:start": "./scripts/start-hardhat.sh",
     "rpc:deploy": "cd contracts && npm run deploy:local",
     "rpc:check": "node scripts/check-rpc.js",
+    "rpc:diagnose": "./scripts/diagnose-hardhat.sh",
     "predev": "node scripts/check-rpc.js || true && node scripts/check-postgres.cjs || true",
+    "help:metamask": "./scripts/verify-metamask.sh",
     "build": "next build",
     "build:next-only": "next build",
     "lint": "prettier --write ./src",
@@ -150,9 +154,9 @@
     "eliza:deploy": "cd contracts && npm run deploy:eliza",
     "eliza:test": "cd contracts && npm run test:e2e",
     "worker:start": "node -e \"require('./src/services/quoteApprovalWorker').startQuoteApprovalWorker()\"",
-    "sol:validator": "sh -c 'cd solana/otc-program && pkill -f solana-test-validator || true; rm -rf test-ledger/lock || true; solana-test-validator'",
+    "sol:validator": "sh -c 'echo \"⛓️  Starting Solana test validator (logs in solana.log)...\"; cd solana/otc-program && pkill -9 -f solana-test-validator 2>/dev/null || true; sleep 1; rm -rf test-ledger/lock 2>/dev/null || true; solana-test-validator --log > ../../solana.log 2>&1'",
     "sol:deploy": "sh -c 'cd solana/otc-program && npm run build && solana airdrop 25 ./id.json --url http://127.0.0.1:8899 && anchor deploy'",
-    "sol:dev": "concurrently --raw --success=first -k \"npm run sol:validator\" \"sh -c 'sleep 5 && npm run sol:deploy && tail -f /dev/null'\""
+    "sol:dev": "concurrently --raw --success=first --kill-others \"npm run sol:validator\" \"sh -c 'sleep 8 && npm run sol:deploy && tail -f /dev/null'\""
   },
   "trustedDependencies": [
     "@tailwindcss/oxide",

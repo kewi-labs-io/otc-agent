@@ -131,7 +131,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
               } else if (msg.content && typeof msg.content === "string") {
                 messageText = msg.content;
               }
-              
+
               // Filter out system messages
               return !messageText.startsWith("Executed action:");
             })
@@ -238,7 +238,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
                 } else if (msg.content && typeof msg.content === "string") {
                   messageText = msg.content;
                 }
-                
+
                 // Filter out system messages
                 return !messageText.startsWith("Executed action:");
               })
@@ -486,7 +486,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
 
       await sendMessage(trimmed);
       setInput("");
-      
+
       // Refocus the textarea after sending
       setTimeout(() => {
         textareaRef.current?.focus();
@@ -513,41 +513,50 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
   // Extract current quote from messages
   useEffect(() => {
     if (!messages.length) {
-      console.log('[Quote Update] No messages yet');
+      console.log("[Quote Update] No messages yet");
       return;
     }
 
-    console.log('[Quote Update] Scanning', messages.length, 'messages for quote');
+    console.log(
+      "[Quote Update] Scanning",
+      messages.length,
+      "messages for quote",
+    );
 
     // Find the latest quote in messages
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (!msg || msg.name === USER_NAME) continue;
-      
+
       try {
         const parsed = parseMessageXML(
-          typeof msg.text === "string" ? msg.text : (msg as any).content?.text || ""
+          typeof msg.text === "string"
+            ? msg.text
+            : (msg as any).content?.text || "",
         );
-        
+
         if (parsed?.type === "otc_quote" && parsed.data) {
           const newQuote = parsed.data;
           const newQuoteId = newQuote.quoteId;
           const prevQuoteId = previousQuoteIdRef.current;
-          
+
           // Only update if quote actually changed
           if (prevQuoteId !== newQuoteId) {
-            console.log('[Quote Update] Quote changed:', { prevQuoteId, newQuoteId });
-            
+            console.log("[Quote Update] Quote changed:", {
+              prevQuoteId,
+              newQuoteId,
+            });
+
             // Trigger glow effect only if there was a previous quote
             if (prevQuoteId) {
-              console.log('[Quote Update] Triggering glow effect');
+              console.log("[Quote Update] Triggering glow effect");
               setIsOfferGlowing(true);
               setTimeout(() => {
-                console.log('[Quote Update] Stopping glow effect');
+                console.log("[Quote Update] Stopping glow effect");
                 setIsOfferGlowing(false);
               }, 5000);
             }
-            
+
             // Update the ref and state
             previousQuoteIdRef.current = newQuoteId;
             setCurrentQuote(newQuote);
@@ -555,9 +564,8 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
           break;
         }
       } catch (e) {
-        console.error('[Quote Update] Error parsing message:', e);
+        console.error("[Quote Update] Error parsing message:", e);
       }
-
     }
   }, [messages]);
 
@@ -571,7 +579,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
     try {
       // Clear local storage for this wallet
       localStorage.removeItem(`otc-desk-room-${entityId}`);
-      
+
       // Create a new room
       const newRoomId = await createNewRoom();
       if (newRoomId) {
@@ -582,7 +590,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         setRoomId(newRoomId);
         console.log("[ClearChat] Created new room:", newRoomId);
       }
-      
+
       setShowClearChatModal(false);
     } catch (error) {
       console.error("[ClearChat] Failed to clear chat:", error);
@@ -614,7 +622,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         onClose={() => setShowAcceptModal(false)}
         initialQuote={currentQuote}
       />
-      
+
       {/* Clear Chat Confirmation Modal */}
       <Dialog
         open={showClearChatModal}
@@ -625,24 +633,20 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
             Clear Chat History?
           </h3>
           <p className="text-zinc-600 dark:text-zinc-400 mb-6">
-            This will permanently delete all messages and reset the agent's memory of your conversation. 
-            Your current quote will be reset to default terms. This action cannot be undone.
+            This will permanently delete all messages and reset the agent&apos;s
+            memory of your conversation. Your current quote will be reset to
+            default terms. This action cannot be undone.
           </p>
           <div className="flex gap-3 justify-end">
             <Button
               onClick={() => setShowClearChatModal(false)}
               className="bg-zinc-200 dark:bg-zinc-800 rounded-lg"
             >
-              <div className="px-4 py-2">
-              Cancel
-              </div>
+              <div className="px-4 py-2">Cancel</div>
             </Button>
-            <Button
-              onClick={handleClearChat}
-              color="red"
-            >
-              <div className="px-4 py-2 bg-red-500 dark:bg-red-500 rounded-lg"> 
-              Clear Chat
+            <Button onClick={handleClearChat} color="red">
+              <div className="px-4 py-2 bg-red-500 dark:bg-red-500 rounded-lg">
+                Clear Chat
               </div>
             </Button>
           </div>
@@ -653,7 +657,8 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
 };
 
 function ChatHeader({
-  messages,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  messages: _messages,
   apiQuote,
   onAcceptOffer,
   isOfferGlowing,
@@ -704,19 +709,19 @@ function ChatHeader({
               <Button
                 onClick={onAcceptOffer}
                 className={`!h-8 !px-3 !text-xs transition-all duration-300 !bg-orange-500 hover:!bg-orange-600 !text-white !border-orange-600 ${
-                  isOfferGlowing 
-                    ? 'shadow-lg shadow-orange-500/50 ring-2 ring-orange-400 animate-pulse' 
-                    : ''
+                  isOfferGlowing
+                    ? "shadow-lg shadow-orange-500/50 ring-2 ring-orange-400 animate-pulse"
+                    : ""
                 }`}
                 color="orange"
-                title={`Accept Offer ${isOfferGlowing ? '(GLOWING)' : ''}`}
+                title={`Accept Offer ${isOfferGlowing ? "(GLOWING)" : ""}`}
               >
                 Accept Offer
               </Button>
             </div>
           ) : null}
-          <Button 
-            onClick={onClearChat} 
+          <Button
+            onClick={onClearChat}
             className="!h-8 !px-3 !text-xs bg-red-500 dark:bg-red-500 rounded-lg"
           >
             Clear Chat
@@ -846,7 +851,13 @@ function ChatBody({
       <div className="relative z-10 flex flex-1 min-h-0 p-4">
         {/* Chat section - Full width */}
         <div className="flex-1 flex flex-col h-full min-w-0">
-          <ChatHeader messages={messages} apiQuote={currentQuote} onAcceptOffer={onAcceptOffer} isOfferGlowing={isOfferGlowing} onClearChat={onClearChat} />
+          <ChatHeader
+            messages={messages}
+            apiQuote={currentQuote}
+            onAcceptOffer={onAcceptOffer}
+            isOfferGlowing={isOfferGlowing}
+            onClearChat={onClearChat}
+          />
 
           {/* Chat Messages - only scrollable area */}
           <div

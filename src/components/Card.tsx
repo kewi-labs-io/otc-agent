@@ -1,4 +1,3 @@
-import { ArrowRight } from "lucide-react";
 import Image from "next/image";
 
 interface ICard {
@@ -42,15 +41,18 @@ export default function Card({
             draggable={false}
           />
           <p className="text-[12px] text-[#64FFAA80]/50">
-            Tokens are auto-released to your wallet as soon as the unlock time
-            is reached.
+          Tokens are auto-released to your wallet on unlock.
           </p>
         </div>
       ) : null}
-      <button 
+      <button
         onClick={onClick}
         disabled={disabled}
-        className={ disabled ? "w-full bg-blue-500/10 text-blue-500 py-3 px-4 rounded-lg flex items-center justify-center gap-2 text-sm font-medium mt-auto" : "cursor-pointer w-full bg-orange-500/10 text-orange-500 py-3 px-4 rounded-lg flex items-center justify-center gap-2 text-sm font-medium hover:bg-orange-500/20 transition-colors mt-auto" }
+        className={
+          disabled
+            ? "w-full bg-blue-500/10 text-blue-500 py-3 px-4 rounded-lg flex items-center justify-center gap-2 text-sm font-medium mt-auto"
+            : "cursor-pointer w-full bg-orange-500/10 text-orange-500 py-3 px-4 rounded-lg flex items-center justify-center gap-2 text-sm font-medium hover:bg-orange-500/20 transition-colors mt-auto"
+        }
       >
         {button}
       </button>

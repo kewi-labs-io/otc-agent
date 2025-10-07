@@ -22,7 +22,7 @@ export interface ParsedOffer {
 /**
  * Parse an Offer struct from viem contract read.
  * Viem may return structs as arrays or objects depending on version/config.
- * 
+ *
  * Struct order from OTC.sol:
  * 0. beneficiary (address)
  * 1. tokenAmount (uint256)

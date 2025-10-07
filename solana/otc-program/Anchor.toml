@@ -6,7 +6,7 @@ resolution = true
 skip-lint = true
 
 [programs.localnet]
-otc = "EPqRoaDur9VtTKABWK3QQArV2wCYKoN3Zu8kErhrtUxp"
+otc = "8X2wDShtcJ5mFrcsJPjK8tQCD16zBqzsUGwhSCM4ggko"
 
 [provider]
 cluster = "localnet"

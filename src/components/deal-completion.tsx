@@ -29,7 +29,10 @@ export function DealCompletion({ quote }: DealCompletionProps) {
   // Calculate discount-derived metrics
   const discountPercent = quote.discountBps / 100;
   const projectedYield = 0; // No yield; discount-only instrument
-  const roi = (quote.discountUsd / quote.discountedUsd) * 100;
+  const roi =
+    quote.discountedUsd > 0
+      ? (quote.discountUsd / quote.discountedUsd) * 100
+      : 0;
 
   const maturityDate = new Date();
   maturityDate.setMonth(maturityDate.getMonth() + quote.lockupMonths);
@@ -89,11 +92,15 @@ export function DealCompletion({ quote }: DealCompletionProps) {
         paymentCurrency: quote.paymentCurrency as "ETH" | "USDC",
       });
 
+      const savingsText =
+        quote.discountUsd > 0 ? `$${quote.discountUsd.toFixed(2)}` : "TBD";
+      const roiText = roi > 0 ? `${roi.toFixed(1)}%` : "TBD";
+
       const text = `Just secured ${parseFloat(quote.tokenAmount).toLocaleString()} ElizaOS at ${(quote.discountBps / 100).toFixed(0)}% discount on ElizaOS OTC Desk!
 
-💰 Saved: $${quote.discountUsd.toFixed(2)}
+💰 Saved: ${savingsText}
 ⏱️ Lockup: ${quote.lockupMonths} months
-💎 ROI: ${roi.toFixed(1)}%`;
+💎 ROI: ${roiText}`;
 
       // Try native share first
       if (
@@ -197,7 +204,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
                   Instant Savings
                 </h3>
                 <p className="text-3xl font-bold text-white">
-                  ${quote.discountUsd.toFixed(2)}
+                  ${quote.discountUsd > 0 ? quote.discountUsd.toFixed(2) : "N/A"}
                 </p>
                 <p className="text-sm text-zinc-400 mt-1">
                   {(quote.discountBps / 100).toFixed(2)}% below market price
@@ -208,13 +215,16 @@ export function DealCompletion({ quote }: DealCompletionProps) {
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-zinc-400">You Paid</span>
                   <span className="text-white font-semibold">
-                    ${quote.discountedUsd.toFixed(2)}
+                    $
+                    {quote.discountedUsd > 0
+                      ? quote.discountedUsd.toFixed(2)
+                      : "N/A"}
                   </span>
                 </div>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-zinc-400">Market Value</span>
                   <span className="text-white font-semibold">
-                    ${quote.totalUsd.toFixed(2)}
+                    ${quote.totalUsd > 0 ? quote.totalUsd.toFixed(2) : "N/A"}
                   </span>
                 </div>
                 <div className="border-t border-zinc-700 pt-2 mt-2">
@@ -235,7 +245,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
                   Discount ROI
                 </h3>
                 <p className="text-3xl font-bold text-white">
-                  {roi.toFixed(1)}%
+                  {roi > 0 ? `${roi.toFixed(1)}%` : "N/A"}
                 </p>
                 <p className="text-sm text-zinc-400 mt-1">
                   Based solely on discount vs. paid

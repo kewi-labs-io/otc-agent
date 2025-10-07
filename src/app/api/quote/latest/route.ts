@@ -8,25 +8,31 @@ export async function GET(request: NextRequest) {
   const quoteService = runtime.getService<QuoteService>("QuoteService");
 
   if (!quoteService) {
-    return NextResponse.json({ error: "QuoteService not available" }, { status: 500 });
+    return NextResponse.json(
+      { error: "QuoteService not available" },
+      { status: 500 },
+    );
   }
 
   const { searchParams } = new URL(request.url);
   const wallet = searchParams.get("entityId");
 
   if (!wallet) {
-    return NextResponse.json({ error: "entityId parameter required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "entityId parameter required" },
+      { status: 400 },
+    );
   }
 
-  console.log('[Quote API] GET - wallet:', wallet);
+  console.log("[Quote API] GET - wallet:", wallet);
 
   let quote = await quoteService.getQuoteByWallet(wallet);
-  console.log('[Quote API] Found:', quote ? quote.quoteId : 'null');
-  
+  console.log("[Quote API] Found:", quote ? quote.quoteId : "null");
+
   if (!quote) {
-    console.log('[Quote API] Creating default quote');
+    console.log("[Quote API] Creating default quote");
     const entityId = walletToEntityId(wallet);
-    
+
     await quoteService.createQuote({
       entityId,
       beneficiary: wallet.toLowerCase(),
@@ -40,82 +46,94 @@ export async function GET(request: NextRequest) {
       discountedUsd: 0,
       paymentAmount: "0",
     });
-    
+
     quote = await quoteService.getQuoteByWallet(wallet);
   }
 
-  const formattedQuote = quote ? {
-    quoteId: quote.quoteId,
-    entityId: quote.entityId,
-    beneficiary: quote.beneficiary,
-    tokenAmount: quote.tokenAmount,
-    discountBps: quote.discountBps,
-    apr: quote.apr,
-    lockupMonths: quote.lockupMonths,
-    lockupDays: quote.lockupDays,
-    paymentCurrency: quote.paymentCurrency,
-    priceUsdPerToken: quote.priceUsdPerToken,
-    totalUsd: quote.totalUsd,
-    discountUsd: quote.discountUsd,
-    discountedUsd: quote.discountedUsd,
-    paymentAmount: quote.paymentAmount,
-    status: quote.status,
-    createdAt: quote.createdAt,
-  } : null;
+  const formattedQuote = quote
+    ? {
+        quoteId: quote.quoteId,
+        entityId: quote.entityId,
+        beneficiary: quote.beneficiary,
+        tokenAmount: quote.tokenAmount,
+        discountBps: quote.discountBps,
+        apr: quote.apr,
+        lockupMonths: quote.lockupMonths,
+        lockupDays: quote.lockupDays,
+        paymentCurrency: quote.paymentCurrency,
+        totalUsd: quote.totalUsd,
+        discountUsd: quote.discountUsd,
+        discountedUsd: quote.discountedUsd,
+        paymentAmount: quote.paymentAmount,
+        status: quote.status,
+        createdAt: quote.createdAt,
+      }
+    : null;
 
-  console.log('[Quote API] Returning:', formattedQuote?.quoteId ?? 'null');
+  console.log("[Quote API] Returning:", formattedQuote?.quoteId ?? "null");
   return NextResponse.json({ success: true, quote: formattedQuote });
 }
 
 export async function POST(request: NextRequest) {
-    const runtime = await agentRuntime.getRuntime();
-    const quoteService = runtime.getService<QuoteService>("QuoteService");
+  const runtime = await agentRuntime.getRuntime();
+  const quoteService = runtime.getService<QuoteService>("QuoteService");
 
-    if (!quoteService) {
-      return NextResponse.json({ error: "QuoteService not available" }, { status: 500 });
-    }
+  if (!quoteService) {
+    return NextResponse.json(
+      { error: "QuoteService not available" },
+      { status: 500 },
+    );
+  }
 
-    const body = await request.json();
-    const { quoteId, beneficiary, tokenAmount, paymentCurrency, totalUsd, discountUsd, discountedUsd, paymentAmount } = body;
+  const body = await request.json();
+  const {
+    quoteId,
+    beneficiary,
+    tokenAmount,
+    paymentCurrency,
+    totalUsd,
+    discountUsd,
+    discountedUsd,
+    paymentAmount,
+  } = body;
 
-    if (!quoteId) {
-      return NextResponse.json({ error: "quoteId required" }, { status: 400 });
-    }
+  if (!quoteId) {
+    return NextResponse.json({ error: "quoteId required" }, { status: 400 });
+  }
 
-    console.log('[Quote API] POST - updating quote:', {
-      quoteId,
-      beneficiary: beneficiary?.slice(0, 10),
-      tokenAmount,
-      paymentCurrency,
-      totalUsd,
-      discountedUsd,
-    });
+  console.log("[Quote API] POST - updating quote:", {
+    quoteId,
+    beneficiary: beneficiary?.slice(0, 10),
+    tokenAmount,
+    paymentCurrency,
+    totalUsd,
+    discountedUsd,
+  });
 
-    // Get existing quote
-    const quote = await quoteService.getQuoteByQuoteId(quoteId);
-    
-    if (!quote) {
-      console.error('[Quote API] Quote not found:', quoteId);
-      return NextResponse.json({ error: "Quote not found" }, { status: 404 });
-    }
-    
-    // Update all provided fields
-    const updatedQuote = {
-      ...quote,
-      ...(beneficiary && { beneficiary: beneficiary.toLowerCase() }),
-      ...(tokenAmount && { tokenAmount: String(tokenAmount) }),
-      ...(paymentCurrency && { paymentCurrency }),
-      ...(typeof totalUsd === 'number' && { totalUsd }),
-      ...(typeof discountUsd === 'number' && { discountUsd }),
-      ...(typeof discountedUsd === 'number' && { discountedUsd }),
-      ...(paymentAmount && { paymentAmount: String(paymentAmount) }),
-    };
+  // Get existing quote
+  const quote = await quoteService.getQuoteByQuoteId(quoteId);
 
-    // Save updated quote
-    await runtime.setCache(`quote:${quoteId}`, updatedQuote);
-    
-    console.log('[Quote API] ✅ Quote updated:', quoteId);
+  if (!quote) {
+    console.error("[Quote API] Quote not found:", quoteId);
+    return NextResponse.json({ error: "Quote not found" }, { status: 404 });
+  }
 
-    return NextResponse.json({ success: true, quote: updatedQuote });
+  // Update all provided fields
+  const updatedQuote = {
+    ...quote,
+    ...(beneficiary && { beneficiary: beneficiary.toLowerCase() }),
+    ...(tokenAmount && { tokenAmount: String(tokenAmount) }),
+    ...(paymentCurrency && { paymentCurrency }),
+    ...(typeof totalUsd === "number" && { totalUsd }),
+    ...(typeof discountUsd === "number" && { discountUsd }),
+    ...(typeof discountedUsd === "number" && { discountedUsd }),
+    ...(paymentAmount && { paymentAmount: String(paymentAmount) }),
+  };
 
+  // Save updated quote
+  await runtime.setCache(`quote:${quoteId}`, updatedQuote);
+
+  console.log("[Quote API] ✅ Quote updated:", quoteId);
+
+  return NextResponse.json({ success: true, quote: updatedQuote });
 }

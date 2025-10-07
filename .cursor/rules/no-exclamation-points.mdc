@@ -1,0 +1,6 @@
+---
+alwaysApply: true
+---
+# No exclamation points in commands
+
+For some reason you make commands with things like "Build successful!" and in a command the ! is not escaped so the command doesn't run. Never use ! in your strings, even if you're enthusiastic.

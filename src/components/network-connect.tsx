@@ -43,7 +43,9 @@ export function NetworkConnectButton({
       </Button>
       <Dialog open={open} onClose={setOpen} size="lg">
         <div className="p-6">
-          <DialogTitle className="text-center mb-2">Choose a network</DialogTitle>
+          <DialogTitle className="text-center mb-2">
+            Choose a network
+          </DialogTitle>
           <DialogBody className="pt-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div

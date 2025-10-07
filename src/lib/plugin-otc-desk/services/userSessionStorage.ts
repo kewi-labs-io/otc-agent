@@ -1,7 +1,7 @@
 // User session storage service using Eliza's cache system
 
 import type { IAgentRuntime } from "@elizaos/core";
-import { Service, ServiceType } from "@elizaos/core";
+import { Service } from "@elizaos/core";
 import { v4 as uuidv4 } from "uuid";
 
 export interface UserSessionMemory {

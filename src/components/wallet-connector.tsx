@@ -3,6 +3,7 @@
 import { Button } from "@/components/button";
 import { useMultiWallet } from "@/components/multiwallet";
 import { NetworkConnectButton } from "@/components/network-connect";
+import { BaseLogo } from "@/components/icons";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
@@ -26,7 +27,6 @@ const WalletConnectorInner = ({
     isConnected: unifiedConnected,
     evmConnected,
     solanaConnected,
-    networkLabel,
   } = useMultiWallet();
 
   const bothConnected = evmConnected && solanaConnected;
@@ -46,16 +46,18 @@ const WalletConnectorInner = ({
   if (showAsButton) {
     if (unifiedConnected) return null;
     return (
-      <NetworkConnectButton className="!h-9">
-        Connect Wallet
+      <NetworkConnectButton className="!h-9 flex items-center gap-2">
+        <BaseLogo className="w-4 h-4" />
+        <span>Connect Wallet</span>
       </NetworkConnectButton>
     );
   }
 
   if (!evmConnected && !solanaConnected) {
     return (
-      <NetworkConnectButton className="!h-9 bg-[#FF5800] !px-3">
-        Connect Wallet
+      <NetworkConnectButton className="!h-9 bg-[#FF5800] !px-3 flex items-center gap-2">
+        <BaseLogo className="w-4 h-4" />
+        <span>Connect Wallet</span>
       </NetworkConnectButton>
     );
   }
@@ -94,13 +96,15 @@ const WalletConnectorInner = ({
           {({ openAccountModal, openConnectModal, account }) => (
             <Button
               onClick={account ? openAccountModal : openConnectModal}
-              color="orange"
-              className="!h-9 !px-3 !text-sm whitespace-nowrap"
+              className="!h-9 !px-3 !text-sm whitespace-nowrap bg-blue-500 dark:bg-blue-500 rounded-lg px-4 py-2 flex items-center gap-2"
             >
-              {account
-                ? account.displayName ||
-                  `${account.address.slice(0, 6)}...${account.address.slice(-4)}`
-                : "Connect Base"}
+              <BaseLogo className="w-4 h-4" />
+              <span>
+                {account
+                  ? account.displayName ||
+                    `${account.address.slice(0, 6)}...${account.address.slice(-4)}`
+                  : "Connect Base"}
+              </span>
             </Button>
           )}
         </ConnectButton.Custom>

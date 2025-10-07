@@ -1,4 +1,5 @@
 "use client";
+
 import Card from "@/components/Card";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -7,6 +8,8 @@ import { useState, useCallback } from "react";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { Dialog, DialogBody, DialogTitle } from "@/components/dialog";
+
+export const dynamic = "force-dynamic";
 
 export default function Page() {
   const router = useRouter();
