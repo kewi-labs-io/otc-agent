@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# ElizaOS OTC System - Complete Startup Script
-# This script deploys and starts the entire ElizaOS financial system
+# elizaOS OTC System - Complete Startup Script
+# This script deploys and starts the entire elizaOS financial system
 
 set -e
 
@@ -61,7 +61,7 @@ wait_for_service() {
 
 # Main execution
 main() {
-    header "🚀 ElizaOS SYSTEM STARTUP"
+    header "🚀 elizaOS SYSTEM STARTUP"
     
     # Step 1: Check environment
     log "1️⃣ Checking environment..." "$BLUE"
@@ -120,8 +120,8 @@ main() {
         fi
     fi
     
-    # Step 5: Deploy ElizaOS OTC contracts
-    log "\n5️⃣ Deploying ElizaOS OTC contracts..." "$BLUE"
+    # Step 5: Deploy elizaOS OTC contracts
+    log "\n5️⃣ Deploying elizaOS OTC contracts..." "$BLUE"
     
     if [ -f "$PROJECT_ROOT/contracts/deployments/eliza-otc-deployment.json" ]; then
         log "  Contracts already deployed, skipping..." "$YELLOW"
@@ -175,7 +175,7 @@ main() {
     
     log "${BOLD}📊 System Status:${NC}" "$GREEN"
     log "  • Hardhat Node: ${GREEN}✓ Running${NC}"
-    log "  • ElizaOS Token: ${GREEN}✓ Deployed${NC}"
+    log "  • elizaOS Token: ${GREEN}✓ Deployed${NC}"
     log "  • OTC Contract: ${GREEN}✓ Deployed${NC}"
     log "  • Approval Worker: ${GREEN}✓ Active${NC}"
     log "  • Next.js App: ${GREEN}✓ Running${NC}"
@@ -189,7 +189,7 @@ main() {
     if [ ! -z "$OTC_ADDRESS" ]; then
         echo
         log "${BOLD}📝 Contract Addresses:${NC}" "$YELLOW"
-        log "  • ElizaOS Token: ${CYAN}$ELIZAOS_ADDRESS${NC}"
+        log "  • elizaOS Token: ${CYAN}$ELIZAOS_ADDRESS${NC}"
         log "  • OTC Contract: ${CYAN}$OTC_ADDRESS${NC}"
     fi
     

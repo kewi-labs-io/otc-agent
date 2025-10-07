@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# ElizaOS OTC System - Stop Script
-# Cleanly shuts down all components of the ElizaOS OTC system
+# elizaOS OTC System - Stop Script
+# Cleanly shuts down all components of the elizaOS OTC system
 
 set -e
 
@@ -50,7 +50,7 @@ stop_process() {
 }
 
 main() {
-    header "🛑 STOPPING ElizaOS SYSTEM"
+    header "🛑 STOPPING elizaOS SYSTEM"
     
     log "Shutting down all components..." "$YELLOW"
     echo

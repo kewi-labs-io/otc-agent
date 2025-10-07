@@ -93,7 +93,7 @@ I can offer 15% discount with a 6-month lockup.
 
 <quote>
   <quoteId>OTC-XXXXX</quoteId>
-  <tokenSymbol>ElizaOS</tokenSymbol>
+  <tokenSymbol>elizaOS</tokenSymbol>
   <lockupMonths>6</lockupMonths>
   <lockupDays>180</lockupDays>
   <pricePerToken>0.00127</pricePerToken>

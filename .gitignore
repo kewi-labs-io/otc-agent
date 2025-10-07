@@ -83,7 +83,7 @@ cypress/videos/
 prisma/dev.db
 prisma/dev.db-journal
 
-# ElizaOS Runtime
+# elizaOS Runtime
 .eliza-runtime/
 
 

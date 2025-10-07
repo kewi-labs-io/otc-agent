@@ -328,6 +328,14 @@ export function AcceptQuoteModal({
   const handleConfirm = async () => {
     if (!unifiedConnected) return;
 
+    // CRITICAL: Quote must exist
+    if (!initialQuote?.quoteId) {
+      setError(
+        "No quote ID available. Please request a quote from the chat first."
+      );
+      return;
+    }
+
     // Block if contract isn't valid (EVM only)
     if (!isSolanaActive && !contractValid) {
       setError(
@@ -348,7 +356,7 @@ export function AcceptQuoteModal({
      * TRANSACTION FLOW (Optimized UX - Backend Pays)
      *
      * requireApproverToFulfill = true (set in contract)
-     * 
+     *
      * Flow:
      * 1. User creates offer (1 wallet signature - ONLY user interaction)
      * 2. Backend approves offer (using agent wallet)
@@ -363,15 +371,14 @@ export function AcceptQuoteModal({
      * - Consistent pricing (no user slippage)
      */
 
-    try {
-      // Solana path
-      if (isSolanaActive) {
-        // Basic config checks
-        if (!SOLANA_DESK || !SOLANA_TOKEN_MINT || !SOLANA_USDC_MINT) {
-          throw new Error(
-            "Solana OTC configuration is incomplete. Please check your environment variables."
-          );
-        }
+    // Solana path
+    if (isSolanaActive) {
+      // Basic config checks
+      if (!SOLANA_DESK || !SOLANA_TOKEN_MINT || !SOLANA_USDC_MINT) {
+        throw new Error(
+          "Solana OTC configuration is incomplete. Please check your environment variables."
+        );
+      }
 
       const connection = new Connection(SOLANA_RPC, "confirmed");
       // @ts-ignore - wallet adapter injects window.solana
@@ -462,16 +469,16 @@ export function AcceptQuoteModal({
       console.log("Offer created");
 
       setStep("await_approval");
-      
+
       // Request backend approval (same as EVM flow)
       console.log("Requesting approval from backend...");
       const approveRes = await fetch("/api/otc/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           offerId: nextOfferId.toString(),
           chain: "solana",
-          offerAddress: offerKeypair.publicKey.toString()
+          offerAddress: offerKeypair.publicKey.toString(),
         }),
       });
 
@@ -480,127 +487,96 @@ export function AcceptQuoteModal({
         throw new Error(`Approval failed: ${errorText}`);
       }
 
-      console.log("Approval requested, polling for confirmation...");
-      
-      // Poll for approval
-      const start = Date.now();
-      while (Date.now() - start < 90_000) {
-        const off: any = await (program.account as any).offer.fetch(
-          offerKeypair.publicKey
-        );
-        if (off.approved) break;
-        await new Promise((r) => setTimeout(r, 2000));
-      }
+      console.log("Approval requested, backend will approve and pay...");
 
-      console.log("Offer approved");
-
+      // Wait for backend to approve AND auto-fulfill
       setStep("paying");
-      if (paymentCurrencySol === 0) {
-        console.log("Paying in SOL on Solana");
-        // Pay in SOL
-        await program.methods
-          .fulfillOfferSol(nextOfferId)
-          .accounts({
-            desk,
-            offer: offerKeypair.publicKey,
-            deskTokenTreasury,
-            payer: wallet.publicKey,
-            systemProgram: SolSystemProgram.programId,
-          })
-          .signers([])
-          .rpc();
-      } else {
-        console.log("Paying in USDC on Solana");
-        // Pay in USDC on Solana
-        if (!usdcMintPk || !deskUsdcTreasury) {
-          throw new Error("USDC mint/treasury not configured for Solana.");
-        }
-        const payerUsdcAta = await getAssociatedTokenAddress(
-          usdcMintPk,
-          wallet.publicKey,
-          false
-        );
-        await program.methods
-          .fulfillOfferUsdc(nextOfferId)
-          .accounts({
-            desk,
-            offer: offerKeypair.publicKey,
-            deskTokenTreasury,
-            deskUsdcTreasury,
-            payerUsdcAta,
-            payer: wallet.publicKey,
-            tokenProgram: new SolPubkey(
-              // spl-token program id
-              "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-            ),
-            systemProgram: SolSystemProgram.programId,
-          })
-          .signers([])
-          .rpc();
+      const approveData = await approveRes.json();
+
+      if (!approveData.autoFulfilled || !approveData.fulfillTx) {
+        throw new Error("Backend did not auto-fulfill Solana offer");
       }
 
-      console.log("Offer paid");
+      console.log("✅ Backend approved:", approveData.approvalTx);
+      console.log("✅ Backend paid:", approveData.fulfillTx);
+      console.log("Offer completed automatically");
 
       // Auto-claim tokens (backend handles this after lockup expires)
       console.log("Requesting automatic token distribution...");
-      try {
-        const claimRes = await fetch("/api/solana/claim", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            offerAddress: offerKeypair.publicKey.toString(),
-            beneficiary: wallet.publicKey.toString(),
-          }),
-        });
+      const claimRes = await fetch("/api/solana/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          offerAddress: offerKeypair.publicKey.toString(),
+          beneficiary: wallet.publicKey.toString(),
+        }),
+      });
 
-        if (claimRes.ok) {
-          const claimData = await claimRes.json();
-          if (claimData.scheduled) {
-            console.log(
-              `✅ Tokens will be automatically distributed after lockup (${Math.floor(claimData.secondsRemaining / 86400)} days)`
-            );
-          } else {
-            console.log("✅ Tokens immediately distributed");
-          }
+      if (claimRes.ok) {
+        const claimData = await claimRes.json();
+        if (claimData.scheduled) {
+          console.log(
+            `✅ Tokens will be automatically distributed after lockup (${Math.floor(claimData.secondsRemaining / 86400)} days)`
+          );
         } else {
-          console.warn("Claim scheduling failed, tokens will be claimable manually");
+          console.log("✅ Tokens immediately distributed");
         }
-      } catch (e) {
-        console.warn("Auto-claim check failed (non-critical):", e);
+      } else {
+        console.warn(
+          "Claim scheduling failed, tokens will be claimable manually"
+        );
       }
 
       // Save deal completion to database
-      if (initialQuote?.quoteId) {
-        try {
-          const response = await fetch("/api/deal-completion", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "complete",
-              quoteId: initialQuote.quoteId,
-              tokenAmount: String(tokenAmount),
-              paymentCurrency: currency,
-              offerId: nextOfferId.toString(),
-              transactionHash: "",
-              chain: "solana",
-              offerAddress: offerKeypair.publicKey.toString(),
-            }),
-          });
-
-          if (response.ok) {
-            console.log("✅ Deal completion saved");
-          } else {
-            console.warn("Failed to save deal completion:", await response.text());
-          }
-        } catch (e) {
-          console.warn("Deal completion save failed (non-critical):", e);
-        }
+      if (!initialQuote?.quoteId) {
+        const errorMsg =
+          "No quote ID - you must get a quote from the chat before buying.";
+        console.error("[Solana]", errorMsg);
+        setError(errorMsg);
+        setIsProcessing(false);
+        setStep("amount");
+        return;
       }
+
+      const solanaWallet = wallet.publicKey.toString().toLowerCase();
+
+      console.log("[Solana] Saving deal completion:", {
+        quoteId: initialQuote.quoteId,
+        wallet: solanaWallet,
+        offerId: nextOfferId.toString(),
+        tokenAmount,
+        currency,
+      });
+
+      const response = await fetch("/api/deal-completion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "complete",
+          quoteId: initialQuote.quoteId,
+          tokenAmount: String(tokenAmount),
+          paymentCurrency: currency,
+          offerId: nextOfferId.toString(),
+          transactionHash: "",
+          chain: "solana",
+          offerAddress: offerKeypair.publicKey.toString(),
+          beneficiary: solanaWallet,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("[Solana] Deal save failed:", errorText);
+        throw new Error(`Failed to save deal: ${errorText}`);
+      }
+
+      const saveResult = await response.json();
+      console.log("✅ Deal completion saved:", saveResult);
 
       setStep("complete");
       setIsProcessing(false);
       onComplete?.({ offerId: BigInt(nextOfferId.toString()) });
-      
+
       // Redirect to deal page after showing success
       if (initialQuote?.quoteId) {
         setTimeout(() => {
@@ -639,7 +615,7 @@ export function AcceptQuoteModal({
 
     // Validate beneficiary matches connected wallet
     if (
-      initialQuote?.beneficiary &&
+      initialQuote.beneficiary &&
       address &&
       initialQuote.beneficiary.toLowerCase() !== address.toLowerCase()
     ) {
@@ -657,16 +633,18 @@ export function AcceptQuoteModal({
     const tokenAmountWei = BigInt(tokenAmount) * 10n ** 18n;
     const lockupSeconds = BigInt(lockupDays * 24 * 60 * 60);
     const paymentCurrency = currency === "ETH" ? 0 : 1;
-    
+
     const createTxHash = (await createOffer({
       tokenAmountWei,
       discountBps,
       paymentCurrency,
       lockupSeconds,
     })) as `0x${string}`;
-    
-    console.log(`[AcceptQuote] ✅ Offer created: ${newOfferId}, tx: ${createTxHash}`);
-    
+
+    console.log(
+      `[AcceptQuote] ✅ Offer created: ${newOfferId}, tx: ${createTxHash}`
+    );
+
     // Wait for transaction to be mined before backend processes it
     console.log("[AcceptQuote] Waiting for offer creation to be confirmed...");
     await publicClient.waitForTransactionReceipt({ hash: createTxHash });
@@ -709,7 +687,7 @@ export function AcceptQuoteModal({
     console.log("[AcceptQuote] Verifying payment on-chain...");
     const finalOffer = await readOffer(newOfferId);
     const isPaidFinal = finalOffer[9]; // paid flag at index 9
-    
+
     if (!isPaidFinal) {
       throw new Error(
         "Backend reported success but offer not paid on-chain. Please contact support with offer ID: " +
@@ -759,19 +737,13 @@ export function AcceptQuoteModal({
     setIsProcessing(false);
 
     onComplete?.({ offerId: newOfferId, txHash: paymentTxHash });
-    
+
     // Auto-redirect after showing success briefly
     setTimeout(() => {
       router.push(`/deal/${initialQuote.quoteId}`);
     }, 2000);
-    } catch (e) {
-      console.error("[AcceptQuote] Error:", e);
-      setError(e instanceof Error ? e.message : "Transaction failed");
-      setIsProcessing(false);
-      setStep("amount");
-    }
   };
-  
+
   const estPerTokenUsd = useMemo(() => {
     // Cannot accurately estimate without on-chain oracle price
     // This is just for UI display, actual cost will be determined at execution
@@ -834,8 +806,13 @@ export function AcceptQuoteModal({
   }, []);
 
   return (
-    <Dialog open={isOpen} onClose={onClose} data-testid="accept-quote-modal">
-      <div className="w-[min(720px,92vw)] mx-auto p-0 overflow-hidden rounded-2xl bg-zinc-950 text-white ring-1 ring-white/10">
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      size="3xl"
+      data-testid="accept-quote-modal"
+    >
+      <div className="w-full max-w-[720px] mx-auto p-0 overflow-hidden rounded-2xl bg-zinc-950 text-white ring-1 ring-white/10">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5">
           <div className="text-lg font-semibold tracking-wide">Your Quote</div>
@@ -894,7 +871,7 @@ export function AcceptQuoteModal({
                   <span className="text-orange-400 text-lg">₣</span>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-semibold">$ElizaOS</div>
+                  <div className="text-sm font-semibold">$elizaOS</div>
                   <div className="text-xs text-zinc-500">{`Balance: ${balanceDisplay}`}</div>
                 </div>
               </div>
@@ -981,7 +958,7 @@ export function AcceptQuoteModal({
                       Connect Wallet
                     </h3>
                     <p className="text-zinc-300 text-sm mb-4">
-                      Get discounted ElizaOS tokens. Let’s deal, anon.
+                      Get discounted elizaOS tokens. Let’s deal, anon.
                     </p>
                     <div className="inline-flex gap-2">
                       <NetworkConnectButton className="!h-9">
@@ -1005,7 +982,7 @@ export function AcceptQuoteModal({
               </Button>
             </div>
           </div>
-        ) : (
+        ) : step !== "complete" ? (
           <div className="flex items-center justify-end gap-3 px-5 py-5">
             <Button
               onClick={onClose}
@@ -1028,7 +1005,7 @@ export function AcceptQuoteModal({
               </div>
             </Button>
           </div>
-        )}
+        ) : null}
 
         {/* Progress states */}
         {step === "creating" && (
@@ -1082,6 +1059,9 @@ export function AcceptQuoteModal({
               <p className="text-sm text-zinc-400">
                 Your purchase is complete. You&apos;ll receive your tokens at
                 maturity.
+              </p>
+              <p className="text-xs text-zinc-500 mt-3">
+                Redirecting to your deal page...
               </p>
             </div>
           </div>

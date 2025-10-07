@@ -39,7 +39,7 @@ export const quoteProvider: Provider = {
 
     if (!currentQuote) {
       return {
-        text: `No active ElizaOS quote. Offer them a deal on ElizaOS tokens with a discount and lockup.`,
+        text: `No active elizaOS quote. Offer them a deal on elizaOS tokens with a discount and lockup.`,
       };
     }
 
@@ -49,7 +49,7 @@ export const quoteProvider: Provider = {
       text: `
 Current Agent Quote (ID: ${currentQuote.quoteId}):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 Amount: ${Number(currentQuote.tokenAmount) > 0 ? formattedAmount + " ElizaOS" : "Choose amount at acceptance"}
+📊 Amount: ${Number(currentQuote.tokenAmount) > 0 ? formattedAmount + " elizaOS" : "Choose amount at acceptance"}
 💰 Price per Token: Determined by Chainlink oracle on-chain at execution
 💵 Total Value: $${currentQuote.totalUsd.toFixed(2)} (estimated at creation)
 🎯 Discount: ${currentQuote.discountBps / 100}% (${currentQuote.discountBps} bps)
@@ -59,10 +59,10 @@ Current Agent Quote (ID: ${currentQuote.quoteId}):
 
 FAQ:
 - What is the minimum order size?
-We have a minimum order size of 1000 $ElizaOS tokens.
+We have a minimum order size of 1000 $elizaOS tokens.
 
 - What is the maximum order size?
-We're capping it so we can have enough for everyone to try out the OTC agent, so only 100k $ElizaOS tokens at a time for now.
+We're capping it so we can have enough for everyone to try out the OTC agent, so only 100k $elizaOS tokens at a time for now.
 
 - What is the maximum discount?
 Try us. Negotiate if you can :) Usually we're around 2-10% off but open to negotiation.
@@ -76,7 +76,7 @@ We're offering 1 week lockups for now.
 - How do I buy the tokens?
 You'll need ETH or USDC on Base.
 
-- Wait, the new $ElizaOS token is on Base? Isn't $ai16z a Solana project?
+- Wait, the new $elizaOS token is on Base? Isn't $ai16z a Solana project?
 It's available on Base, Optimism, Arbitrum, Solana, Polygon and Ethereum mainnet.
 
 - When do I get my tokens?

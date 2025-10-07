@@ -52,14 +52,14 @@ describe('OTC Runtime E2E Tests', function() {
 
     // Deploy mock tokens
     const MockERC20 = await ethers.getContractFactory('MockERC20');
-    elizaToken = await MockERC20.deploy('ElizaOS', 'ELIZA', 18);
+    elizaToken = await MockERC20.deploy('elizaOS', 'ELIZA', 18);
     await elizaToken.waitForDeployment();
     
     usdcToken = await MockERC20.deploy('USD Coin', 'USDC', 6);
     await usdcToken.waitForDeployment();
     
     console.log('🪙 Tokens deployed:');
-    console.log(`  ElizaOS: ${await elizaToken.getAddress()}`);
+    console.log(`  elizaOS: ${await elizaToken.getAddress()}`);
     console.log(`  USDC: ${await usdcToken.getAddress()}\n`);
 
     // Deploy mock price feeds

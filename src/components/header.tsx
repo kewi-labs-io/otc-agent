@@ -1,6 +1,6 @@
 "use client";
 
-import { XMarkIcon } from "@heroicons/react/24/outline";
+import { XMarkIcon, Bars3Icon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
 import Link from "next/link";
 import { useState } from "react";
@@ -98,13 +98,21 @@ export function Header() {
             </Link>
           </div>
 
-          <div className="flex-1 min-w-0 flex items-center justify-center gap-x-3 overflow-x-auto whitespace-nowrap">
+          <div className="hidden lg:flex flex-1 min-w-0 items-center justify-center gap-x-3 overflow-x-auto whitespace-nowrap">
             <NavLinks />
           </div>
-          <div className="flex items-center justify-end whitespace-nowrap shrink-0">
-            <div className="pl-4">
+          <div className="flex items-center justify-end whitespace-nowrap shrink-0 gap-2">
+            <div className="hidden lg:block">
               <WalletConnector onConnectionChange={() => {}} />
             </div>
+            <button
+              type="button"
+              className="lg:hidden -m-2.5 inline-flex items-center justify-center rounded-md p-2.5 text-zinc-700 dark:text-zinc-400"
+              onClick={() => setMobileMenuOpen(true)}
+            >
+              <span className="sr-only">Open main menu</span>
+              <Bars3Icon className="h-6 w-6" aria-hidden="true" />
+            </button>
           </div>
         </div>
       </nav>
@@ -115,7 +123,7 @@ export function Header() {
         className="lg:hidden"
         variant="slideout"
       >
-        <div className="px-6 py-6 h-full">
+        <div className="px-6 py-6 h-full flex flex-col">
           <div className="flex items-center justify-between">
             <Link
               href="/"
@@ -133,7 +141,10 @@ export function Header() {
               <XMarkIcon className="h-6 w-6" aria-hidden="true" />
             </button>
           </div>
-          <div className="mt-6 flow-root">
+          <div className="mt-6 pb-6 border-b border-zinc-200 dark:border-zinc-800">
+            <WalletConnector onConnectionChange={() => {}} />
+          </div>
+          <div className="mt-6 flow-root flex-1">
             <div className="space-y-2 py-6">
               <NavLinks mobile />
             </div>

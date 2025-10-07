@@ -6,7 +6,7 @@ describe("Oracle Failure Scenarios", function () {
     const [owner, user] = await hre.ethers.getSigners();
 
     const MockERC20 = await hre.ethers.getContractFactory("MockERC20");
-    const eliza = await MockERC20.deploy("ElizaOS", "ELIZA", 18, hre.ethers.parseEther("1000000"));
+    const eliza = await MockERC20.deploy("elizaOS", "ELIZA", 18, hre.ethers.parseEther("1000000"));
     const usdc = await MockERC20.deploy("USD Coin", "USDC", 6, 1_000_000n * 10n ** 6n);
 
     const MockAgg = await hre.ethers.getContractFactory("MockAggregatorV3");

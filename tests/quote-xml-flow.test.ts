@@ -42,7 +42,7 @@ describe("Quote XML Flow E2E", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         entityId: TEST_WALLET,
-        text: "I want to buy 100,000 ElizaOS at 10% discount",
+        text: "I want to buy 100,000 elizaOS at 10% discount",
       }),
     });
 

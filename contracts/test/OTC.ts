@@ -7,7 +7,7 @@ describe("OTC", () => {
     const [owner, agent, user, approver, other] = await hre.ethers.getSigners();
 
     const MockERC20 = await hre.ethers.getContractFactory("MockERC20");
-    const token = await MockERC20.deploy("ElizaOS", "ElizaOS", 18, hre.ethers.parseEther("1000000"));
+    const token = await MockERC20.deploy("elizaOS", "elizaOS", 18, hre.ethers.parseEther("1000000"));
     const usdc = await MockERC20.deploy("USD Coin", "USDC", 6, 1_000_000n * 10n ** 6n);
 
     const MockAgg = await hre.ethers.getContractFactory("MockAggregatorV3");
@@ -29,7 +29,7 @@ describe("OTC", () => {
   it("create -> approve -> fulfill (USDC) -> claim after unlock", async () => {
     const { owner, user, approver, usdc, desk, token } = await deploy();
 
-    // Reduce token price to something realistic: $0.001 per ElizaOS (8 decimals)
+    // Reduce token price to something realistic: $0.001 per elizaOS (8 decimals)
     const tokenUsdAddr = await desk.tokenUsdFeed();
     const tokenUsd = (await hre.ethers.getContractAt("MockAggregatorV3", tokenUsdAddr)) as any;
     await tokenUsd.setAnswer(100_000n); // $0.001 with 8 decimals

@@ -82,19 +82,28 @@ export function MyDealsContent() {
   // Fetch Solana deals from database
   useEffect(() => {
     if (activeFamily === "solana" && solWallet.publicKey) {
-      fetch(`/api/deal-completion?wallet=${solWallet.publicKey.toString()}`)
+      const walletAddr = solWallet.publicKey.toString().toLowerCase();
+      console.log("[MyDeals] Fetching Solana deals for wallet:", walletAddr);
+      
+      fetch(`/api/deal-completion?wallet=${walletAddr}`)
         .then((res) => res.json())
         .then((data) => {
+          console.log("[MyDeals] API response:", data);
           if (data.success && data.deals) {
             console.log(
               "[MyDeals] Loaded Solana deals from DB:",
-              data.deals.length
+              data.deals.length,
+              data.deals
             );
             setSolanaDeals(data.deals);
+          } else {
+            console.log("[MyDeals] No deals returned or error:", data);
+            setSolanaDeals([]);
           }
         })
         .catch((err) => {
           console.error("[MyDeals] Failed to load Solana deals:", err);
+          setSolanaDeals([]);
         });
     } else if (activeFamily === "evm" && address) {
       fetch(`/api/deal-completion?wallet=${address}`)
@@ -112,34 +121,53 @@ export function MyDealsContent() {
   }, [activeFamily, solWallet.publicKey, address]);
 
   const inProgress = useMemo(() => {
-    // For Solana, use database deals; for EVM, use contract offers
-    if (activeFamily === "solana" && solanaDeals.length > 0) {
+    // For Solana, ALWAYS use database (never query contracts)
+    if (activeFamily === "solana") {
       console.log(
         "[MyDeals] Using Solana deals from database:",
         solanaDeals.length
       );
+      
+      if (solanaDeals.length === 0) {
+        console.log("[MyDeals] No Solana deals found");
+        return [];
+      }
+      
       // Transform database deals to match offer structure
-      return solanaDeals.map((deal: any) => ({
-        id: BigInt(deal.offerId || 0),
-        beneficiary: solWallet.publicKey?.toString() || "",
-        tokenAmount: BigInt(deal.tokenAmount || 0) * BigInt(1e9), // Convert to wei equivalent
-        discountBps: deal.discountBps || 1000,
-        createdAt: BigInt(
-          Math.floor(new Date(deal.createdAt).getTime() / 1000)
-        ),
-        unlockTime: BigInt(
-          Math.floor(new Date(deal.createdAt).getTime() / 1000) + 180 * 86400
-        ), // 6 months default
-        priceUsdPerToken: BigInt(100_000_000), // $1.00 in 8 decimals
-        ethUsdPrice: BigInt(0),
-        currency: deal.paymentCurrency === "SOL" ? 0 : 1,
-        approved: true,
-        paid: true,
-        fulfilled: false,
-        cancelled: false,
-        payer: solWallet.publicKey?.toString() || "",
-        amountPaid: BigInt(0),
-      }));
+      return solanaDeals.map((deal: any) => {
+        const createdTs = deal.createdAt ? new Date(deal.createdAt).getTime() / 1000 : Date.now() / 1000;
+        const lockupDays = 180; // 6 months default for Solana
+        
+        console.log("[MyDeals] Transforming deal:", {
+          offerId: deal.offerId,
+          tokenAmount: deal.tokenAmount,
+          type: typeof deal.tokenAmount,
+        });
+        
+        const tokenAmountRaw = deal.tokenAmount || "0";
+        const tokenAmountBigInt = BigInt(tokenAmountRaw) * BigInt(1e18);
+        console.log("[MyDeals] Token amount:", tokenAmountRaw, "→", tokenAmountBigInt.toString());
+        
+        return {
+          id: BigInt(deal.offerId || "0"),
+          beneficiary: deal.beneficiary || solWallet.publicKey?.toString() || "",
+          // Use 18 decimals to match formatTokenAmount function (which divides by 1e18)
+          tokenAmount: tokenAmountBigInt,
+          discountBps: Number(deal.discountBps) || 1000,
+          createdAt: BigInt(Math.floor(createdTs)),
+          unlockTime: BigInt(Math.floor(createdTs + lockupDays * 86400)),
+          priceUsdPerToken: BigInt(100_000_000), // $1.00
+          ethUsdPrice: BigInt(10_000_000_000), // $100
+          currency: deal.paymentCurrency === "SOL" || deal.paymentCurrency === "ETH" ? 0 : 1,
+          approved: true,
+          paid: true,
+          fulfilled: false,
+          cancelled: false,
+          payer: deal.payer || solWallet.publicKey?.toString() || "",
+          amountPaid: BigInt(deal.paymentAmount || "0"),
+          quoteId: deal.quoteId, // Add quoteId for proper linking
+        };
+      });
     }
 
     const offers = myOffers ?? [];
@@ -205,7 +233,10 @@ export function MyDealsContent() {
     })();
   }, []);
 
-  if (!isConnected) {
+  // Check if either EVM or Solana wallet is connected
+  const hasWallet = isConnected || solWallet.connected;
+  
+  if (!hasWallet) {
     return (
       <main className="flex-1 min-h-[70vh] flex items-center justify-center">
         <div className="text-center space-y-4">
@@ -272,7 +303,7 @@ export function MyDealsContent() {
                 <Table striped bleed>
                   <TableHead>
                     <TableRow>
-                      <TableHeader>Amount (ElizaOS)</TableHeader>
+                      <TableHeader>Amount (elizaOS)</TableHeader>
                       <TableHeader>
                         <button
                           className="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white"
@@ -328,8 +359,11 @@ export function MyDealsContent() {
                               <Button
                                 color="zinc"
                                 onClick={() => {
-                                  // API will lookup quote by offerId and redirect to deal page
-                                  window.location.href = `/api/quote/by-offer/${o.id}`;
+                                  // For Solana, use quoteId directly; for EVM, lookup by offerId
+                                  const dealLink = (o as any).quoteId 
+                                    ? `/deal/${(o as any).quoteId}`
+                                    : `/api/quote/by-offer/${o.id}`;
+                                  window.location.href = dealLink;
                                 }}
                                 className="!px-4 !py-2"
                               >
@@ -400,7 +434,7 @@ export function MyDealsContent() {
                                   );
                                   const tokenAmount =
                                     Number(o.tokenAmount) / 1e18;
-                                  const shareText = `I just completed an OTC deal for ${tokenAmount.toLocaleString()} ElizaOS at ${discountPct.toFixed(0)}% with ${months}-month lockup. #ElizaOS #OTC`;
+                                  const shareText = `I just completed an OTC deal for ${tokenAmount.toLocaleString()} elizaOS at ${discountPct.toFixed(0)}% with ${months}-month lockup. #elizaOS #OTC`;
                                   const { dataUrl } =
                                     await createDealShareImage({
                                       tokenAmount,

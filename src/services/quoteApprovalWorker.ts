@@ -221,7 +221,7 @@ export class QuoteApprovalWorker {
       entityId: quote.entityId,
       quoteId: quote.quoteId,
       offerId,
-      message: "🎉 Congratulations! Your ElizaOS deal is complete!",
+      message: "🎉 Congratulations! Your elizaOS deal is complete!",
       type: "deal_completed",
       dealSummary: {
         tokenAmount,

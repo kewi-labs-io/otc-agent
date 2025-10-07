@@ -8,7 +8,7 @@ const OTCModule = buildModule("OTCModule", (m) => {
   const agent = m.getAccount(1);
 
   const tokenSupply = m.getParameter("tokenSupply", 1_000_000n * 10n ** ELIZAOS_DECIMALS);
-  const eliza = m.contract("MockERC20", ["ElizaOS", "ElizaOS", Number(ELIZAOS_DECIMALS), tokenSupply], { id: "eliza_token", from: owner });
+  const eliza = m.contract("MockERC20", ["elizaOS", "elizaOS", Number(ELIZAOS_DECIMALS), tokenSupply], { id: "eliza_token", from: owner });
   const usdc = m.contract("MockERC20", ["USD Coin", "USDC", Number(USDC_DECIMALS), 0n], { id: "usdc_token", from: owner });
 
   // Deploy mock Chainlink feeds: 8 decimals

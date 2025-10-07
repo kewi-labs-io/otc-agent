@@ -94,7 +94,7 @@ Cypress.Commands.add('createQuote', (tokenAmount: string, entityId = 'cypress-te
     timeout: 60000,
     failOnStatusCode: false,
     body: {
-      message: `I want to buy ${tokenAmount} ElizaOS tokens`,
+      message: `I want to buy ${tokenAmount} elizaOS tokens`,
       entityId,
     },
     headers: {

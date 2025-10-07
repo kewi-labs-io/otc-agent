@@ -11,7 +11,7 @@ describe("Multi-Approver", function () {
   before(async function () {
     const [owner] = await ethers.getSigners();
     const MockERC20 = await ethers.getContractFactory("MockERC20");
-    const token = await MockERC20.deploy("ElizaOS", "ELIZA", 18, ethers.parseEther("1000000"));
+    const token = await MockERC20.deploy("elizaOS", "ELIZA", 18, ethers.parseEther("1000000"));
     usdc = await MockERC20.deploy("USD Coin", "USDC", 6, 1_000_000n * 10n ** 6n);
 
     const MockAgg = await ethers.getContractFactory("MockAggregatorV3");

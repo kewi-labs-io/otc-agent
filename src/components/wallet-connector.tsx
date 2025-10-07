@@ -55,7 +55,7 @@ const WalletConnectorInner = ({
 
   if (!evmConnected && !solanaConnected) {
     return (
-      <NetworkConnectButton className="!h-9 bg-[#FF5800] !px-3 flex items-center gap-2">
+      <NetworkConnectButton className="!h-9 bg-[#ff8c00] !px-3 flex items-center gap-2">
         <BaseLogo className="w-4 h-4" />
         <span>Connect Wallet</span>
       </NetworkConnectButton>

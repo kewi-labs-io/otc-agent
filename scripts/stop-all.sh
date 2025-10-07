@@ -5,7 +5,7 @@ echo "🛑 Stopping all services..."
 # Kill by process name
 pkill -f "hardhat node" 2>/dev/null && echo "   ✅ Stopped Hardhat node"
 pkill -f "next dev" 2>/dev/null && echo "   ✅ Stopped Next.js"
-pkill -f "elizaos" 2>/dev/null && echo "   ✅ Stopped ElizaOS"
+pkill -f "elizaos" 2>/dev/null && echo "   ✅ Stopped elizaOS"
 
 # Also try to kill by PID if .pids file exists
 if [ -f .pids ]; then

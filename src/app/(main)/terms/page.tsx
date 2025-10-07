@@ -12,7 +12,7 @@ export default function Page() {
 
 **Effective Date:** December 10th, 2024
 
-These Terms of Use ("Terms") govern your access to and use of documentation and related resources for the Eliza.how project. Eliza Labs, Inc. ("Eliza Labs", "we," "our," or "us") provides these resources as a reference for developers and other interested parties. We are not affiliated with the Eliza project or its trademarks, including ElizaOS. By using these resources ("Resources"), you agree to comply with these Terms. If you do not agree to these Terms, do not access or use the Resources.
+These Terms of Use ("Terms") govern your access to and use of documentation and related resources for the Eliza.how project. Eliza Labs, Inc. ("Eliza Labs", "we," "our," or "us") provides these resources as a reference for developers and other interested parties. We are not affiliated with the Eliza project or its trademarks, including elizaOS. By using these resources ("Resources"), you agree to comply with these Terms. If you do not agree to these Terms, do not access or use the Resources.
 
 **1. Scope and Purpose**
 ------------------------
@@ -21,7 +21,7 @@ These Terms of Use ("Terms") govern your access to and use of documentation and 
 The Resources provided here are intended solely for informational purposes to assist developers in understanding and implementing the Eliza framework.
 
 1.2 **No Ownership or Affiliation**
-Eliza Labs does not claim ownership of or affiliation with the Eliza framework or ElizaOS, its trademarks, or any associated intellectual property.
+Eliza Labs does not claim ownership of or affiliation with the Eliza framework or elizaOS, its trademarks, or any associated intellectual property.
 
 1.3 **No Affiliation with a16z**
 The information presented on this website is for informational purposes only. Eliza Labs and its affiliates is in no way affiliated with, endorsed by, or officially connected to a16z, its creators, developers, or any of its subsidiaries, partners, or associated entities. Any references to a16z or its trademarks, logos, products, or services on this website are used solely for descriptive or informational purposes and do not imply any partnership, sponsorship, or endorsement by or with a16z or its associated organizations. All trademarks, service marks, and logos related to a16z are the property of their respective owners and are used herein under fair use for identification and reference purposes only. We do not claim any ownership or rights over these intellectual properties, nor do we intend to infringe upon the rights of any trademark holders.

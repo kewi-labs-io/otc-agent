@@ -26,7 +26,7 @@ async function main() {
   
   // Create offer
   const tx1 = await otc.connect(user).createOffer(
-    ethers.parseEther("1000"), // 1000 ElizaOS
+    ethers.parseEther("1000"), // 1000 elizaOS
     500, // 5% discount
     1, // USDC payment
     0 // No lockup for quick test
@@ -59,7 +59,7 @@ async function main() {
   const tx4 = await otc.connect(user).claim(offerId);
   await tx4.wait();
   const userBalance = await elizaToken.balanceOf(user.address);
-  console.log("  ✓ Tokens claimed:", ethers.formatEther(userBalance), "ElizaOS");
+  console.log("  ✓ Tokens claimed:", ethers.formatEther(userBalance), "elizaOS");
   
   // Test 2: Emergency refund setup
   console.log("\n2️⃣ Testing Emergency Refund Setup...");

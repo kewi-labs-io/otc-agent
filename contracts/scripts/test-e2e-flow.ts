@@ -23,7 +23,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function main() {
-  log("\n🧪 ElizaOS END-TO-END TEST", COLORS.bright + COLORS.cyan);
+  log("\n🧪 elizaOS END-TO-END TEST", COLORS.bright + COLORS.cyan);
   log("=" .repeat(60), COLORS.cyan);
 
   // Load deployment info
@@ -68,13 +68,13 @@ async function main() {
   log("STEP 1: USER CREATES OFFER", COLORS.bright + COLORS.green);
   log("=".repeat(60), COLORS.cyan);
   
-  const tokenAmount = ethers.parseEther("10000"); // 10,000 ElizaOS
+  const tokenAmount = ethers.parseEther("10000"); // 10,000 elizaOS
   const discountBps = 1500; // 15% discount
   const paymentCurrency = 1; // USDC
   const lockupSeconds = 90 * 24 * 60 * 60; // 90 days (3 months)
   
   log("\n📝 Quote Parameters:", COLORS.yellow);
-  log(`  • Token Amount: 10,000 ElizaOS`);
+  log(`  • Token Amount: 10,000 elizaOS`);
   log(`  • Discount: 15%`);
   log(`  • Payment: USDC`);
   log(`  • Lockup: 90 days`);
@@ -105,7 +105,7 @@ async function main() {
   const totalUsd = await deal.totalUsdForOffer(offerId);
   
   log("\n💰 Offer Details:", COLORS.yellow);
-  log(`  • Token Amount: ${ethers.formatEther(offer.tokenAmount)} ElizaOS`);
+  log(`  • Token Amount: ${ethers.formatEther(offer.tokenAmount)} elizaOS`);
   log(`  • Price per Token: $${Number(offer.priceUsdPerToken) / 1e8}`);
   log(`  • Total USD Value: $${Number(totalUsd) / 1e8}`);
   log(`  • Payment Required: ${Number(totalUsd) / 1e8} USDC`);
@@ -190,7 +190,7 @@ async function main() {
   }
   
   // Claim tokens
-  log("\n⏳ Claiming ElizaOS tokens...");
+  log("\n⏳ Claiming elizaOS tokens...");
   const claimTx = await dealUser.claim(offerId);
   const claimReceipt = await claimTx.wait();
   
@@ -202,7 +202,7 @@ async function main() {
   const finalUsdcBalance = await usdcToken.balanceOf(testWallet.address);
   
   log("\n💎 Final Balances:", COLORS.yellow);
-  log(`  • ElizaOS: ${ethers.formatEther(elizaBalance)} ElizaOS`);
+  log(`  • elizaOS: ${ethers.formatEther(elizaBalance)} elizaOS`);
   log(`  • USDC: ${Number(finalUsdcBalance) / 1e6} USDC`);
 
   // ====================
@@ -216,7 +216,7 @@ async function main() {
   
   log("\n🎉 CONGRATULATIONS! Deal Complete! 🎉", COLORS.bright + COLORS.magenta);
   log("\n📈 Deal Summary:", COLORS.yellow);
-  log(`  • Tokens Received: ${ethers.formatEther(elizaBalance)} ElizaOS`);
+  log(`  • Tokens Received: ${ethers.formatEther(elizaBalance)} elizaOS`);
   log(`  • Amount Paid: ${Number(usdcAmount) / 1e6} USDC`);
   log(`  • Discount Received: 15% ($${savedAmount.toFixed(2)} saved)`);
   log(`  • Discount ROI: ${((savedAmount / (Number(totalUsd) / 1e8)) * 100).toFixed(1)}%`);

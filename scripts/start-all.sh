@@ -34,8 +34,8 @@ if [ "${NEXT_BUILD_BEFORE_DEV:-}" = "1" ]; then
   fi
 fi
 
-# Start ElizaOS agent (via project script if CLI not present)
-echo "🤖 Starting ElizaOS agent..."
+# Start elizaOS agent (via project script if CLI not present)
+echo "🤖 Starting elizaOS agent..."
 if command -v elizaos >/dev/null 2>&1; then
   elizaos dev --port 3137 > elizaos.log 2>&1 &
   ELIZAOS_PID=$!
@@ -44,7 +44,7 @@ else
   npm run eliza:start > elizaos.log 2>&1 &
   ELIZAOS_PID=$!
 fi
-echo "   ElizaOS PID: $ELIZAOS_PID"
+echo "   elizaOS PID: $ELIZAOS_PID"
 
 # Start Next.js dev server
 echo "🌐 Starting Next.js dev server..."
@@ -66,11 +66,11 @@ else
     echo "   ❌ Hardhat node is not responding"
 fi
 
-# Check ElizaOS
+# Check elizaOS
 if curl -s http://localhost:3137 > /dev/null 2>&1; then
-    echo "   ✅ ElizaOS is running on port 3137"
+    echo "   ✅ elizaOS is running on port 3137"
 else
-    echo "   ❌ ElizaOS is not responding"
+    echo "   ❌ elizaOS is not responding"
 fi
 
 # Check Next.js
@@ -98,13 +98,13 @@ echo "🚀 All services started!"
 echo ""
 echo "📊 Service URLs:"
 echo "   - Next.js app: http://localhost:2222"
-echo "   - ElizaOS dashboard: http://localhost:3137"
+echo "   - elizaOS dashboard: http://localhost:3137"
 echo "   - Hardhat RPC: http://127.0.0.1:8545"
 echo ""
 echo "📁 Log files:"
 echo "   - hardhat.log - Hardhat node output"
 echo "   - deploy.log - Contract deployment logs"
-echo "   - elizaos.log - ElizaOS agent logs"
+echo "   - elizaos.log - elizaOS agent logs"
 echo "   - nextjs.log - Next.js server logs"
 echo "   - worker.log - Quote worker status"
 echo ""

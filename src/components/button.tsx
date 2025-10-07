@@ -8,8 +8,8 @@ export const styles = {
     "relative isolate inline-flex items-center justify-center gap-x-2 rounded-md border text-base/6 font-semibold",
     // Sizing
     "px-[calc(calc(var(--spacing)*3.5)-1px)] py-[calc(calc(var(--spacing)*2.5)-1px)] sm:px-[calc(calc(var(--spacing)*3)-1px)] sm:py-[calc(calc(var(--spacing)*1.5)-1px)] sm:text-sm/6",
-    // Focus - only show on keyboard navigation, not mouse clicks
-    "focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500",
+    // Focus
+    "focus:outline-none",
     // Disabled
     "disabled:opacity-50 disabled:pointer-events-none",
     // Icon

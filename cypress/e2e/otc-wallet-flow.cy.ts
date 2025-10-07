@@ -151,14 +151,14 @@ describe('OTC Desk - Complete Wallet Flow (EVM)', () => {
       cy.get('[data-testid="chat-input"]')
         .should('not.be.disabled')
         .clear()
-        .type('Hello, I want to buy ElizaOS tokens');
+        .type('Hello, I want to buy elizaOS tokens');
       
       cy.get('[data-testid="send-button"]').click();
       
       // Verify message appears
       cy.get('[data-testid="user-message"]', { timeout: 5000 })
         .should('be.visible')
-        .and('contain', 'buy ElizaOS');
+        .and('contain', 'buy elizaOS');
     });
 
     it('receives agent response', {
@@ -178,7 +178,7 @@ describe('OTC Desk - Complete Wallet Flow (EVM)', () => {
       cy.get('[data-testid="chat-input"]')
         .should('not.be.disabled')
         .clear()
-        .type('Give me a quote for 50,000 ElizaOS tokens');
+        .type('Give me a quote for 50,000 elizaOS tokens');
       
       cy.get('[data-testid="send-button"]').click();
       

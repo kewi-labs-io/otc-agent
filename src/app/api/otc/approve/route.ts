@@ -129,25 +129,77 @@ export async function POST(request: NextRequest) {
     const desk = new PublicKey(SOLANA_DESK);
     const offer = new PublicKey(offerAddress);
     
-    const tx = await program.methods
-      .approveOffer(new (anchor as any).BN(offerId))
-      .accounts({
-        desk,
-        offer,
-        approver: approverKeypair.publicKey,
-      })
-      .signers([approverKeypair])
-      .rpc();
-    
-    console.log("[Approve API] ✅ Solana offer approved:", tx);
-    
-    return NextResponse.json({
-      success: true,
-      approved: true,
-      chain: "solana",
-      offerAddress,
-      approvalTx: tx,
-    });
+        const approveTx = await program.methods
+          .approveOffer(new (anchor as any).BN(offerId))
+          .accounts({
+            desk,
+            offer,
+            approver: approverKeypair.publicKey,
+          })
+          .signers([approverKeypair])
+          .rpc();
+        
+        console.log("[Approve API] ✅ Solana offer approved:", approveTx);
+        
+        // Fetch offer to get payment details
+        const offerData = await program.account.offer.fetch(offer);
+        
+        // Auto-fulfill (backend pays)
+        console.log("[Approve API] Auto-fulfilling Solana offer...");
+        
+        const { getAssociatedTokenAddress } = await import("@solana/spl-token");
+        const deskData = await program.account.desk.fetch(desk);
+        const tokenMint = new PublicKey(deskData.tokenMint);
+        const deskTokenTreasury = await getAssociatedTokenAddress(tokenMint, desk, true);
+        
+        let fulfillTx: string;
+        
+        if (offerData.currency === 0) {
+          // Pay with SOL
+          fulfillTx = await program.methods
+            .fulfillOfferSol(new (anchor as any).BN(offerId))
+            .accounts({
+              desk,
+              offer,
+              deskTokenTreasury,
+              payer: approverKeypair.publicKey,
+              systemProgram: new PublicKey("11111111111111111111111111111111"),
+            })
+            .signers([approverKeypair])
+            .rpc();
+          console.log("[Approve API] ✅ Paid with SOL:", fulfillTx);
+        } else {
+          // Pay with USDC
+          const usdcMint = new PublicKey(deskData.usdcMint);
+          const deskUsdcTreasury = await getAssociatedTokenAddress(usdcMint, desk, true);
+          const payerUsdcAta = await getAssociatedTokenAddress(usdcMint, approverKeypair.publicKey, false);
+          
+          fulfillTx = await program.methods
+            .fulfillOfferUsdc(new (anchor as any).BN(offerId))
+            .accounts({
+              desk,
+              offer,
+              deskTokenTreasury,
+              deskUsdcTreasury,
+              payerUsdcAta,
+              payer: approverKeypair.publicKey,
+              tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+              systemProgram: new PublicKey("11111111111111111111111111111111"),
+            })
+            .signers([approverKeypair])
+            .rpc();
+          console.log("[Approve API] ✅ Paid with USDC:", fulfillTx);
+        }
+        
+        return NextResponse.json({
+          success: true,
+          approved: true,
+          autoFulfilled: true,
+          chain: "solana",
+          offerAddress,
+          approvalTx: approveTx,
+          fulfillTx,
+        });
   }
 
   const chain = getChain();

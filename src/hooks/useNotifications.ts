@@ -56,7 +56,7 @@ export function useNotifications(entityId?: string) {
       const notification: Notification = {
         id: `completed-${Date.now()}`,
         type: "dealCompleted",
-        message: data.message || "🎉 Your ElizaOS deal is complete!",
+        message: data.message || "🎉 Your elizaOS deal is complete!",
         data,
         timestamp: data.timestamp || new Date().toISOString(),
         read: false,
@@ -68,7 +68,7 @@ export function useNotifications(entityId?: string) {
       toast.success(notification.message, {
         duration: 15000,
         description: data.dealSummary
-          ? `You saved $${data.dealSummary.savings} on ${data.dealSummary.tokenAmount} ElizaOS!`
+          ? `You saved $${data.dealSummary.savings} on ${data.dealSummary.tokenAmount} elizaOS!`
           : undefined,
         action: {
           label: "View Details",

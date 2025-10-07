@@ -4,6 +4,7 @@
 
 export interface OTCQuote {
   quoteId: string;
+  beneficiary?: string;
   tokenAmount: string;
   tokenAmountFormatted: string;
   tokenSymbol: string;

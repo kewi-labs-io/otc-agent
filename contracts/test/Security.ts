@@ -6,7 +6,7 @@ describe("OTC Security Tests", () => {
     const [owner, agent, user, approver, attacker] = await hre.ethers.getSigners();
 
     const MockERC20 = await hre.ethers.getContractFactory("MockERC20");
-    const token = await MockERC20.deploy("ElizaOS", "ElizaOS", 18, hre.ethers.parseEther("1000000"));
+    const token = await MockERC20.deploy("elizaOS", "elizaOS", 18, hre.ethers.parseEther("1000000"));
     const usdc = await MockERC20.deploy("USD Coin", "USDC", 6, 1_000_000n * 10n ** 6n);
 
     const MockAgg = await hre.ethers.getContractFactory("MockAggregatorV3");

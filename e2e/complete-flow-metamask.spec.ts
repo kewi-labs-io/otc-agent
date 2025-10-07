@@ -81,7 +81,7 @@ test.describe('Complete E2E Flow with Real Wallet', () => {
     // Step 2: Seed a quote via API for deterministic E2E
     console.log('2️⃣  Seeding quote via API...');
     await page.request.post('/api/eliza/message', {
-      data: { entityId: 'pw-user', message: 'create quote for 10000 ElizaOS at 15% discount payable in USDC' },
+      data: { entityId: 'pw-user', message: 'create quote for 10000 elizaOS at 15% discount payable in USDC' },
       headers: { 'Content-Type': 'application/json' },
     });
     // Reload to let InitialQuoteDisplay pick up the quote
@@ -155,7 +155,7 @@ test.describe('Complete E2E Flow with Real Wallet', () => {
 
     // Create quote
     const chatInput = page.locator('[data-testid="chat-input"]');
-    await chatInput.fill('Quote me 5000 ElizaOS at 10%');
+    await chatInput.fill('Quote me 5000 elizaOS at 10%');
     await page.click('[data-testid="send-button"]');
     await page.waitForSelector('[data-testid="quote-display"]', { timeout: 30000 });
 

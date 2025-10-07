@@ -1,4 +1,4 @@
-// quote action - generate a new ElizaOS quote and return an XML object to the frontend
+// quote action - generate a new elizaOS quote and return an XML object to the frontend
 
 import {
   Action,
@@ -212,7 +212,7 @@ export const quoteAction: Action = {
 
       if (callback) {
         await callback({
-          text: "Your ElizaOS quote has been cancelled.",
+          text: "Your elizaOS quote has been cancelled.",
           action: "QUOTE_CANCELLED",
         });
       }

@@ -71,7 +71,7 @@ async function main() {
 
   // Create a test offer to check payment calculation
   const tx = await otc.createOffer(
-    ethers.parseEther("1000"), // 1000 ElizaOS
+    ethers.parseEther("1000"), // 1000 elizaOS
     500, // 5% discount
     0, // ETH payment
     0 // No lockup

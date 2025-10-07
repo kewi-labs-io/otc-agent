@@ -1,6 +1,6 @@
 {
   "network": "hardhat",
-  "timestamp": "2025-10-07T16:03:46.583Z",
+  "timestamp": "2025-10-07T19:00:12.654Z",
   "contracts": {
     "elizaToken": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
     "usdcToken": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
@@ -12,15 +12,15 @@
     "owner": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     "agent": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
     "approver": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
-    "testWallet": "0xCdb4BA709071660dfd80430CdB239ec9300789C5"
+    "testWallet": "0xEf9C2708e4cAA671E9872C8fCa5898fBe4AA4B00"
   },
-  "testWalletPrivateKey": "0x00fd641621082a94e8381bd09138ef1d0d387814aa4546b916093953ac0cac43",
+  "testWalletPrivateKey": "0x2475873e6ab86da95ad0e534cfad473a66fd709385c05c6a63e6e764dd1925a0",
   "configuration": {
     "elizaPrice": "$0.05",
     "ethPrice": "$3500",
     "minOrderUsd": "$5",
     "maxOrderEliza": "1,000,000",
     "quoteExpiry": "30 minutes",
-    "dealFunding": "10,000,000 ElizaOS"
+    "dealFunding": "10,000,000 elizaOS"
   }
 }

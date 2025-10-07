@@ -2,7 +2,7 @@
  * Complete Runtime E2E Test - NO MOCKS
  * 
  * Verifies full OTC flow from agent to blockchain:
- * 1. Agent negotiates quote (ElizaOS)
+ * 1. Agent negotiates quote (elizaOS)
  * 2. Quote stored in DB
  * 3. Contracts deployed on local chain
  * 4. Integration verified
@@ -331,7 +331,7 @@ describe('Test Summary', () => {
     console.log('✅ Agent Integration:');
     console.log('  ✓ Quote negotiation actions');
     console.log('  ✓ NO MOCK FUNCTIONS (Real blockchain only)');
-    console.log('  ✓ ElizaOS plugin complete\n');
+    console.log('  ✓ elizaOS plugin complete\n');
     
     console.log('✅ Database & State Sync:');
     console.log('  ✓ Quote storage service');

@@ -520,7 +520,21 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
     }
   }, [messages]);
 
-  const handleAcceptOffer = () => {
+  const handleAcceptOffer = async () => {
+    // Ensure quote exists before opening modal
+    if (!currentQuote) {
+      console.error("[Chat] Cannot accept offer - no quote available");
+      // TODO: Show error message to user
+      return;
+    }
+    
+    // Validate quote has required fields
+    if (!currentQuote.quoteId) {
+      console.error("[Chat] Quote missing quoteId");
+      return;
+    }
+    
+    console.log("[Chat] Opening accept modal with quote:", currentQuote.quoteId);
     setShowAcceptModal(true);
   };
 
@@ -595,7 +609,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
             </Button>
             <Button onClick={handleClearChat} color="red">
               <div className="px-4 py-2 bg-red-500 dark:bg-red-500 rounded-lg">
-                Clear Chat
+                Reset
               </div>
             </Button>
           </div>
@@ -624,58 +638,119 @@ function ChatHeader({
 
   return (
     <div className="mb-3">
-      <div className="flex items-center gap-3">
-        <div className="ml-auto flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3">
           {currentQuote ? (
-            <div className="hidden sm:flex items-center gap-6 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 px-4 py-2">
-              <div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                Current Offer
+            <>
+              {/* Desktop version */}
+              <div className="hidden sm:flex items-center gap-6 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 px-4 py-2">
+                <div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  Current Offer
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-zinc-500 dark:text-zinc-400 text-xs">
+                    Discount
+                  </span>
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {(
+                      (currentQuote as any).discountPercent ||
+                      (currentQuote as any).discountBps / 100
+                    ).toFixed(0)}
+                    %
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-zinc-500 dark:text-zinc-400 text-xs">
+                    Maturity
+                  </span>
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {Math.round(
+                      (currentQuote as any).lockupMonths ||
+                        ((currentQuote as any).lockupDays || 0) / 30
+                    )}{" "}
+                    months
+                  </span>
+                </div>
+                <Button
+                  onClick={onAcceptOffer}
+                  className={`!h-8 !px-3 !text-xs transition-all duration-300 !bg-orange-500 hover:!bg-orange-600 !text-white !border-orange-600 ${
+                    isOfferGlowing
+                      ? "shadow-lg shadow-orange-500/50 ring-2 ring-orange-400 animate-pulse"
+                      : ""
+                  }`}
+                  color="orange"
+                  title={`Accept Offer ${isOfferGlowing ? "(GLOWING)" : ""}`}
+                >
+                  Accept Offer
+                </Button>
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-zinc-500 dark:text-zinc-400 text-xs">
-                  Discount
-                </span>
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  {(
-                    (currentQuote as any).discountPercent ||
-                    (currentQuote as any).discountBps / 100
-                  ).toFixed(0)}
-                  %
-                </span>
+
+              {/* Mobile version */}
+              <div className="flex sm:hidden flex-col gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 p-3">
+                <div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  Current Offer
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-zinc-500 dark:text-zinc-400 text-xs">
+                      Discount
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      {(
+                        (currentQuote as any).discountPercent ||
+                        (currentQuote as any).discountBps / 100
+                      ).toFixed(0)}
+                      %
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-zinc-500 dark:text-zinc-400 text-xs">
+                      Maturity
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      {Math.round(
+                        (currentQuote as any).lockupMonths ||
+                          ((currentQuote as any).lockupDays || 0) / 30
+                      )}{" "}
+                      months
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={onAcceptOffer}
+                    className={`flex-1 !h-9 !px-3 !text-sm transition-all duration-300 !bg-orange-500 hover:!bg-orange-600 !text-white !border-orange-600 ${
+                      isOfferGlowing
+                        ? "shadow-lg shadow-orange-500/50 ring-2 ring-orange-400 animate-pulse"
+                        : ""
+                    }`}
+                    color="orange"
+                    title={`Accept Offer ${isOfferGlowing ? "(GLOWING)" : ""}`}
+                  >
+                    Accept Offer
+                  </Button>
+                  <Button
+                    onClick={onClearChat}
+                    className="!h-9 !px-3 !text-sm bg-red-500 dark:bg-red-500 rounded-lg"
+                  >
+                    Reset
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-zinc-500 dark:text-zinc-400 text-xs">
-                  Maturity
-                </span>
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  {Math.round(
-                    (currentQuote as any).lockupMonths ||
-                      ((currentQuote as any).lockupDays || 0) / 30
-                  )}{" "}
-                  months
-                </span>
-              </div>
-              <Button
-                onClick={onAcceptOffer}
-                className={`!h-8 !px-3 !text-xs transition-all duration-300 !bg-orange-500 hover:!bg-orange-600 !text-white !border-orange-600 ${
-                  isOfferGlowing
-                    ? "shadow-lg shadow-orange-500/50 ring-2 ring-orange-400 animate-pulse"
-                    : ""
-                }`}
-                color="orange"
-                title={`Accept Offer ${isOfferGlowing ? "(GLOWING)" : ""}`}
-              >
-                Accept Offer
-              </Button>
-            </div>
-          ) : null}
-          <Button
-            onClick={onClearChat}
-            className="!h-8 !px-3 !text-xs bg-red-500 dark:bg-red-500 rounded-lg"
-          >
-            Clear Chat
-          </Button>
-        </div>
+            </>
+          ) : (
+            <Button
+              onClick={onClearChat}
+              className="!h-9 !px-3 !text-sm bg-red-500 dark:bg-red-500 rounded-lg sm:hidden"
+            >
+              Reset
+            </Button>
+          )}
+        <Button
+          onClick={onClearChat}
+          className="!h-8 !px-3 !text-xs bg-red-500 dark:bg-red-500 rounded-lg hidden sm:block"
+        >
+          Reset
+        </Button>
       </div>
     </div>
   );
@@ -745,7 +820,7 @@ function ChatBody({
                       Connect Wallet
                     </h2>
                     <p className="text-zinc-300 text-sm mb-4">
-                      Get discounted ElizaOS tokens. Let&apos;s deal, anon.
+                      Get discounted elizaOS tokens. Let&apos;s deal, anon.
                     </p>
                     <div className="inline-flex gap-2">
                       <NetworkConnectButton className="!h-10 !px-4 !py-2 bg-orange-500 dark:bg-orange-500 rounded-lg">
@@ -820,11 +895,11 @@ function ChatBody({
               <div className="flex items-center justify-center min-h-full text-center">
                 <div>
                   <h2 className="text-xl font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
-                    Welcome to ElizaOS OTC Desk
+                    Welcome to elizaOS OTC Desk
                   </h2>
                   <p className="text-zinc-500 dark:text-zinc-400">
                     {isConnected
-                      ? "Ask me about quotes for ElizaOS tokens!"
+                      ? "Ask me about quotes for elizaOS tokens!"
                       : "Connect your wallet to get a quote and start chatting."}
                   </p>
                 </div>
@@ -859,7 +934,7 @@ function ChatBody({
               isLoading={isAgentThinking || inputDisabled || !isConnected}
               placeholder={
                 isConnected
-                  ? "Ask about quotes for ElizaOS tokens..."
+                  ? "Negotiate a deal for $elizaOS!"
                   : "Connect wallet to chat"
               }
             />

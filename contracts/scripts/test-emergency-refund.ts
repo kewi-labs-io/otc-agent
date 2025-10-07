@@ -62,7 +62,7 @@ async function main() {
 
   // Create offer with long lockup
   const tx1 = await otc.connect(user).createOffer(
-    ethers.parseEther("5000"), // 5000 ElizaOS
+    ethers.parseEther("5000"), // 5000 elizaOS
     1000, // 10% discount
     1, // USDC payment
     180 * 24 * 60 * 60 // 180 day lockup (very long)
@@ -226,7 +226,7 @@ async function main() {
   console.log(
     "  ✓ Tokens sent to beneficiary:",
     ethers.formatEther(userTokensAfter - userTokensBefore),
-    "ElizaOS"
+    "elizaOS"
   );
 
   // Test storage cleanup

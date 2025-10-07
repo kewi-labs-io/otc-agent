@@ -205,15 +205,23 @@ export class QuoteService extends Service {
   }
 
   async getUserQuoteHistory(entityId: string, limit: number): Promise<QuoteMemory[]> {
+    console.log("[QuoteService] getUserQuoteHistory:", { entityId, limit });
+    
     const entityQuoteIds = (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(entityId))) ?? [];
+    console.log("[QuoteService] Found quote IDs:", entityQuoteIds.length, entityQuoteIds);
 
     const quotes: QuoteMemory[] = [];
     for (const quoteId of entityQuoteIds) {
       const quote = await this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId));
-      if (quote) quotes.push(quote);
+      if (quote) {
+        console.log("[QuoteService] Quote:", quote.quoteId, "status:", quote.status);
+        quotes.push(quote);
+      }
     }
 
-    return quotes.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+    const sorted = quotes.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+    console.log("[QuoteService] Returning quotes:", sorted.length);
+    return sorted;
   }
 
   async getQuoteByQuoteId(quoteId: string): Promise<QuoteMemory> {
@@ -280,7 +288,14 @@ export class QuoteService extends Service {
       blockNumber: number;
     },
   ): Promise<QuoteMemory> {
+    console.log("[QuoteService] updateQuoteExecution called:", {
+      quoteId,
+      offerId: data.offerId,
+      tokenAmount: data.tokenAmount,
+    });
+    
     const quote = await this.getQuoteByQuoteId(quoteId);
+    console.log("[QuoteService] Current quote status:", quote.status);
 
     const updatedQuote: QuoteMemory = {
       ...quote,
@@ -298,16 +313,49 @@ export class QuoteService extends Service {
     };
 
     await this.runtime.setCache(QUOTE_KEY(quoteId), updatedQuote);
+    console.log("[QuoteService] Quote status updated to EXECUTED:", {
+      quoteId: updatedQuote.quoteId,
+      status: updatedQuote.status,
+      entityId: updatedQuote.entityId,
+    });
+    
     return updatedQuote;
   }
 
   async setQuoteBeneficiary(quoteId: string, beneficiary: string): Promise<QuoteMemory> {
+    console.log("[QuoteService] setQuoteBeneficiary called:", { quoteId, beneficiary });
+    
     const quote = await this.getQuoteByQuoteId(quoteId);
     const normalized = beneficiary.toLowerCase();
+    const newEntityId = walletToEntityId(normalized);
+
+    console.log("[QuoteService] Updating quote beneficiary:", {
+      quoteId,
+      oldBeneficiary: quote.beneficiary,
+      newBeneficiary: normalized,
+      oldEntityId: quote.entityId,
+      newEntityId,
+    });
+
+    // Remove from old entity's quote list
+    const oldEntityQuotes = (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(quote.entityId))) || [];
+    console.log("[QuoteService] Old entity quotes:", oldEntityQuotes.length, oldEntityQuotes);
+    const filteredOld = oldEntityQuotes.filter(id => id !== quoteId);
+    await this.runtime.setCache(ENTITY_QUOTES_KEY(quote.entityId), filteredOld);
+    console.log("[QuoteService] Removed from old entity, remaining:", filteredOld.length);
+
+    // Add to new entity's quote list
+    const newEntityQuotes = (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(newEntityId))) || [];
+    console.log("[QuoteService] New entity quotes before:", newEntityQuotes.length, newEntityQuotes);
+    if (!newEntityQuotes.includes(quoteId)) {
+      newEntityQuotes.push(quoteId);
+      await this.runtime.setCache(ENTITY_QUOTES_KEY(newEntityId), newEntityQuotes);
+      console.log("[QuoteService] Added to new entity, total:", newEntityQuotes.length);
+    }
 
     const newSignature = this.generateQuoteSignature({
       quoteId: quote.quoteId,
-      entityId: quote.entityId,
+      entityId: newEntityId,
       beneficiary: normalized,
       tokenAmount: quote.tokenAmount,
       discountBps: quote.discountBps,
@@ -317,10 +365,17 @@ export class QuoteService extends Service {
     const updatedQuote: QuoteMemory = {
       ...quote,
       beneficiary: normalized,
+      entityId: newEntityId,
       signature: newSignature,
     };
 
     await this.runtime.setCache(QUOTE_KEY(quoteId), updatedQuote);
+    console.log("[QuoteService] Quote updated and cached:", {
+      quoteId: updatedQuote.quoteId,
+      entityId: updatedQuote.entityId,
+      beneficiary: updatedQuote.beneficiary,
+    });
+    
     return updatedQuote;
   }
 

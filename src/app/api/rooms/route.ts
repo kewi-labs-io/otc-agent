@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
 
 <quote>
   <quoteId>${initialQuoteId}</quoteId>
-  <tokenSymbol>ElizaOS</tokenSymbol>
+  <tokenSymbol>elizaOS</tokenSymbol>
   <lockupMonths>5</lockupMonths>
   <lockupDays>150</lockupDays>
   <pricePerToken>0.00127</pricePerToken>

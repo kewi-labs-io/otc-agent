@@ -39,11 +39,34 @@ export async function POST(request: NextRequest) {
     const blockNumber = Number(body.blockNumber || 0);
     const chainType = body.chain || "evm";
     const offerAddress = body.offerAddress;
+    const beneficiaryOverride = body.beneficiary; // Solana wallet address
 
     const quoteService =
       agentRuntime.runtime.getService<QuoteService>("QuoteService");
 
     const quote = await quoteService.getQuoteByQuoteId(quoteId);
+    
+    // Update beneficiary AND entityId if provided (for Solana wallets)
+    if (beneficiaryOverride) {
+      const normalizedBeneficiary = beneficiaryOverride.toLowerCase();
+      if (quote.beneficiary !== normalizedBeneficiary) {
+        console.log("[DealCompletion] Updating beneficiary and entityId:", {
+          oldBeneficiary: quote.beneficiary,
+          newBeneficiary: normalizedBeneficiary,
+          oldEntityId: quote.entityId,
+        });
+        
+        // Update both beneficiary and entityId to match
+        const newEntityId = walletToEntityId(normalizedBeneficiary);
+        await quoteService.setQuoteBeneficiary(quoteId, normalizedBeneficiary);
+        
+        // Re-fetch to get updated quote
+        const updatedQuote = await quoteService.getQuoteByQuoteId(quoteId);
+        Object.assign(quote, updatedQuote);
+        
+        console.log("[DealCompletion] Updated to new entityId:", quote.entityId);
+      }
+    }
 
     let totalUsd = 0;
     let discountUsd = 0;
@@ -226,23 +249,52 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  await agentRuntime.getRuntime();
+  try {
+    await agentRuntime.getRuntime();
 
-  const { searchParams } = new URL(request.url);
-  const wallet = searchParams.get("wallet");
+    const { searchParams } = new URL(request.url);
+    const wallet = searchParams.get("wallet");
 
-  if (!wallet) {
-    return NextResponse.json({ error: "wallet required" }, { status: 400 });
+    if (!wallet) {
+      return NextResponse.json({ error: "wallet required" }, { status: 400 });
+    }
+
+    const entityId = walletToEntityId(wallet);
+    console.log("[Deal Completion GET] Querying deals:", {
+      wallet,
+      entityId,
+    });
+    
+    const quoteService =
+      agentRuntime.runtime.getService<QuoteService>("QuoteService");
+    
+    if (!quoteService) {
+      console.warn("[Deal Completion GET] QuoteService not ready");
+      return NextResponse.json({
+        success: true,
+        deals: [],
+      });
+    }
+    
+    const quotes = await quoteService.getUserQuoteHistory(entityId, 100);
+    console.log("[Deal Completion GET] Got quotes:", quotes.length);
+    
+    // Show active, approved, and executed deals
+    // active = quote created, approved = offer created/approved on-chain, executed = paid/fulfilled
+    const deals = quotes.filter((quote) => 
+      quote.status === "executed" || quote.status === "active" || quote.status === "approved"
+    );
+    console.log("[Deal Completion GET] Filtered deals (active + approved + executed):", deals.length);
+
+    return NextResponse.json({
+      success: true,
+      deals,
+    });
+  } catch (error: any) {
+    console.error("[Deal Completion GET] Error:", error);
+    return NextResponse.json({
+      success: true,
+      deals: [],
+    });
   }
-
-  const entityId = walletToEntityId(wallet);
-  const quoteService =
-    agentRuntime.runtime.getService<QuoteService>("QuoteService");
-  const quotes = await quoteService.getUserQuoteHistory(entityId, 100);
-  const completedDeals = quotes.filter((quote) => quote.status === "executed");
-
-  return NextResponse.json({
-    success: true,
-    deals: completedDeals,
-  });
 }

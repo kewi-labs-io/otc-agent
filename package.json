@@ -116,7 +116,8 @@
   "scripts": {
     "start": "next start -p 2222",
     "dev": "npm run dev:full",
-    "dev:full": "sh -c 'npm run dev:cleanup && sleep 2 && concurrently --kill-others --success=first --names \"rpc,sol,next\" \"npm run rpc:dev\" \"npm run sol:dev\" \"sh -c \\\"sleep 8 && next dev -p 2222\\\"\"'",
+    "dev:full": "sh -c 'npm run dev:cleanup && sleep 2 && concurrently --kill-others --success=first --names \"rpc,sol,prices,next\" \"npm run rpc:dev\" \"npm run sol:dev\" \"npm run prices:keep-fresh\" \"sh -c \\\"sleep 8 && next dev -p 2222\\\"\"'",
+    "prices:keep-fresh": "sh -c 'sleep 15 && ./scripts/keep-prices-fresh.sh'",
     "rpc:dev": "sh -c 'npm run rpc:start & sleep 6 && npm run rpc:deploy && tail -f /dev/null'",
     "dev:cleanup": "sh -c 'echo \"🧹 Cleaning up processes and ports...\"; pkill -9 -f \"hardhat node\" 2>/dev/null || true; pkill -9 -f anvil 2>/dev/null || true; pkill -9 -f \"solana-test-validator\" 2>/dev/null || true; pkill -9 -f \"next dev\" 2>/dev/null || true; lsof -t -i:8545 | xargs kill -9 2>/dev/null || true; lsof -t -i:2222 | xargs kill -9 2>/dev/null || true; lsof -t -i:8899 | xargs kill -9 2>/dev/null || true; echo \"✅ Cleanup complete\"'",
     "db:push": "drizzle-kit push --config=drizzle.config.ts",

@@ -14,10 +14,19 @@ export async function GET(
     return NextResponse.json({ error: "Quote ID required" }, { status: 400 });
   }
 
-  const quote = await QuoteDB.getQuoteByQuoteId(quoteId);
+  let quote;
+  try {
+    quote = await QuoteDB.getQuoteByQuoteId(quoteId);
+  } catch (error: any) {
+    console.error("[Quote Executed API] Quote not found:", quoteId, error.message);
+    return NextResponse.json({ error: "Quote not found" }, { status: 400 });
+  }
 
-  if (quote.status !== "executed") {
-    return NextResponse.json({ error: "Quote not executed" }, { status: 400 });
+  // Allow active, approved, and executed quotes to be viewed
+  // active = quote created, approved = offer created/approved on-chain, executed = paid/fulfilled
+  if (quote.status !== "executed" && quote.status !== "active" && quote.status !== "approved") {
+    console.warn("[Quote Executed API] Invalid status:", { quoteId, status: quote.status });
+    return NextResponse.json({ error: "Quote not found or invalid status" }, { status: 400 });
   }
 
   const formattedQuote = {
