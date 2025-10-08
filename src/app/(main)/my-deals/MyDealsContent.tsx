@@ -218,7 +218,9 @@ export function MyDealsContent() {
         const createdTs = deal.createdAt ? new Date(deal.createdAt).getTime() / 1000 : Date.now() / 1000;
         const lockupDays = deal.lockupMonths ? deal.lockupMonths * 30 : 150;
         const tokenAmountRaw = deal.tokenAmount || "0";
-        const tokenAmountBigInt = BigInt(tokenAmountRaw);
+        // Database stores plain number (e.g. "1000"), need to convert to wei for display
+        // formatTokenAmount() divides by 1e18, so we multiply here
+        const tokenAmountBigInt = BigInt(tokenAmountRaw) * BigInt(1e18);
         
         result.push({
           id: BigInt(deal.offerId || "0"),
