@@ -28,12 +28,14 @@
     "node_modules", 
     "elizaos/**/*",
     "eliza/**/*",
+    "privy-frames-v2-demo/**/*",
     "src/agent.ts",
     "src/lib/plugin-otc-desk/**/*",
     "src/plugin-groq.ts",
     "src/services/quoteApprovalWorker.ts",
     "dist/**/*",
     "solana/**/*",
-    "contracts/**/*"
+    "contracts/**/*",
+    "tests/**/*"
   ]
 }

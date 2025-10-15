@@ -11,5 +11,3 @@ export function SolanaLogo(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-
-

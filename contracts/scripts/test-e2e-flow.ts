@@ -62,28 +62,31 @@ async function main() {
   log(`  • USDC Balance: ${Number(usdcBalance) / 1e6} USDC`);
 
   // ====================
-  // STEP 1: USER CREATES OFFER
+  // STEP 1: USER CREATES OFFER FROM CONSIGNMENT
   // ====================
   log("\n" + "=".repeat(60), COLORS.cyan);
-  log("STEP 1: USER CREATES OFFER", COLORS.bright + COLORS.green);
+  log("STEP 1: USER CREATES OFFER FROM CONSIGNMENT", COLORS.bright + COLORS.green);
   log("=".repeat(60), COLORS.cyan);
   
   const tokenAmount = ethers.parseEther("10000"); // 10,000 elizaOS
   const discountBps = 1500; // 15% discount
   const paymentCurrency = 1; // USDC
   const lockupSeconds = 90 * 24 * 60 * 60; // 90 days (3 months)
+  const consignmentId = 1; // First consignment created during deployment
   
   log("\n📝 Quote Parameters:", COLORS.yellow);
   log(`  • Token Amount: 10,000 elizaOS`);
   log(`  • Discount: 15%`);
   log(`  • Payment: USDC`);
   log(`  • Lockup: 90 days`);
+  log(`  • Consignment ID: ${consignmentId}`);
   
   // Connect deal contract to test wallet
   const dealUser = deal.connect(testWallet);
   
-  log("\n⏳ Creating offer on-chain...");
-  const createTx = await dealUser.createOffer(
+  log("\n⏳ Creating offer from consignment...");
+  const createTx = await dealUser.createOfferFromConsignment(
+    consignmentId,
     tokenAmount,
     discountBps,
     paymentCurrency,

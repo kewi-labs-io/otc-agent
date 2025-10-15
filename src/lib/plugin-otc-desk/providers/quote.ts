@@ -5,7 +5,6 @@ import { walletToEntityId } from "../../entityId";
 import { formatElizaAmount } from "../services/priceFeed";
 import type { PaymentCurrency, QuoteMemory } from "../types";
 
-
 export const quoteProvider: Provider = {
   name: "ElizaQuote",
   get: async (
@@ -13,22 +12,24 @@ export const quoteProvider: Provider = {
     message: Memory,
   ): Promise<ProviderResult> => {
     const messageText = message.content?.text || "";
-    
+
     // Only provide quote context if user is asking about quotes/terms/pricing
-    const isQuoteRelated = /quote|discount|lockup|price|term|deal|offer|buy|purchase|%|percent/i.test(messageText);
-    
+    const isQuoteRelated =
+      /quote|discount|lockup|price|term|deal|offer|buy|purchase|%|percent/i.test(
+        messageText,
+      );
+
     if (!isQuoteRelated) {
-      console.log('[QuoteProvider] Skipping - not quote-related:', messageText.substring(0, 50));
+      console.log(
+        "[QuoteProvider] Skipping - not quote-related:",
+        messageText.substring(0, 50),
+      );
       return { text: "" }; // Return empty to not pollute context
     }
 
-    const walletAddress =
-      (message as any).entityId ||
-      (message as any).entityId ||
-      (message as any).roomId ||
-      "default";
+    const walletAddress = message.entityId || message.roomId || "default";
 
-    console.log('[QuoteProvider] get() called for wallet:', walletAddress);
+    console.log("[QuoteProvider] get() called for wallet:", walletAddress);
 
     // Use QuoteService for consistent quote lookup
     const quoteService = runtime.getService<QuoteService>("QuoteService");
@@ -37,9 +38,12 @@ export const quoteProvider: Provider = {
         text: `No active elizaOS quote. Offer them a deal on elizaOS tokens with a discount and lockup.`,
       };
     }
-    
+
     const currentQuote = await quoteService.getQuoteByWallet(walletAddress);
-    console.log('[QuoteProvider] QuoteService result:', currentQuote ? currentQuote.quoteId : 'null');
+    console.log(
+      "[QuoteProvider] QuoteService result:",
+      currentQuote ? currentQuote.quoteId : "null",
+    );
 
     if (!currentQuote) {
       return {
@@ -89,16 +93,18 @@ You'll automatically receive your tokens when the lockup period ends.`.trim(),
   },
 };
 
-export async function getUserQuote(walletAddress: string): Promise<QuoteMemory | undefined> {
+export async function getUserQuote(
+  walletAddress: string,
+): Promise<QuoteMemory | undefined> {
   const { agentRuntime } = await import("../../agent-runtime");
   const runtime = await agentRuntime.getRuntime();
-  
+
   // Use QuoteService to get quote (it has the correct ID generation logic)
   const quoteService = runtime.getService<any>("QuoteService");
   if (!quoteService) {
     return undefined;
   }
-  
+
   const quote = await quoteService.getQuoteByWallet(walletAddress);
   return quote;
 }
@@ -120,31 +126,33 @@ export async function setUserQuote(
 ): Promise<QuoteMemory> {
   const normalized = walletAddress.toLowerCase();
   const entityId = walletToEntityId(normalized);
-  
-  console.log('[setUserQuote] Creating new quote:', {
+
+  console.log("[setUserQuote] Creating new quote:", {
     walletAddress: normalized,
     entityId,
     discountBps: quote.discountBps,
-    lockupMonths: quote.lockupMonths
+    lockupMonths: quote.lockupMonths,
   });
 
   const runtime = await agentRuntime.getRuntime();
-  
+
   // Generate consistent quote ID using the same method as QuoteService
   const crypto = await import("crypto");
   const dayTimestamp = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
-  const hash = crypto.createHash('sha256')
+  const hash = crypto
+    .createHash("sha256")
     .update(`${entityId}-${dayTimestamp}`)
-    .digest('hex')
+    .digest("hex")
     .substring(0, 12)
     .toUpperCase();
   const quoteId = `OTC-${hash}`;
-  
+
   const lockupDays = quote.lockupMonths * 30;
   const now = Date.now();
-  
+
   // Generate signature using same method as QuoteService
-  const secret = process.env.WORKER_AUTH_TOKEN || "dev-secret-DO-NOT-USE-IN-PRODUCTION";
+  const secret =
+    process.env.WORKER_AUTH_TOKEN || "dev-secret-DO-NOT-USE-IN-PRODUCTION";
   const signatureData = {
     quoteId,
     entityId,
@@ -154,8 +162,11 @@ export async function setUserQuote(
     lockupMonths: quote.lockupMonths,
   };
   const payload = JSON.stringify(signatureData);
-  const signature = crypto.createHmac("sha256", secret).update(payload).digest("hex");
-  
+  const signature = crypto
+    .createHmac("sha256", secret)
+    .update(payload)
+    .digest("hex");
+
   const quoteData: QuoteMemory = {
     id: (await import("uuid")).v4(),
     quoteId,
@@ -183,35 +194,38 @@ export async function setUserQuote(
     rejectionReason: "",
     approvalNote: "",
   };
-  
+
   await runtime.setCache(`quote:${quoteId}`, quoteData);
-  
+
   // Add to indexes
   const allQuotes = (await runtime.getCache<string[]>("all_quotes")) ?? [];
   if (!allQuotes.includes(quoteId)) {
     allQuotes.push(quoteId);
     await runtime.setCache("all_quotes", allQuotes);
   }
-  
-  const entityQuoteIds = (await runtime.getCache<string[]>(`entity_quotes:${entityId}`)) ?? [];
+
+  const entityQuoteIds =
+    (await runtime.getCache<string[]>(`entity_quotes:${entityId}`)) ?? [];
   if (!entityQuoteIds.includes(quoteId)) {
     entityQuoteIds.push(quoteId);
     await runtime.setCache(`entity_quotes:${entityId}`, entityQuoteIds);
   }
-  
-  console.log('[setUserQuote] ✅ New quote created and indexed:', quoteId);
+
+  console.log("[setUserQuote] ✅ New quote created and indexed:", quoteId);
   return quoteData;
 }
 
 export async function deleteUserQuote(walletAddress: string): Promise<void> {
   // In serverless, we can't delete from memory - just mark as expired in DB
-  console.log('[QuoteProvider] deleteUserQuote called for:', walletAddress);
+  console.log("[QuoteProvider] deleteUserQuote called for:", walletAddress);
 }
 
 export async function loadActiveQuotes(): Promise<void> {
   const runtime = await agentRuntime.getRuntime();
-  const quoteService = runtime.getService<QuoteService>(QuoteService.serviceName);
-  
+  const quoteService = runtime.getService<QuoteService>(
+    QuoteService.serviceName,
+  );
+
   if (quoteService) {
     const activeQuotes = await quoteService.getActiveQuotes();
     console.log(`[QuoteProvider] Loaded ${activeQuotes.length} active quotes`);

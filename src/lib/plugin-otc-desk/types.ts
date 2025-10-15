@@ -1,6 +1,11 @@
 // Shared types for OTC Desk plugin - export for external use only
 
-export type QuoteStatus = "active" | "expired" | "executed" | "rejected" | "approved";
+export type QuoteStatus =
+  | "active"
+  | "expired"
+  | "executed"
+  | "rejected"
+  | "approved";
 export type PaymentCurrency = "ETH" | "USDC";
 export type ChainType = "evm" | "solana";
 

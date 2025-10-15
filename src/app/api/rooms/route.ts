@@ -91,13 +91,14 @@ export async function POST(request: NextRequest) {
   // Save initial quote to cache with consistent ID generation
   const crypto = await import("crypto");
   const dayTimestamp = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
-  const hash = crypto.createHash('sha256')
+  const hash = crypto
+    .createHash("sha256")
     .update(`${userEntityId}-${dayTimestamp}`)
-    .digest('hex')
+    .digest("hex")
     .substring(0, 12)
     .toUpperCase();
   const initialQuoteId = `OTC-${hash}`;
-  
+
   const initialQuoteData = {
     id: uuidv4(),
     quoteId: initialQuoteId,
@@ -128,21 +129,25 @@ export async function POST(request: NextRequest) {
   };
 
   await runtime.setCache(`quote:${initialQuoteId}`, initialQuoteData);
-  
+
   // Add to indexes
   const allQuotes = (await runtime.getCache<string[]>("all_quotes")) ?? [];
   if (!allQuotes.includes(initialQuoteId)) {
     allQuotes.push(initialQuoteId);
     await runtime.setCache("all_quotes", allQuotes);
   }
-  
-  const entityQuoteIds = (await runtime.getCache<string[]>(`entity_quotes:${userEntityId}`)) ?? [];
+
+  const entityQuoteIds =
+    (await runtime.getCache<string[]>(`entity_quotes:${userEntityId}`)) ?? [];
   if (!entityQuoteIds.includes(initialQuoteId)) {
     entityQuoteIds.push(initialQuoteId);
     await runtime.setCache(`entity_quotes:${userEntityId}`, entityQuoteIds);
   }
-  
-  console.log("[Rooms API] Initial quote saved to cache and indexed:", initialQuoteId);
+
+  console.log(
+    "[Rooms API] Initial quote saved to cache and indexed:",
+    initialQuoteId,
+  );
 
   // Create a welcome message with default quote terms
   const welcomeMessage = `I can offer a 10.00% discount with a 5-month lockup.

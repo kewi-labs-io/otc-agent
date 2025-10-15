@@ -42,7 +42,9 @@ export class UserSessionStorageService extends Service {
     // Cleanup if needed
   }
 
-  static async start(runtime: IAgentRuntime): Promise<UserSessionStorageService> {
+  static async start(
+    runtime: IAgentRuntime,
+  ): Promise<UserSessionStorageService> {
     const service = new UserSessionStorageService(runtime);
     await service.initialize();
     return service;

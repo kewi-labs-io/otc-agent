@@ -10,7 +10,6 @@ import {
   http,
   type Address,
   type Abi,
-  type PublicClient,
 } from "viem";
 import { hardhat, base, baseSepolia } from "viem/chains";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
@@ -34,7 +33,7 @@ interface ContractOffer {
 }
 
 export class ReconciliationService {
-  private client: PublicClient;
+  private client: any; // PublicClient type causes "excessively deep" TypeScript error
   private otcAddress: Address | undefined;
   private abi: Abi;
 
@@ -54,37 +53,53 @@ export class ReconciliationService {
     this.client = createPublicClient({
       chain,
       transport: http(rpcUrl),
-    }) as unknown as PublicClient;
+    });
 
-    this.otcAddress = process.env.NEXT_PUBLIC_OTC_ADDRESS as
-      | Address
-      | undefined;
+    this.otcAddress = process.env.NEXT_PUBLIC_OTC_ADDRESS as Address | undefined;
     this.abi = otcArtifact.abi as Abi;
   }
 
   async readContractOffer(offerId: string | number): Promise<ContractOffer> {
-    const offer = (await (this.client as any).readContract({
+    if (!this.otcAddress) throw new Error("OTC address not configured");
+    
+    // Type cast needed - viem's readContract return type is too complex for TypeScript to infer
+    const [
+      beneficiary,
+      tokenAmount,
+      discountBps,
+      createdAt,
+      unlockTime,
+      priceUsdPerToken,
+      ethUsdPrice,
+      currency,
+      approved,
+      paid,
+      fulfilled,
+      cancelled,
+      payer,
+      amountPaid,
+    ] = (await this.client.readContract({
       address: this.otcAddress,
       abi: this.abi,
       functionName: "offers",
       args: [BigInt(offerId)],
-    })) as any;
+    } as any)) as [Address, bigint, bigint, bigint, bigint, bigint, bigint, number, boolean, boolean, boolean, boolean, Address, bigint];
 
     return {
-      beneficiary: offer.beneficiary,
-      tokenAmount: offer.tokenAmount,
-      discountBps: Number(offer.discountBps),
-      createdAt: offer.createdAt,
-      unlockTime: offer.unlockTime,
-      priceUsdPerToken: offer.priceUsdPerToken,
-      ethUsdPrice: offer.ethUsdPrice || 0n,
-      currency: Number(offer.currency),
-      approved: Boolean(offer.approved),
-      paid: Boolean(offer.paid),
-      fulfilled: Boolean(offer.fulfilled),
-      cancelled: Boolean(offer.cancelled),
-      payer: offer.payer,
-      amountPaid: offer.amountPaid,
+      beneficiary,
+      tokenAmount,
+      discountBps: Number(discountBps),
+      createdAt,
+      unlockTime,
+      priceUsdPerToken,
+      ethUsdPrice,
+      currency: Number(currency),
+      approved,
+      paid,
+      fulfilled,
+      cancelled,
+      payer,
+      amountPaid,
     };
   }
 
@@ -167,16 +182,19 @@ export class ReconciliationService {
     blockNumber: number;
     contractAddress: string;
   }> {
+    if (!this.otcAddress) throw new Error("OTC address not configured");
+    
     const blockNumber = await this.client.getBlockNumber();
-    await (this.client as any).readContract({
+    // Type cast needed - viem's readContract parameters are too complex
+    await this.client.readContract({
       address: this.otcAddress,
       abi: this.abi,
       functionName: "nextOfferId",
       args: [],
-    });
+    } as any);
     return {
       blockNumber: Number(blockNumber),
-      contractAddress: this.otcAddress!,
+      contractAddress: this.otcAddress,
     };
   }
 }

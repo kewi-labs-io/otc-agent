@@ -8,31 +8,42 @@ import {
   useMemo,
   useState,
 } from "react";
-import { useAccount, useChainId } from "wagmi";
+import { useChainId } from "wagmi";
 import { base, hardhat, mainnet } from "wagmi/chains";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { usePrivy, useWallets, useSolanaWallets } from "@privy-io/react-auth";
 
-type ChainFamily = "evm" | "solana" | "none";
+type ChainFamily = "evm" | "solana" | "social" | "none";
 
 type MultiWalletContextValue = {
   activeFamily: ChainFamily;
   setActiveFamily: (family: Exclude<ChainFamily, "none">) => void;
 
-  // Unified status
+  // Connection status
   isConnected: boolean;
   entityId: string | null;
-  networkLabel: string; // e.g. "EVM Mainnet" or "Solana Devnet"
+  networkLabel: string; // e.g. "EVM Base" or "Solana Devnet"
 
-  // EVM
+  // EVM (via Privy)
   evmConnected: boolean;
   evmAddress?: string;
 
-  // Solana
+  // Solana (via Privy)
   solanaConnected: boolean;
   solanaPublicKey?: string;
 
+  // Privy auth
+  privyAuthenticated: boolean;
+  privyReady: boolean;
+  privyUser: any;
+  isFarcasterContext: boolean;
+
   // Helpers
   paymentPairLabel: string; // e.g. "USDC/ETH" or "USDC/SOL"
+  
+  // Privy methods
+  login: () => void;
+  logout: () => Promise<void>;
+  connectWallet: () => void;
 };
 
 const MultiWalletContext = createContext<MultiWalletContextValue | undefined>(
@@ -44,19 +55,62 @@ export function MultiWalletProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { address: evmAddress, isConnected: evmConnected } = useAccount();
-  const { publicKey, connected: solanaConnected } = useWallet();
+  const {
+    ready: privyReady,
+    authenticated: privyAuthenticated,
+    user: privyUser,
+    login,
+    logout,
+    connectWallet,
+  } = usePrivy();
+
+  // Get all connected wallets from Privy
+  const { wallets } = useWallets(); // EVM wallets
+  const { wallets: solanaWallets } = useSolanaWallets(); // Solana wallets
+  
   const chainId = useChainId();
 
   const [activeFamily, setActiveFamilyState] = useState<ChainFamily>("none");
+  const [isFarcasterContext, setIsFarcasterContext] = useState(false);
 
-  // Prefer whichever is connected; allow explicit switching
+  // Detect Farcaster context
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    import("@farcaster/miniapp-sdk")
+      .then(({ default: miniappSdk }) => {
+        miniappSdk.context
+          .then((context) => {
+            if (context) {
+              setIsFarcasterContext(true);
+              miniappSdk.actions.ready();
+            }
+          })
+          .catch(() => {
+            setIsFarcasterContext(false);
+          });
+      })
+      .catch(() => {
+        setIsFarcasterContext(false);
+      });
+  }, []);
+
+  // Determine connection status from Privy wallets
+  const evmConnected = wallets.length > 0;
+  const solanaConnected = solanaWallets.length > 0;
+  
+  // Get primary wallet addresses
+  const evmAddress = wallets[0]?.address;
+  const solanaPublicKey = solanaWallets[0]?.address;
+
+  // Auto-select active family based on connected wallets
   useEffect(() => {
     if (activeFamily === "none") {
       if (evmConnected) setActiveFamilyState("evm");
       else if (solanaConnected) setActiveFamilyState("solana");
+      else if (privyAuthenticated) setActiveFamilyState("social");
     }
-  }, [activeFamily, evmConnected, solanaConnected]);
+  }, [activeFamily, evmConnected, solanaConnected, privyAuthenticated]);
 
   // If user disconnects active family, flip to the other if available
   useEffect(() => {
@@ -64,10 +118,12 @@ export function MultiWalletProvider({
       setActiveFamilyState("solana");
     } else if (activeFamily === "solana" && !solanaConnected && evmConnected) {
       setActiveFamilyState("evm");
-    } else if (!evmConnected && !solanaConnected) {
+    } else if (!evmConnected && !solanaConnected && privyAuthenticated) {
+      setActiveFamilyState("social");
+    } else if (!evmConnected && !solanaConnected && !privyAuthenticated) {
       setActiveFamilyState("none");
     }
-  }, [activeFamily, evmConnected, solanaConnected]);
+  }, [activeFamily, evmConnected, solanaConnected, privyAuthenticated]);
 
   const setActiveFamily = useCallback(
     (family: Exclude<ChainFamily, "none">) => {
@@ -76,9 +132,8 @@ export function MultiWalletProvider({
     [],
   );
 
-  const solanaPublicKey = useMemo(() => publicKey?.toBase58(), [publicKey]);
+  const isConnected = evmConnected || solanaConnected || privyAuthenticated;
 
-  const isConnected = evmConnected || solanaConnected;
   const evmNetworkName = useMemo(() => {
     if (!chainId) return "Unknown";
     if (chainId === hardhat.id) return "Hardhat";
@@ -87,22 +142,27 @@ export function MultiWalletProvider({
     return `Chain ${chainId}`;
   }, [chainId]);
 
-  const solanaEndpoint =
-    process.env.NEXT_PUBLIC_SOLANA_RPC || "https://api.devnet.solana.com";
+  const solanaCluster =
+    process.env.NODE_ENV === "development" ? "devnet" : "mainnet-beta";
   const solanaNetworkName = useMemo(() => {
-    const e = solanaEndpoint.toLowerCase();
-    if (e.includes("devnet")) return "Devnet";
-    if (e.includes("mainnet")) return "Mainnet";
-    if (e.includes("127.0.0.1") || e.includes("localhost")) return "Localnet";
+    if (solanaCluster === "devnet") return "Devnet";
+    if (solanaCluster === "mainnet-beta") return "Mainnet";
     return "Unknown";
-  }, [solanaEndpoint]);
+  }, [solanaCluster]);
 
   const networkLabel = useMemo(() => {
-    if (activeFamily === "evm" && evmConnected) return `EVM ${evmNetworkName}`;
-    if (activeFamily === "solana" && solanaConnected)
+    if (activeFamily === "evm" && evmConnected) {
+      return `EVM ${evmNetworkName}`;
+    }
+    if (activeFamily === "solana" && solanaConnected) {
       return `Solana ${solanaNetworkName}`;
+    }
+    if (activeFamily === "social" && privyAuthenticated) {
+      return isFarcasterContext ? "Farcaster" : "Social Login";
+    }
     if (evmConnected) return `EVM ${evmNetworkName}`;
     if (solanaConnected) return `Solana ${solanaNetworkName}`;
+    if (privyAuthenticated) return "Social Login";
     return "Not connected";
   }, [
     activeFamily,
@@ -110,17 +170,24 @@ export function MultiWalletProvider({
     solanaConnected,
     evmNetworkName,
     solanaNetworkName,
+    privyAuthenticated,
+    isFarcasterContext,
   ]);
+
   const entityId = useMemo(() => {
     // Return wallet address directly (not UUID) for entity ID
     // Backend APIs will convert to UUID when needed for cache keys
-    if (activeFamily === "evm" && evmConnected && evmAddress)
+    if (activeFamily === "evm" && evmConnected && evmAddress) {
       return evmAddress.toLowerCase();
-    if (activeFamily === "solana" && solanaConnected && solanaPublicKey)
-      return solanaPublicKey;
+    }
+    if (activeFamily === "solana" && solanaConnected && solanaPublicKey) {
+      return solanaPublicKey.toLowerCase();
+    }
     // Fallback if active family not set but one is connected
     if (evmConnected && evmAddress) return evmAddress.toLowerCase();
-    if (solanaConnected && solanaPublicKey) return solanaPublicKey;
+    if (solanaConnected && solanaPublicKey) return solanaPublicKey.toLowerCase();
+    // For social login, use Privy user ID
+    if (privyAuthenticated && privyUser?.id) return privyUser.id;
     return null;
   }, [
     activeFamily,
@@ -128,6 +195,8 @@ export function MultiWalletProvider({
     evmAddress,
     solanaConnected,
     solanaPublicKey,
+    privyAuthenticated,
+    privyUser,
   ]);
 
   const paymentPairLabel = activeFamily === "solana" ? "USDC/SOL" : "USDC/ETH";
@@ -139,10 +208,17 @@ export function MultiWalletProvider({
     entityId,
     networkLabel,
     evmConnected,
-    evmAddress: evmAddress ?? undefined,
+    evmAddress,
     solanaConnected,
     solanaPublicKey,
+    privyAuthenticated,
+    privyReady,
+    privyUser,
+    isFarcasterContext,
     paymentPairLabel,
+    login,
+    logout,
+    connectWallet,
   };
 
   return (
@@ -155,18 +231,7 @@ export function MultiWalletProvider({
 export function useMultiWallet(): MultiWalletContextValue {
   const ctx = useContext(MultiWalletContext);
   if (!ctx) {
-    return {
-      activeFamily: "none",
-      setActiveFamily: () => {},
-      isConnected: false,
-      entityId: null,
-      networkLabel: "Not connected",
-      evmConnected: false,
-      evmAddress: undefined,
-      solanaConnected: false,
-      solanaPublicKey: undefined,
-      paymentPairLabel: "USDC/ETH",
-    };
+    throw new Error("useMultiWallet must be used within MultiWalletProvider");
   }
   return ctx;
 }

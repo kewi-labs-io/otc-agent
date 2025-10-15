@@ -28,8 +28,6 @@ The $elizaOS token will be distributed as follows:
 This deal will not effect $degenai in any way. We will continue to support $degenai as a separate token and work to get it listed and bridged to other chains.`;
 
     return {
-      data: [],
-      values: [],
       text,
     };
   },

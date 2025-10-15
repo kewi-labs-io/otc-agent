@@ -2,13 +2,8 @@
 
 import { Button } from "@/components/button";
 import { useMultiWallet } from "@/components/multiwallet";
-import { NetworkConnectButton } from "@/components/network-connect";
-import { BaseLogo } from "@/components/icons/index";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { NetworkMenu } from "@/components/network-menu";
 import { useEffect, useState } from "react";
-import { useAccount } from "wagmi";
 
 interface WalletConnectorProps {
   onConnectionChange: (connected: boolean, address?: string) => void;
@@ -19,99 +14,75 @@ const WalletConnectorInner = ({
   onConnectionChange,
   showAsButton,
 }: WalletConnectorProps) => {
-  const { address } = useAccount();
-  const sol = useWallet();
   const {
+    isConnected,
+    evmAddress,
+    solanaPublicKey,
     activeFamily,
-    setActiveFamily,
-    isConnected: unifiedConnected,
-    evmConnected,
-    solanaConnected,
+    login,
+    connectWallet,
+    entityId,
   } = useMultiWallet();
-
-  const bothConnected = evmConnected && solanaConnected;
 
   // Notify parent component of connection changes
   useEffect(() => {
-    const a = activeFamily === "solana" ? sol.publicKey?.toBase58() : address;
-    onConnectionChange(unifiedConnected, a);
-  }, [
-    unifiedConnected,
-    activeFamily,
-    sol.publicKey,
-    address,
-    onConnectionChange,
-  ]);
+    onConnectionChange(isConnected, evmAddress || solanaPublicKey);
+  }, [isConnected, evmAddress, solanaPublicKey, onConnectionChange]);
 
   if (showAsButton) {
-    if (unifiedConnected) return null;
+    if (isConnected) return null;
+
+    // Show simplified connect button
     return (
-      <NetworkConnectButton className="!h-9 flex items-center gap-2">
-        <BaseLogo className="w-4 h-4" />
-        <span>Connect Wallet</span>
-      </NetworkConnectButton>
+      <div className="inline-flex">
+        <Button
+          onClick={() => login()}
+          className="!h-9 !px-4 !text-sm bg-orange-500 hover:bg-orange-600 text-white rounded-lg"
+        >
+          Connect Wallet
+        </Button>
+      </div>
     );
   }
 
-  if (!evmConnected && !solanaConnected) {
-    return (
-      <NetworkConnectButton className="!h-9 bg-[#ff8c00] !px-3 flex items-center gap-2">
-        <BaseLogo className="w-4 h-4" />
-        <span>Connect Wallet</span>
-      </NetworkConnectButton>
-    );
-  }
-
+  // Main header view - always show network menu + wallet button
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {bothConnected && (
-        <div className="inline-flex rounded-lg bg-zinc-100 dark:bg-zinc-900 p-1 border border-zinc-200 dark:border-zinc-800 min-w-fit">
-          <button
-            type="button"
-            onClick={() => setActiveFamily("evm")}
-            className={`px-3 py-1.5 rounded-md transition-all duration-200 font-medium text-xs whitespace-nowrap ${
-              activeFamily === "evm"
-                ? "bg-white text-[#0052ff] dark:bg-zinc-800 dark:text-white shadow-sm"
-                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-            }`}
-          >
-            Base
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveFamily("solana")}
-            className={`px-3 py-1.5 rounded-md transition-all duration-200 font-medium text-xs whitespace-nowrap ${
-              activeFamily === "solana"
-                ? "bg-gradient-to-r from-[#9945FF] to-[#14F195] text-white shadow-sm"
-                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-            }`}
-          >
-            Solana
-          </button>
-        </div>
-      )}
+      {/* Network Menu (Base | Solana) */}
+      <NetworkMenu />
 
-      {activeFamily === "evm" ? (
-        <ConnectButton.Custom>
-          {({ openAccountModal, openConnectModal, account }) => (
-            <Button
-              onClick={account ? openAccountModal : openConnectModal}
-              className="!h-9 !px-3 !text-sm whitespace-nowrap bg-blue-500 dark:bg-blue-500 rounded-lg px-4 py-2 flex items-center gap-2"
-            >
-              <BaseLogo className="w-4 h-4" />
-              <span>
-                {account
-                  ? account.displayName ||
-                    `${account.address.slice(0, 6)}...${account.address.slice(-4)}`
-                  : "Connect Base"}
-              </span>
-            </Button>
+      {/* Wallet/Account button */}
+      {isConnected ? (
+        <Button
+          onClick={() => connectWallet()}
+          className="!h-9 !px-3 !text-sm whitespace-nowrap bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white rounded-lg flex items-center gap-2 border border-zinc-200 dark:border-zinc-700"
+        >
+          {activeFamily === "evm" && evmAddress && (
+            <>
+              <div className="w-2 h-2 rounded-full bg-green-500" />
+              <span>{`${evmAddress.slice(0, 6)}...${evmAddress.slice(-4)}`}</span>
+            </>
           )}
-        </ConnectButton.Custom>
+          {activeFamily === "solana" && solanaPublicKey && (
+            <>
+              <div className="w-2 h-2 rounded-full bg-purple-500" />
+              <span>{`${solanaPublicKey.slice(0, 6)}...${solanaPublicKey.slice(-4)}`}</span>
+            </>
+          )}
+          {activeFamily === "social" && entityId && (
+            <>
+              <div className="w-2 h-2 rounded-full bg-blue-500" />
+              <span>Account</span>
+            </>
+          )}
+        </Button>
       ) : (
-        <div className="inline-flex">
-          <WalletMultiButton className="!h-9 !py-0 !px-3 !text-sm !text-white !border !border-[#e67e00] hover:!brightness-110 !whitespace-nowrap" />
-        </div>
+        <Button
+          onClick={() => login()}
+          className="!h-9 !px-4 !text-sm bg-orange-500 hover:bg-orange-600 text-white rounded-lg"
+        >
+          Connect
+        </Button>
       )}
     </div>
   );

@@ -93,12 +93,32 @@ async function main() {
   await deal.setRequireApproverToFulfill(true); // Only approver can fulfill - user just creates offer
   console.log("  ✓ Approver-only fulfillment enabled");
 
-  // 6. Fund OTC Contract with elizaOS tokens
-  console.log("\n6️⃣ Funding OTC Contract with elizaOS tokens...");
+  // 6. Register elizaOS token and create consignment
+  console.log("\n6️⃣ Setting up elizaOS token consignment...");
+  
+  // Register the token in multi-token registry
+  const elizaTokenId = ethers.keccak256(ethers.toUtf8Bytes("ELIZA"));
+  await deal.registerToken(elizaTokenId, elizaAddress, elizaUsdAddress);
+  console.log("  ✓ elizaOS token registered in multi-token system");
+  
+  // Create a negotiable consignment for the elizaOS token
   const fundAmount = ethers.parseEther("10000000"); // 10M elizaOS
   await elizaToken.approve(otcAddress, fundAmount);
-  await deal.depositTokens(fundAmount);
-  console.log("  ✓ Deposited 10M elizaOS to OTC contract");
+  await deal.createConsignment(
+    elizaTokenId,
+    fundAmount,
+    true, // negotiable
+    0, 0, // no fixed values (negotiable)
+    100, 2500, // discount range: 1% - 25%
+    7, 365, // lockup range: 7 days - 365 days
+    ethers.parseEther("100"), // min deal: 100 tokens
+    ethers.parseEther("1000000"), // max deal: 1M tokens
+    true, // fractionalized
+    false, // not private
+    2000, // 20% max price volatility
+    86400 * 7 // 7 days to execute
+  );
+  console.log("  ✓ Created negotiable consignment with 10M elizaOS tokens");
 
   // 7. Fund test accounts
   console.log("\n7️⃣ Setting up test accounts...");

@@ -2,26 +2,13 @@
 
 import { MultiWalletProvider } from "@/components/multiwallet";
 import { ChainResetMonitor } from "@/components/chain-reset-monitor";
-import { DevResetButton } from "@/components/dev-reset-button";
-import { APP_INFO } from "@/config/app";
 import { config } from "@/lib/wagmi-client";
-import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
-import {
-  ConnectionProvider,
-  WalletProvider,
-} from "@solana/wallet-adapter-react";
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import {
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-} from "@solana/wallet-adapter-wallets";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { WagmiProvider } from "wagmi";
-
-// Required by wallet-adapter-react-ui styles
-import "@solana/wallet-adapter-react-ui/styles.css";
+import { PrivyProvider } from "@privy-io/react-auth";
+import { base, hardhat, mainnet } from "wagmi/chains";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,12 +26,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setMounted(true);
   }, []);
 
-  const solanaEndpoint =
-    process.env.NEXT_PUBLIC_SOLANA_RPC || "https://api.devnet.solana.com";
-  const wallets = useMemo(
-    () => [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
-    [],
-  );
+  const isDevelopment = process.env.NODE_ENV === "development";
+  const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+
+  if (!privyAppId) {
+    throw new Error(
+      "NEXT_PUBLIC_PRIVY_APP_ID is required. Please add it to your .env.local file."
+    );
+  }
 
   return (
     <ThemeProvider
@@ -54,27 +43,37 @@ export function Providers({ children }: { children: React.ReactNode }) {
       disableTransitionOnChange
     >
       {mounted ? (
-        <WagmiProvider config={config}>
-          <QueryClientProvider client={queryClient}>
-            <RainbowKitProvider
-              appInfo={{
-                appName: APP_INFO.NAME,
-              }}
-            >
-              <ConnectionProvider endpoint={solanaEndpoint}>
-                <WalletProvider wallets={wallets} autoConnect>
-                  <WalletModalProvider>
-                    <MultiWalletProvider>
-                      <ChainResetMonitor />
-                      <DevResetButton />
-                      {children}
-                    </MultiWalletProvider>
-                  </WalletModalProvider>
-                </WalletProvider>
-              </ConnectionProvider>
-            </RainbowKitProvider>
-          </QueryClientProvider>
-        </WagmiProvider>
+        <PrivyProvider
+          appId={privyAppId}
+          config={{
+            // ALL login methods: social logins + external wallets
+            loginMethods: ["wallet", "email", "google", "farcaster"],
+            // Support both EVM and Solana wallets
+            appearance: {
+              theme: "light",
+              accentColor: "#0052ff",
+              walletChainType: "ethereum-and-solana", // KEY: Enable both chains
+            },
+            // Embedded wallets for users without external wallets
+            embeddedWallets: {
+              createOnLogin: "users-without-wallets",
+              requireUserPasswordOnCreate: false,
+            },
+            defaultChain: isDevelopment ? hardhat : base,
+            supportedChains: isDevelopment
+              ? [hardhat, base, mainnet]
+              : [base, mainnet],
+          }}
+        >
+          <WagmiProvider config={config}>
+            <QueryClientProvider client={queryClient}>
+              <MultiWalletProvider>
+                <ChainResetMonitor />
+                {children}
+              </MultiWalletProvider>
+            </QueryClientProvider>
+          </WagmiProvider>
+        </PrivyProvider>
       ) : (
         children
       )}

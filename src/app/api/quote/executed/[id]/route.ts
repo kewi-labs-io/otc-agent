@@ -18,9 +18,19 @@ export async function GET(
 
   // Allow active, approved, and executed quotes to be viewed
   // active = quote created, approved = offer created/approved on-chain, executed = paid/fulfilled
-  if (quote.status !== "executed" && quote.status !== "active" && quote.status !== "approved") {
-    console.warn("[Quote Executed API] Invalid status:", { quoteId, status: quote.status });
-    return NextResponse.json({ error: "Quote not found or invalid status" }, { status: 400 });
+  if (
+    quote.status !== "executed" &&
+    quote.status !== "active" &&
+    quote.status !== "approved"
+  ) {
+    console.warn("[Quote Executed API] Invalid status:", {
+      quoteId,
+      status: quote.status,
+    });
+    return NextResponse.json(
+      { error: "Quote not found or invalid status" },
+      { status: 400 },
+    );
   }
 
   const formattedQuote = {

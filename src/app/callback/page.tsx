@@ -105,7 +105,9 @@ export default function CallbackPage() {
       window.location.href = u.toString();
     }
 
-    run().catch((e) => setError(e instanceof Error ? e.message : "OAuth failed"));
+    run().catch((e) =>
+      setError(e instanceof Error ? e.message : "OAuth failed"),
+    );
   }, []);
 
   if (error) {

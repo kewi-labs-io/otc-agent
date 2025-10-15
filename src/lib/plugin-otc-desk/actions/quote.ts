@@ -15,6 +15,8 @@ import {
   setUserQuote,
 } from "../providers/quote";
 import { ELIZAOS_TOKEN, getEthPriceUsd } from "../services/priceFeed";
+import { ConsignmentService } from "@/services/consignmentService";
+import { TokenDB, type OTCConsignment } from "@/services/database";
 
 function parseQuoteRequest(text: string): {
   tokenAmount?: string;
@@ -58,8 +60,7 @@ function parseQuoteRequest(text: string): {
   return result;
 }
 
-// ---------------- Negotiation support (discount/lockup) ----------------
-const MAX_DISCOUNT_BPS = 2500; // 25% maximum discount
+const MAX_DISCOUNT_BPS = 2500;
 
 function parseNegotiationRequest(text: string): {
   tokenAmount?: string;
@@ -119,38 +120,87 @@ function parseNegotiationRequest(text: string): {
   return result;
 }
 
-function clampDiscountBps(discountBps: number): number {
-  return Math.max(0, Math.min(MAX_DISCOUNT_BPS, Math.round(discountBps)));
+async function extractTokenContext(
+  text: string,
+): Promise<string | null> {
+  const tokenMatch = text.match(/\b([A-Z]{2,6})\b/);
+  if (tokenMatch) {
+    const symbol = tokenMatch[1];
+    const allTokens = await TokenDB.getAllTokens();
+    const token = allTokens.find((t) => t.symbol === symbol);
+    if (token) return token.id;
+  }
+  return null;
+}
+
+async function findSuitableConsignment(
+  tokenId: string,
+  tokenAmount: string,
+  discountBps: number,
+  lockupDays: number,
+): Promise<OTCConsignment | null> {
+  const consignmentService = new ConsignmentService();
+  const consignments = await consignmentService.getAllConsignments({ tokenId });
+  return consignmentService.findSuitableConsignment(
+    consignments,
+    tokenAmount,
+    discountBps,
+    lockupDays,
+  );
 }
 
 async function negotiateTerms(
   _runtime: IAgentRuntime,
   request: any,
   existingQuote: any,
+  consignment?: OTCConsignment,
 ): Promise<{
   lockupMonths: number;
   discountBps: number;
   paymentCurrency: "ETH" | "USDC";
   reasoning: string;
+  consignmentId?: string;
 }> {
-  let lockupMonths = 5; // default
+  let lockupMonths = 5;
+  let minDiscountBps = 100;
+  let maxDiscountBps = MAX_DISCOUNT_BPS;
+  let minLockupDays = 7;
+  let maxLockupDays = 365;
 
-  if (request.lockupMonths) {
-    lockupMonths = Math.max(0.25, Math.min(12, request.lockupMonths));
+  if (consignment) {
+    if (consignment.isNegotiable) {
+      minDiscountBps = consignment.minDiscountBps;
+      maxDiscountBps = consignment.maxDiscountBps;
+      minLockupDays = consignment.minLockupDays;
+      maxLockupDays = consignment.maxLockupDays;
+    } else {
+      const discountBps = consignment.fixedDiscountBps || 1000;
+      const lockupMonths = Math.round(consignment.fixedLockupDays / 30);
+      return {
+        lockupMonths,
+        discountBps,
+        paymentCurrency: request.paymentCurrency || "USDC",
+        reasoning: `This is a fixed-price deal: ${discountBps / 100}% discount with ${consignment.fixedLockupDays} days lockup.`,
+        consignmentId: consignment.id,
+      };
+    }
   }
 
-  // Requested discount or default based on existing quote
-  const discountBps = clampDiscountBps(
-    request.requestedDiscountBps ?? existingQuote?.discountBps ?? 800,
-  );
+  if (request.lockupMonths) {
+    lockupMonths = Math.max(
+      minLockupDays / 30,
+      Math.min(maxLockupDays / 30, request.lockupMonths),
+    );
+  }
 
-  // Adjust lockup guidance for larger discounts
+  let discountBps =
+    request.requestedDiscountBps ?? existingQuote?.discountBps ?? 800;
+  discountBps = Math.max(minDiscountBps, Math.min(maxDiscountBps, discountBps));
+
   if (discountBps >= 2000 && lockupMonths < 6) lockupMonths = 6;
   if (discountBps >= 2500 && lockupMonths < 9) lockupMonths = 9;
 
-  const reasoning = `I can offer a ${(discountBps / 100).toFixed(
-    2,
-  )}% discount with a ${lockupMonths}-month lockup.`;
+  const reasoning = `I can offer a ${(discountBps / 100).toFixed(2)}% discount with a ${lockupMonths}-month lockup.`;
 
   return {
     lockupMonths,
@@ -158,6 +208,7 @@ async function negotiateTerms(
     paymentCurrency:
       request.paymentCurrency || existingQuote?.paymentCurrency || "USDC",
     reasoning,
+    consignmentId: consignment?.id,
   };
 }
 
@@ -187,11 +238,7 @@ export const quoteAction: Action = {
       "[CREATE_OTC_QUOTE] Message object:",
       JSON.stringify(message, null, 2),
     );
-    const entityId =
-      (message as any).entityId ||
-      (message as any).entityId ||
-      (message as any).roomId ||
-      "default";
+    const entityId = message.entityId || message.roomId || "default";
     const text = message.content?.text || "";
     console.log(
       "[CREATE_OTC_QUOTE] EntityId:",
@@ -223,21 +270,31 @@ export const quoteAction: Action = {
     const request = parseQuoteRequest(text);
     const negotiationRequest = parseNegotiationRequest(text);
 
-    // Get existing quote or use defaults
+    const tokenId = await extractTokenContext(text);
     const existingQuote = await getUserQuote(entityId);
 
-    // Determine whether this is a negotiation-style request
+    let consignment: OTCConsignment | null = null;
+    if (tokenId && negotiationRequest.tokenAmount) {
+      const lockupDays = (negotiationRequest.lockupMonths || 5) * 30;
+      consignment = await findSuitableConsignment(
+        tokenId,
+        negotiationRequest.tokenAmount,
+        negotiationRequest.requestedDiscountBps || 1000,
+        lockupDays,
+      );
+    }
+
     const isNegotiation =
       /negotiate|discount|lockup|month/i.test(text) ||
       negotiationRequest.requestedDiscountBps !== undefined ||
       negotiationRequest.lockupMonths !== undefined;
 
     if (isNegotiation) {
-      // Compute negotiated terms (amount chosen at acceptance)
       const negotiated = await negotiateTerms(
         runtime,
         negotiationRequest,
         existingQuote,
+        consignment || undefined,
       );
 
       const ethPriceUsd =
@@ -303,7 +360,7 @@ export const quoteAction: Action = {
       return { success: true };
     }
 
-    // ------------- Simple discount-based quote (legacy path) -------------
+    // ------------- Simple discount-based quote -------------
     const discountBps =
       request.discountBps ?? existingQuote?.discountBps ?? 1000; // Default 10%
     const paymentCurrency =

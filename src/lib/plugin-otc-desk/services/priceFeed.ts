@@ -39,7 +39,7 @@ async function fetchElizaPriceFromCoinGecko(): Promise<number | null> {
       headers: {
         Accept: "application/json",
       },
-    }
+    },
   );
 
   if (!response.ok) {
@@ -106,7 +106,7 @@ export async function getEthPriceUsd(): Promise<number> {
       headers: {
         Accept: "application/json",
       },
-    }
+    },
   );
 
   if (response.ok) {
@@ -151,7 +151,7 @@ export function formatElizaAmount(amount: string | number): string {
  * Convert elizaOS amount to USD value
  */
 export async function getElizaValueUsd(
-  amount: string | number
+  amount: string | number,
 ): Promise<number> {
   const price = await getElizaPriceUsd();
   const num = typeof amount === "string" ? parseFloat(amount) : amount;

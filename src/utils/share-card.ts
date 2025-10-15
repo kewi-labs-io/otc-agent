@@ -80,14 +80,14 @@ export async function createDealShareImage(args: {
   ctx.fillText(
     `Lockup: ${Math.max(1, Math.round(lockupMonths))} months`,
     60,
-    420
+    420,
   );
   if (paymentCurrency) {
     ctx.fillText(`Payment: ${paymentCurrency}`, 60, 480);
   }
 
   const blob: Blob | null = await new Promise((resolve) =>
-    canvas.toBlob(resolve, "image/jpeg", 0.92)
+    canvas.toBlob(resolve, "image/jpeg", 0.92),
   );
   if (!blob) throw new Error("Failed to create image");
   const dataUrl = canvas.toDataURL("image/jpeg", 0.92);

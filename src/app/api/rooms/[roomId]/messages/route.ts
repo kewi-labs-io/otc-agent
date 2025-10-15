@@ -9,10 +9,7 @@ export async function POST(request: Request, ctx: any) {
 
   if (!roomId) {
     console.error("[Messages API] Missing roomId");
-    return NextResponse.json(
-      { error: "roomId is required" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "roomId is required" }, { status: 400 });
   }
 
   if (!entityId) {
@@ -74,10 +71,7 @@ export async function GET(request: Request, ctx: any) {
   const afterTimestamp = searchParams.get("afterTimestamp");
 
   if (!roomId) {
-    return NextResponse.json(
-      { error: "roomId is required" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "roomId is required" }, { status: 400 });
   }
 
   const runtime = await agentRuntime.getRuntime();

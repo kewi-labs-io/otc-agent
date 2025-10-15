@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { usePublicClient, useAccount, useDisconnect } from "wagmi";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { usePrivy } from "@privy-io/react-auth";
 import { toast } from "sonner";
 
 type ChainResetState = {
@@ -13,7 +13,7 @@ type ChainResetState = {
 
 export function useChainReset() {
   const [mounted, setMounted] = useState(false);
-  
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -21,8 +21,8 @@ export function useChainReset() {
   const publicClient = usePublicClient();
   const { address } = useAccount();
   const { disconnect } = useDisconnect();
-  const solWallet = useWallet();
-  
+  const { logout } = usePrivy();
+
   const [state, setState] = useState<ChainResetState>({
     resetDetected: false,
     lastBlockNumber: null,
@@ -33,8 +33,12 @@ export function useChainReset() {
 
   // Enable checks only after mounting and in development
   useEffect(() => {
-    if (mounted && typeof window !== "undefined" && process.env.NODE_ENV === "development") {
-      setState(prev => ({ ...prev, checksEnabled: true }));
+    if (
+      mounted &&
+      typeof window !== "undefined" &&
+      process.env.NODE_ENV === "development"
+    ) {
+      setState((prev) => ({ ...prev, checksEnabled: true }));
     }
   }, [mounted]);
 
@@ -43,60 +47,70 @@ export function useChainReset() {
     hasShownToast.current = true;
 
     console.warn("[ChainReset] Local chain reset detected");
-    
-    toast.error(
-      "Chain Reset Detected",
-      {
-        description: "Local blockchain was reset. Click here to reset your wallet connection.",
-        duration: 10000,
-        action: {
-          label: "Reset Wallet",
-          onClick: async () => {
-            if (address) {
-              await disconnect();
-            }
-            if (solWallet.connected) {
-              await solWallet.disconnect();
-            }
-            
-            localStorage.removeItem("wagmi.store");
-            localStorage.removeItem("wagmi.cache");
-            localStorage.removeItem("wagmi.recentConnectorId");
-            
-            setTimeout(() => {
-              window.location.reload();
-            }, 500);
-          },
-        },
-      }
-    );
 
-    setState(prev => ({ ...prev, resetDetected: true }));
-  }, [address, disconnect, solWallet]);
+    toast.error("Chain Reset Detected", {
+      description:
+        "Local blockchain was reset. Click here to reset your wallet connection.",
+      duration: 10000,
+      action: {
+        label: "Reset Wallet",
+        onClick: async () => {
+          // Disconnect EVM wallet
+          if (address) {
+            await disconnect();
+          }
+          
+          // Logout from Privy (handles all wallet types)
+          await logout();
+
+          // Clear all wallet caches
+          localStorage.removeItem("wagmi.store");
+          localStorage.removeItem("wagmi.cache");
+          localStorage.removeItem("wagmi.recentConnectorId");
+          localStorage.removeItem("privy:token");
+          localStorage.removeItem("privy:refresh_token");
+
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
+        },
+      },
+    });
+
+    setState((prev) => ({ ...prev, resetDetected: true }));
+  }, [address, disconnect, logout]);
 
   const resetWalletState = useCallback(async () => {
     console.log("[ChainReset] Manually resetting wallet state");
-    
+
+    // Disconnect EVM wallet
     if (address) {
       await disconnect();
     }
-    if (solWallet.connected) {
-      await solWallet.disconnect();
-    }
     
+    // Logout from Privy (handles all wallet types)
+    await logout();
+
+    // Clear all wallet caches
     localStorage.removeItem("wagmi.store");
     localStorage.removeItem("wagmi.cache");
     localStorage.removeItem("wagmi.recentConnectorId");
-    
+    localStorage.removeItem("privy:token");
+    localStorage.removeItem("privy:refresh_token");
+
     hasShownToast.current = false;
-    setState(prev => ({ ...prev, resetDetected: false, lastBlockNumber: null }));
-    
+    setState((prev) => ({
+      ...prev,
+      resetDetected: false,
+      lastBlockNumber: null,
+    }));
+
     toast.success("Wallet reset complete");
-    
+
     setTimeout(() => {
       window.location.reload();
     }, 500);
-  }, [address, disconnect, solWallet]);
+  }, [address, disconnect, logout]);
 
   useEffect(() => {
     if (!mounted || !state.checksEnabled || !publicClient) return;
@@ -104,19 +118,28 @@ export function useChainReset() {
     const checkInterval = setInterval(async () => {
       try {
         const currentBlock = await publicClient.getBlockNumber();
-        
-        if (state.lastBlockNumber !== null && currentBlock < state.lastBlockNumber) {
+
+        if (
+          state.lastBlockNumber !== null &&
+          currentBlock < state.lastBlockNumber
+        ) {
           await handleChainReset();
         }
-        
-        setState(prev => ({ ...prev, lastBlockNumber: currentBlock }));
+
+        setState((prev) => ({ ...prev, lastBlockNumber: currentBlock }));
       } catch (error) {
         console.warn("[ChainReset] Error checking block number:", error);
       }
     }, 3000);
 
     return () => clearInterval(checkInterval);
-  }, [mounted, state.checksEnabled, state.lastBlockNumber, publicClient, handleChainReset]);
+  }, [
+    mounted,
+    state.checksEnabled,
+    state.lastBlockNumber,
+    publicClient,
+    handleChainReset,
+  ]);
 
   return {
     resetDetected: state.resetDetected,
@@ -124,4 +147,3 @@ export function useChainReset() {
     checksEnabled: state.checksEnabled,
   };
 }
-

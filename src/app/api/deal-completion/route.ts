@@ -20,16 +20,61 @@ export async function POST(request: NextRequest) {
   await agentRuntime.getRuntime();
 
   const body = await request.json();
-  const { quoteId, action } = body;
+  const { quoteId, action, tokenId, consignmentId } = body;
 
   if (!quoteId) {
     return NextResponse.json(
       { error: "Quote ID is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   if (action === "complete") {
+    if (consignmentId && tokenId) {
+      const { PriceProtectionService } = await import(
+        "@/services/priceProtection"
+      );
+      const { TokenDB } = await import("@/services/database");
+      const { ConsignmentService } = await import(
+        "@/services/consignmentService"
+      );
+
+      const priceProtection = new PriceProtectionService();
+      const consignmentService = new ConsignmentService();
+      const token = await TokenDB.getToken(tokenId);
+
+      const priceAtQuote = body.priceAtQuote || 1.0;
+      const validationResult = await priceProtection.validateQuotePrice(
+        tokenId,
+        token.contractAddress,
+        token.chain,
+        priceAtQuote,
+        body.maxPriceDeviationBps || 1000,
+      );
+
+      if (!validationResult.isValid) {
+        return NextResponse.json(
+          {
+            error: "Price volatility exceeded maximum allowed",
+            details: validationResult,
+          },
+          { status: 400 },
+        );
+      }
+
+      await consignmentService.reserveAmount(consignmentId, body.tokenAmount);
+      await consignmentService.recordDeal({
+        consignmentId,
+        quoteId,
+        tokenId,
+        buyerAddress: body.beneficiary || "",
+        amount: body.tokenAmount,
+        discountBps: body.discountBps || 1000,
+        lockupDays: body.lockupDays || 150,
+        offerId: body.offerId,
+      });
+    }
+
     const tokenAmountStr = String(body.tokenAmount);
     console.log("[DealCompletion] Received request:", {
       tokenAmount: body.tokenAmount,
@@ -38,10 +83,12 @@ export async function POST(request: NextRequest) {
       chain: body.chain,
       offerId: body.offerId,
     });
-    
+
     // Map SOL to ETH internally since database schema uses ETH/USDC
     const paymentCurrency: PaymentCurrency =
-      (body.paymentCurrency === "ETH" || body.paymentCurrency === "SOL") ? "ETH" : "USDC";
+      body.paymentCurrency === "ETH" || body.paymentCurrency === "SOL"
+        ? "ETH"
+        : "USDC";
     const offerId = String(body.offerId || "");
     const transactionHash = String(body.transactionHash || "");
     const blockNumber = Number(body.blockNumber || 0);
@@ -53,7 +100,7 @@ export async function POST(request: NextRequest) {
       agentRuntime.runtime.getService<QuoteService>("QuoteService");
 
     const quote = await quoteService.getQuoteByQuoteId(quoteId);
-    
+
     // Update beneficiary AND entityId if provided (for Solana wallets)
     if (beneficiaryOverride) {
       const normalizedBeneficiary = beneficiaryOverride.toLowerCase();
@@ -63,15 +110,18 @@ export async function POST(request: NextRequest) {
           newBeneficiary: normalizedBeneficiary,
           oldEntityId: quote.entityId,
         });
-        
+
         // Update both beneficiary and entityId to match
         await quoteService.setQuoteBeneficiary(quoteId, normalizedBeneficiary);
-        
+
         // Re-fetch to get updated quote
         const updatedQuote = await quoteService.getQuoteByQuoteId(quoteId);
         Object.assign(quote, updatedQuote);
-        
-        console.log("[DealCompletion] Updated to new entityId:", quote.entityId);
+
+        console.log(
+          "[DealCompletion] Updated to new entityId:",
+          quote.entityId,
+        );
       }
     }
 
@@ -95,10 +145,10 @@ export async function POST(request: NextRequest) {
       const solPrice = 100.0; // $100 from setPrices
 
       // Calculate values
-      totalUsd = (Number(tokenAmount) * tokenPrice);
+      totalUsd = Number(tokenAmount) * tokenPrice;
       discountUsd = totalUsd * (discountBps / 10000);
       discountedUsd = totalUsd - discountUsd;
-      
+
       // Payment amount based on currency
       if (body.paymentCurrency === "SOL") {
         actualPaymentAmount = (discountedUsd / solPrice).toFixed(6);
@@ -213,23 +263,33 @@ export async function POST(request: NextRequest) {
 
     // VALIDATE before saving
     if (!tokenAmountStr || tokenAmountStr === "0") {
-      console.warn(`[DealCompletion] tokenAmount is ${tokenAmountStr} - quote: ${quoteId}`);
+      console.warn(
+        `[DealCompletion] tokenAmount is ${tokenAmountStr} - quote: ${quoteId}`,
+      );
       // For old quotes, skip validation and just return current state
       if (quote.status === "executed") {
-        console.log("[DealCompletion] Quote already executed, returning current state");
+        console.log(
+          "[DealCompletion] Quote already executed, returning current state",
+        );
         return NextResponse.json({ success: true, quote });
       }
-      throw new Error(`CRITICAL: tokenAmount is ${tokenAmountStr} - must be > 0`);
+      throw new Error(
+        `CRITICAL: tokenAmount is ${tokenAmountStr} - must be > 0`,
+      );
     }
     if (totalUsd === 0 && chainType === "solana") {
-      console.warn(`[DealCompletion] Solana deal has $0 value - quote: ${quoteId}`);
+      console.warn(
+        `[DealCompletion] Solana deal has $0 value - quote: ${quoteId}`,
+      );
       if (quote.status === "executed") {
-        console.log("[DealCompletion] Quote already executed, returning current state");
+        console.log(
+          "[DealCompletion] Quote already executed, returning current state",
+        );
         return NextResponse.json({ success: true, quote });
       }
       throw new Error("CRITICAL: Solana deal has $0 value");
     }
-    
+
     console.log("[DealCompletion] Calling updateQuoteExecution with:", {
       quoteId,
       tokenAmount: tokenAmountStr,
@@ -240,7 +300,7 @@ export async function POST(request: NextRequest) {
       paymentAmount: actualPaymentAmount,
       offerId,
     });
-    
+
     const updated = await quoteService.updateQuoteExecution(quoteId, {
       tokenAmount: tokenAmountStr,
       totalUsd,
@@ -252,32 +312,43 @@ export async function POST(request: NextRequest) {
       transactionHash,
       blockNumber,
     });
-    
+
     // VERIFY status changed
     if (updated.status !== "executed") {
-      throw new Error(`CRITICAL: Status is ${updated.status}, expected executed`);
+      throw new Error(
+        `CRITICAL: Status is ${updated.status}, expected executed`,
+      );
     }
-    
+
     // Store chain type for proper currency display
     (updated as any).chain = chainType === "solana" ? "solana" : "evm";
     await agentRuntime.runtime.setCache(`quote:${quoteId}`, updated);
-    
+
     // VERIFY quote is in entity's list, and fix index if missing
-    const entityQuotes = await agentRuntime.runtime.getCache<string[]>(`entity_quotes:${updated.entityId}`) || [];
+    const entityQuotes =
+      (await agentRuntime.runtime.getCache<string[]>(
+        `entity_quotes:${updated.entityId}`,
+      )) || [];
     if (!entityQuotes.includes(quoteId)) {
-      console.warn(`[Deal Completion] Quote ${quoteId} not in entity ${updated.entityId} list - fixing index`);
+      console.warn(
+        `[Deal Completion] Quote ${quoteId} not in entity ${updated.entityId} list - fixing index`,
+      );
       entityQuotes.push(quoteId);
-      await agentRuntime.runtime.setCache(`entity_quotes:${updated.entityId}`, entityQuotes);
-      
+      await agentRuntime.runtime.setCache(
+        `entity_quotes:${updated.entityId}`,
+        entityQuotes,
+      );
+
       // Also ensure it's in the all_quotes index
-      const allQuotes = await agentRuntime.runtime.getCache<string[]>("all_quotes") || [];
+      const allQuotes =
+        (await agentRuntime.runtime.getCache<string[]>("all_quotes")) || [];
       if (!allQuotes.includes(quoteId)) {
         allQuotes.push(quoteId);
         await agentRuntime.runtime.setCache("all_quotes", allQuotes);
       }
       console.log(`[Deal Completion] ✅ Fixed indexes for quote ${quoteId}`);
     }
-    
+
     console.log("[Deal Completion] ✅ VERIFIED and completed:", {
       entityId: quote.entityId,
       quoteId,
@@ -312,63 +383,70 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-    await agentRuntime.getRuntime();
+  await agentRuntime.getRuntime();
 
-    const { searchParams } = new URL(request.url);
-    const wallet = searchParams.get("wallet");
+  const { searchParams } = new URL(request.url);
+  const wallet = searchParams.get("wallet");
 
-    if (!wallet) {
-      return NextResponse.json({ error: "wallet required" }, { status: 400 });
-    }
+  if (!wallet) {
+    return NextResponse.json({ error: "wallet required" }, { status: 400 });
+  }
 
-    const entityId = walletToEntityId(wallet);
-    const normalizedWallet = wallet.toLowerCase();
-    console.log("[Deal Completion GET] Querying deals:", {
-      wallet,
-      normalizedWallet,
-      entityId,
-    });
-    
-    const quoteService =
-      agentRuntime.runtime.getService<QuoteService>("QuoteService");
-    
-    if (!quoteService) {
-      console.warn("[Deal Completion GET] QuoteService not ready");
-      return NextResponse.json({
-        success: true,
-        deals: [],
-      });
-    }
-    
-    // Get quotes by entityId
-    const quotes = await quoteService.getUserQuoteHistory(entityId, 100);
-    console.log("[Deal Completion GET] Got quotes by entityId:", quotes.length);
-    
-    // ALSO search by beneficiary address (for quotes indexed under wrong entityId)
-    const allQuoteIds = (await agentRuntime.runtime.getCache<string[]>("all_quotes")) ?? [];
-    const quotesSet = new Set(quotes.map(q => q.quoteId));
-    
-    for (const quoteId of allQuoteIds) {
-      if (quotesSet.has(quoteId)) continue; // Already have it
-      
-      const quote = await agentRuntime.runtime.getCache<any>(`quote:${quoteId}`);
-      if (quote && quote.beneficiary === normalizedWallet) {
-        console.log("[Deal Completion GET] Found quote by beneficiary:", quoteId);
-        quotes.push(quote);
-      }
-    }
-    
-    console.log("[Deal Completion GET] Total quotes found:", quotes.length);
-    
-    // Show active, approved, and executed deals
-    // active = quote created, approved = offer created/approved on-chain, executed = paid/fulfilled
-    const deals = quotes.filter((quote) => 
-      quote.status === "executed" || quote.status === "active" || quote.status === "approved"
-    );
-    console.log("[Deal Completion GET] Filtered deals (active + approved + executed):", deals.length);
+  const entityId = walletToEntityId(wallet);
+  const normalizedWallet = wallet.toLowerCase();
+  console.log("[Deal Completion GET] Querying deals:", {
+    wallet,
+    normalizedWallet,
+    entityId,
+  });
 
+  const quoteService =
+    agentRuntime.runtime.getService<QuoteService>("QuoteService");
+
+  if (!quoteService) {
+    console.warn("[Deal Completion GET] QuoteService not ready");
     return NextResponse.json({
       success: true,
-      deals,
+      deals: [],
     });
+  }
+
+  // Get quotes by entityId
+  const quotes = await quoteService.getUserQuoteHistory(entityId, 100);
+  console.log("[Deal Completion GET] Got quotes by entityId:", quotes.length);
+
+  // ALSO search by beneficiary address (for quotes indexed under wrong entityId)
+  const allQuoteIds =
+    (await agentRuntime.runtime.getCache<string[]>("all_quotes")) ?? [];
+  const quotesSet = new Set(quotes.map((q) => q.quoteId));
+
+  for (const quoteId of allQuoteIds) {
+    if (quotesSet.has(quoteId)) continue; // Already have it
+
+    const quote = await agentRuntime.runtime.getCache<any>(`quote:${quoteId}`);
+    if (quote && quote.beneficiary === normalizedWallet) {
+      console.log("[Deal Completion GET] Found quote by beneficiary:", quoteId);
+      quotes.push(quote);
+    }
+  }
+
+  console.log("[Deal Completion GET] Total quotes found:", quotes.length);
+
+  // Show active, approved, and executed deals
+  // active = quote created, approved = offer created/approved on-chain, executed = paid/fulfilled
+  const deals = quotes.filter(
+    (quote) =>
+      quote.status === "executed" ||
+      quote.status === "active" ||
+      quote.status === "approved",
+  );
+  console.log(
+    "[Deal Completion GET] Filtered deals (active + approved + executed):",
+    deals.length,
+  );
+
+  return NextResponse.json({
+    success: true,
+    deals,
+  });
 }

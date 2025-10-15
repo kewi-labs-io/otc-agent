@@ -13,7 +13,7 @@ import { AcceptQuoteModal } from "@/components/accept-quote-modal";
 import { Button } from "@/components/button";
 import { CHAT_SOURCE, USER_NAME } from "@/constants";
 import type { ChatMessage } from "@/types/chat-message";
-import { parseMessageXML } from "@/utils/xml-parser";
+import { parseMessageXML, type OTCQuote } from "@/utils/xml-parser";
 
 interface ChatProps {
   roomId?: string;
@@ -28,10 +28,9 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
   const [isAgentThinking, setIsAgentThinking] = useState<boolean>(false);
   const [entityId, setUserId] = useState<string | null>(null);
-  const { isConnected: unifiedConnected, entityId: unifiedUserId } =
-    useMultiWallet();
+  const { isConnected, entityId: walletEntityId } = useMultiWallet();
   const [showConnectOverlay, setShowConnectOverlay] = useState<boolean>(false);
-  const [currentQuote, setCurrentQuote] = useState<any>(null);
+  const [currentQuote, setCurrentQuote] = useState<OTCQuote | null>(null);
   const [showAcceptModal, setShowAcceptModal] = useState<boolean>(false);
   const [isOfferGlowing, setIsOfferGlowing] = useState<boolean>(false);
   const [showClearChatModal, setShowClearChatModal] = useState<boolean>(false);
@@ -43,14 +42,12 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
   const previousQuoteIdRef = useRef<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // (Removed duplicate time helper; consolidated in utils/time if needed elsewhere)
-
   // Initialize user from connected wallet; gate chat when disconnected
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    if (unifiedConnected && unifiedUserId) {
-      const addr = unifiedUserId.toLowerCase();
+    if (isConnected && walletEntityId) {
+      const addr = walletEntityId.toLowerCase();
       setUserId(addr);
 
       // Load room for this wallet if we have one
@@ -67,7 +64,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
       // Always show overlay when wallet is not connected
       setShowConnectOverlay(true);
     }
-  }, [unifiedConnected, unifiedUserId, initialRoomId]);
+  }, [isConnected, walletEntityId, initialRoomId]);
 
   // Function to create a new room
   const createNewRoom = useCallback(async () => {
@@ -160,7 +157,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         setMessages((prev) => {
           // Filter out optimistic user messages (client-side only)
           const withoutOptimistic = prev.filter(
-            (m) => !(m as any).isUserMessage
+            (m) => !m.isUserMessage,
           );
 
           // Merge and dedupe by server ID
@@ -206,7 +203,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         `/api/rooms/${roomId}/messages?afterTimestamp=${lastMessageTimestampRef.current}&_=${Date.now()}`,
         {
           cache: "no-store",
-        }
+        },
       );
 
       if (response.ok) {
@@ -261,33 +258,36 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
           setMessages((prev) => {
             console.log(
               `[Polling] Received ${formattedMessages.length} new messages`,
-              formattedMessages.map((m: any) => ({ id: m.serverMessageId, text: m.text.substring(0, 50) }))
+              formattedMessages.map((m) => ({
+                id: m.serverMessageId,
+                text: m.text?.substring(0, 50),
+              })),
             );
 
             // Remove optimistic client messages - they'll be replaced by server versions
             const withoutOptimistic = prev.filter(
-              (m) => !(m as any).isUserMessage
+              (m) => !m.isUserMessage,
             );
 
             // Merge with new messages and dedupe by server ID
-            const byServerId = new Map<string, any>();
+            const byServerId = new Map<string, ChatMessage>();
             withoutOptimistic.forEach((m) => {
-              const key = (m as any).serverMessageId || m.id;
+              const key = m.serverMessageId || m.id;
               byServerId.set(key, m);
             });
-            formattedMessages.forEach((m: any) => {
-              byServerId.set(m.serverMessageId, m);
+            formattedMessages.forEach((m) => {
+              byServerId.set(m.serverMessageId || m.id, m);
             });
 
             const merged = Array.from(byServerId.values());
             merged.sort(
-              (a: any, b: any) => (a.createdAt || 0) - (b.createdAt || 0)
+              (a, b) => (a.createdAt || 0) - (b.createdAt || 0),
             );
 
             console.log(
-              `[Polling] After deduplication: ${merged.length} total messages (was ${prev.length})`
+              `[Polling] After deduplication: ${merged.length} total messages (was ${prev.length})`,
             );
-            
+
             // Force a re-render by returning a new array reference
             return [...merged];
           });
@@ -299,10 +299,12 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
 
           // Check if we received an agent message
           const hasAgentMessage = newMessages.some(
-            (msg: any) => msg.entityId === msg.agentId
+            (msg: any) => msg.entityId === msg.agentId,
           );
           if (hasAgentMessage) {
-            console.log("[Polling] Agent response received, will continue polling for 3 more seconds");
+            console.log(
+              "[Polling] Agent response received, will continue polling for 3 more seconds",
+            );
             // Continue polling for a bit longer to catch any delayed messages
             setTimeout(() => {
               console.log("[Polling] Delayed stop after agent response");
@@ -341,14 +343,14 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         entityId,
         roomId,
         inputDisabled,
-        unifiedConnected
+        isConnected,
       );
       if (
         !messageText.trim() ||
         !entityId ||
         !roomId ||
         inputDisabled ||
-        !unifiedConnected
+        !isConnected
       ) {
         throw new Error("Cannot send message: missing required data");
       }
@@ -404,17 +406,17 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         // Set to just before our message so we catch both our message and agent's response
         lastMessageTimestampRef.current = serverCreatedAt - 100;
         console.log(
-          `[Send Message] Set polling timestamp to ${lastMessageTimestampRef.current} (server time: ${serverCreatedAt})`
+          `[Send Message] Set polling timestamp to ${lastMessageTimestampRef.current} (server time: ${serverCreatedAt})`,
         );
       } else {
         // Fallback: use current time minus a buffer
         lastMessageTimestampRef.current = Date.now() - 1000;
         console.log(
-          `[Send Message] Set polling timestamp to ${lastMessageTimestampRef.current} (fallback)`
+          `[Send Message] Set polling timestamp to ${lastMessageTimestampRef.current} (fallback)`,
         );
       }
     },
-    [entityId, roomId, inputDisabled, unifiedConnected]
+    [entityId, roomId, inputDisabled, isConnected],
   );
 
   // Handle form submit
@@ -424,10 +426,10 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
       const trimmed = input.trim();
       if (!trimmed) return;
 
-      console.log("handleSubmit", trimmed, entityId, roomId, unifiedConnected);
+      console.log("handleSubmit", trimmed, entityId, roomId, isConnected);
 
       // Ensure user is connected and room exists before sending
-      if (!unifiedConnected || !entityId) {
+      if (!isConnected || !entityId) {
         setShowConnectOverlay(true);
         return;
       }
@@ -447,16 +449,16 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         textareaRef.current?.focus();
       }, 0);
     },
-    [input, unifiedConnected, entityId, roomId, createNewRoom, sendMessage]
+    [input, isConnected, entityId, roomId, createNewRoom, sendMessage],
   );
 
   // Handle creating a new room when there isn't one
   useEffect(() => {
-    if (!roomId && entityId && unifiedConnected) {
+    if (!roomId && entityId && isConnected) {
       // Automatically create a room for this wallet when connected
       createNewRoom();
     }
-  }, [roomId, entityId, unifiedConnected, createNewRoom]);
+  }, [roomId, entityId, isConnected, createNewRoom]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -475,7 +477,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
     console.log(
       "[Quote Update] Scanning",
       messages.length,
-      "messages for quote"
+      "messages for quote",
     );
 
     // Find the latest quote in messages
@@ -486,7 +488,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
       const parsed = parseMessageXML(
         typeof msg.text === "string"
           ? msg.text
-          : (msg as any).content?.text || ""
+          : msg.content?.text || "",
       );
 
       if (parsed?.type === "otc_quote" && parsed.data) {
@@ -513,7 +515,9 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
 
           // Update the ref and state
           previousQuoteIdRef.current = newQuoteId;
-          setCurrentQuote(newQuote);
+          if ('tokenSymbol' in newQuote) {
+            setCurrentQuote(newQuote as OTCQuote);
+          }
         }
         break;
       }
@@ -527,14 +531,17 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
       // TODO: Show error message to user
       return;
     }
-    
+
     // Validate quote has required fields
     if (!currentQuote.quoteId) {
       console.error("[Chat] Quote missing quoteId");
       return;
     }
-    
-    console.log("[Chat] Opening accept modal with quote:", currentQuote.quoteId);
+
+    console.log(
+      "[Chat] Opening accept modal with quote:",
+      currentQuote.quoteId,
+    );
     setShowAcceptModal(true);
   };
 
@@ -562,13 +569,15 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
 
   const handleDealComplete = useCallback(async () => {
     console.log("[Chat] Deal completed, resetting chat and creating new room");
-    
+
     // DO NOT close the modal - let it show the success state and handle its own redirect
     // The modal will redirect to /deal/[id] page after 2 seconds
-    
+
     // Reset chat and create new room in the background
     if (!entityId) {
-      console.warn("[Chat] No entityId during deal completion - cannot reset chat");
+      console.warn(
+        "[Chat] No entityId during deal completion - cannot reset chat",
+      );
       return;
     }
 
@@ -578,7 +587,9 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
     // Create a new room
     const newRoomId = await createNewRoom();
     if (!newRoomId) {
-      console.error("[Chat] Failed to create new room after deal completion - user will need to refresh");
+      console.error(
+        "[Chat] Failed to create new room after deal completion - user will need to refresh",
+      );
       // Still clear the old state even if new room creation failed
       setMessages([]);
       setCurrentQuote(null);
@@ -592,7 +603,11 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
     setCurrentQuote(null);
     previousQuoteIdRef.current = null;
     setRoomId(newRoomId);
-    console.log("[Chat] Deal complete - created new room:", newRoomId, "- User will be redirected to deal page");
+    console.log(
+      "[Chat] Deal complete - created new room:",
+      newRoomId,
+      "- User will be redirected to deal page",
+    );
   }, [entityId, createNewRoom]);
 
   return (
@@ -605,7 +620,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         setInput={setInput}
         handleSubmit={handleSubmit}
         inputDisabled={inputDisabled}
-        isConnected={unifiedConnected}
+        isConnected={isConnected}
         messagesContainerRef={messagesContainerRef}
         textareaRef={textareaRef}
         showConnectOverlay={showConnectOverlay}
@@ -665,7 +680,7 @@ function ChatHeader({
   isLoadingHistory,
 }: {
   messages: ChatMessage[];
-  apiQuote: any;
+  apiQuote: OTCQuote | null;
   onAcceptOffer: () => void;
   isOfferGlowing: boolean;
   onClearChat: () => void;
@@ -677,21 +692,65 @@ function ChatHeader({
   return (
     <div className="mb-3">
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3">
-          {currentQuote ? (
-            <>
-              {/* Desktop version */}
-              <div className="hidden sm:flex items-center gap-6 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 px-4 py-2">
-                <div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  Current Offer
-                </div>
+        {currentQuote ? (
+          <>
+            {/* Desktop version */}
+            <div className="hidden sm:flex items-center gap-6 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 px-4 py-2">
+              <div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                Current Offer
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-zinc-500 dark:text-zinc-400 text-xs">
+                  Discount
+                </span>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  {(
+                    currentQuote.discountPercent ||
+                    currentQuote.discountBps / 100
+                  ).toFixed(0)}
+                  %
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-zinc-500 dark:text-zinc-400 text-xs">
+                  Maturity
+                </span>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  {Math.round(
+                    currentQuote.lockupMonths ||
+                      (currentQuote.lockupDays || 0) / 30,
+                  )}{" "}
+                  months
+                </span>
+              </div>
+              <Button
+                onClick={onAcceptOffer}
+                className={`!h-8 !px-3 !text-xs transition-all duration-300 !bg-orange-500 hover:!bg-orange-600 !text-white !border-orange-600 ${
+                  isOfferGlowing
+                    ? "shadow-lg shadow-orange-500/50 ring-2 ring-orange-400 animate-pulse"
+                    : ""
+                }`}
+                color="orange"
+                title={`Accept Offer ${isOfferGlowing ? "(GLOWING)" : ""}`}
+              >
+                Accept Offer
+              </Button>
+            </div>
+
+            {/* Mobile version */}
+            <div className="flex sm:hidden flex-col gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 p-3">
+              <div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                Current Offer
+              </div>
+              <div className="flex items-center justify-between">
                 <div className="flex items-baseline gap-2">
                   <span className="text-zinc-500 dark:text-zinc-400 text-xs">
                     Discount
                   </span>
                   <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                     {(
-                      (currentQuote as any).discountPercent ||
-                      (currentQuote as any).discountBps / 100
+                      currentQuote.discountPercent ||
+                      currentQuote.discountBps / 100
                     ).toFixed(0)}
                     %
                   </span>
@@ -702,15 +761,17 @@ function ChatHeader({
                   </span>
                   <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                     {Math.round(
-                      (currentQuote as any).lockupMonths ||
-                        ((currentQuote as any).lockupDays || 0) / 30
+                      currentQuote.lockupMonths ||
+                        (currentQuote.lockupDays || 0) / 30,
                     )}{" "}
                     months
                   </span>
                 </div>
+              </div>
+              <div className="flex gap-2">
                 <Button
                   onClick={onAcceptOffer}
-                  className={`!h-8 !px-3 !text-xs transition-all duration-300 !bg-orange-500 hover:!bg-orange-600 !text-white !border-orange-600 ${
+                  className={`flex-1 !h-9 !px-3 !text-sm transition-all duration-300 !bg-orange-500 hover:!bg-orange-600 !text-white !border-orange-600 ${
                     isOfferGlowing
                       ? "shadow-lg shadow-orange-500/50 ring-2 ring-orange-400 animate-pulse"
                       : ""
@@ -720,73 +781,27 @@ function ChatHeader({
                 >
                   Accept Offer
                 </Button>
-              </div>
-
-              {/* Mobile version */}
-              <div className="flex sm:hidden flex-col gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 p-3">
-                <div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  Current Offer
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-zinc-500 dark:text-zinc-400 text-xs">
-                      Discount
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      {(
-                        (currentQuote as any).discountPercent ||
-                        (currentQuote as any).discountBps / 100
-                      ).toFixed(0)}
-                      %
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-zinc-500 dark:text-zinc-400 text-xs">
-                      Maturity
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      {Math.round(
-                        (currentQuote as any).lockupMonths ||
-                          ((currentQuote as any).lockupDays || 0) / 30
-                      )}{" "}
-                      months
-                    </span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
+                {!isLoadingHistory && (
                   <Button
-                    onClick={onAcceptOffer}
-                    className={`flex-1 !h-9 !px-3 !text-sm transition-all duration-300 !bg-orange-500 hover:!bg-orange-600 !text-white !border-orange-600 ${
-                      isOfferGlowing
-                        ? "shadow-lg shadow-orange-500/50 ring-2 ring-orange-400 animate-pulse"
-                        : ""
-                    }`}
-                    color="orange"
-                    title={`Accept Offer ${isOfferGlowing ? "(GLOWING)" : ""}`}
+                    onClick={onClearChat}
+                    className="!h-9 !px-3 !text-sm bg-red-500 dark:bg-red-500 rounded-lg"
                   >
-                    Accept Offer
+                    Reset
                   </Button>
-                  {!isLoadingHistory && (
-                    <Button
-                      onClick={onClearChat}
-                      className="!h-9 !px-3 !text-sm bg-red-500 dark:bg-red-500 rounded-lg"
-                    >
-                      Reset
-                    </Button>
-                  )}
-                </div>
+                )}
               </div>
-            </>
-          ) : (
-            !isLoadingHistory && (
-              <Button
-                onClick={onClearChat}
-                className="!h-9 !px-3 !text-sm bg-red-500 dark:bg-red-500 rounded-lg sm:hidden"
-              >
-                Reset
-              </Button>
-            )
-          )}
+            </div>
+          </>
+        ) : (
+          !isLoadingHistory && (
+            <Button
+              onClick={onClearChat}
+              className="!h-9 !px-3 !text-sm bg-red-500 dark:bg-red-500 rounded-lg sm:hidden"
+            >
+              Reset
+            </Button>
+          )
+        )}
         {!isLoadingHistory && (
           <Button
             onClick={onClearChat}
@@ -846,67 +861,71 @@ function ChatBody({
           setShowConnectOverlay(false);
         }}
       >
-        <div className="relative p-0 mx-auto">
-          <div className="flex flex-col items-center justify-center w-[min(640px,90vw)] mx-auto">
-            <div className="w-full rounded-2xl overflow-hidden bg-zinc-50 dark:bg-zinc-900 ring-1 ring-zinc-200 dark:ring-zinc-800 shadow-2xl mx-auto">
-              <div className="relative w-full">
-                <div className="relative aspect-[16/9] w-full bg-gradient-to-br from-zinc-900 to-zinc-800">
-                  <div
-                    aria-hidden
-                    className="absolute inset-0 opacity-30 bg-no-repeat bg-right-bottom"
-                    style={{
-                      backgroundImage: "url('/business.png')",
-                      backgroundSize: "contain",
-                    }}
-                  />
-                  <div className="relative z-10 h-full w-full flex flex-col items-center justify-center text-center px-6">
-                    <h2 className="text-2xl font-semibold text-white tracking-tight mb-2">
-                      Connect Wallet
-                    </h2>
-                    <p className="text-zinc-300 text-sm mb-4">
-                      Get discounted elizaOS tokens. Let&apos;s deal, anon.
-                    </p>
-                    <div className="inline-flex gap-2">
-                      <NetworkConnectButton className="!h-10 !px-4 !py-2 bg-orange-500 dark:bg-orange-500 rounded-lg">
-                        Connect
-                      </NetworkConnectButton>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      localStorage.setItem(
-                        "otc-desk-connect-overlay-seen",
-                        "1"
-                      );
+        <div className="w-full rounded-2xl overflow-hidden bg-zinc-50 dark:bg-zinc-900 ring-1 ring-zinc-200 dark:ring-zinc-800 shadow-2xl mx-auto">
+          <div className="relative w-full">
+            <div className="relative aspect-[16/9] w-full bg-gradient-to-br from-zinc-900 to-zinc-800">
+              <div
+                aria-hidden
+                className="absolute inset-0 opacity-30 bg-no-repeat bg-right-bottom"
+                style={{
+                  backgroundImage: "url('/business.png')",
+                  backgroundSize: "contain",
+                }}
+              />
+              <div className="relative z-10 h-full w-full flex flex-col items-center justify-center text-center px-6">
+                <h2 className="text-2xl font-semibold text-white tracking-tight mb-2">
+                  Connect Wallet
+                </h2>
+                <p className="text-zinc-300 text-sm mb-4">
+                  Get discounted elizaOS tokens. Let&apos;s deal, anon.
+                </p>
+                <div className="inline-flex gap-2">
+                  <NetworkConnectButton 
+                    className="!h-10 !px-4 !py-2 bg-orange-500 dark:bg-orange-500 rounded-lg"
+                    onBeforeOpen={() => {
+                      // Close this overlay before opening network selection
+                      localStorage.setItem("otc-desk-connect-overlay-seen", "1");
                       localStorage.setItem(
                         "otc-desk-connect-overlay-dismissed",
-                        "1"
+                        "1",
                       );
                       setShowConnectOverlay(false);
                     }}
-                    className="absolute top-2 right-2 rounded-full bg-white/10 text-white hover:bg-white/20 p-1"
-                    aria-label="Close"
                   >
-                    <svg
-                      className="h-5 w-5"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </button>
+                    Connect
+                  </NetworkConnectButton>
                 </div>
               </div>
-              <div className="p-4 text-xs text-zinc-600 dark:text-zinc-400">
-                You must connect a wallet to chat. Conversations are tied to
-                your address.
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.setItem("otc-desk-connect-overlay-seen", "1");
+                  localStorage.setItem(
+                    "otc-desk-connect-overlay-dismissed",
+                    "1",
+                  );
+                  setShowConnectOverlay(false);
+                }}
+                className="absolute top-2 right-2 rounded-full bg-white/10 text-white hover:bg-white/20 p-1"
+                aria-label="Close"
+              >
+                <svg
+                  className="h-5 w-5"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
             </div>
+          </div>
+          <div className="p-4 text-xs text-zinc-600 dark:text-zinc-400">
+            You must connect a wallet to chat. Conversations are tied to your
+            address.
           </div>
         </div>
       </Dialog>

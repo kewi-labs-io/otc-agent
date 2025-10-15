@@ -11,11 +11,11 @@ import {
   type Media,
   type Memory,
   type MessagePayload,
-  type MessageReceivedHandlerParams,
   ModelType,
   type Plugin,
   type UUID,
   type WorldPayload,
+  type HandlerCallback,
 } from "@elizaos/core";
 import { v4 } from "uuid";
 import { quoteAction } from "./actions/quote";
@@ -46,7 +46,7 @@ function extractResponseText(text: string): string | null {
     const fallbackMatch = text.match(/<(\w+)>([\s\S]*?)<\/\1>/);
     if (fallbackMatch && fallbackMatch[2] !== undefined) {
       logger.warn(
-        `Found <${fallbackMatch[1]}> tag instead of <response>. Using its content.`
+        `Found <${fallbackMatch[1]}> tag instead of <response>. Using its content.`,
       );
       const fallbackContent = fallbackMatch[2].trim();
       return fallbackContent || null; // Return null if content is empty after trimming
@@ -136,11 +136,11 @@ type MediaData = {
 // Helper functions for response ID tracking in serverless environment
 async function getLatestResponseId(
   runtime: IAgentRuntime,
-  roomId: string
+  roomId: string,
 ): Promise<string | null> {
   return (
     (await runtime.getCache<string>(
-      `response_id:${runtime.agentId}:${roomId}`
+      `response_id:${runtime.agentId}:${roomId}`,
     )) ?? null
   );
 }
@@ -148,7 +148,7 @@ async function getLatestResponseId(
 async function setLatestResponseId(
   runtime: IAgentRuntime,
   roomId: string,
-  responseId: string
+  responseId: string,
 ): Promise<void> {
   if (!responseId || typeof responseId !== "string") {
     console.error("[setLatestResponseId] Invalid responseId:", responseId);
@@ -164,7 +164,7 @@ async function setLatestResponseId(
 
 async function clearLatestResponseId(
   runtime: IAgentRuntime,
-  roomId: string
+  roomId: string,
 ): Promise<void> {
   const key = `response_id:${runtime.agentId}:${roomId}`;
   console.log("[clearLatestResponseId] Deleting cache key:", key);
@@ -183,7 +183,7 @@ async function clearLatestResponseId(
  * @returns {Promise<MediaData[]>} - A Promise that resolves with an array of MediaData objects.
  */
 export async function fetchMediaData(
-  attachments: Media[]
+  attachments: Media[],
 ): Promise<MediaData[]> {
   return Promise.all(
     attachments.map(async (attachment: Media) => {
@@ -204,9 +204,9 @@ export async function fetchMediaData(
       //   return { data: mediaBuffer, mediaType };
       // }
       throw new Error(
-        `File not found: ${attachment.url}. Make sure the path is correct.`
+        `File not found: ${attachment.url}. Make sure the path is correct.`,
       );
-    })
+    }),
   );
 }
 
@@ -220,12 +220,16 @@ const messageReceivedHandler = async ({
   runtime,
   message,
   callback,
-}: MessageReceivedHandlerParams): Promise<void> => {
+}: {
+  runtime: IAgentRuntime;
+  message: Memory;
+  callback: HandlerCallback;
+}): Promise<void> => {
   // Generate a new response ID
   const responseId = v4();
   console.log(
     "[MessageHandler] Generated response ID:",
-    responseId.substring(0, 8)
+    responseId.substring(0, 8),
   );
 
   // Set this as the latest response ID for this room (using runtime cache for serverless)
@@ -303,7 +307,7 @@ const messageReceivedHandler = async ({
       console.log("[MessageHandler] LLM response length:", response.length);
       console.log(
         "[MessageHandler] LLM response preview:",
-        response.substring(0, 500)
+        response.substring(0, 500),
       );
 
       // Attempt to parse the XML response
@@ -311,7 +315,7 @@ const messageReceivedHandler = async ({
 
       if (!extractedContent) {
         logger.warn(
-          "*** Missing required fields (thought or actions), retrying... ***"
+          "*** Missing required fields (thought or actions), retrying... ***",
         );
         responseContent = "";
       } else {
@@ -324,11 +328,11 @@ const messageReceivedHandler = async ({
     // Check if this is still the latest response ID for this room
     const currentResponseId = await getLatestResponseId(
       runtime,
-      message.roomId
+      message.roomId,
     );
     if (currentResponseId !== responseId) {
       logger.info(
-        `Response discarded - newer message being processed for agent: ${runtime.agentId}, room: ${message.roomId}`
+        `Response discarded - newer message being processed for agent: ${runtime.agentId}, room: ${message.roomId}`,
       );
       return;
     }
@@ -339,7 +343,7 @@ const messageReceivedHandler = async ({
     // Parse actions from response - support both XML tags and function-call syntax
     const xmlActionMatch = responseContent.match(/<action>(.*?)<\/action>/gi);
     const functionActionMatch = responseContent.match(
-      /\b(CREATE_OTC_QUOTE|ACCEPT_ELIZAOS_QUOTE|SHOW_ELIZAOS_HISTORY)\s*\(/gi
+      /\b(CREATE_OTC_QUOTE|ACCEPT_ELIZAOS_QUOTE|SHOW_ELIZAOS_HISTORY)\s*\(/gi,
     );
 
     const actionNames: string[] = [];
@@ -348,8 +352,8 @@ const messageReceivedHandler = async ({
     if (xmlActionMatch) {
       actionNames.push(
         ...xmlActionMatch.map((match) =>
-          match.replace(/<\/?action>/gi, "").trim()
-        )
+          match.replace(/<\/?action>/gi, "").trim(),
+        ),
       );
     }
 
@@ -357,8 +361,8 @@ const messageReceivedHandler = async ({
     if (functionActionMatch) {
       actionNames.push(
         ...functionActionMatch.map((match) =>
-          match.replace(/\s*\(.*/g, "").trim()
-        )
+          match.replace(/\s*\(.*/g, "").trim(),
+        ),
       );
     }
 
@@ -366,13 +370,13 @@ const messageReceivedHandler = async ({
     const quoteMatch = responseContent.match(/<quote>([\s\S]*?)<\/quote>/i);
     if (quoteMatch) {
       console.log(
-        "[MessageHandler] Detected <quote> XML in response, parsing and saving"
+        "[MessageHandler] Detected <quote> XML in response, parsing and saving",
       );
       // Simple regex-based parsing (server-side compatible)
       const quoteXml = quoteMatch[0];
       const getTag = (tag: string) => {
         const match = quoteXml.match(
-          new RegExp(`<${tag}>([^<]*)<\/${tag}>`, "i")
+          new RegExp(`<${tag}>([^<]*)<\/${tag}>`, "i"),
         );
         return match ? match[1].trim() : "";
       };
@@ -416,22 +420,32 @@ const messageReceivedHandler = async ({
         };
 
         await runtime.setCache(`quote:${quoteId}`, quoteData);
-        
+
         // Add to indexes
-        const allQuotes = (await runtime.getCache<string[]>("all_quotes")) ?? [];
+        const allQuotes =
+          (await runtime.getCache<string[]>("all_quotes")) ?? [];
         if (!allQuotes.includes(quoteId)) {
           allQuotes.push(quoteId);
           await runtime.setCache("all_quotes", allQuotes);
         }
-        
+
         const quoteEntityId = walletToEntityId(entityId);
-        const entityQuoteIds = (await runtime.getCache<string[]>(`entity_quotes:${quoteEntityId}`)) ?? [];
+        const entityQuoteIds =
+          (await runtime.getCache<string[]>(
+            `entity_quotes:${quoteEntityId}`,
+          )) ?? [];
         if (!entityQuoteIds.includes(quoteId)) {
           entityQuoteIds.push(quoteId);
-          await runtime.setCache(`entity_quotes:${quoteEntityId}`, entityQuoteIds);
+          await runtime.setCache(
+            `entity_quotes:${quoteEntityId}`,
+            entityQuoteIds,
+          );
         }
-        
-        console.log("[MessageHandler] Quote saved to cache and indexed:", quoteId);
+
+        console.log(
+          "[MessageHandler] Quote saved to cache and indexed:",
+          quoteId,
+        );
       }
     }
 
@@ -492,12 +506,12 @@ const messageReceivedHandler = async ({
             });
           }
           return [];
-        }
+        },
       );
     } else {
       // No actions - save and send the response
       console.log(
-        "[MessageHandler] No actions, saving response and calling callback"
+        "[MessageHandler] No actions, saving response and calling callback",
       );
       await runtime.createMemory(responseMemory, "messages");
       console.log("[MessageHandler] Response saved, sending to frontend");
@@ -546,11 +560,11 @@ const syncSingleUser = async (
   serverId: string,
   channelId: string,
   type: ChannelType,
-  source: string
+  source: string,
 ) => {
   const entity = await runtime.getEntityById(entityId);
   logger.info(
-    `Syncing user: ${(entity?.metadata?.[source] as any)?.username || entityId}`
+    `Syncing user: ${(entity?.metadata?.[source] as any)?.username || entityId}`,
   );
 
   // Ensure we're not using WORLD type and that we have a valid channelId
@@ -648,7 +662,7 @@ const handleServerSync = async ({
             type: firstRoomUserIsIn.type,
             worldId: world.id,
           });
-        })
+        }),
       );
 
       // Add a small delay between batches if not the last batch
@@ -659,7 +673,7 @@ const handleServerSync = async ({
   }
 
   logger.debug(
-    `Successfully synced standardized world structure for ${world.name}`
+    `Successfully synced standardized world structure for ${world.name}`,
   );
 };
 
@@ -685,7 +699,7 @@ const controlMessageHandler = async ({
   };
 }) => {
   logger.debug(
-    `[controlMessageHandler] Processing control message: ${message.payload.action} for room ${message.roomId}`
+    `[controlMessageHandler] Processing control message: ${message.payload.action} for room ${message.roomId}`,
   );
 
   // Here we would use a WebSocket service to send the control message to the frontend
@@ -696,7 +710,7 @@ const controlMessageHandler = async ({
   const websocketServiceName = serviceNames.find(
     (name: string) =>
       name.toLowerCase().includes("websocket") ||
-      name.toLowerCase().includes("socket")
+      name.toLowerCase().includes("socket"),
   );
 
   if (websocketServiceName) {
@@ -713,16 +727,16 @@ const controlMessageHandler = async ({
       });
 
       logger.debug(
-        `[controlMessageHandler] Control message ${message.payload.action} sent successfully`
+        `[controlMessageHandler] Control message ${message.payload.action} sent successfully`,
       );
     } else {
       logger.error(
-        "[controlMessageHandler] WebSocket service does not have sendMessage method"
+        "[controlMessageHandler] WebSocket service does not have sendMessage method",
       );
     }
   } else {
     logger.error(
-      "[controlMessageHandler] No WebSocket service found to send control message"
+      "[controlMessageHandler] No WebSocket service found to send control message",
     );
   }
 };
@@ -764,7 +778,7 @@ const events = {
       // Check for required fields
       if (!payload.worldId || !payload.metadata?.type || !payload.roomId) {
         logger.warn(
-          `Skipping entity sync - missing worldId, roomId, or metadata.type`
+          `Skipping entity sync - missing worldId, roomId, or metadata.type`,
         );
         return;
       }
@@ -780,7 +794,7 @@ const events = {
         serverId,
         channelId,
         channelType,
-        payload.source
+        payload.source,
       );
     },
   ],

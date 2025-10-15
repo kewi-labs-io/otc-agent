@@ -69,8 +69,10 @@ async function main() {
   // 4. Test new view functions
   console.log("\n🔧 Testing New View Functions:");
 
-  // Create a test offer to check payment calculation
-  const tx = await otc.createOffer(
+  // Create a test offer from consignment to check payment calculation
+  const consignmentId = 1; // First consignment from deployment
+  const tx = await otc.createOfferFromConsignment(
+    consignmentId,
     ethers.parseEther("1000"), // 1000 elizaOS
     500, // 5% discount
     0, // ETH payment
@@ -91,7 +93,8 @@ async function main() {
   );
 
   // Create USDC offer
-  const tx2 = await otc.createOffer(
+  const tx2 = await otc.createOfferFromConsignment(
+    consignmentId,
     ethers.parseEther("1000"),
     500,
     1, // USDC payment

@@ -1,7 +1,6 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import "@rainbow-me/rainbowkit/styles.css";
 
 .prose :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
   padding: 0 !important;
@@ -13,8 +12,4 @@
 
 .prose :where(p:last-child) {
   margin-bottom: 0 !important;
-}
-
-.wallet-adapter-button-trigger {
-  background-color: #ff8c00 !important;
 }

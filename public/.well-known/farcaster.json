@@ -1,0 +1,18 @@
+{
+  "accountAssociation": {
+    "header": "farcaster-domain-verification",
+    "payload": "eliza-otc-desk"
+  },
+  "frame": {
+    "version": "next",
+    "name": "Eliza OTC Desk",
+    "iconUrl": "https://yourapp.com/icon.png",
+    "homeUrl": "https://yourapp.com",
+    "imageUrl": "https://yourapp.com/opengraph-image.png",
+    "splashImageUrl": "https://yourapp.com/splash.png",
+    "splashBackgroundColor": "#000000",
+    "webhookUrl": "https://yourapp.com/api/webhook"
+  }
+}
+
+

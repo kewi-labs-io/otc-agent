@@ -22,11 +22,11 @@ export async function GET(request: NextRequest) {
   // Always require auth in production
   if (process.env.NODE_ENV === "production" && !CRON_SECRET) {
     console.error(
-      "[Reconciliation Cron] No CRON_SECRET configured in production"
+      "[Reconciliation Cron] No CRON_SECRET configured in production",
     );
     return NextResponse.json(
       { error: "Server configuration error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 

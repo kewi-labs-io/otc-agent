@@ -9,7 +9,6 @@ import clsx from "clsx";
 import Image from "next/image";
 import { memo, useState } from "react";
 
-import { CodeBlock } from "@/components/code-block";
 import { MemoizedMarkdown } from "@/components/memoized-markdown";
 import { Citation } from "@/types/chat";
 import { ChatMessage as ChatMessageType } from "@/types/chat-message";
@@ -49,9 +48,6 @@ export const ChatMessage = memo(function ChatMessage({
   const markdownOptions = {
     forceBlock: true,
     overrides: {
-      code: {
-        component: CodeBlock,
-      },
       // Hide embedded XML quote blocks so React doesn't attempt to render unknown tags
       quote: {
         component: () => null,

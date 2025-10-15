@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+
 import { Button } from "@/components/button";
 import { useMultiWallet } from "@/components/multiwallet";
+import { MyListingsTab } from "@/components/my-listings-tab";
 import {
   Table,
   TableBody,
@@ -11,12 +14,7 @@ import {
   TableRow,
 } from "@/components/table";
 import { useOTC } from "@/hooks/contracts/useOTC";
-import {
-  resumeFreshAuth
-} from "@/utils/x-share";
-import { useWallet } from "@solana/wallet-adapter-react";
-import { useEffect, useMemo, useState } from "react";
-import { useAccount } from "wagmi";
+import { resumeFreshAuth } from "@/utils/x-share";
 
 function formatDate(tsSeconds: bigint): string {
   const d = new Date(Number(tsSeconds) * 1000);
@@ -58,9 +56,7 @@ function getLockupLabel(createdAt: bigint, unlockTime: bigint): string {
 }
 
 export function MyDealsContent() {
-  const { isConnected, address } = useAccount();
-  const solWallet = useWallet();
-  const { activeFamily } = useMultiWallet();
+  const { activeFamily, evmAddress, solanaPublicKey, isConnected } = useMultiWallet();
   const {
     myOffers,
     claim,
@@ -69,94 +65,88 @@ export function MyDealsContent() {
     emergencyRefund,
     emergencyRefundsEnabled,
   } = useOTC();
+  const [activeTab, setActiveTab] = useState<"purchases" | "listings">(
+    "purchases",
+  );
   const [sortAsc, setSortAsc] = useState(true);
   const [refunding, setRefunding] = useState<bigint | null>(null);
   const [solanaDeals, setSolanaDeals] = useState<any[]>([]);
   const [evmDeals, setEvmDeals] = useState<any[]>([]);
+  const [myListings, setMyListings] = useState<any[]>([]);
 
-  // Fetch Solana deals from database
   useEffect(() => {
-    if (activeFamily === "solana" && solWallet.publicKey) {
-      const walletAddr = solWallet.publicKey.toString().toLowerCase();
-      console.log("[MyDeals] Fetching Solana deals for wallet:", walletAddr);
-      
-      fetch(`/api/deal-completion?wallet=${walletAddr}`)
-        .then((res) => res.json())
-        .then((data) => {
-          console.log("[MyDeals] API response:", data);
-          if (data.success && data.deals) {
-            console.log(
-              "[MyDeals] Loaded Solana deals from DB:",
-              data.deals.length,
-              data.deals
-            );
-            setSolanaDeals(data.deals);
-          } else {
-            console.log("[MyDeals] No deals returned or error:", data);
-            setSolanaDeals([]);
-          }
-        })
-        .catch((err) => {
-          console.error("[MyDeals] Failed to load Solana deals:", err);
-          setSolanaDeals([]);
-        });
-    } else if (activeFamily === "evm" && address) {
-      fetch(`/api/deal-completion?wallet=${address}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && data.deals) {
-            console.log(
-              "[MyDeals] Loaded EVM deals from DB:",
-              data.deals.length,
-              data.deals
-            );
-            setEvmDeals(data.deals);
-          } else {
-            setEvmDeals([]);
-          }
-        })
-        .catch((err) => {
-          console.error("[MyDeals] Failed to load EVM deals:", err);
-          setEvmDeals([]);
-        });
-    } else {
-      // Clear deals when wallet disconnects
+    const walletAddr =
+      activeFamily === "solana"
+        ? solanaPublicKey?.toLowerCase()
+        : evmAddress?.toLowerCase();
+
+    if (!walletAddr) {
       setSolanaDeals([]);
       setEvmDeals([]);
+      setMyListings([]);
+      return;
     }
-  }, [activeFamily, solWallet.publicKey, address]);
+
+    fetch(`/api/deal-completion?wallet=${walletAddr}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.deals) {
+          if (activeFamily === "solana") {
+            setSolanaDeals(data.deals);
+          } else {
+            setEvmDeals(data.deals);
+          }
+        }
+      });
+
+    fetch(`/api/consignments?consigner=${walletAddr}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setMyListings(data.consignments || []);
+        }
+      });
+  }, [activeFamily, solanaPublicKey, evmAddress]);
 
   const inProgress = useMemo(() => {
-    // For Solana, ALWAYS use database (never query contracts)
     if (activeFamily === "solana") {
       console.log(
         "[MyDeals] Using Solana deals from database:",
-        solanaDeals.length
+        solanaDeals.length,
       );
-      
+
       if (solanaDeals.length === 0) {
         console.log("[MyDeals] No Solana deals found");
         return [];
       }
-      
-      // Transform database deals to match offer structure
+
+      const solanaWalletAddress = solanaPublicKey?.toString() || "";
+
       return solanaDeals.map((deal: any) => {
-        const createdTs = deal.createdAt ? new Date(deal.createdAt).getTime() / 1000 : Date.now() / 1000;
-        const lockupDays = 180; // 6 months default for Solana
-        
+        const createdTs = deal.createdAt
+          ? new Date(deal.createdAt).getTime() / 1000
+          : Date.now() / 1000;
+        const lockupDays = 180;
+
         console.log("[MyDeals] Transforming deal:", {
           offerId: deal.offerId,
           tokenAmount: deal.tokenAmount,
           type: typeof deal.tokenAmount,
         });
-        
+
         const tokenAmountRaw = deal.tokenAmount || "0";
         const tokenAmountBigInt = BigInt(tokenAmountRaw) * BigInt(1e18);
-        console.log("[MyDeals] Token amount:", tokenAmountRaw, "→", tokenAmountBigInt.toString());
-        
+        console.log(
+          "[MyDeals] Token amount:",
+          tokenAmountRaw,
+          "→",
+          tokenAmountBigInt.toString(),
+        );
+
         return {
           id: BigInt(deal.offerId || "0"),
-          beneficiary: deal.beneficiary || solWallet.publicKey?.toString() || "",
+          beneficiary:
+            deal.beneficiary || solanaWalletAddress,
           // Use 18 decimals to match formatTokenAmount function (which divides by 1e18)
           tokenAmount: tokenAmountBigInt,
           discountBps: Number(deal.discountBps) || 1000,
@@ -164,12 +154,15 @@ export function MyDealsContent() {
           unlockTime: BigInt(Math.floor(createdTs + lockupDays * 86400)),
           priceUsdPerToken: BigInt(100_000_000), // $1.00
           ethUsdPrice: BigInt(10_000_000_000), // $100
-          currency: deal.paymentCurrency === "SOL" || deal.paymentCurrency === "ETH" ? 0 : 1,
+          currency:
+            deal.paymentCurrency === "SOL" || deal.paymentCurrency === "ETH"
+              ? 0
+              : 1,
           approved: true,
           paid: true,
           fulfilled: false,
           cancelled: false,
-          payer: deal.payer || solWallet.publicKey?.toString() || "",
+          payer: deal.payer || solanaWalletAddress,
           amountPaid: BigInt(deal.paymentAmount || "0"),
           quoteId: deal.quoteId, // Add quoteId for proper linking
         };
@@ -189,42 +182,50 @@ export function MyDealsContent() {
     for (const deal of evmDeals) {
       // Only show executed or approved deals (in-progress)
       if (deal.status !== "executed" && deal.status !== "approved") {
-        console.log(`[MyDeals] Skipping deal ${deal.quoteId} with status: ${deal.status}`);
+        console.log(
+          `[MyDeals] Skipping deal ${deal.quoteId} with status: ${deal.status}`,
+        );
         continue;
       }
 
       // Find matching contract offer for full data
-      const contractOffer = deal.offerId 
+      const contractOffer = deal.offerId
         ? offers.find((o) => o.id.toString() === deal.offerId)
         : undefined;
 
       if (contractOffer) {
         // We have both database and contract data - use contract structure with quoteId
-        console.log(`[MyDeals] Matched DB deal ${deal.quoteId} to contract offer ${deal.offerId}`);
-        
+        console.log(
+          `[MyDeals] Matched DB deal ${deal.quoteId} to contract offer ${deal.offerId}`,
+        );
+
         result.push({
           ...contractOffer,
           quoteId: deal.quoteId, // ✅ Add quoteId from database
         });
-        
+
         if (deal.offerId) {
           processedOfferIds.add(deal.offerId);
         }
       } else {
         // Database deal without matching contract offer (possibly old data or Solana)
         // Transform to match offer structure
-        console.log(`[MyDeals] Using DB-only deal ${deal.quoteId} (no contract match)`);
-        
-        const createdTs = deal.createdAt ? new Date(deal.createdAt).getTime() / 1000 : Date.now() / 1000;
+        console.log(
+          `[MyDeals] Using DB-only deal ${deal.quoteId} (no contract match)`,
+        );
+
+        const createdTs = deal.createdAt
+          ? new Date(deal.createdAt).getTime() / 1000
+          : Date.now() / 1000;
         const lockupDays = deal.lockupMonths ? deal.lockupMonths * 30 : 150;
         const tokenAmountRaw = deal.tokenAmount || "0";
         // Database stores plain number (e.g. "1000"), need to convert to wei for display
         // formatTokenAmount() divides by 1e18, so we multiply here
         const tokenAmountBigInt = BigInt(tokenAmountRaw) * BigInt(1e18);
-        
+
         result.push({
           id: BigInt(deal.offerId || "0"),
-          beneficiary: deal.beneficiary || address || "",
+          beneficiary: deal.beneficiary || evmAddress || "",
           tokenAmount: tokenAmountBigInt,
           discountBps: BigInt(deal.discountBps || 1000),
           createdAt: BigInt(Math.floor(createdTs)),
@@ -236,7 +237,7 @@ export function MyDealsContent() {
           paid: true,
           fulfilled: false,
           cancelled: false,
-          payer: address || "",
+          payer: evmAddress || "",
           amountPaid: BigInt(0),
           quoteId: deal.quoteId, // ✅ quoteId from database
         });
@@ -265,23 +266,34 @@ export function MyDealsContent() {
         hasTokenAmount,
       });
 
-      return hasValidId && hasTokenAmount && isPaid && !isFulfilled && !isCancelled;
+      return (
+        hasValidId && hasTokenAmount && isPaid && !isFulfilled && !isCancelled
+      );
     });
 
     // Add contract-only offers (these won't have quoteId, will use fallback)
-    result.push(...filteredContractOnly.map(o => ({
-      ...o,
-      quoteId: undefined, // No quoteId - will use API fallback
-    })));
+    result.push(
+      ...filteredContractOnly.map((o) => ({
+        ...o,
+        quoteId: undefined, // No quoteId - will use API fallback
+      })),
+    );
 
     console.log("[MyDeals] Final combined deals:", {
-      fromDatabase: result.filter(r => r.quoteId).length,
-      fromContractOnly: result.filter(r => !r.quoteId).length,
+      fromDatabase: result.filter((r) => r.quoteId).length,
+      fromContractOnly: result.filter((r) => !r.quoteId).length,
       total: result.length,
     });
 
     return result;
-  }, [myOffers, activeFamily, solanaDeals, evmDeals, solWallet.publicKey, address]);
+  }, [
+    myOffers,
+    activeFamily,
+    solanaDeals,
+    evmDeals,
+    solanaPublicKey,
+    evmAddress,
+  ]);
 
   const sorted = useMemo(() => {
     const list = [...inProgress];
@@ -311,9 +323,8 @@ export function MyDealsContent() {
     })();
   }, []);
 
-  // Check if either EVM or Solana wallet is connected
-  const hasWallet = isConnected || solWallet.connected;
-  
+  const hasWallet = isConnected;
+
   if (!hasWallet) {
     return (
       <main className="flex-1 min-h-[70vh] flex items-center justify-center">
@@ -335,7 +346,32 @@ export function MyDealsContent() {
             <h1 className="text-2xl font-semibold">My Deals</h1>
           </div>
 
-          {isLoading ? (
+          <div className="flex gap-4 border-b border-zinc-200 dark:border-zinc-800">
+            <button
+              onClick={() => setActiveTab("purchases")}
+              className={`px-4 py-2 font-medium transition-colors ${
+                activeTab === "purchases"
+                  ? "text-emerald-600 border-b-2 border-emerald-600"
+                  : "text-zinc-600 dark:text-zinc-400"
+              }`}
+            >
+              My Purchases
+            </button>
+            <button
+              onClick={() => setActiveTab("listings")}
+              className={`px-4 py-2 font-medium transition-colors ${
+                activeTab === "listings"
+                  ? "text-emerald-600 border-b-2 border-emerald-600"
+                  : "text-zinc-600 dark:text-zinc-400"
+              }`}
+            >
+              My Listings
+            </button>
+          </div>
+
+          {activeTab === "listings" ? (
+            <MyListingsTab listings={myListings} />
+          ) : isLoading ? (
             <div className="text-zinc-600 dark:text-zinc-400">
               Loading deals…
             </div>
@@ -378,7 +414,7 @@ export function MyDealsContent() {
               </div>
 
               <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden px-4 sm:px-6">
-                <Table striped bleed>
+                <Table>
                   <TableHead>
                     <TableRow>
                       <TableHeader>Amount (elizaOS)</TableHeader>
@@ -406,7 +442,10 @@ export function MyDealsContent() {
                       const discountPct = Number(o.discountBps ?? 0n) / 100;
                       const lockup = getLockupLabel(o.createdAt, o.unlockTime);
                       // Use quoteId if available (Solana), otherwise offerId
-                      const uniqueKey = (o as any).quoteId || o.id.toString() || `deal-${index}`;
+                      const uniqueKey =
+                        (o as any).quoteId ||
+                        o.id.toString() ||
+                        `deal-${index}`;
                       return (
                         <TableRow key={uniqueKey}>
                           <TableCell>
@@ -444,24 +483,31 @@ export function MyDealsContent() {
                                     window.location.href = `/deal/${o.quoteId}`;
                                     return;
                                   }
-                                  
+
                                   // Fallback: lookup quoteId by offerId (for old data without proper linking)
-                                  console.log("[MyDeals] No quoteId, looking up by offerId:", o.id?.toString());
-                                  
-                                    const response = await fetch(`/api/quote/by-offer/${o.id}`);
-                                    if (response.redirected) {
-                                      window.location.href = response.url;
-                                    } else if (response.ok) {
-                                      // Handle JSON response with quoteId
-                                      const data = await response.json();
-                                      if (data.quoteId) {
-                                        window.location.href = `/deal/${data.quoteId}`;
-                                      } else {
-                                        throw new Error("No quoteId in response");
-                                      }
+                                  console.log(
+                                    "[MyDeals] No quoteId, looking up by offerId:",
+                                    o.id?.toString(),
+                                  );
+
+                                  const response = await fetch(
+                                    `/api/quote/by-offer/${o.id}`,
+                                  );
+                                  if (response.redirected) {
+                                    window.location.href = response.url;
+                                  } else if (response.ok) {
+                                    // Handle JSON response with quoteId
+                                    const data = await response.json();
+                                    if (data.quoteId) {
+                                      window.location.href = `/deal/${data.quoteId}`;
                                     } else {
-                                      throw new Error(`Failed to lookup quote: ${response.status}`);
+                                      throw new Error("No quoteId in response");
                                     }
+                                  } else {
+                                    throw new Error(
+                                      `Failed to lookup quote: ${response.status}`,
+                                    );
+                                  }
                                 }}
                                 className="!px-4 !py-2"
                               >
@@ -495,14 +541,14 @@ export function MyDealsContent() {
 
                                     if (daysSinceCreation < 90) {
                                       alert(
-                                        `Emergency refund available in ${Math.ceil(90 - daysSinceCreation)} days`
+                                        `Emergency refund available in ${Math.ceil(90 - daysSinceCreation)} days`,
                                       );
                                       return;
                                     }
 
                                     if (
                                       confirm(
-                                        "Request emergency refund? This will cancel the deal and return your payment."
+                                        "Request emergency refund? This will cancel the deal and return your payment.",
                                       )
                                     ) {
                                       setRefunding(o.id);

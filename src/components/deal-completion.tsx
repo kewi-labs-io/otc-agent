@@ -59,7 +59,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
       quote.tokenAmount === "0"
     ) {
       console.log(
-        "[DealCompletion] Skipping POST - quote already executed or has no data"
+        "[DealCompletion] Skipping POST - quote already executed or has no data",
       );
       return;
     }
@@ -82,7 +82,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
     if (!response.ok) {
       console.error(
         "[DealCompletion] Failed to record:",
-        await response.text()
+        await response.text(),
       );
       // Don't throw - this is not critical, just logging
     }

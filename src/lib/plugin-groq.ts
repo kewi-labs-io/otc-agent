@@ -64,7 +64,6 @@ async function detokenizeText(model: ModelTypeName, tokens: number[]) {
   return encoding.decode(tokens);
 }
 
-
 /**
  * Generate text using Groq API
  */
@@ -263,7 +262,9 @@ export const groqPlugin: Plugin = {
               `Models Available: ${(data as { data: unknown[] })?.data?.length}`,
             );
             if (!response.ok) {
-              throw new Error(`Failed to validate Groq API key: ${response.statusText}`);
+              throw new Error(
+                `Failed to validate Groq API key: ${response.statusText}`,
+              );
             }
           },
         },
@@ -313,7 +314,9 @@ export const groqPlugin: Plugin = {
               "https://upload.wikimedia.org/wikipedia/en/4/40/Chris_Benoit_Voice_Message.ogg",
             );
             if (!response.ok) {
-              throw new Error(`Failed to fetch audio sample: ${response.statusText}`);
+              throw new Error(
+                `Failed to fetch audio sample: ${response.statusText}`,
+              );
             }
             const arrayBuffer = await response.arrayBuffer();
             const transcription = await runtime.useModel(
@@ -332,7 +335,9 @@ export const groqPlugin: Plugin = {
               { prompt },
             );
             if (!Array.isArray(tokens) || tokens.length === 0) {
-              throw new Error("Failed to tokenize text: expected non-empty array of tokens");
+              throw new Error(
+                "Failed to tokenize text: expected non-empty array of tokens",
+              );
             }
             logger.log(`Tokenized output: ${JSON.stringify(tokens)}`);
           },
@@ -354,7 +359,9 @@ export const groqPlugin: Plugin = {
               },
             );
             if (decodedText !== prompt) {
-              throw new Error(`Decoded text does not match original. Expected "${prompt}", got "${decodedText}"`);
+              throw new Error(
+                `Decoded text does not match original. Expected "${prompt}", got "${decodedText}"`,
+              );
             }
             logger.log(`Decoded text: ${decodedText}`);
           },

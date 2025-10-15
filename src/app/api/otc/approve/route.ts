@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
   const resolveOtcAddress = async (): Promise<Address> => {
     const envAddr = process.env.NEXT_PUBLIC_OTC_ADDRESS as Address | undefined;
     if (envAddr) return envAddr;
-    
+
     const deployed = path.join(
       process.cwd(),
       "contracts/ignition/deployments/chain-31337/deployed_addresses.json",
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
   let offerId: string | number | bigint;
   let chainType: string | undefined;
   let offerAddress: string | undefined;
-  
+
   if (contentType.includes("application/json")) {
     const body = await request.json();
     offerId = body.offerId;
@@ -83,26 +83,33 @@ export async function POST(request: NextRequest) {
   // Handle Solana approval
   if (chainType === "solana") {
     if (!offerAddress) throw new Error("offerAddress required for Solana");
-    console.log("[Approve API] Processing Solana approval for offer:", offerAddress);
-    
+    console.log(
+      "[Approve API] Processing Solana approval for offer:",
+      offerAddress,
+    );
+
     // Import Anchor and Solana libs dynamically
     const anchor = await import("@coral-xyz/anchor");
     const { Connection, PublicKey, Keypair } = await import("@solana/web3.js");
-    
-    const SOLANA_RPC = process.env.NEXT_PUBLIC_SOLANA_RPC || "http://127.0.0.1:8899";
+
+    const SOLANA_RPC =
+      process.env.NEXT_PUBLIC_SOLANA_RPC || "http://127.0.0.1:8899";
     const SOLANA_DESK = process.env.NEXT_PUBLIC_SOLANA_DESK;
-    
+
     if (!SOLANA_DESK) throw new Error("SOLANA_DESK not configured");
-    
+
     const connection = new Connection(SOLANA_RPC, "confirmed");
-    
+
     // Load owner/approver keypair from id.json
-    const idlPath = path.join(process.cwd(), "solana/otc-program/target/idl/otc.json");
+    const idlPath = path.join(
+      process.cwd(),
+      "solana/otc-program/target/idl/otc.json",
+    );
     const keypairPath = path.join(process.cwd(), "solana/otc-program/id.json");
     const idl = JSON.parse(await fs.readFile(idlPath, "utf8"));
     const keypairData = JSON.parse(await fs.readFile(keypairPath, "utf8"));
     const approverKeypair = Keypair.fromSecretKey(Uint8Array.from(keypairData));
-    
+
     // Create provider with the approver keypair
     const wallet = {
       publicKey: approverKeypair.publicKey,
@@ -111,95 +118,107 @@ export async function POST(request: NextRequest) {
         return tx;
       },
       signAllTransactions: async (txs: any[]) => {
-        txs.forEach(tx => tx.partialSign(approverKeypair));
+        txs.forEach((tx) => tx.partialSign(approverKeypair));
         return txs;
       },
     };
-    
-    const provider = new anchor.AnchorProvider(
-      connection,
-      wallet as any,
-      { commitment: "confirmed" }
-    );
+
+    const provider = new anchor.AnchorProvider(connection, wallet as any, {
+      commitment: "confirmed",
+    });
     anchor.setProvider(provider);
-    
+
     const program = new (anchor as any).Program(idl, provider);
-    
+
     // Approve the offer
     const desk = new PublicKey(SOLANA_DESK);
     const offer = new PublicKey(offerAddress);
-    
-        const approveTx = await program.methods
-          .approveOffer(new (anchor as any).BN(offerId))
-          .accounts({
-            desk,
-            offer,
-            approver: approverKeypair.publicKey,
-          })
-          .signers([approverKeypair])
-          .rpc();
-        
-        console.log("[Approve API] ✅ Solana offer approved:", approveTx);
-        
-        // Fetch offer to get payment details
-        const offerData = await program.account.offer.fetch(offer);
-        
-        // Auto-fulfill (backend pays)
-        console.log("[Approve API] Auto-fulfilling Solana offer...");
-        
-        const { getAssociatedTokenAddress } = await import("@solana/spl-token");
-        const deskData = await program.account.desk.fetch(desk);
-        const tokenMint = new PublicKey(deskData.tokenMint);
-        const deskTokenTreasury = await getAssociatedTokenAddress(tokenMint, desk, true);
-        
-        let fulfillTx: string;
-        
-        if (offerData.currency === 0) {
-          // Pay with SOL
-          fulfillTx = await program.methods
-            .fulfillOfferSol(new (anchor as any).BN(offerId))
-            .accounts({
-              desk,
-              offer,
-              deskTokenTreasury,
-              payer: approverKeypair.publicKey,
-              systemProgram: new PublicKey("11111111111111111111111111111111"),
-            })
-            .signers([approverKeypair])
-            .rpc();
-          console.log("[Approve API] ✅ Paid with SOL:", fulfillTx);
-        } else {
-          // Pay with USDC
-          const usdcMint = new PublicKey(deskData.usdcMint);
-          const deskUsdcTreasury = await getAssociatedTokenAddress(usdcMint, desk, true);
-          const payerUsdcAta = await getAssociatedTokenAddress(usdcMint, approverKeypair.publicKey, false);
-          
-          fulfillTx = await program.methods
-            .fulfillOfferUsdc(new (anchor as any).BN(offerId))
-            .accounts({
-              desk,
-              offer,
-              deskTokenTreasury,
-              deskUsdcTreasury,
-              payerUsdcAta,
-              payer: approverKeypair.publicKey,
-              tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
-              systemProgram: new PublicKey("11111111111111111111111111111111"),
-            })
-            .signers([approverKeypair])
-            .rpc();
-          console.log("[Approve API] ✅ Paid with USDC:", fulfillTx);
-        }
-        
-        return NextResponse.json({
-          success: true,
-          approved: true,
-          autoFulfilled: true,
-          chain: "solana",
-          offerAddress,
-          approvalTx: approveTx,
-          fulfillTx,
-        });
+
+    const approveTx = await program.methods
+      .approveOffer(new (anchor as any).BN(offerId))
+      .accounts({
+        desk,
+        offer,
+        approver: approverKeypair.publicKey,
+      })
+      .signers([approverKeypair])
+      .rpc();
+
+    console.log("[Approve API] ✅ Solana offer approved:", approveTx);
+
+    // Fetch offer to get payment details
+    const offerData = await program.account.offer.fetch(offer);
+
+    // Auto-fulfill (backend pays)
+    console.log("[Approve API] Auto-fulfilling Solana offer...");
+
+    const { getAssociatedTokenAddress } = await import("@solana/spl-token");
+    const deskData = await program.account.desk.fetch(desk);
+    const tokenMint = new PublicKey(deskData.tokenMint);
+    const deskTokenTreasury = await getAssociatedTokenAddress(
+      tokenMint,
+      desk,
+      true,
+    );
+
+    let fulfillTx: string;
+
+    if (offerData.currency === 0) {
+      // Pay with SOL
+      fulfillTx = await program.methods
+        .fulfillOfferSol(new (anchor as any).BN(offerId))
+        .accounts({
+          desk,
+          offer,
+          deskTokenTreasury,
+          payer: approverKeypair.publicKey,
+          systemProgram: new PublicKey("11111111111111111111111111111111"),
+        })
+        .signers([approverKeypair])
+        .rpc();
+      console.log("[Approve API] ✅ Paid with SOL:", fulfillTx);
+    } else {
+      // Pay with USDC
+      const usdcMint = new PublicKey(deskData.usdcMint);
+      const deskUsdcTreasury = await getAssociatedTokenAddress(
+        usdcMint,
+        desk,
+        true,
+      );
+      const payerUsdcAta = await getAssociatedTokenAddress(
+        usdcMint,
+        approverKeypair.publicKey,
+        false,
+      );
+
+      fulfillTx = await program.methods
+        .fulfillOfferUsdc(new (anchor as any).BN(offerId))
+        .accounts({
+          desk,
+          offer,
+          deskTokenTreasury,
+          deskUsdcTreasury,
+          payerUsdcAta,
+          payer: approverKeypair.publicKey,
+          tokenProgram: new PublicKey(
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          ),
+          systemProgram: new PublicKey("11111111111111111111111111111111"),
+        })
+        .signers([approverKeypair])
+        .rpc();
+      console.log("[Approve API] ✅ Paid with USDC:", fulfillTx);
+    }
+
+    return NextResponse.json({
+      success: true,
+      approved: true,
+      autoFulfilled: true,
+      chain: "solana",
+      offerAddress,
+      approvalTx: approveTx,
+      fulfillTx,
+    });
   }
 
   const chain = getChain();
@@ -210,7 +229,7 @@ export async function POST(request: NextRequest) {
   let account: any;
   let walletClient: any;
   let approverAddr: Address;
-  
+
   if (APPROVER_PRIVATE_KEY) {
     account = privateKeyToAccount(APPROVER_PRIVATE_KEY);
     walletClient = createWalletClient({
@@ -227,7 +246,7 @@ export async function POST(request: NextRequest) {
     const raw = await fs.readFile(deploymentInfoPath, "utf8");
     const json = JSON.parse(raw);
     const testPk = json.testWalletPrivateKey as `0x${string}` | undefined;
-    
+
     if (testPk && /^0x[0-9a-fA-F]{64}$/.test(testPk)) {
       account = privateKeyToAccount(testPk);
       walletClient = createWalletClient({
@@ -238,12 +257,12 @@ export async function POST(request: NextRequest) {
       approverAddr = account.address;
       console.log(
         "[Approve API] Using testWalletPrivateKey from deployment for approvals",
-        { address: approverAddr }
+        { address: approverAddr },
       );
     } else {
       approverAddr = json.accounts.approver as Address;
       if (!approverAddr) throw new Error("approver address not found");
-      
+
       // Impersonate approver on hardhat
       await fetch("http://127.0.0.1:8545", {
         method: "POST",
@@ -340,7 +359,7 @@ export async function POST(request: NextRequest) {
 
   // Approve immediately
   const accountAddr = (account.address || account) as Address;
-  
+
   console.log("[Approve API] Simulating approval...", {
     offerId,
     account: accountAddr,
@@ -369,12 +388,7 @@ export async function POST(request: NextRequest) {
     gasUsed: approvalReceipt.gasUsed?.toString(),
   });
 
-  console.log(
-    "[Approve API] ✅ Offer approved:",
-    offerId,
-    "tx:",
-    txHash,
-  );
+  console.log("[Approve API] ✅ Offer approved:", offerId, "tx:", txHash);
 
   // Update quote status and financial data if we can find it
   const runtime = await agentRuntime.getRuntime();
@@ -392,23 +406,24 @@ export async function POST(request: NextRequest) {
       const tokenAmountWei = BigInt(offer.tokenAmount);
       const priceUsd8 = BigInt(offer.priceUsdPerToken);
       const discountBpsNum = Number(offer.discountBps);
-      
+
       // totalUsd = (tokenAmount * priceUsdPerToken) / 1e18 (result in 8 decimals)
       const totalUsd8 = (tokenAmountWei * priceUsd8) / BigInt(1e18);
       const totalUsd = Number(totalUsd8) / 1e8;
-      
+
       // discountUsd = totalUsd * discountBps / 10000
       const discountUsd8 = (totalUsd8 * BigInt(discountBpsNum)) / 10000n;
       const discountUsd = Number(discountUsd8) / 1e8;
-      
+
       // discountedUsd = totalUsd - discountUsd
       const discountedUsd8 = totalUsd8 - discountUsd8;
       const discountedUsd = Number(discountedUsd8) / 1e8;
-      
+
       // Determine payment currency and amount based on offer currency
-      const paymentCurrency: "ETH" | "USDC" = offer.currency === 0 ? "ETH" : "USDC";
+      const paymentCurrency: "ETH" | "USDC" =
+        offer.currency === 0 ? "ETH" : "USDC";
       let paymentAmount = "0";
-      
+
       if (offer.currency === 0) {
         // Calculate required ETH
         const ethPrice = Number(offer.ethUsdPrice) / 1e8;
@@ -417,7 +432,7 @@ export async function POST(request: NextRequest) {
         // USDC
         paymentAmount = discountedUsd.toFixed(2);
       }
-      
+
       console.log("[Approve API] Calculated financial data:", {
         tokenAmount: offer.tokenAmount.toString(),
         totalUsd,
@@ -426,22 +441,20 @@ export async function POST(request: NextRequest) {
         paymentAmount,
         paymentCurrency,
       });
-      
+
       // Update quote status
-      await quoteService.updateQuoteStatus(
-        matchingQuote.quoteId,
-        "approved",
-        {
-          offerId: String(offerId),
-          transactionHash: txHash,
-          blockNumber: Number(approvalReceipt.blockNumber),
-          rejectionReason: "",
-          approvalNote: "Approved via API",
-        },
-      );
-      
+      await quoteService.updateQuoteStatus(matchingQuote.quoteId, "approved", {
+        offerId: String(offerId),
+        transactionHash: txHash,
+        blockNumber: Number(approvalReceipt.blockNumber),
+        rejectionReason: "",
+        approvalNote: "Approved via API",
+      });
+
       // Update quote with financial data from contract
-      const updatedQuote = await quoteService.getQuoteByQuoteId(matchingQuote.quoteId);
+      const updatedQuote = await quoteService.getQuoteByQuoteId(
+        matchingQuote.quoteId,
+      );
       updatedQuote.tokenAmount = offer.tokenAmount.toString();
       updatedQuote.totalUsd = totalUsd;
       updatedQuote.discountUsd = discountUsd;
@@ -449,9 +462,9 @@ export async function POST(request: NextRequest) {
       updatedQuote.paymentAmount = paymentAmount;
       updatedQuote.paymentCurrency = paymentCurrency;
       updatedQuote.discountBps = discountBpsNum;
-      
+
       await runtime.setCache(`quote:${matchingQuote.quoteId}`, updatedQuote);
-      
+
       console.log(
         "[Approve API] Updated quote with financial data:",
         matchingQuote.quoteId,
@@ -483,7 +496,7 @@ export async function POST(request: NextRequest) {
 
     for (const addr of candidates) {
       console.log("[Approve API] Attempting secondary approval by", addr);
-      
+
       await fetch("http://127.0.0.1:8545", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -494,7 +507,7 @@ export async function POST(request: NextRequest) {
           id: 1,
         }),
       });
-      
+
       const { request: req2 } = await publicClient.simulateContract({
         address: OTC_ADDRESS,
         abi,
@@ -506,7 +519,7 @@ export async function POST(request: NextRequest) {
         chain,
         transport: http(),
       }).writeContract({ ...req2, account: addr });
-      
+
       // Re-read state after each attempt
       approvedOfferRaw = (await publicClient.readContract({
         address: OTC_ADDRESS,
@@ -540,10 +553,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (approvedOffer.cancelled) {
-    return NextResponse.json(
-      { error: "Offer is cancelled" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Offer is cancelled" }, { status: 400 });
   }
 
   if (!approvedOffer.approved) {
@@ -558,7 +568,10 @@ export async function POST(request: NextRequest) {
     args: [],
   } as any)) as boolean;
 
-  console.log("[Approve API] requireApproverToFulfill:", requireApproverToFulfill);
+  console.log(
+    "[Approve API] requireApproverToFulfill:",
+    requireApproverToFulfill,
+  );
 
   let fulfillTxHash: `0x${string}` | undefined;
 
@@ -567,11 +580,11 @@ export async function POST(request: NextRequest) {
     console.log("[Approve API] Auto-fulfilling offer (approver-only mode)...");
 
     const accountAddr = (account.address || account) as Address;
-    
+
     // Calculate required payment
     const currency = approvedOffer.currency;
     let valueWei: bigint | undefined;
-    
+
     if (currency === 0) {
       // ETH payment required
       const requiredEth = (await publicClient.readContract({
@@ -580,7 +593,7 @@ export async function POST(request: NextRequest) {
         functionName: "requiredEthWei",
         args: [BigInt(offerId)],
       } as any)) as bigint;
-      
+
       valueWei = requiredEth;
       console.log("[Approve API] Required ETH:", requiredEth.toString());
     } else {
@@ -591,16 +604,16 @@ export async function POST(request: NextRequest) {
         functionName: "usdc",
         args: [],
       } as any)) as Address;
-      
+
       const requiredUsdc = (await publicClient.readContract({
         address: OTC_ADDRESS,
         abi,
         functionName: "requiredUsdcAmount",
         args: [BigInt(offerId)],
       } as any)) as bigint;
-      
+
       console.log("[Approve API] Required USDC:", requiredUsdc.toString());
-      
+
       // Approve USDC
       const erc20Abi = [
         {
@@ -614,7 +627,7 @@ export async function POST(request: NextRequest) {
           outputs: [{ name: "", type: "bool" }],
         },
       ] as Abi;
-      
+
       const { request: approveUsdcReq } = await publicClient.simulateContract({
         address: usdcAddress,
         abi: erc20Abi,
@@ -622,11 +635,11 @@ export async function POST(request: NextRequest) {
         args: [OTC_ADDRESS, requiredUsdc],
         account: accountAddr,
       });
-      
+
       await walletClient.writeContract(approveUsdcReq);
       console.log("[Approve API] USDC approved");
     }
-    
+
     // Fulfill offer
     const { request: fulfillReq } = await publicClient.simulateContract({
       address: OTC_ADDRESS,
@@ -636,10 +649,10 @@ export async function POST(request: NextRequest) {
       account: accountAddr,
       value: valueWei,
     });
-    
+
     fulfillTxHash = await walletClient.writeContract(fulfillReq);
     console.log("[Approve API] Fulfill tx sent:", fulfillTxHash);
-    
+
     await publicClient.waitForTransactionReceipt({ hash: fulfillTxHash });
     console.log("[Approve API] ✅ Offer fulfilled automatically");
   } else {
@@ -656,7 +669,7 @@ export async function POST(request: NextRequest) {
     fulfillTx: fulfillTxHash,
     offerId: String(offerId),
     autoFulfilled: Boolean(fulfillTxHash),
-    message: fulfillTxHash 
+    message: fulfillTxHash
       ? "Offer approved and fulfilled automatically"
       : "Offer approved. Please complete payment to fulfill the offer.",
   });

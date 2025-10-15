@@ -3,7 +3,9 @@
 echo "🔨 Starting Hardhat Node for MetaMask/Rabby..."
 echo ""
 
-cd /Users/shawwalters/eliza-nextjs-starter/contracts
+# Get project root (script is in scripts/ subdirectory)
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$PROJECT_ROOT/contracts"
 
 # Kill any existing Hardhat processes
 pkill -9 -f "hardhat node" 2>/dev/null || true

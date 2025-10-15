@@ -14,10 +14,6 @@ On January 28, 2025, due to confusion with the established VC firm Andreessen 
 The DAO token continued to trade under the ticker AI16Z, until the rebrand. The rebrand was positioned as a step toward broader collaboration and expansion under a distinct identity. 
 elizaOS is an open source platform for building, deploying, and managing autonomous AI agents. It's available at https://github.com/elizaos/eliza or https://elizaos.ai`;
 
-    return {
-      data: [],
-      values: [],
-      text,
-    };
+    return { text };
   },
 };

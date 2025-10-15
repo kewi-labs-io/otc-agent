@@ -60,8 +60,11 @@ async function main() {
   // Create a stuck deal scenario
   console.log("\n1️⃣ Creating Stuck Deal Scenario...");
 
-  // Create offer with long lockup
-  const tx1 = await otc.connect(user).createOffer(
+  const consignmentId = 1; // First consignment from deployment
+
+  // Create offer with long lockup from consignment
+  const tx1 = await otc.connect(user).createOfferFromConsignment(
+    consignmentId,
     ethers.parseEther("5000"), // 5000 elizaOS
     1000, // 10% discount
     1, // USDC payment
@@ -182,8 +185,9 @@ async function main() {
     currentBlock2.timestamp
   );
 
-  // Create another stuck deal
-  const tx3 = await otc.connect(user).createOffer(
+  // Create another stuck deal from consignment
+  const tx3 = await otc.connect(user).createOfferFromConsignment(
+    consignmentId,
     ethers.parseEther("1000"),
     0,
     1,
@@ -250,9 +254,9 @@ async function main() {
     currentBlock3.timestamp
   );
 
-  // Create some expired offers
+  // Create some expired offers from consignment
   for (let i = 0; i < 5; i++) {
-    await otc.connect(user).createOffer(ethers.parseEther("100"), 0, 1, 0);
+    await otc.connect(user).createOfferFromConsignment(consignmentId, ethers.parseEther("100"), 0, 1, 0);
   }
 
   const beforeCleanup = await otc.getOpenOfferIds();

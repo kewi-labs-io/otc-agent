@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     console.error("[Cron API] No CRON_SECRET configured in production");
     return NextResponse.json(
       { error: "Server configuration error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
   if (!OTC_ADDRESS) {
     return NextResponse.json(
       { error: "Missing configuration" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
           maturedOffers: result.maturedOffers,
           message: "Found matured offers but cannot claim without approver key",
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 

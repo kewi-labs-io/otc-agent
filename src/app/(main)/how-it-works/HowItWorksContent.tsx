@@ -5,17 +5,13 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useMultiWallet } from "@/components/multiwallet";
 import { useState, useCallback } from "react";
-import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { Dialog, DialogBody, DialogTitle } from "@/components/dialog";
 import { BaseLogo, SolanaLogo } from "@/components/icons/index";
 
 export default function HowItWorksContent() {
   const router = useRouter();
-  const { isConnected, setActiveFamily } = useMultiWallet();
+  const { isConnected, setActiveFamily, login } = useMultiWallet();
   const [showNetworkModal, setShowNetworkModal] = useState(false);
-  const { openConnectModal } = useConnectModal();
-  const { setVisible } = useWalletModal();
 
   const handleConnectWallet = useCallback(() => {
     if (!isConnected) {
@@ -36,14 +32,16 @@ export default function HowItWorksContent() {
   const onChooseEvm = useCallback(() => {
     setActiveFamily("evm");
     setShowNetworkModal(false);
-    openConnectModal?.();
-  }, [openConnectModal, setActiveFamily]);
+    // Privy handles EVM wallet connection
+    login();
+  }, [login, setActiveFamily]);
 
   const onChooseSolana = useCallback(() => {
     setActiveFamily("solana");
     setShowNetworkModal(false);
-    setVisible(true);
-  }, [setActiveFamily, setVisible]);
+    // Privy handles Solana wallet connection
+    login();
+  }, [setActiveFamily, login]);
 
   return (
     <div className="relative flex flex-col px-4 sm:px-6 py-10 h-screen">
@@ -133,7 +131,9 @@ export default function HowItWorksContent() {
       {/* Network selection modal */}
       <Dialog open={showNetworkModal} onClose={setShowNetworkModal} size="lg">
         <div className="p-6">
-          <DialogTitle className="text-center mb-2">Choose a network</DialogTitle>
+          <DialogTitle className="text-center mb-2">
+            Choose a network
+          </DialogTitle>
           <DialogBody className="pt-4">
             <div className="bg-zinc-900/50 backdrop-blur-sm rounded-2xl p-6 border border-zinc-800/50 shadow-xl">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

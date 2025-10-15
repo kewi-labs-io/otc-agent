@@ -19,20 +19,22 @@ async function main() {
   console.log("📋 Contract Info:");
   console.log("  OTC Address:", await otc.getAddress());
   console.log("  Token Balance:", ethers.formatEther(await elizaToken.balanceOf(await otc.getAddress())));
-  console.log("  Available Inventory:", ethers.formatEther(await otc.availableTokenInventory()));
   
   // Test 1: Basic offer creation and fulfillment
   console.log("\n1️⃣ Testing Basic Offer Flow...");
   
-  // Create offer
-  const tx1 = await otc.connect(user).createOffer(
+  const consignmentId = 1; // First consignment from deployment
+  
+  // Create offer from consignment
+  const tx1 = await otc.connect(user).createOfferFromConsignment(
+    consignmentId,
     ethers.parseEther("1000"), // 1000 elizaOS
     500, // 5% discount
     1, // USDC payment
     0 // No lockup for quick test
   );
   await tx1.wait();
-  console.log("  ✓ Offer created");
+  console.log("  ✓ Offer created from consignment");
   
   // Get offer ID
   const openOffers = await otc.getOpenOfferIds();
@@ -64,8 +66,9 @@ async function main() {
   // Test 2: Emergency refund setup
   console.log("\n2️⃣ Testing Emergency Refund Setup...");
   
-  // Create offer with lockup
-  const tx5 = await otc.connect(user).createOffer(
+  // Create offer with lockup from consignment
+  const tx5 = await otc.connect(user).createOfferFromConsignment(
+    consignmentId,
     ethers.parseEther("500"),
     0,
     1, // USDC
@@ -117,8 +120,9 @@ async function main() {
   // Test 5: ETH payment with refund
   console.log("\n5️⃣ Testing ETH Payment with Excess Refund...");
   
-  // Create ETH offer
-  const tx7 = await otc.connect(user).createOffer(
+  // Create ETH offer from consignment
+  const tx7 = await otc.connect(user).createOfferFromConsignment(
+    consignmentId,
     ethers.parseEther("100"),
     0,
     0, // ETH payment

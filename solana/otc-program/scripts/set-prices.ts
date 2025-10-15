@@ -11,7 +11,7 @@ async function setPrices() {
   
   const ownerData = JSON.parse(fs.readFileSync("./id.json", "utf8"));
   const owner = Keypair.fromSecretKey(Uint8Array.from(ownerData));
-  const desk = new PublicKey("8X2wDShtcJ5mFrcsJPjK8tQCD16zBqzsUGwhSCM4ggkorvuN61bYq");
+  const desk = new PublicKey("7EN1rubej95WmoyupRXQ78PKU2hTCspKn2mVKN1vxuPp");
   
   console.log("💲 Setting prices on desk:", desk.toString());
   console.log("   Token: $1.00");

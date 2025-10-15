@@ -1,41 +1,62 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { Dialog, DialogBody, DialogTitle } from "@/components/dialog";
 import { Button } from "@/components/button";
 import { useMultiWallet } from "@/components/multiwallet";
 import { BaseLogo, SolanaLogo } from "@/components/icons/index";
 
+/**
+ * NetworkConnectButton - Wallet connection via Privy
+ * Shows modal to choose Base or Solana, then triggers Privy login for that chain
+ * 
+ * IMPORTANT: If used inside another modal, provide onBeforeOpen callback
+ * to close parent modal first (prevents modal nesting issues)
+ */
 export function NetworkConnectButton({
   className,
   children,
+  onBeforeOpen,
 }: {
   className?: string;
   children?: React.ReactNode;
+  onBeforeOpen?: () => void | Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
-  const { openConnectModal } = useConnectModal();
-  const { setVisible } = useWalletModal();
-  const { setActiveFamily } = useMultiWallet();
+  const { setActiveFamily, login } = useMultiWallet();
+
+  const handleButtonClick = useCallback(async () => {
+    // Close parent modal first if provided (avoids modal nesting)
+    if (onBeforeOpen) {
+      await onBeforeOpen();
+      // Small delay to let parent modal close animation complete
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    setOpen(true);
+  }, [onBeforeOpen]);
 
   const onChooseEvm = useCallback(() => {
     setActiveFamily("evm");
     setOpen(false);
-    openConnectModal?.();
-  }, [openConnectModal, setActiveFamily]);
+    // Small delay to ensure modal closes smoothly before Privy opens
+    setTimeout(() => {
+      login();
+    }, 100);
+  }, [login, setActiveFamily]);
 
   const onChooseSolana = useCallback(() => {
     setActiveFamily("solana");
     setOpen(false);
-    setVisible(true);
-  }, [setActiveFamily, setVisible]);
+    // Small delay to ensure modal closes smoothly before Privy opens
+    setTimeout(() => {
+      login();
+    }, 100);
+  }, [setActiveFamily, login]);
 
   return (
     <>
       <Button
-        onClick={() => setOpen(true)}
+        onClick={handleButtonClick}
         color="orange"
         className={className}
       >
@@ -49,7 +70,8 @@ export function NetworkConnectButton({
           <DialogBody className="pt-4">
             <div className="bg-zinc-900/50 backdrop-blur-sm rounded-2xl p-6 border border-zinc-800/50 shadow-xl">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div
+                <button
+                  type="button"
                   onClick={onChooseEvm}
                   className="group rounded-xl p-8 sm:p-10 text-center transition-all duration-200 cursor-pointer text-white bg-[#0052ff] border-2 border-[#0047e5] hover:border-[#0052ff] hover:brightness-110 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-[#0052ff] focus:ring-offset-2 focus:ring-offset-zinc-900"
                 >
@@ -59,8 +81,9 @@ export function NetworkConnectButton({
                     </div>
                     <div className="text-2xl sm:text-3xl font-bold">Base</div>
                   </div>
-                </div>
-                <div
+                </button>
+                <button
+                  type="button"
                   onClick={onChooseSolana}
                   className="group rounded-xl p-8 sm:p-10 text-center transition-all duration-200 cursor-pointer text-white bg-gradient-to-br from-[#9945FF] via-[#8752F3] to-[#14F195] border-2 border-[#9945FF]/50 hover:border-[#14F195]/50 hover:brightness-110 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-[#9945FF] focus:ring-offset-2 focus:ring-offset-zinc-900"
                 >
@@ -70,7 +93,7 @@ export function NetworkConnectButton({
                     </div>
                     <div className="text-2xl sm:text-3xl font-bold">Solana</div>
                   </div>
-                </div>
+                </button>
               </div>
             </div>
           </DialogBody>

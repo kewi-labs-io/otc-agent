@@ -1,36 +1,35 @@
-import { createConfig, http, injected } from "wagmi";
+import { createConfig, http } from "wagmi";
 import type { Config } from "wagmi";
-import { hardhat, mainnet } from "wagmi/chains";
-import { createClient } from "viem";
-import { getDefaultConfig } from "@rainbow-me/rainbowkit";
-
-import { APP_INFO } from "@/config/app";
+import { base, hardhat, mainnet } from "wagmi/chains";
+import { injected, walletConnect } from "wagmi/connectors";
 
 // Custom RPC URL if provided, otherwise use default
 const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
 
 // Configure chains based on environment
 const isDevelopment = process.env.NODE_ENV === "development";
-const chains = isDevelopment ? [hardhat, mainnet] : [mainnet];
+const chains = isDevelopment ? [hardhat, base, mainnet] : [base, mainnet];
 
-// Only for local development
-export const hardHatConfig = createConfig({
-  chains: [hardhat],
-  connectors: [injected()],
-  client({ chain }) {
-    return createClient({ chain, transport: http(rpcUrl) });
-  },
-  ssr: true,
-});
+// Create connectors only on client side to avoid indexedDB SSR errors
+function getConnectors() {
+  if (typeof window === "undefined") return [];
+  return [
+    injected({ shimDisconnect: true }),
+    walletConnect({
+      projectId: process.env.NEXT_PUBLIC_PROJECT_ID || "demo-project-id",
+    }),
+  ];
+}
 
-// Both for prod and dev mode
-export const config: Config = getDefaultConfig({
+// Wagmi configuration for Privy integration
+// Privy handles wallet connection, wagmi handles contract interactions
+export const config: Config = createConfig({
   chains: chains as any,
-  appName: APP_INFO.NAME,
-  projectId: process.env.NEXT_PUBLIC_PROJECT_ID || "demo-project-id",
-  ssr: true,
+  connectors: getConnectors(),
   transports: {
     [hardhat.id]: http(rpcUrl),
+    [base.id]: http(),
     [mainnet.id]: http(),
   },
+  ssr: true,
 });

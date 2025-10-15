@@ -68,7 +68,7 @@ export function ensureXAuth(pending?: PendingShare): boolean {
 export async function shareOnX(
   text: string,
   dataUrl: string,
-  creds?: XCredentials | null
+  creds?: XCredentials | null,
 ): Promise<{ success: boolean; tweetId?: string; tweetUrl?: string }> {
   const apiUrl = getApiUrl();
   const c = creds ?? getXCreds();

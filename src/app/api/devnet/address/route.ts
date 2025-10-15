@@ -17,7 +17,6 @@ export async function GET() {
     json["OTCDeskModule#OTC"] ||
     json["ElizaOTCModule#ElizaOTC"] ||
     json["OTCModule#desk"];
-  if (!addr)
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!addr) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ address: addr });
 }

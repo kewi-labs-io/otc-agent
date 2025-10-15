@@ -9,5 +9,7 @@ export interface ChatMessage {
   isLoading?: boolean;
   thought?: string;
   isUserMessage?: boolean;
+  serverMessageId?: string;
+  content?: { text?: string }; // For messages that have structured content
   actions?: any[]; // Consider defining a more specific type if the structure is known
 }

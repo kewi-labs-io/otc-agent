@@ -21,14 +21,34 @@ const ibmPlexMono = IBM_Plex_Mono({
   variable: "--font-ibm-plex-mono",
 });
 
+const appUrl = process.env.NEXT_PUBLIC_URL || "http://localhost:2222";
+
+// Farcaster Mini App frame configuration
+const frame = {
+  version: "next",
+  imageUrl: `${appUrl}/opengraph-image.png`,
+  button: {
+    title: "Eliza OTC Desk",
+    action: {
+      type: "launch_frame",
+      name: "Eliza OTC Desk",
+      url: appUrl,
+      splashImageUrl: `${appUrl}/splash.png`,
+      splashBackgroundColor: "#000000",
+    },
+  },
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
-  title: `${siteConfig.name} - Learn about the Eliza Agent Framework`,
-  description: siteConfig.description,
+  title: `${siteConfig.name} - AI-Powered OTC Trading Desk`,
+  description:
+    "Trade tokens OTC with Eliza AI agent. Negotiate deals on EVM and Solana networks with automated pricing and smart contracts.",
   openGraph: {
     siteName: siteConfig.name,
-    title: "The Documentation for Eliza",
-    description: siteConfig.description,
+    title: "Eliza OTC Desk - AI-Powered Token Trading",
+    description:
+      "Trade tokens OTC with Eliza AI agent. Negotiate deals on EVM and Solana networks.",
     images: [siteConfig.ogImage],
     type: "website",
     url: siteConfig.url,
@@ -38,10 +58,14 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     site: siteConfig.name,
-    title: "The Documentation for Eliza",
-    description: siteConfig.description,
+    title: "Eliza OTC Desk - AI-Powered Token Trading",
+    description:
+      "Trade tokens OTC with Eliza AI agent. Negotiate deals on EVM and Solana networks.",
     images: [siteConfig.ogImage],
     creator: siteConfig.creator,
+  },
+  other: {
+    "fc:frame": JSON.stringify(frame),
   },
 };
 

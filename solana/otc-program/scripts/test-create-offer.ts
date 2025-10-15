@@ -13,7 +13,7 @@ async function test() {
   const ownerData = JSON.parse(fs.readFileSync("./id.json", "utf8"));
   const owner = Keypair.fromSecretKey(Uint8Array.from(ownerData));
 
-  const desk = new PublicKey("8X2wDShtcJ5mFrcsJPjK8tQCD16zBqzsUGwhSCM4ggkorvuN61bYq");
+  const desk = new PublicKey("7EN1rubej95WmoyupRXQ78PKU2hTCspKn2mVKN1vxuPp");
   const tokenMint = new PublicKey(
     "5QLcgYPdVSgZrS84TecffohCJHWC1eEkftnK6DKtpxg9"
   );

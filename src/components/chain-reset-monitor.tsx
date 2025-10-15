@@ -6,4 +6,3 @@ export function ChainResetMonitor() {
   useChainReset();
   return null;
 }
-

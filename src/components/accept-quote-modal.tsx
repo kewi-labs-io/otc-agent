@@ -49,7 +49,7 @@ export function AcceptQuoteModal({
   onComplete,
 }: AcceptQuoteModalProps) {
   const { isConnected, address } = useAccount();
-  const { activeFamily, isConnected: unifiedConnected } = useMultiWallet();
+  const { activeFamily, isConnected: walletConnected } = useMultiWallet();
   const router = useRouter();
   const {
     otcAddress,
@@ -71,7 +71,7 @@ export function AcceptQuoteModal({
   // If RPC is localhost, we're reading from Hardhat regardless of wallet network
   const isLocalRpc = useMemo(
     () => /localhost|127\.0\.0\.1/.test(rpcUrl),
-    [rpcUrl]
+    [rpcUrl],
   );
 
   // Always use hardhat chain for localhost RPC
@@ -79,7 +79,7 @@ export function AcceptQuoteModal({
 
   const publicClient = useMemo(
     () => createPublicClient({ chain: readChain, transport: http(rpcUrl) }),
-    [readChain, rpcUrl]
+    [readChain, rpcUrl],
   );
 
   // Local UI state
@@ -88,12 +88,12 @@ export function AcceptQuoteModal({
       ONE_MILLION,
       Math.max(
         MIN_TOKENS,
-        initialQuote?.tokenAmount ? Number(initialQuote.tokenAmount) : 1000
-      )
-    )
+        initialQuote?.tokenAmount ? Number(initialQuote.tokenAmount) : 1000,
+      ),
+    ),
   );
   const [currency, setCurrency] = useState<"ETH" | "USDC" | "SOL">(
-    activeFamily === "solana" ? "SOL" : "ETH"
+    activeFamily === "solana" ? "SOL" : "ETH",
   );
   const [step, setStep] = useState<StepState>("amount");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -101,14 +101,6 @@ export function AcceptQuoteModal({
   const [requireApprover, setRequireApprover] = useState(false);
   const { handleTransactionError } = useTransactionErrorHandler();
   const [contractValid, setContractValid] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_lastSignedMessage, setLastSignedMessage] = useState<
-    string | undefined
-  >(undefined);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_lastSignature, setLastSignature] = useState<
-    `0x${string}` | undefined
-  >(undefined);
   const isSolanaActive = activeFamily === "solana";
   const SOLANA_RPC =
     (process.env.NEXT_PUBLIC_SOLANA_RPC_URL as string | undefined) ||
@@ -136,9 +128,9 @@ export function AcceptQuoteModal({
           ONE_MILLION,
           Math.max(
             MIN_TOKENS,
-            initialQuote?.tokenAmount ? Number(initialQuote.tokenAmount) : 1000
-          )
-        )
+            initialQuote?.tokenAmount ? Number(initialQuote.tokenAmount) : 1000,
+          ),
+        ),
       );
     }
   }, [isOpen, initialQuote, activeFamily]);
@@ -177,11 +169,11 @@ export function AcceptQuoteModal({
       if (!code || code === "0x") {
         console.error(
           `[AcceptQuote] No contract at ${otcAddress} on ${readChain.name}. ` +
-            `Ensure Hardhat node is running and contracts are deployed.`
+            `Ensure Hardhat node is running and contracts are deployed.`,
         );
         setContractValid(false);
         setError(
-          "Contract not found. Ensure Hardhat node is running and contracts are deployed."
+          "Contract not found. Ensure Hardhat node is running and contracts are deployed.",
         );
         return;
       }
@@ -214,7 +206,7 @@ export function AcceptQuoteModal({
     if (typeof initialQuote?.lockupMonths === "number")
       return Math.max(1, initialQuote.lockupMonths * 30);
     return Number(
-      defaultUnlockDelaySeconds ? defaultUnlockDelaySeconds / 86400n : 180n
+      defaultUnlockDelaySeconds ? defaultUnlockDelaySeconds / 86400n : 180n,
     );
   }, [
     initialQuote?.lockupDays,
@@ -240,23 +232,22 @@ export function AcceptQuoteModal({
 
   async function readNextOfferId(): Promise<bigint> {
     if (!otcAddress) throw new Error("Missing OTC address");
-    const id = (await publicClient.readContract({
+    return (await publicClient.readContract({
       address: otcAddress as `0x${string}`,
       abi,
       functionName: "nextOfferId",
       args: [],
     } as any)) as bigint;
-    return id;
   }
 
-  async function readOffer(offerId: bigint): Promise<any> {
+  async function readOffer(offerId: bigint): Promise<[`0x${string}`, bigint, bigint, bigint, bigint, bigint, bigint, number, boolean, boolean, boolean, boolean, `0x${string}`, bigint]> {
     if (!otcAddress) throw new Error("Missing OTC address");
     return (await publicClient.readContract({
       address: otcAddress as `0x${string}`,
       abi,
       functionName: "offers",
       args: [offerId],
-    } as any)) as any;
+    } as any)) as [`0x${string}`, bigint, bigint, bigint, bigint, bigint, bigint, number, boolean, boolean, boolean, boolean, `0x${string}`, bigint];
   }
 
   async function wait(ms: number) {
@@ -265,12 +256,10 @@ export function AcceptQuoteModal({
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function fulfillWithRetry(
-    offerId: bigint
+    offerId: bigint,
   ): Promise<`0x${string}` | undefined> {
     // Check if already fulfilled
-    const offer = await readOffer(offerId);
-    const isPaid = offer[9];
-    const isFulfilled = offer[10];
+    const [, , , , , , , , , isPaid, isFulfilled] = await readOffer(offerId);
 
     if (isPaid || isFulfilled) {
       console.log("[AcceptQuote] Offer already fulfilled");
@@ -281,11 +270,11 @@ export function AcceptQuoteModal({
     const isEth = currency === "ETH";
     const requiredAmount = await getRequiredPayment(
       offerId,
-      isEth ? "ETH" : "USDC"
+      isEth ? "ETH" : "USDC",
     );
 
     console.log(
-      `[AcceptQuote] Required payment: ${requiredAmount} ${currency}`
+      `[AcceptQuote] Required payment: ${requiredAmount} ${currency}`,
     );
 
     let txHash: `0x${string}` | undefined;
@@ -314,13 +303,11 @@ export function AcceptQuoteModal({
     }
 
     // Verify fulfillment
-    const finalOffer = await readOffer(offerId);
-    const isPaidFinal = finalOffer[9];
-    const isFulfilledFinal = finalOffer[10];
+    const [, , , , , , , , , isPaidFinal, isFulfilledFinal] = await readOffer(offerId);
 
     if (!(isPaidFinal || isFulfilledFinal)) {
       throw new Error(
-        "Payment transaction completed but offer state not updated. Please refresh and try again."
+        "Payment transaction completed but offer state not updated. Please refresh and try again.",
       );
     }
 
@@ -329,12 +316,12 @@ export function AcceptQuoteModal({
   }
 
   const handleConfirm = async () => {
-    if (!unifiedConnected) return;
+    if (!walletConnected) return;
 
     // CRITICAL: Quote must exist
     if (!initialQuote?.quoteId) {
       setError(
-        "No quote ID available. Please request a quote from the chat first."
+        "No quote ID available. Please request a quote from the chat first.",
       );
       return;
     }
@@ -342,7 +329,7 @@ export function AcceptQuoteModal({
     // Block if contract isn't valid (EVM only)
     if (!isSolanaActive && !contractValid) {
       setError(
-        "Contract not available. Please ensure Hardhat node is running and contracts are deployed."
+        "Contract not available. Please ensure Hardhat node is running and contracts are deployed.",
       );
       console.error("[AcceptQuote] Blocked transaction - contract not valid:", {
         otcAddress,
@@ -366,7 +353,6 @@ export function AcceptQuoteModal({
   };
 
   const executeTransaction = async () => {
-
     /**
      * TRANSACTION FLOW (Optimized UX - Backend Pays)
      *
@@ -391,7 +377,7 @@ export function AcceptQuoteModal({
       // Basic config checks
       if (!SOLANA_DESK || !SOLANA_TOKEN_MINT || !SOLANA_USDC_MINT) {
         throw new Error(
-          "Solana OTC configuration is incomplete. Please check your environment variables."
+          "Solana OTC configuration is incomplete. Please check your environment variables.",
         );
       }
 
@@ -406,7 +392,7 @@ export function AcceptQuoteModal({
         connection,
         // Anchor expects an object with signTransaction / signAllTransactions
         wallet,
-        { commitment: "confirmed" }
+        { commitment: "confirmed" },
       );
       console.log("Fetching IDL");
       const idl = await fetchSolanaIdl();
@@ -429,12 +415,12 @@ export function AcceptQuoteModal({
       const deskTokenTreasury = await getAssociatedTokenAddress(
         tokenMintPk,
         desk,
-        true
+        true,
       );
       const deskUsdcTreasury = await getAssociatedTokenAddress(
         usdcMintPk,
         desk,
-        true
+        true,
       );
 
       console.log("Desk token treasury:", deskTokenTreasury.toString());
@@ -450,12 +436,12 @@ export function AcceptQuoteModal({
       const offerKeypair = Keypair.generate();
       console.log(
         "Generated offer keypair:",
-        offerKeypair.publicKey.toString()
+        offerKeypair.publicKey.toString(),
       );
 
       // Create offer on Solana
       const tokenAmountWei = new anchor.BN(
-        (BigInt(tokenAmount) * 10n ** 9n).toString()
+        (BigInt(tokenAmount) * 10n ** 9n).toString(),
       );
       const lockupSeconds = new anchor.BN(lockupDays * 24 * 60 * 60);
       const paymentCurrencySol = currency === "USDC" ? 1 : 0; // 0 SOL, 1 USDC
@@ -469,7 +455,7 @@ export function AcceptQuoteModal({
           tokenAmountWei,
           discountBps,
           paymentCurrencySol,
-          lockupSeconds
+          lockupSeconds,
         )
         .accountsStrict({
           desk,
@@ -531,14 +517,14 @@ export function AcceptQuoteModal({
         const claimData = await claimRes.json();
         if (claimData.scheduled) {
           console.log(
-            `✅ Tokens will be automatically distributed after lockup (${Math.floor(claimData.secondsRemaining / 86400)} days)`
+            `✅ Tokens will be automatically distributed after lockup (${Math.floor(claimData.secondsRemaining / 86400)} days)`,
           );
         } else {
           console.log("✅ Tokens immediately distributed");
         }
       } else {
         console.warn(
-          "Claim scheduling failed, tokens will be claimable manually"
+          "Claim scheduling failed, tokens will be claimable manually",
         );
       }
 
@@ -557,7 +543,7 @@ export function AcceptQuoteModal({
 
       // CRITICAL: Capture tokenAmount NOW before any async operations
       const finalTokenAmount = tokenAmount;
-      
+
       console.log("[Solana] Saving deal completion:", {
         quoteId: initialQuote.quoteId,
         wallet: solanaWallet,
@@ -588,10 +574,10 @@ export function AcceptQuoteModal({
         console.error("[Solana] Deal save failed:", errorText);
         throw new Error(`Failed to save deal: ${errorText}`);
       }
-      
+
       const saveResult = await response.json();
       console.log("✅ Deal completion saved:", saveResult);
-      
+
       // VERIFY the save succeeded
       if (!saveResult.success) {
         throw new Error("Deal save returned success=false");
@@ -600,9 +586,11 @@ export function AcceptQuoteModal({
         throw new Error("Deal save didn't return quote data");
       }
       if (saveResult.quote.status !== "executed") {
-        throw new Error(`Deal saved but status is ${saveResult.quote.status}, not executed`);
+        throw new Error(
+          `Deal saved but status is ${saveResult.quote.status}, not executed`,
+        );
       }
-      
+
       console.log("✅ VERIFIED deal is in database as executed");
 
       setStep("complete");
@@ -652,7 +640,7 @@ export function AcceptQuoteModal({
       initialQuote.beneficiary.toLowerCase() !== address.toLowerCase()
     ) {
       throw new Error(
-        `Wallet mismatch: Quote is for ${initialQuote.beneficiary.slice(0, 6)}... but you're connected as ${address.slice(0, 6)}...`
+        `Wallet mismatch: Quote is for ${initialQuote.beneficiary.slice(0, 6)}... but you're connected as ${address.slice(0, 6)}...`,
       );
     }
 
@@ -674,7 +662,7 @@ export function AcceptQuoteModal({
     })) as `0x${string}`;
 
     console.log(
-      `[AcceptQuote] ✅ Offer created: ${newOfferId}, tx: ${createTxHash}`
+      `[AcceptQuote] ✅ Offer created: ${newOfferId}, tx: ${createTxHash}`,
     );
 
     // Wait for transaction to be mined before backend processes it
@@ -685,7 +673,7 @@ export function AcceptQuoteModal({
     // Step 2: Request backend approval (and auto-fulfillment if enabled)
     setStep("await_approval");
     console.log(
-      `[AcceptQuote] Requesting approval and payment from backend...`
+      `[AcceptQuote] Requesting approval and payment from backend...`,
     );
 
     const approveRes = await fetch("/api/otc/approve", {
@@ -702,13 +690,13 @@ export function AcceptQuoteModal({
     const approveData = await approveRes.json();
     console.log(
       `[AcceptQuote] ✅ Offer approved:`,
-      approveData.approvalTx || approveData.txHash
+      approveData.approvalTx || approveData.txHash,
     );
 
     // Backend should have auto-fulfilled (requireApproverToFulfill=true)
     if (!approveData.autoFulfilled || !approveData.fulfillTx) {
       throw new Error(
-        "Backend did not automatically fulfill offer. Contact support."
+        "Backend did not automatically fulfill offer. Contact support.",
       );
     }
 
@@ -717,13 +705,12 @@ export function AcceptQuoteModal({
 
     // Verify payment was actually made on-chain
     console.log("[AcceptQuote] Verifying payment on-chain...");
-    const finalOffer = await readOffer(newOfferId);
-    const isPaidFinal = finalOffer[9]; // paid flag at index 9
+    const [, , , , , , , , , isPaidFinal] = await readOffer(newOfferId);
 
     if (!isPaidFinal) {
       throw new Error(
         "Backend reported success but offer not paid on-chain. Please contact support with offer ID: " +
-          newOfferId
+          newOfferId,
       );
     }
     console.log("[AcceptQuote] ✅ Payment verified on-chain");
@@ -758,7 +745,7 @@ export function AcceptQuoteModal({
     if (!saveRes.ok) {
       const errorText = await saveRes.text();
       throw new Error(
-        `Deal completion save failed: ${errorText}. Your offer is paid but not saved. Offer ID: ${newOfferId}`
+        `Deal completion save failed: ${errorText}. Your offer is paid but not saved. Offer ID: ${newOfferId}`,
       );
     }
 
@@ -944,7 +931,7 @@ export function AcceptQuoteModal({
               <div className="text-zinc-500">Maturity date</div>
               <div className="text-lg font-semibold">
                 {new Date(
-                  Date.now() + lockupDays * 24 * 60 * 60 * 1000
+                  Date.now() + lockupDays * 24 * 60 * 60 * 1000,
                 ).toLocaleDateString(undefined, {
                   month: "2-digit",
                   day: "2-digit",
@@ -973,7 +960,7 @@ export function AcceptQuoteModal({
         )}
 
         {/* Actions / Connect state */}
-        {!unifiedConnected ? (
+        {!walletConnected ? (
           <div className="px-5 pb-5">
             <div className="rounded-xl overflow-hidden ring-1 ring-white/10 bg-zinc-900">
               <div className="relative">
@@ -994,7 +981,13 @@ export function AcceptQuoteModal({
                       Get discounted elizaOS tokens. Let’s deal, anon.
                     </p>
                     <div className="inline-flex gap-2">
-                      <NetworkConnectButton className="!h-9">
+                      <NetworkConnectButton 
+                        className="!h-9"
+                        onBeforeOpen={() => {
+                          // Close accept quote modal before opening network selection
+                          onClose();
+                        }}
+                      >
                         Connect
                       </NetworkConnectButton>
                     </div>

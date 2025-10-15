@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const wallet = searchParams.get("entityId");
+  const tokenId = searchParams.get("tokenId");
 
   if (!wallet) {
     return NextResponse.json(
@@ -24,14 +25,22 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  console.log("[Quote API] GET - wallet:", wallet);
+  if (!tokenId) {
+    return NextResponse.json(
+      { error: "tokenId parameter required" },
+      { status: 400 },
+    );
+  }
 
-  let quote = await quoteService.getQuoteByWallet(wallet);
+  console.log("[Quote API] GET - wallet:", wallet, "tokenId:", tokenId);
+
+  const entityId = walletToEntityId(wallet);
+  const quoteKey = `quote:${tokenId}:${entityId}`;
+  let quote = await runtime.getCache<any>(quoteKey);
   console.log("[Quote API] Found:", quote ? quote.quoteId : "null");
 
   if (!quote) {
-    console.log("[Quote API] Creating default quote");
-    const entityId = walletToEntityId(wallet);
+    console.log("[Quote API] Creating default quote for token:", tokenId);
 
     await quoteService.createQuote({
       entityId,
@@ -47,7 +56,11 @@ export async function GET(request: NextRequest) {
       paymentAmount: "0",
     });
 
-    quote = await quoteService.getQuoteByWallet(wallet);
+    quote = await runtime.getCache<any>(quoteKey);
+    if (quote) {
+      quote.tokenId = tokenId;
+      await runtime.setCache(quoteKey, quote);
+    }
   }
 
   const formattedQuote = quote
@@ -55,6 +68,7 @@ export async function GET(request: NextRequest) {
         quoteId: quote.quoteId,
         entityId: quote.entityId,
         beneficiary: quote.beneficiary,
+        tokenId: quote.tokenId || tokenId,
         tokenAmount: quote.tokenAmount,
         discountBps: quote.discountBps,
         apr: quote.apr,

@@ -42,11 +42,7 @@ export function Dialog({
           <div className="flex min-h-full items-center justify-center sm:p-4">
             <Headless.DialogPanel
               transition
-              className={clsx(
-                className,
-                sizes[size],
-                "w-full min-w-0",
-              )}
+              className={clsx(className, sizes[size], "w-full")}
             >
               {children}
             </Headless.DialogPanel>

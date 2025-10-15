@@ -51,7 +51,7 @@ export interface QuoteAccepted {
 export function extractXMLFromMessage(messageText: string): string | null {
   // Try to find XML between comment markers first
   const commentMatch = messageText.match(
-    /<!-- XML_START -->([\s\S]*?)<!-- XML_END -->/
+    /<!-- XML_START -->([\s\S]*?)<!-- XML_END -->/,
   );
   if (commentMatch && commentMatch[1]) {
     return commentMatch[1].trim();
@@ -59,7 +59,7 @@ export function extractXMLFromMessage(messageText: string): string | null {
 
   // Try to find quote XML (supports lower and PascalCase)
   const quoteMatch = messageText.match(
-    /<(quote|Quote)>([\s\S]*?)<\/(quote|Quote)>/
+    /<(quote|Quote)>([\s\S]*?)<\/(quote|Quote)>/,
   );
   if (quoteMatch && quoteMatch[0]) {
     return quoteMatch[0];
@@ -67,7 +67,7 @@ export function extractXMLFromMessage(messageText: string): string | null {
 
   // Try to find quoteAccepted XML (supports lower and PascalCase)
   const acceptedMatch = messageText.match(
-    /<(quoteAccepted|QuoteAccepted)>([\s\S]*?)<\/(quoteAccepted|QuoteAccepted)>/
+    /<(quoteAccepted|QuoteAccepted)>([\s\S]*?)<\/(quoteAccepted|QuoteAccepted)>/,
   );
   if (acceptedMatch && acceptedMatch[0]) {
     return acceptedMatch[0];
@@ -258,7 +258,7 @@ export function sanitizeAgentMessage(raw: string | null | undefined): {
     // Extract nested tags from response content
     const nestedExtract = (tag: string) => {
       const m = inner.match(
-        new RegExp(`<${tag}>([\\n\\s\\S]*?)<\/${tag}>`, "i")
+        new RegExp(`<${tag}>([\\n\\s\\S]*?)<\/${tag}>`, "i"),
       );
       if (m && m[1] !== undefined) meta[tag] = m[1].trim();
     };

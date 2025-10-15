@@ -8,7 +8,7 @@ async function check() {
   anchor.setProvider(provider);
   const program = anchor.workspace.Otc as any;
   
-  const desk = new PublicKey("8X2wDShtcJ5mFrcsJPjK8tQCD16zBqzsUGwhSCM4ggkorvuN61bYq");
+  const desk = new PublicKey("7EN1rubej95WmoyupRXQ78PKU2hTCspKn2mVKN1vxuPp");
   const data = await program.account.desk.fetch(desk);
   
   console.log("Full desk data:", JSON.stringify(data, null, 2));
