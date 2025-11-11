@@ -83,8 +83,9 @@ export async function checkUserBan(userAddress: Address): Promise<BanCheckResult
         abi: IDENTITY_REGISTRY_ABI,
         functionName: 'getAgentId',
         args: [userAddress],
+        authorizationList: [],
       });
-    } catch (error) {
+    } catch {
       // User not registered in Identity Registry
       console.log('[ERC-8004] User not registered in Identity Registry, allowing access');
       return { allowed: true };
@@ -96,6 +97,7 @@ export async function checkUserBan(userAddress: Address): Promise<BanCheckResult
       abi: BAN_MANAGER_ABI,
       functionName: 'isBanned',
       args: [agentId],
+      authorizationList: [],
     });
 
     if (isBanned) {
@@ -105,12 +107,14 @@ export async function checkUserBan(userAddress: Address): Promise<BanCheckResult
           abi: BAN_MANAGER_ABI,
           functionName: 'getBanReason',
           args: [agentId],
+          authorizationList: [],
         }),
         client.readContract({
           address: BAN_MANAGER_ADDRESS,
           abi: BAN_MANAGER_ABI,
           functionName: 'getBanExpiry',
           args: [agentId],
+          authorizationList: [],
         }),
       ]);
 
@@ -127,6 +131,7 @@ export async function checkUserBan(userAddress: Address): Promise<BanCheckResult
       abi: BAN_MANAGER_ABI,
       functionName: 'isAccessAllowed',
       args: [agentId, THEDESK_APP_ID as `0x${string}`],
+      authorizationList: [],
     });
 
     if (!isAllowed) {
@@ -164,8 +169,9 @@ export async function getUserReputation(userAddress: Address): Promise<Reputatio
         abi: IDENTITY_REGISTRY_ABI,
         functionName: 'getAgentId',
         args: [userAddress],
+        authorizationList: [],
       });
-    } catch (error) {
+    } catch {
       // User not registered
       return { score: 0, meetsMinimum: true };
     }
@@ -176,6 +182,7 @@ export async function getUserReputation(userAddress: Address): Promise<Reputatio
       abi: REPUTATION_MANAGER_ABI,
       functionName: 'getReputation',
       args: [agentId],
+      authorizationList: [],
     });
 
     // Check if meets minimum threshold (e.g., 50 for basic trading)
@@ -185,6 +192,7 @@ export async function getUserReputation(userAddress: Address): Promise<Reputatio
       abi: REPUTATION_MANAGER_ABI,
       functionName: 'hasMinimumReputation',
       args: [agentId, minThreshold],
+      authorizationList: [],
     });
 
     return {
@@ -213,6 +221,7 @@ export async function isUserRegistered(userAddress: Address): Promise<boolean> {
       abi: IDENTITY_REGISTRY_ABI,
       functionName: 'getAgentId',
       args: [userAddress],
+      authorizationList: [],
     });
 
     return agentId !== BigInt(0);

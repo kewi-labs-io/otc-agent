@@ -121,7 +121,7 @@ contract DeployElizaOTC is Script {
         uint256 testWalletKey = uint256(keccak256(abi.encodePacked(block.timestamp, "test")));
         address testWallet = vm.addr(testWalletKey);
         
-        payable(testWallet).transfer(1 ether);
+        payable(testWallet).transfer(0.001 ether);
         usdcToken.transfer(testWallet, 10_000 * 10**6); // 10k USDC
         otc.setApprover(testWallet, true);
         console.log("Test wallet created and funded:", testWallet);

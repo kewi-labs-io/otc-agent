@@ -8,7 +8,7 @@ import {
 } from "@/services/database";
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http, type Address } from "viem";
-import { getChain, getRpcUrl } from "@/lib/getChain";
+import { getChain } from "@/lib/getChain";
 
 export async function POST(request: NextRequest) {
   await agentRuntime.getRuntime();

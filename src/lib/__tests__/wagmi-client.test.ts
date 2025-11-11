@@ -121,13 +121,13 @@ describe("wagmi-client chain availability", () => {
 describe("Chain exports", () => {
 	it("should export chains array for UI reference", async () => {
 		// Dynamic import to test exports
-		const module = await import("../wagmi-client");
-		expect(module.chains).toBeDefined();
-		expect(Array.isArray(module.chains)).toBe(true);
+		const wagmiModule = await import("../wagmi-client");
+		expect(wagmiModule.chains).toBeDefined();
+		expect(Array.isArray(wagmiModule.chains)).toBe(true);
 	});
 
 	it("should export wagmi config", async () => {
-		const module = await import("../wagmi-client");
-		expect(module.config).toBeDefined();
+		const wagmiModule = await import("../wagmi-client");
+		expect(wagmiModule.config).toBeDefined();
 	});
 });

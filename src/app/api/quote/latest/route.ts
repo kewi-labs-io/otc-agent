@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
       const token = await TokenDB.getToken(tokenId);
       tokenChain = token.chain;
       tokenSymbol = token.symbol;
-    } catch (error) {
+    } catch {
       console.warn("[Quote API] Failed to fetch token data:", tokenId);
     }
   }

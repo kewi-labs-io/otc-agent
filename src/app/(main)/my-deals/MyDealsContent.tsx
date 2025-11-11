@@ -44,7 +44,7 @@ export function MyDealsContent() {
   const [activeTab, setActiveTab] = useState<"purchases" | "listings">(
     "purchases",
   );
-  const [sortAsc, setSortAsc] = useState(true);
+  const [sortAsc] = useState(true);
   const [refunding, setRefunding] = useState<bigint | null>(null);
   const [solanaDeals, setSolanaDeals] = useState<any[]>([]);
   const [evmDeals, setEvmDeals] = useState<any[]>([]);

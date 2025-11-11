@@ -1,12 +1,10 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState, useEffect } from "react";
 import dynamicImport from "next/dynamic";
 import { TokenHeader } from "@/components/token-header";
 import { useTokenCache, useMarketDataRefresh } from "@/hooks/useTokenCache";
 import { Footer } from "@/components/footer";
-import type { OTCConsignment } from "@/services/database";
 
 const Chat = dynamicImport(() => import("@/components/chat"), { ssr: false });
 
@@ -22,33 +20,6 @@ export default function TokenPage() {
   } = useTokenCache(tokenId);
   const refreshedMarketData = useMarketDataRefresh(tokenId, token);
   const marketData = refreshedMarketData || initialMarketData;
-  const [consignments, setConsignments] = useState<OTCConsignment[]>([]);
-  const [loadingConsignments, setLoadingConsignments] = useState(true);
-
-  useEffect(() => {
-    async function fetchConsignments() {
-      if (!tokenId) return;
-      try {
-        const response = await fetch(`/api/consignments?tokenId=${tokenId}`, {
-          cache: "no-store",
-        });
-        const data = await response.json();
-        if (data.success) {
-          setConsignments(data.consignments || []);
-        }
-      } catch (error) {
-        console.error("Failed to fetch consignments:", error);
-      } finally {
-        setLoadingConsignments(false);
-      }
-    }
-    fetchConsignments();
-  }, [tokenId]);
-
-  const nonNegotiableConsignments = consignments.filter(
-    (c) => !c.isNegotiable && c.status === "active",
-  );
-  const hasNonNegotiableDeals = nonNegotiableConsignments.length > 0;
 
   if (loading) {
     return (

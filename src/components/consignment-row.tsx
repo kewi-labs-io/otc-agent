@@ -65,21 +65,6 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
     (Number(consignment.remainingAmount) / Number(consignment.totalAmount)) *
     100;
 
-  const handlePause = async () => {
-    await fetch(`/api/consignments/${consignment.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        status: consignment.status === "active" ? "paused" : "active",
-      }),
-    });
-
-    // Refresh parent component state instead of full page reload
-    if (onUpdate) {
-      onUpdate();
-    }
-  };
-
   const handleWithdraw = async () => {
     setWithdrawError(null);
     setWithdrawTxHash(null);

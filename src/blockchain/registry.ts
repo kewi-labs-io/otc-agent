@@ -4,14 +4,13 @@
 
 import { ethers } from 'ethers';
 
-const REGISTRY_ABI = ['function agentExists(uint256 agentId) external view returns (bool)'];
 const BAN_MANAGER_ABI = ['function isAccessAllowed(uint256 agentId, bytes32 appId) external view returns (bool)'];
 
 export class RegistryService {
-  private provider: ethers.Provider;
+  private provider: ReturnType<typeof ethers.getDefaultProvider>;
   
   constructor() {
-    this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL || 'http://localhost:8545');
+    this.provider = ethers.getDefaultProvider(process.env.RPC_URL || 'http://localhost:8545');
   }
 
   async checkBan(agentAddress: string, appId: string): Promise<boolean> {
@@ -22,7 +21,7 @@ export class RegistryService {
     );
     
     try {
-      const allowed = await banManager.isAccessAllowed(agentAddress, ethers.id(appId));
+      const allowed = await banManager.isAccessAllowed(agentAddress, ethers.utils.id(appId));
       return !allowed; // return true if banned
     } catch {
       return false; // fail open

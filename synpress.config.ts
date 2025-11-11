@@ -1,6 +1,29 @@
-import { createJejuSynpressConfig, createJejuWalletSetup } from '../../tests/shared/synpress.config.base';
+import type { PlaywrightTestConfig } from '@playwright/test';
 
 const OTC_DESK_PORT = parseInt(process.env.OTC_DESK_PORT || '5004');
+
+// Stub implementations for missing config functions
+function createJejuSynpressConfig(options: {
+  appName: string;
+  port: number;
+  testDir: string;
+  overrides?: Record<string, unknown>;
+}): PlaywrightTestConfig {
+  return {
+    testDir: options.testDir,
+    timeout: options.overrides?.timeout as number || 30000,
+    use: {
+      baseURL: `http://localhost:${options.port}`,
+    },
+    webServer: options.overrides?.webServer as PlaywrightTestConfig['webServer'],
+  };
+}
+
+function createJejuWalletSetup() {
+  return {
+    walletPassword: process.env.METAMASK_PASSWORD || 'password123',
+  };
+}
 
 // Export Playwright config
 export default createJejuSynpressConfig({

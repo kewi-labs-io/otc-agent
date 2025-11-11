@@ -271,6 +271,7 @@ export async function settlePayment(
       abi: erc20Abi,
       functionName: 'allowance',
       args: [account.address, payload.payTo],
+      authorizationList: [],
     });
 
     const requiredAmount = BigInt(payload.amount);
@@ -283,10 +284,12 @@ export async function settlePayment(
     }
 
     const hash = await walletClient.writeContract({
+      account,
       address: payload.asset,
       abi: erc20Abi,
       functionName: 'transferFrom',
       args: [account.address, payload.payTo, requiredAmount],
+      chain,
     });
 
     const receipt = await publicClient.waitForTransactionReceipt({ hash });

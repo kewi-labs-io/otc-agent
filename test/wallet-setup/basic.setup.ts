@@ -22,7 +22,5 @@ export default defineWalletSetup(PASSWORD, async (context, walletPage) => {
       }]
     });
   }, [jejuChainId, jejuRpcUrl]);
-
-  return metamask;
 });
 

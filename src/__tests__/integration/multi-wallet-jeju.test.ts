@@ -35,17 +35,14 @@ describe("Multi-wallet Jeju Integration", () => {
 
 	describe("Network naming", () => {
 		it("should display correct name for Jeju mainnet", () => {
-			const chainId = jejuMainnet.id;
 			expect(jejuMainnet.name).toBe("Jeju");
 		});
 
 		it("should display correct name for Jeju testnet", () => {
-			const chainId = jejuTestnet.id;
 			expect(jejuTestnet.name).toBe("Jeju Testnet");
 		});
 
 		it("should display correct name for Jeju localnet", () => {
-			const chainId = jejuLocalnet.id;
 			expect(jejuLocalnet.name).toBe("Jeju Localnet");
 		});
 	});
@@ -68,8 +65,6 @@ describe("Multi-wallet Jeju Integration", () => {
 		});
 
 		it("should allow switching to Solana", () => {
-			const evmConnected = true;
-			const solanaConnected = true;
 			let activeFamily: "evm" | "solana" = "evm";
 
 			// User switches to Solana

@@ -10,9 +10,9 @@ const SERVICES = {
 };
 
 export class X402PaymentHandler {
-  async verifyPayment(txHash: string, service: string, user: string): Promise<boolean> {
+  async verifyPayment(txHash: string): Promise<boolean> {
     // Verify transaction on Jeju chain
-    const provider = new ethers.JsonRpcProvider(process.env.JEJU_RPC_URL || 'http://localhost:8545');
+    const provider = ethers.getDefaultProvider(process.env.JEJU_RPC_URL || 'http://localhost:8545');
     const receipt = await provider.getTransactionReceipt(txHash);
     return receipt?.status === 1;
   }

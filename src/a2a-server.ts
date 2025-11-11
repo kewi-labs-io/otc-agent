@@ -34,26 +34,6 @@ interface A2ARequest {
   id: number | string;
 }
 
-interface A2AResponse {
-  jsonrpc: string;
-  id: number | string;
-  result?: {
-    role: string;
-    parts: Array<{
-      kind: string;
-      text?: string;
-      data?: Record<string, unknown>;
-    }>;
-    messageId: string;
-    kind: string;
-  };
-  error?: {
-    code: number;
-    message: string;
-    data?: unknown;
-  };
-}
-
 /**
  * Execute a skill and return results
  * Premium skills require payment via x402

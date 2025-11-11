@@ -1,10 +1,9 @@
 "use client";
 
-import { Button } from "@/components/button";
 import { useMultiWallet } from "@/components/multiwallet";
 import { NetworkConnectButton } from "@/components/network-connect";
 import { WalletMenu } from "@/components/wallet-menu";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 
 interface WalletConnectorProps {
   onConnectionChange: (connected: boolean, address?: string) => void;

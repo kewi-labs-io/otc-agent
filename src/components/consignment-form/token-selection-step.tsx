@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import { useMultiWallet } from "../multiwallet";
 import type { Token, TokenMarketData } from "@/services/database";
@@ -61,6 +61,22 @@ export function TokenSelectionStep({
   const [tokens, setTokens] = useState<TokenWithBalance[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+
+  const fetchSolanaBalance = useCallback(
+    async (mintAddress: string, userPublicKey: string): Promise<string> => {
+      const { getAssociatedTokenAddress, getAccount } = await import(
+        "@solana/spl-token"
+      );
+
+      const mintPubkey = new PublicKey(mintAddress);
+      const ownerPubkey = new PublicKey(userPublicKey);
+      const ata = await getAssociatedTokenAddress(mintPubkey, ownerPubkey);
+
+      const accountInfo = await getAccount(connection, ata).catch(() => null);
+      return accountInfo ? accountInfo.amount.toString() : "0";
+    },
+    [connection],
+  );
 
   useEffect(() => {
     setLoading(true);
@@ -141,6 +157,7 @@ export function TokenSelectionStep({
     isConnected,
     address,
     connection,
+    fetchSolanaBalance,
   ]);
 
   async function fetchEvmBalance(
@@ -167,22 +184,6 @@ export function TokenSelectionStep({
     } as any);
 
     return (balance as bigint).toString();
-  }
-
-  async function fetchSolanaBalance(
-    mintAddress: string,
-    userPublicKey: string,
-  ): Promise<string> {
-    const { getAssociatedTokenAddress, getAccount } = await import(
-      "@solana/spl-token"
-    );
-
-    const mintPubkey = new PublicKey(mintAddress);
-    const ownerPubkey = new PublicKey(userPublicKey);
-    const ata = await getAssociatedTokenAddress(mintPubkey, ownerPubkey);
-
-    const accountInfo = await getAccount(connection, ata).catch(() => null);
-    return accountInfo ? accountInfo.amount.toString() : "0";
   }
 
   const formatBalance = (balance: string, decimals: number) => {

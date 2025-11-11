@@ -70,6 +70,7 @@ export async function getAvailablePaymasters(minStake: bigint = MIN_STAKE_THRESH
       address: PAYMASTER_FACTORY_ADDRESS,
       abi: PAYMASTER_FACTORY_ABI,
       functionName: 'getAllPaymasters',
+      authorizationList: [],
     }) as Address[];
 
     // Get details for each paymaster
@@ -81,12 +82,14 @@ export async function getAvailablePaymasters(minStake: bigint = MIN_STAKE_THRESH
               address: paymasterAddr,
               abi: PAYMASTER_ABI,
               functionName: 'token',
+              authorizationList: [],
             }),
             client.readContract({
               address: PAYMASTER_FACTORY_ADDRESS,
               abi: PAYMASTER_FACTORY_ABI,
               functionName: 'paymasterStake',
               args: [paymasterAddr],
+              authorizationList: [],
             }),
           ]);
 
@@ -126,6 +129,7 @@ export async function getPaymasterForToken(tokenAddress: Address): Promise<Addre
       abi: PAYMASTER_FACTORY_ABI,
       functionName: 'getPaymasterByToken',
       args: [tokenAddress],
+      authorizationList: [],
     }) as Address;
 
     // Verify paymaster has sufficient stake
@@ -134,6 +138,7 @@ export async function getPaymasterForToken(tokenAddress: Address): Promise<Addre
       abi: PAYMASTER_FACTORY_ABI,
       functionName: 'paymasterStake',
       args: [paymaster],
+      authorizationList: [],
     }) as bigint;
 
     if (stake >= MIN_STAKE_THRESHOLD) {
@@ -162,12 +167,14 @@ export async function getPaymasterQuote(
         address: paymasterAddress,
         abi: PAYMASTER_ABI,
         functionName: 'token',
+        authorizationList: [],
       }),
       client.readContract({
         address: paymasterAddress,
         abi: PAYMASTER_ABI,
         functionName: 'getQuote',
         args: [ethAmount],
+        authorizationList: [],
       }),
     ]);
 
@@ -233,6 +240,7 @@ export async function canPayGasWithToken(
       abi: parseAbi(['function balanceOf(address) view returns (uint256)']),
       functionName: 'balanceOf',
       args: [userAddress],
+      authorizationList: [],
     }) as bigint;
 
     return balance >= requiredAmount;

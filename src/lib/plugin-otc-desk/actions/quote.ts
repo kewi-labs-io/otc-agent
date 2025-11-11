@@ -281,7 +281,7 @@ export const quoteAction: Action = {
         tokenSymbol = token.symbol;
         tokenName = token.name;
         tokenChain = token.chain;
-      } catch (error) {
+      } catch {
         console.warn("[CREATE_OTC_QUOTE] Failed to fetch token:", tokenId);
       }
     }

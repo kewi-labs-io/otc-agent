@@ -91,7 +91,10 @@ export function AcceptQuoteModal({
   );
 
   // Always use localhost chain for local RPC (Anvil/Jeju Localnet)
-  const readChain = isLocalRpc ? { id: 31337, name: 'Localhost', network: 'localhost', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [rpcUrl] } } } : base;
+  const readChain = useMemo(
+    () => isLocalRpc ? { id: 31337, name: 'Localhost', network: 'localhost', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [rpcUrl] } } } : base,
+    [isLocalRpc, rpcUrl],
+  );
 
   const publicClient = useMemo(
     () => createPublicClient({ chain: readChain, transport: http(rpcUrl) }),

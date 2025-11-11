@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import dynamic from "next/dynamic";
 import { useMultiWallet } from "@/components/multiwallet";
 import { EVMChainSelectorModal } from "@/components/evm-chain-selector-modal";

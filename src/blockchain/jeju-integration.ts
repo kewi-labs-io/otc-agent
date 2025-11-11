@@ -11,19 +11,13 @@ const BAZAAR_ABI = [
   'function getListing(uint256 listingId) external view returns (tuple(uint256 listingId, address seller, uint8 assetType, address assetContract, uint256 tokenId, uint256 amount, uint8 currency, address customCurrencyAddress, uint256 price, uint8 listingType, uint8 status, uint256 createdAt, uint256 expiresAt))'
 ];
 
-const PLAYER_TRADE_ESCROW_ABI = [
-  'function createTrade(address playerB) external returns (uint256)',
-  'function depositItems(uint256 tradeId, tuple(address tokenContract, uint256 tokenId, uint256 amount, uint8 tokenType)[] memory items) external',
-  'function confirmTrade(uint256 tradeId) external'
-];
-
 export class JejuIntegration {
-  private provider: ethers.Provider;
+  private provider: ReturnType<typeof ethers.getDefaultProvider>;
   private chainId: number;
 
   constructor() {
     const rpcUrl = process.env.NEXT_PUBLIC_JEJU_RPC_URL || 'http://localhost:8545';
-    this.provider = new ethers.JsonRpcProvider(rpcUrl);
+    this.provider = ethers.getDefaultProvider(rpcUrl);
     this.chainId = parseInt(process.env.NEXT_PUBLIC_JEJU_CHAIN_ID || '420691');
   }
 
@@ -72,7 +66,7 @@ export class JejuIntegration {
       0, // tokenId (0 for ERC20)
       amount,
       acceptedCurrency,
-      ethers.ZeroAddress,
+      '0x0000000000000000000000000000000000000000',
       price,
       7 * 24 * 60 * 60 // 7 days
     );
@@ -151,7 +145,7 @@ export class JejuIntegration {
         this.provider
       );
 
-      const appId = ethers.id('otc-desk');
+      const appId = ethers.utils.id('otc-desk');
       const allowed = await banManager.isAccessAllowed(address, appId);
 
       return { allowed };

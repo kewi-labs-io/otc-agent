@@ -107,17 +107,25 @@ export function MultiWalletProvider({
   const { setVisible: setSolanaModalVisible } = useWalletModal();
 
   // Create wallet adapter object for Anchor
-  const solanaWalletAdapter: SolanaWalletAdapter | null =
-    solanaWalletConnected &&
-    solanaPublicKeyObj &&
-    signTransaction &&
-    signAllTransactions
-      ? {
-          publicKey: solanaPublicKeyObj,
-          signTransaction,
-          signAllTransactions,
-        }
-      : null;
+  const solanaWalletAdapter: SolanaWalletAdapter | null = useMemo(
+    () =>
+      solanaWalletConnected &&
+      solanaPublicKeyObj &&
+      signTransaction &&
+      signAllTransactions
+        ? {
+            publicKey: solanaPublicKeyObj,
+            signTransaction,
+            signAllTransactions,
+          }
+        : null,
+    [
+      solanaWalletConnected,
+      solanaPublicKeyObj,
+      signTransaction,
+      signAllTransactions,
+    ],
+  );
 
   const chainId = useChainId();
 
