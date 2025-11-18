@@ -123,7 +123,7 @@ export function AcceptQuoteModal({
   const [showEVMChainSelector, setShowEVMChainSelector] = useState(false);
   const isSolanaActive = activeFamily === "solana";
   const SOLANA_RPC =
-    (process.env.NEXT_PUBLIC_SOLANA_RPC_URL as string | undefined) ||
+    (process.env.NEXT_PUBLIC_SOLANA_RPC as string | undefined) ||
     "http://127.0.0.1:8899";
   const SOLANA_DESK = process.env.NEXT_PUBLIC_SOLANA_DESK as string | undefined;
   const SOLANA_TOKEN_MINT = process.env.NEXT_PUBLIC_SOLANA_TOKEN_MINT as

@@ -171,6 +171,7 @@
     "test:watch": "vitest",
     "format": "prettier --write ./src",
     "format:check": "prettier --check ./src",
+    "listeners:start": "bun scripts/start-listeners.ts",
     "eliza:start": "./scripts/start-eliza-system.sh",
     "eliza:stop": "./scripts/stop-eliza-system.sh",
     "eliza:deploy": "cd contracts && bun run deploy:eliza",
