@@ -15,7 +15,7 @@ For security best practices, create a fresh wallet specifically for deployment:
 
 ```bash
 # Generate a new wallet
-forge wallet new
+cast wallet new
 
 # Output will show:
 # Address: 0x...
@@ -64,6 +64,8 @@ forge script script/DeployOTCMainnet.s.sol:DeployOTCMainnet \
   --slow
 ```
 
+**Note**: The script is located at `contracts/script/DeployOTCMainnet.s.sol` (singular `script`, not `scripts`).
+
 ### 1.3 Save Deployed Addresses
 
 The script will output:
@@ -109,6 +111,9 @@ NEXT_PUBLIC_BASE_RPC_URL=https://mainnet.base.org
 # Optional APIs
 HELIUS_API_KEY=...                       # Optional, for enhanced Solana metadata
 
+# Cron Job Security (Required for automated listeners)
+CRON_SECRET=your-random-secret-key-here  # Generate a random string for cron endpoint auth
+
 # Solana (existing)
 NEXT_PUBLIC_SOLANA_PROGRAM_ID=...        # Already configured
 NEXT_PUBLIC_SOLANA_DESK=...              # Already configured
@@ -127,6 +132,9 @@ echo "NEXT_PUBLIC_BASE_RPC_URL=https://mainnet.base.org" >> .env.local
 
 # Optional: Enhanced Solana metadata
 echo "HELIUS_API_KEY=..." >> .env.local
+
+# Cron secret (for production - not needed locally)
+# echo "CRON_SECRET=..." >> .env.local
 ```
 
 ## Step 2.5: Understanding Wallet Scanning
@@ -164,44 +172,106 @@ Uses native Solana RPC to list ALL SPL tokens in wallet:
 
 ## Step 3: Start Backend Event Listeners
 
-### 3.1 Update Server Entry Point
+The token registration listeners monitor blockchain events and automatically register tokens to your database when users register them on-chain.
 
-Add to `src/server/index.ts` or wherever your backend initializes:
+### 3.1 Start Listeners (Development)
 
-```typescript
-import { startBaseListener } from '@/services/token-registration-listener-base';
-import { startSolanaListener } from '@/services/token-registration-listener-solana';
+**Option A: Standalone Script (Recommended for Development)**
 
-// Start listeners on server startup
-async function startListeners() {
-  try {
-    await Promise.all([
-      startBaseListener(),
-      startSolanaListener(),
-    ]);
-    console.log('✅ Token registration listeners started');
-  } catch (error) {
-    console.error('❌ Failed to start listeners:', error);
-  }
-}
+```bash
+# Start listeners in a separate terminal
+bun run listeners:start
 
-// Call during server initialization
-startListeners();
+# Or directly:
+bun run scripts/start-listeners.ts
+```
+
+**Option B: Via API Endpoint**
+
+After starting your Next.js server, call the API endpoint:
+
+```bash
+# Start all listeners
+curl -X POST http://localhost:5004/api/listeners/start \
+  -H "Content-Type: application/json" \
+  -d '{"chain": "all"}'
+
+# Or start specific chain
+curl -X POST http://localhost:5004/api/listeners/start \
+  -H "Content-Type: application/json" \
+  -d '{"chain": "base"}'
 ```
 
 ### 3.2 Start Development Server
+
+In a separate terminal, start the Next.js app:
 
 ```bash
 bun run dev
 ```
 
-You should see:
+### 3.3 Verify Listeners Started
+
+You should see output like:
 ```
+🚀 Starting token registration listeners...
+📡 Starting Base listener...
 [Base Listener] Starting listener for 0x...
-[Base Listener] Now listening for token registrations
+✅ Base listener started
+📡 Starting Solana listener...
 [Solana Listener] Starting listener for ...
-[Solana Listener] Now listening for token registrations
+✅ Solana listener started
+🎯 All listeners initialized successfully!
 ```
+
+### 3.4 Production Deployment (Vercel) - Automated ✅
+
+**The listeners are now automated via Vercel Cron Jobs!** No manual setup required.
+
+When you deploy to Vercel, the cron job automatically runs every minute to poll for new token registrations. The cron job is configured in `vercel.json`:
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron/poll-token-registrations",
+      "schedule": "* * * * *"
+    }
+  ]
+}
+```
+
+**What happens automatically:**
+- ✅ Polls Base chain every minute for new `TokenRegistered` events
+- ✅ Polls Solana every minute for new token registrations
+- ✅ Automatically registers new tokens to your database
+- ✅ Handles errors gracefully and continues polling
+
+**Note:** The cron job is a backup - when users register tokens through the UI, they're synced immediately (see below).
+
+**Environment Variable Required:**
+
+Add to your Vercel project settings:
+```bash
+CRON_SECRET=your-secret-key-here  # Used to secure the cron endpoint
+```
+
+**How it works:**
+- The cron job uses polling (not websockets) which works perfectly with Vercel's serverless functions
+- Each run checks the last ~1000 blocks (safe window for 1-minute intervals)
+- The database automatically prevents duplicates (tokens are keyed by `chain-address`)
+- Even if the same block is processed multiple times, duplicate registrations are safely ignored
+- No long-running processes needed - perfect for serverless!
+
+**Immediate Sync (Better UX):**
+- When users register tokens through the UI, they're synced immediately via `/api/tokens/sync`
+- The UI polls the database until the token appears (max 30 seconds)
+- Users see "Syncing token..." status instead of waiting for the cron job
+- This provides near-instant feedback while the cron job serves as a backup
+
+**Alternative Options (if you need real-time):**
+1. **Separate Worker Process**: Deploy `scripts/start-listeners.ts` on Railway/Render/Fly.io for real-time websocket listening
+2. **API Endpoint**: Call `/api/listeners/start` via external cron service (not recommended - use built-in cron instead)
 
 ## Step 4: Verify Deployment
 
@@ -209,6 +279,9 @@ Run the verification script:
 
 ```bash
 bun run scripts/verify-multichain-deployment.ts
+
+# Or if the script is executable:
+./scripts/verify-multichain-deployment.ts
 ```
 
 Expected output:
@@ -343,17 +416,22 @@ cast send <ORACLE_ADDRESS> "setTWAPInterval(uint32)" 1800 \
 
 ### Backend listener not receiving events
 
-- Ensure `NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS` is correct
-- Check RPC URL has websocket support
-- Verify listeners started successfully (check logs)
-- Try restarting server
+- **Listeners must be started manually** - they don't auto-start with Next.js
+- Ensure listeners are running: `bun run listeners:start` or via API endpoint
+- Verify `NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS` is correct
+- Check RPC URL is accessible (websocket support not required for HTTP polling)
+- Check listener logs for errors
+- Ensure environment variables are set correctly
+- Try restarting listeners
 
 ## Success Criteria Checklist
 
 - [ ] OTC contract deployed and verified on Basescan
 - [ ] RegistrationHelper deployed and verified
 - [ ] Environment variables updated in Vercel
-- [ ] Backend listeners running
+- [ ] CRON_SECRET environment variable set in Vercel
+- [ ] Automated cron job configured (already in vercel.json)
+- [ ] Verify cron job is running (check Vercel logs after deployment)
 - [ ] Verification script passes all checks
 - [ ] Wallet scanning works (shows tokens with balances)
 - [ ] Test token registration works end-to-end

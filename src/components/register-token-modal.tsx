@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useMultiWallet } from "@/components/multiwallet";
+import { useWriteContract, usePublicClient } from "wagmi";
+import { parseEther } from "viem";
 import { Dialog, DialogTitle, DialogBody } from "@/components/dialog";
 import { Button } from "@/components/button";
 import { scanWalletTokens, type ScannedToken } from "@/utils/wallet-token-scanner";
@@ -17,7 +19,7 @@ interface RegisterTokenModalProps {
   defaultChain?: Chain;
 }
 
-type Step = "scan" | "select" | "oracle" | "confirm" | "register" | "success";
+type Step = "scan" | "select" | "oracle" | "confirm" | "register" | "syncing" | "success";
 
 export function RegisterTokenModal({
   open,
@@ -27,6 +29,8 @@ export function RegisterTokenModal({
 }: RegisterTokenModalProps) {
   const { user, authenticated } = usePrivy();
   const { solanaWallet } = useMultiWallet();
+  const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
   
   const [step, setStep] = useState<Step>("scan");
   const [selectedChain, setSelectedChain] = useState<Chain>(defaultChain);
@@ -36,6 +40,8 @@ export function RegisterTokenModal({
   const [oracleInfo, setOracleInfo] = useState<SolanaOracleInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<string>("");
 
   // Get wallet addresses
   const evmAddress = user?.wallet?.address;
@@ -152,13 +158,30 @@ export function RegisterTokenModal({
     setLoading(true);
     setError(null);
     setStep("register");
+    setTxHash(null);
+    setSyncStatus("");
 
     try {
+      let hash: string;
+      
       if (selectedChain === "base") {
-        await registerBaseToken();
+        hash = await registerBaseToken();
       } else if (selectedChain === "solana") {
-        await registerSolanaToken();
+        hash = await registerSolanaToken();
+      } else {
+        throw new Error("Unsupported chain");
       }
+
+      setTxHash(hash);
+      
+      // Wait for transaction confirmation
+      setSyncStatus("Waiting for transaction confirmation...");
+      if (publicClient && hash) {
+        await publicClient.waitForTransactionReceipt({ hash: hash as `0x${string}` });
+      }
+
+      // Now sync to database immediately
+      await syncTokenToDatabase(hash);
 
       setStep("success");
       onSuccess?.();
@@ -170,31 +193,101 @@ export function RegisterTokenModal({
     }
   };
 
-  // Register token on Base
-  const registerBaseToken = async () => {
-    if (!selectedToken || !poolInfo) throw new Error("Missing token or pool info");
-    if (!evmAddress) throw new Error("No EVM wallet connected");
+  /**
+   * Sync token to database immediately after on-chain registration
+   */
+  const syncTokenToDatabase = async (transactionHash: string) => {
+    setStep("syncing");
+    setSyncStatus("Syncing token to database...");
 
     try {
-      // For UI testing without contract deployment, simulate success
-      console.log("Base token registration would call:", {
-        token: selectedToken.address,
-        pool: poolInfo.address,
-        registrationFee: "0.005 ETH",
-        contractAddress: process.env.NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS
+      // Call sync endpoint
+      const syncResponse = await fetch("/api/tokens/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chain: selectedChain === "base" ? "base" : "solana",
+          transactionHash,
+        }),
       });
 
-      // Simulate successful registration for UI testing
-      console.log("Base token registration simulated successfully");
+      const syncData = await syncResponse.json();
 
-      // In a real implementation, we would:
-      // 1. Use wagmi writeContractAsync to send transaction
-      // 2. Wait for transaction confirmation
-      // 3. Return the transaction hash
+      if (!syncData.success) {
+        throw new Error(syncData.error || "Sync failed");
+      }
 
-      // For UI testing, simulate a successful transaction
-      console.log("Base token registration simulated successfully");
+      // Poll database until token appears (max 30 seconds)
+      setSyncStatus("Waiting for token to appear in database...");
+      const maxAttempts = 15; // 15 attempts × 2 seconds = 30 seconds max
+      let attempts = 0;
 
+      while (attempts < maxAttempts) {
+        const chain = selectedChain === "base" ? "base" : "solana";
+        const response = await fetch(`/api/tokens?chain=${chain}&isActive=true`);
+        const data = await response.json();
+
+        if (data.success && data.tokens) {
+          const tokenFound = data.tokens.find(
+            (t: any) => t.contractAddress.toLowerCase() === selectedToken.address.toLowerCase()
+          );
+
+          if (tokenFound) {
+            setSyncStatus("Token synced successfully!");
+            return; // Success!
+          }
+        }
+
+        attempts++;
+        await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds
+      }
+
+      // If we get here, token didn't appear but sync might have succeeded
+      // (could be a race condition or the token was already registered)
+      console.warn("Token did not appear in database after polling, but sync may have succeeded");
+      setSyncStatus("Sync completed (token may already be registered)");
+    } catch (err) {
+      console.error("Sync error:", err);
+      // Don't fail the whole flow - cron job will catch it eventually
+      setSyncStatus("Sync in progress (will complete automatically)...");
+    }
+  };
+
+  // Register token on Base
+  const registerBaseToken = async (): Promise<string> => {
+    if (!selectedToken || !poolInfo) throw new Error("Missing token or pool info");
+    if (!evmAddress) throw new Error("No EVM wallet connected");
+    if (!writeContractAsync) throw new Error("Wallet not connected");
+
+    const registrationHelperAddress = process.env.NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS;
+    if (!registrationHelperAddress) {
+      throw new Error("RegistrationHelper contract not configured");
+    }
+
+    try {
+      const registrationFee = parseEther("0.005"); // 0.005 ETH
+
+      const hash = await writeContractAsync({
+        address: registrationHelperAddress as `0x${string}`,
+        abi: [
+          {
+            name: "registerTokenWithPayment",
+            type: "function",
+            stateMutability: "payable",
+            inputs: [
+              { name: "tokenAddress", type: "address" },
+              { name: "poolAddress", type: "address" },
+            ],
+            outputs: [{ name: "oracle", type: "address" }],
+          },
+        ],
+        functionName: "registerTokenWithPayment",
+        args: [selectedToken.address as `0x${string}`, poolInfo.address as `0x${string}`],
+        value: registrationFee,
+      } as any);
+
+      console.log("Base token registration transaction sent:", hash);
+      return hash;
     } catch (error) {
       console.error("Registration failed:", error);
       throw new Error(`Registration failed: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -311,6 +404,7 @@ export function RegisterTokenModal({
         txHash
       });
 
+      return txHash;
     } catch (error) {
       console.error("Solana registration failed:", error);
       throw new Error(`Solana registration failed: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -557,6 +651,29 @@ export function RegisterTokenModal({
           </DialogBody>
         )}
 
+        {/* Syncing */}
+        {step === "syncing" && (
+          <DialogBody>
+            <div className="text-center space-y-4 py-6">
+              <div className="animate-spin text-orange-500 text-5xl">⟳</div>
+              <div>
+                <div className="font-medium text-lg">Syncing Token...</div>
+                <div className="text-sm text-zinc-600 dark:text-zinc-400 mt-2">
+                  {syncStatus || "Processing registration"}
+                </div>
+                {txHash && (
+                  <div className="text-xs text-zinc-500 dark:text-zinc-500 mt-2 font-mono break-all">
+                    TX: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+                  </div>
+                )}
+              </div>
+              <div className="text-xs text-zinc-500 dark:text-zinc-500 mt-4">
+                This usually takes a few seconds...
+              </div>
+            </div>
+          </DialogBody>
+        )}
+
         {/* Success */}
         {step === "success" && (
           <DialogBody>
@@ -567,6 +684,11 @@ export function RegisterTokenModal({
                 <div className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
                   {selectedToken?.symbol} is now available for trading
                 </div>
+                {txHash && (
+                  <div className="text-xs text-zinc-500 dark:text-zinc-500 mt-2 font-mono break-all">
+                    TX: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+                  </div>
+                )}
               </div>
               <Button onClick={() => onOpenChange(false)} className="w-full">
                 Close
