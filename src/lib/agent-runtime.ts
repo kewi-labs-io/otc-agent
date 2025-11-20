@@ -80,12 +80,58 @@ class AgentRuntimeManager {
       const DEFAULT_POSTGRES_URL = `postgres://eliza:password@localhost:${dbPort}/eliza`;
       
       // Check for Vercel Neon Storage variables first, then fallback to standard names
+      // Log which env vars are present (without values) for debugging
+      const dbEnvVars = {
+        DATABASE_POSTGRES_URL: !!process.env.DATABASE_POSTGRES_URL,
+        DATABASE_URL_UNPOOLED: !!process.env.DATABASE_URL_UNPOOLED,
+        POSTGRES_URL: !!process.env.POSTGRES_URL,
+        POSTGRES_DATABASE_URL: !!process.env.POSTGRES_DATABASE_URL,
+      };
+      console.log("[AgentRuntime] Database env vars present:", dbEnvVars);
+      
       const postgresUrl = 
         process.env.DATABASE_POSTGRES_URL ||     // Vercel Neon Storage (pooled)
         process.env.DATABASE_URL_UNPOOLED ||     // Vercel Neon Storage (unpooled)
         process.env.POSTGRES_URL ||              // Standard
         process.env.POSTGRES_DATABASE_URL ||     // Alternative standard
         DEFAULT_POSTGRES_URL;                    // Local development
+      
+      // Validate database URL format
+      if (!postgresUrl || postgresUrl === DEFAULT_POSTGRES_URL) {
+        const isProduction = process.env.NODE_ENV === "production";
+        if (isProduction && postgresUrl === DEFAULT_POSTGRES_URL) {
+          console.error("[AgentRuntime] ERROR: No database URL found in production!");
+          console.error("[AgentRuntime] Expected one of: DATABASE_POSTGRES_URL, DATABASE_URL_UNPOOLED, POSTGRES_URL, POSTGRES_DATABASE_URL");
+          throw new Error(
+            "Database connection failed: No database URL configured in production. " +
+            "Vercel Neon Storage should provide DATABASE_POSTGRES_URL automatically. " +
+            "Please check your Vercel project settings."
+          );
+        }
+      }
+      
+      // Validate URL format (basic check)
+      if (postgresUrl && !postgresUrl.includes('localhost')) {
+        const isValidFormat = 
+          postgresUrl.startsWith('postgres://') || 
+          postgresUrl.startsWith('postgresql://');
+        if (!isValidFormat) {
+          console.warn("[AgentRuntime] WARNING: Database URL doesn't start with postgres:// or postgresql://");
+        }
+        // Check for hostname (basic validation)
+        try {
+          const url = new URL(postgresUrl.replace(/^postgres(ql)?:\/\//, 'http://'));
+          if (!url.hostname || url.hostname === '') {
+            console.error("[AgentRuntime] ERROR: Database URL missing hostname");
+            throw new Error("Database connection failed: Invalid database URL format (missing hostname)");
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("Invalid database URL")) {
+            throw error;
+          }
+          console.warn("[AgentRuntime] Could not parse database URL for validation (may be valid)");
+        }
+      }
       
       console.log(`[AgentRuntime] Database config: ${postgresUrl.includes('localhost') ? 'localhost:' + dbPort : 'remote (Vercel/Neon)'}`);
       

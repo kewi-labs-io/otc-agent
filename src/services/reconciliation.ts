@@ -10,6 +10,7 @@ import type { Offer } from "@/types";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 import { QuoteDB } from "./database";
 import { getChain, getRpcUrl } from "@/lib/getChain";
+import { getContractAddress } from "@/lib/getContractAddress";
 
 // ContractOffer is same as Offer type
 type ContractOffer = Offer;
@@ -30,9 +31,14 @@ export class ReconciliationService {
       transport: http(rpcUrl),
     });
 
-    this.otcAddress = process.env.NEXT_PUBLIC_OTC_ADDRESS as
-      | Address
-      | undefined;
+    // Use chain-specific contract address based on NETWORK env var
+    try {
+      this.otcAddress = getContractAddress();
+      console.log(`[ReconciliationService] Using contract address: ${this.otcAddress} for network: ${process.env.NETWORK || process.env.NEXT_PUBLIC_JEJU_NETWORK || "localnet"}`);
+    } catch (error) {
+      console.error("[ReconciliationService] Failed to get contract address:", error);
+      throw error;
+    }
     this.abi = otcArtifact.abi as Abi;
   }
 

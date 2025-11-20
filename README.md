@@ -294,6 +294,65 @@ ALLOWED_DEV_ORIGINS=
 
 **Note:** The `POSTGRES_URL` must match the database started by docker-compose (see Prerequisites section above).
 
+### Production Environment Variables
+
+When deploying to production (e.g., Vercel), ensure the following environment variables are configured:
+
+#### Required for Base Mainnet Deployment
+
+```env
+# Network Configuration (CRITICAL)
+NETWORK=base  # Must be set to "base" for Base mainnet
+
+# Contract Addresses (Base Mainnet)
+NEXT_PUBLIC_BASE_OTC_ADDRESS=0x02C53285D209262F81211d73759d6c1c36b9C2E5
+NEXT_PUBLIC_BASE_RPC_URL=https://mainnet.base.org
+
+# Database (Vercel Neon Storage Integration)
+# DATABASE_POSTGRES_URL is automatically provided by Vercel Neon Storage
+# No manual configuration needed if using Vercel Neon Storage integration
+
+# Security
+CRON_SECRET=<your-secure-random-string>
+APPROVER_PRIVATE_KEY=<your-approver-private-key>
+```
+
+#### Required for Jeju Mainnet Deployment
+
+```env
+# Network Configuration
+NETWORK=jeju-mainnet  # Or leave unset (defaults to Jeju)
+
+# Contract Addresses (Jeju Mainnet)
+NEXT_PUBLIC_JEJU_OTC_ADDRESS=<deployed-contract-address>
+NEXT_PUBLIC_JEJU_RPC_URL=https://rpc.jeju.network
+
+# Database (same as Base)
+DATABASE_POSTGRES_URL=<from-vercel-neon-storage>
+```
+
+#### Troubleshooting Production Issues
+
+**Database Connection Errors (`getaddrinfo ENOTFOUND`):**
+- Ensure Vercel Neon Storage integration is enabled in your Vercel project
+- Verify `DATABASE_POSTGRES_URL` is available in Vercel environment variables
+- Check that the database hostname in the connection string is valid
+- The code checks for: `DATABASE_POSTGRES_URL`, `DATABASE_URL_UNPOOLED`, `POSTGRES_URL`, `POSTGRES_DATABASE_URL`
+
+**Contract Address Errors (`nextOfferId()` returns `"0x"`):**
+- **CRITICAL**: Ensure `NETWORK=base` is set in Vercel environment variables for Base mainnet
+- Verify `NEXT_PUBLIC_BASE_OTC_ADDRESS` matches your deployed contract address
+- Check that the contract address exists on the correct chain (Base mainnet chain ID 8453)
+- The code uses `getContractAddress()` which selects the correct address based on `NETWORK`:
+  - `NETWORK=base` → Uses `NEXT_PUBLIC_BASE_OTC_ADDRESS`
+  - `NETWORK=bsc` → Uses `NEXT_PUBLIC_BSC_OTC_ADDRESS`
+  - `NETWORK=jeju-mainnet` or unset → Uses `NEXT_PUBLIC_JEJU_OTC_ADDRESS`
+
+**Common Mistakes:**
+- ❌ Forgetting to set `NETWORK=base` in production (causes code to default to Jeju mainnet)
+- ❌ Using `NEXT_PUBLIC_OTC_ADDRESS` instead of chain-specific address (`NEXT_PUBLIC_BASE_OTC_ADDRESS`)
+- ❌ Database URL not configured (Vercel Neon Storage should provide `DATABASE_POSTGRES_URL` automatically)
+
 ### Market Data API Keys
 
 To display real-time token prices and 24h price changes:

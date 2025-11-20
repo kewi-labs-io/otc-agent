@@ -35,7 +35,7 @@ export OWNER_ADDRESS=0x...         # Your new wallet address
 - Makes it easier to track deployment-related transactions
 - Can be discarded after deployment if desired
 
-## Step 1: Deploy Base Contracts
+## Step 1: Deploy Base Contracts (EVM)
 
 ### 1.1 Set Environment Variables
 
@@ -94,6 +94,142 @@ forge verify-contract <REGISTRATION_HELPER_ADDRESS> RegistrationHelper \
   --constructor-args $(cast abi-encode "constructor(address,address)" <OTC_ADDRESS> <ETH_USD_FEED>)
 ```
 
+## Step 1.5: Deploy Solana Program (Optional)
+
+**Note**: If you already have a Solana program deployed (e.g., from devnet/testing), you can skip this step and use the existing program ID. The verification script will check if your configured program exists on mainnet.
+
+### Prerequisites
+
+- [ ] Solana CLI installed (`sh -c "$(curl -sSfL https://release.solana.com/stable/install)"`)
+- [ ] Anchor CLI installed (`cargo install --git https://github.com/coral-xyz/anchor avm && avm install latest && avm use latest`)
+- [ ] SOL in your wallet for deployment (~2-5 SOL recommended for mainnet)
+- [ ] Keypair file for deployment
+
+### 1.5.1 Set Up Solana Wallet
+
+```bash
+# Generate a new keypair (or use existing)
+solana-keygen new --outfile ~/.config/solana/mainnet-deployer.json
+
+# Set as default keypair
+solana config set --keypair ~/.config/solana/mainnet-deployer.json
+
+# Set Solana cluster to mainnet
+solana config set --url https://api.mainnet-beta.solana.com
+
+# Check balance (need ~2-5 SOL for deployment)
+solana balance
+```
+
+**If you need SOL:**
+- Use a faucet (for devnet/testnet) or
+- Buy SOL and transfer to your deployment wallet
+
+### 1.5.2 Build Solana Program
+
+```bash
+cd solana/otc-program
+
+# Build the program (Anchor builds in release mode by default)
+anchor build
+
+# This creates: target/deploy/otc.so
+# Note: Anchor doesn't have a --release flag - it builds optimized by default
+```
+
+### 1.5.3 Deploy to Mainnet
+
+**Option A: Using Anchor (Recommended)**
+
+```bash
+# Deploy (Anchor will use the Solana CLI config you set earlier)
+anchor deploy --provider.cluster mainnet --provider.wallet ~/.config/solana/mainnet-deployer.json
+
+# Save the program ID from output
+# Example: Program Id: 8X2wDShtcJ5mFrcsJPjK8tQCD16zBqzsUGwhSCM4ggko
+
+# Note: Make sure you've set the Solana config first:
+# solana config set --url https://api.mainnet-beta.solana.com
+# solana config set --keypair ~/.config/solana/mainnet-deployer.json
+```
+
+**Option B: Using Solana CLI**
+
+```bash
+# Deploy the program
+solana program deploy \
+  --program-id target/deploy/otc-keypair.json \
+  --keypair ~/.config/solana/mainnet-deployer.json \
+  --url https://api.mainnet-beta.solana.com \
+  target/deploy/otc.so
+
+# Save the program ID (from otc-keypair.json or output)
+```
+
+### 1.5.4 Initialize Desk Account
+
+After deployment, you need to initialize the desk account:
+
+```bash
+# Using the quick-init script (if available)
+cd solana/otc-program
+bun run scripts/quick-init.ts
+
+# Or manually via Anchor
+anchor run init-desk --provider.cluster mainnet
+```
+
+**What gets initialized:**
+- Desk PDA account (stores OTC state)
+- Price feeds configuration
+- Limits and parameters
+
+### 1.5.5 Save Deployment Info
+
+Save these values for environment variables:
+
+```
+Program ID: 8X2wDShtcJ5mFrcsJPjK8tQCD16zBqzsUGwhSCM4ggko  (from deployment)
+Desk Address: <from init-desk output>
+Desk Owner: <your wallet address>
+```
+
+### 1.5.6 Verify Deployment
+
+```bash
+# Check program exists
+solana program show <PROGRAM_ID> --url https://api.mainnet-beta.solana.com
+
+# Check desk account
+solana account <DESK_ADDRESS> --url https://api.mainnet-beta.solana.com
+```
+
+**Expected output:**
+- Program should show as "Executable"
+- Desk account should exist with data
+
+### Troubleshooting Solana Deployment
+
+**"Insufficient funds"**
+- Need ~2-5 SOL for deployment
+- Check balance: `solana balance`
+- Get SOL from exchange or faucet
+
+**"Program already deployed"**
+- If re-deploying, use `--upgrade-authority` flag
+- Or deploy to a new program ID
+
+**"Desk initialization fails"**
+- Ensure program is deployed first
+- Check you have enough SOL for account creation
+- Verify program ID matches in Anchor.toml
+
+**Note**: If you're deploying to devnet/testnet first for testing, use:
+```bash
+solana config set --url https://api.devnet.solana.com  # or testnet
+anchor deploy --provider.cluster devnet
+```
+
 ## Step 2: Update Environment Variables
 
 ### 2.1 Production Environment (Vercel)
@@ -114,9 +250,11 @@ HELIUS_API_KEY=...                       # Optional, for enhanced Solana metadat
 # Cron Job Security (Required for automated listeners)
 CRON_SECRET=your-random-secret-key-here  # Generate a random string for cron endpoint auth
 
-# Solana (existing)
-NEXT_PUBLIC_SOLANA_PROGRAM_ID=...        # Already configured
-NEXT_PUBLIC_SOLANA_DESK=...              # Already configured
+# Solana (Required if deploying Solana program)
+NEXT_PUBLIC_SOLANA_PROGRAM_ID=8X2wDShtcJ5mFrcsJPjK8tQCD16zBqzsUGwhSCM4ggko  # From Step 1.5
+NEXT_PUBLIC_SOLANA_DESK=...              # Desk PDA address from init-desk
+NEXT_PUBLIC_SOLANA_DESK_OWNER=...       # Your wallet address (deployer)
+NEXT_PUBLIC_SOLANA_RPC=https://api.mainnet-beta.solana.com  # Or use Helius/RPC provider
 ```
 
 ### 2.2 Local Development (.env.local)
@@ -428,13 +566,16 @@ cast send <ORACLE_ADDRESS> "setTWAPInterval(uint32)" 1800 \
 
 - [ ] OTC contract deployed and verified on Basescan
 - [ ] RegistrationHelper deployed and verified
+- [ ] **Solana program deployed (if using Solana)** - Program ID saved
+- [ ] **Solana desk initialized (if using Solana)** - Desk address saved
 - [ ] Environment variables updated in Vercel
 - [ ] CRON_SECRET environment variable set in Vercel
 - [ ] Automated cron job configured (already in vercel.json)
 - [ ] Verify cron job is running (check Vercel logs after deployment)
 - [ ] Verification script passes all checks
 - [ ] Wallet scanning works (shows tokens with balances)
-- [ ] Test token registration works end-to-end
+- [ ] Test token registration works end-to-end (Base)
+- [ ] Test token registration works end-to-end (Solana, if deployed)
 - [ ] Tokens appear in database after registration
 - [ ] Can create consignments with registered tokens
 - [ ] Manual address input works for unlisted tokens

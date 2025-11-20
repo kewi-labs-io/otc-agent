@@ -8,7 +8,8 @@ import {
 } from "@/services/database";
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http, type Address } from "viem";
-import { getChain } from "@/lib/getChain";
+import { getChain, getRpcUrl } from "@/lib/getChain";
+import { getContractAddress } from "@/lib/getContractAddress";
 
 export async function POST(request: NextRequest) {
   await agentRuntime.getRuntime();
@@ -158,22 +159,35 @@ export async function POST(request: NextRequest) {
       });
     } else if (offerId && offerId !== "0") {
       // Fetch on-chain data for EVM deals
-      const OTC_ADDRESS = process.env.NEXT_PUBLIC_OTC_ADDRESS as Address;
-      const RPC_URL =
-        process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
+      // Use chain-specific contract address based on NETWORK env var
+      let OTC_ADDRESS: Address;
+      try {
+        OTC_ADDRESS = getContractAddress();
+      } catch (error) {
+        console.error("[DealCompletion] Failed to get contract address:", error);
+        return NextResponse.json(
+          { 
+            error: "Missing contract address configuration",
+            details: error instanceof Error ? error.message : "Unknown error"
+          },
+          { status: 500 },
+        );
+      }
+      
+      const chain = getChain();
+      const RPC_URL = getRpcUrl();
 
       console.log("[DealCompletion] Fetching on-chain data:", {
         offerId,
         OTC_ADDRESS,
         RPC_URL,
+        network: process.env.NETWORK || process.env.NEXT_PUBLIC_JEJU_NETWORK || "localnet",
       });
 
-      if (OTC_ADDRESS) {
-        const chain = getChain();
-        const publicClient = createPublicClient({
-          chain,
-          transport: http(RPC_URL),
-        });
+      const publicClient = createPublicClient({
+        chain,
+        transport: http(RPC_URL),
+      });
         const abi = otcArtifact.abi as any;
 
         const offerData = (await publicClient.readContract({

@@ -11,28 +11,39 @@ import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 import { agentRuntime } from "@/lib/agent-runtime";
 import { parseOfferStruct } from "@/lib/otc-helpers";
 import { getChain, getRpcUrl } from "@/lib/getChain";
+import { getContractAddress } from "@/lib/getContractAddress";
 import { promises as fs } from "fs";
 import path from "path";
 
 export async function POST(request: NextRequest) {
-  // Resolve OTC address (env first, then devnet file fallback)
+  // Resolve OTC address (chain-specific first, then devnet file fallback for local development)
   const resolveOtcAddress = async (): Promise<Address> => {
-    const envAddr = process.env.NEXT_PUBLIC_OTC_ADDRESS as Address | undefined;
-    if (envAddr) return envAddr;
-
-    const deployed = path.join(
-      process.cwd(),
-      "contracts/ignition/deployments/chain-31337/deployed_addresses.json",
-    );
-    const raw = await fs.readFile(deployed, "utf8");
-    const json = JSON.parse(raw);
-    const addr =
-      (json["OTCModule#OTC"] as Address) ||
-      (json["OTCDeskModule#OTC"] as Address) ||
-      (json["ElizaOTCModule#ElizaOTC"] as Address) ||
-      (json["OTCModule#desk"] as Address);
-    if (!addr) throw new Error("No OTC address configured");
-    return addr;
+    // Try to get chain-specific address first (production/configured networks)
+    try {
+      return getContractAddress();
+    } catch (error) {
+      // Fallback to devnet file for local development
+      const deployed = path.join(
+        process.cwd(),
+        "contracts/ignition/deployments/chain-31337/deployed_addresses.json",
+      );
+      try {
+        const raw = await fs.readFile(deployed, "utf8");
+        const json = JSON.parse(raw);
+        const addr =
+          (json["OTCModule#OTC"] as Address) ||
+          (json["OTCDeskModule#OTC"] as Address) ||
+          (json["ElizaOTCModule#ElizaOTC"] as Address) ||
+          (json["OTCModule#desk"] as Address);
+        if (addr) {
+          console.log(`[Approve API] Using devnet address: ${addr}`);
+          return addr;
+        }
+      } catch (fileError) {
+        // File doesn't exist or can't be read
+      }
+      throw new Error("No OTC address configured. Set NETWORK and chain-specific NEXT_PUBLIC_*_OTC_ADDRESS env var.");
+    }
   };
 
   const OTC_ADDRESS = await resolveOtcAddress();

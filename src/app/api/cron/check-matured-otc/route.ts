@@ -9,11 +9,11 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 import { getChain, getRpcUrl } from "@/lib/getChain";
+import { getContractAddress } from "@/lib/getContractAddress";
 
 // This should be called daily via a cron job (e.g., Vercel Cron or external scheduler)
 // It checks for matured OTC and claims them on behalf of users
 
-const OTC_ADDRESS = process.env.NEXT_PUBLIC_OTC_ADDRESS as Address;
 const APPROVER_PRIVATE_KEY = process.env.APPROVER_PRIVATE_KEY as
   | `0x${string}`
   | undefined;
@@ -43,9 +43,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!OTC_ADDRESS) {
+  // Get chain-specific contract address based on NETWORK env var
+  let OTC_ADDRESS: Address;
+  try {
+    OTC_ADDRESS = getContractAddress();
+    console.log(`[Check Matured OTC] Using contract address: ${OTC_ADDRESS} for network: ${process.env.NETWORK || process.env.NEXT_PUBLIC_JEJU_NETWORK || "localnet"}`);
+  } catch (error) {
+    console.error("[Check Matured OTC] Failed to get contract address:", error);
     return NextResponse.json(
-      { error: "Missing configuration" },
+      { 
+        error: "Missing contract address configuration",
+        details: error instanceof Error ? error.message : "Unknown error"
+      },
       { status: 500 },
     );
   }
