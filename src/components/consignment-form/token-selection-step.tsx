@@ -5,8 +5,9 @@ import Image from "next/image";
 import { useMultiWallet } from "../multiwallet";
 import type { Token, TokenMarketData } from "@/services/database";
 import { Button } from "../button";
-import { useAccount } from "wagmi";
-import { localhost } from "wagmi/chains";
+import { useAccount, useChainId, usePublicClient } from "wagmi";
+import { localhost, base, baseSepolia, bsc, bscTestnet } from "wagmi/chains";
+import { jejuMainnet, jejuTestnet, jejuLocalnet } from "@/lib/chains";
 import type { Abi, Address } from "viem";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
@@ -59,6 +60,8 @@ export function TokenSelectionStep({
   const { activeFamily, evmAddress, solanaPublicKey, isConnected } =
     useMultiWallet();
   const { address } = useAccount();
+  const chainId = useChainId();
+  const publicClient = usePublicClient();
   const { connection } = useConnection();
   const [tokens, setTokens] = useState<TokenWithBalance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,16 +70,32 @@ export function TokenSelectionStep({
 
   const fetchSolanaBalance = useCallback(
     async (mintAddress: string, userPublicKey: string): Promise<string> => {
-      const { getAssociatedTokenAddress, getAccount } = await import(
-        "@solana/spl-token"
-      );
+      try {
+        const { getAssociatedTokenAddress, getAccount } = await import(
+          "@solana/spl-token"
+        );
 
-      const mintPubkey = new PublicKey(mintAddress);
-      const ownerPubkey = new PublicKey(userPublicKey);
-      const ata = await getAssociatedTokenAddress(mintPubkey, ownerPubkey);
+        // Normalize addresses to handle case sensitivity
+        const normalizedMint = mintAddress.toLowerCase();
+        const mintPubkey = new PublicKey(normalizedMint);
+        const ownerPubkey = new PublicKey(userPublicKey);
+        const ata = await getAssociatedTokenAddress(mintPubkey, ownerPubkey);
 
-      const accountInfo = await getAccount(connection, ata).catch(() => null);
-      return accountInfo ? accountInfo.amount.toString() : "0";
+        const accountInfo = await getAccount(connection, ata).catch((error) => {
+          console.error(`[TokenSelection] Failed to fetch balance for ${mintAddress}:`, error);
+          return null;
+        });
+        
+        if (!accountInfo) {
+          console.log(`[TokenSelection] No token account found for ${mintAddress}`);
+          return "0";
+        }
+        
+        return accountInfo.amount.toString();
+      } catch (error) {
+        console.error(`[TokenSelection] Error fetching Solana balance for ${mintAddress}:`, error);
+        return "0";
+      }
     },
     [connection],
   );
@@ -124,31 +143,51 @@ export function TokenSelectionStep({
         let balance = "0";
         let balanceNum = 0;
 
-        if (activeFamily === "solana" && solanaPublicKey) {
-          balance = await fetchSolanaBalance(
-            token.contractAddress,
-            solanaPublicKey,
-          );
-          balanceNum = Number(balance) / Math.pow(10, token.decimals);
-        } else if (evmAddress) {
-          balance = await fetchEvmBalance(token.contractAddress, evmAddress);
-          balanceNum = Number(balance) / Math.pow(10, token.decimals);
+        try {
+          if (activeFamily === "solana" && solanaPublicKey) {
+            // Normalize token address for comparison
+            const normalizedTokenAddress = token.contractAddress.toLowerCase();
+            balance = await fetchSolanaBalance(
+              normalizedTokenAddress,
+              solanaPublicKey,
+            );
+            balanceNum = Number(balance) / Math.pow(10, token.decimals);
+          } else if (evmAddress && chainId) {
+            // Only fetch balance if we have a valid chainId
+            balance = await fetchEvmBalance(token.contractAddress, evmAddress);
+            balanceNum = Number(balance) / Math.pow(10, token.decimals);
+          }
+        } catch (error) {
+          console.error(`[TokenSelection] Error checking balance for token ${token.id}:`, error);
+          // Continue to next token instead of failing completely
+          continue;
         }
 
         if (balanceNum > 0) {
-          const marketDataRes = await fetch(`/api/market-data/${token.id}`);
-          const marketDataJson = await marketDataRes.json();
-          const marketData =
-            marketDataJson.marketData as TokenMarketData | null;
-          const priceUsd = marketData?.priceUsd || 0;
-          const balanceUsd = balanceNum * priceUsd;
+          try {
+            const marketDataRes = await fetch(`/api/market-data/${token.id}`);
+            const marketDataJson = await marketDataRes.json();
+            const marketData =
+              marketDataJson.marketData as TokenMarketData | null;
+            const priceUsd = marketData?.priceUsd || 0;
+            const balanceUsd = balanceNum * priceUsd;
 
-          tokensWithBalances.push({
-            ...token,
-            balance,
-            balanceUsd,
-            priceUsd,
-          });
+            tokensWithBalances.push({
+              ...token,
+              balance,
+              balanceUsd,
+              priceUsd,
+            });
+          } catch (error) {
+            console.error(`[TokenSelection] Error fetching market data for token ${token.id}:`, error);
+            // Still add token even if market data fails
+            tokensWithBalances.push({
+              ...token,
+              balance,
+              balanceUsd: 0,
+              priceUsd: 0,
+            });
+          }
         }
       }
 
@@ -167,33 +206,78 @@ export function TokenSelectionStep({
     address,
     connection,
     fetchSolanaBalance,
+    fetchEvmBalance,
+    chainId,
+    publicClient,
   ]);
 
-  async function fetchEvmBalance(
-    tokenAddress: string,
-    userAddress: string,
-  ): Promise<string> {
-    const publicClient = await import("viem").then((m) =>
-      m.createPublicClient({
-        chain: {
-          ...localhost,
-          features: undefined,
-        },
-        transport: m.http(
-          process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545",
-        ),
-      }),
-    );
+  const fetchEvmBalance = useCallback(
+    async (tokenAddress: string, userAddress: string): Promise<string> => {
+      try {
+        // Use the publicClient from wagmi if available (uses correct chain)
+        if (publicClient) {
+          const balance = await publicClient.readContract({
+            address: tokenAddress as Address,
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [userAddress as Address],
+          } as any);
+          return (balance as bigint).toString();
+        }
 
-    const balance = await publicClient.readContract({
-      address: tokenAddress as Address,
-      abi: erc20Abi,
-      functionName: "balanceOf",
-      args: [userAddress as Address],
-    } as any);
+        // Fallback: Create client based on current chainId
+        const { createPublicClient, http } = await import("viem");
+        let chain;
+        let rpcUrl;
 
-    return (balance as bigint).toString();
-  }
+        // Map chainId to chain and RPC URL
+        if (chainId === base.id) {
+          chain = base;
+          rpcUrl = process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+        } else if (chainId === baseSepolia.id) {
+          chain = baseSepolia;
+          rpcUrl = process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://sepolia.base.org";
+        } else if (chainId === bsc.id) {
+          chain = bsc;
+          rpcUrl = process.env.NEXT_PUBLIC_BSC_RPC_URL || "https://bsc-dataseed1.binance.org";
+        } else if (chainId === bscTestnet.id) {
+          chain = bscTestnet;
+          rpcUrl = process.env.NEXT_PUBLIC_BSC_RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545";
+        } else if (chainId === jejuMainnet.id) {
+          chain = jejuMainnet;
+          rpcUrl = process.env.NEXT_PUBLIC_JEJU_RPC_URL || "https://rpc.jeju.network";
+        } else if (chainId === jejuTestnet.id) {
+          chain = jejuTestnet;
+          rpcUrl = process.env.NEXT_PUBLIC_JEJU_RPC_URL || "https://testnet-rpc.jeju.network";
+        } else if (chainId === jejuLocalnet.id) {
+          chain = jejuLocalnet;
+          rpcUrl = process.env.NEXT_PUBLIC_JEJU_RPC_URL || "http://127.0.0.1:9545";
+        } else {
+          // Default to localhost for unknown chains
+          chain = localhost;
+          rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
+        }
+
+        const client = createPublicClient({
+          chain,
+          transport: http(rpcUrl),
+        });
+
+        const balance = await client.readContract({
+          address: tokenAddress as Address,
+          abi: erc20Abi,
+          functionName: "balanceOf",
+          args: [userAddress as Address],
+        } as any);
+
+        return (balance as bigint).toString();
+      } catch (error) {
+        console.error(`[TokenSelection] Error fetching EVM balance for ${tokenAddress}:`, error);
+        return "0";
+      }
+    },
+    [publicClient, chainId],
+  );
 
   const formatBalance = (balance: string, decimals: number) => {
     const num = Number(balance) / Math.pow(10, decimals);

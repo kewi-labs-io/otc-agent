@@ -266,6 +266,10 @@ export function MultiWalletProvider({
   // Switch Solana wallet - always shows modal for wallet selection
   const switchSolanaWallet = useCallback(() => {
     console.log("[MultiWallet] Switching Solana wallet - showing modal");
+    // Ensure activeFamily stays as solana during switch to prevent button disappearing
+    if (activeFamily !== "solana") {
+      setActiveFamilyState("solana");
+    }
     if (!setSolanaModalVisible) {
       console.error(
         "[MultiWallet] setSolanaModalVisible is not available - wallet modal won't open",
@@ -273,7 +277,7 @@ export function MultiWalletProvider({
       return;
     }
     setSolanaModalVisible(true);
-  }, [setSolanaModalVisible]);
+  }, [setSolanaModalVisible, activeFamily]);
 
   // Unified disconnect for both Privy and Solana
   const disconnect = useCallback(async () => {
