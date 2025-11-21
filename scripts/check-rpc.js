@@ -2,6 +2,36 @@
 
 import { spawn } from 'child_process';
 import http from 'http';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+// Load environment variables from .env.local
+function loadEnvFile() {
+  try {
+    const envPath = join(process.cwd(), '.env.local');
+    const envContent = readFileSync(envPath, 'utf8');
+    const envVars = {};
+    
+    envContent.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#')) {
+        const [key, ...valueParts] = trimmed.split('=');
+        if (key && valueParts.length > 0) {
+          const value = valueParts.join('=').replace(/^["']|["']$/g, '');
+          envVars[key.trim()] = value.trim();
+        }
+      }
+    });
+    
+    // Set env vars
+    Object.assign(process.env, envVars);
+  } catch (e) {
+    // .env.local might not exist, that's ok
+  }
+}
+
+// Load env vars before checking
+loadEnvFile();
 
 function checkRPC() {
   return new Promise((resolve) => {
@@ -40,6 +70,17 @@ function checkRPC() {
 }
 
 async function main() {
+  // Check if we're using a production network (skip Anvil)
+  const network = process.env.NETWORK || process.env.NEXT_PUBLIC_JEJU_NETWORK || 'localnet';
+  const isProductionNetwork = ['base', 'bsc', 'jeju-mainnet', 'mainnet'].includes(network);
+  
+  if (isProductionNetwork) {
+    console.log(`✅ Using production network: ${network}`);
+    console.log('   Skipping Anvil RPC setup');
+    process.exit(0);
+    return;
+  }
+  
   console.log('🔍 Checking if Anvil RPC is running on localhost:8545...');
   const isRunning = await checkRPC();
 

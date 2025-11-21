@@ -5,6 +5,31 @@
 
 set -e
 
+# Load environment variables from .env.local if it exists
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [ -f "$PROJECT_ROOT/.env.local" ]; then
+  # Source .env.local, but only export variables that don't start with #
+  set -a
+  source "$PROJECT_ROOT/.env.local"
+  set +a
+fi
+
+# Also check .env file
+if [ -f "$PROJECT_ROOT/.env" ]; then
+  set -a
+  source "$PROJECT_ROOT/.env"
+  set +a
+fi
+
+# Check if POSTGRES_URL is set and points to a non-local database
+if [ -n "$POSTGRES_URL" ] && [[ ! "$POSTGRES_URL" =~ localhost|127\.0\.0\.1 ]]; then
+  echo "✅ Using production database from POSTGRES_URL"
+  echo "   Skipping local Docker PostgreSQL setup"
+  exit 0
+fi
+
 DB_PORT="${VENDOR_OTC_DESK_DB_PORT:-${POSTGRES_DEV_PORT:-5439}}"
 
 echo "🔍 Ensuring PostgreSQL is ready..."

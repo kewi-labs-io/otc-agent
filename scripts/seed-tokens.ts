@@ -1,9 +1,26 @@
 #!/usr/bin/env bun
 
 async function seedTokens() {
+  // Check if using production networks - skip seed if so
+  const fs = await import("fs");
+  const dotenv = await import("dotenv");
+  
+  // Load .env.local if it exists
+  if (fs.existsSync(".env.local")) {
+    dotenv.config({ path: ".env.local" });
+  }
+  
+  const network = process.env.NETWORK || process.env.NEXT_PUBLIC_NETWORK || "localnet";
+  const isProductionNetwork = ["base", "bsc", "jeju-mainnet", "mainnet"].includes(network);
+  
+  if (isProductionNetwork) {
+    console.log(`\n✅ Using production network: ${network}`);
+    console.log("   Skipping seed (production contracts already exist)\n");
+    process.exit(0);
+  }
+  
   console.log("\n🌱 Seeding multi-token OTC marketplace...\n");
   
-  const fs = await import("fs");
   const deploymentPath = "./contracts/deployments/eliza-otc-deployment.json";
   
   if (!fs.existsSync(deploymentPath)) {
