@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runReconciliationTask } from "@/services/reconciliation";
+import { agentRuntime } from "@/lib/agent-runtime";
 
 /**
  * Automated Reconciliation Cron Job
@@ -41,6 +42,29 @@ export async function GET(request: NextRequest) {
   }
 
   console.log("[Reconciliation Cron] Starting reconciliation task...");
+
+  // Ensure runtime is initialized before running reconciliation
+  const runtime = await agentRuntime.getRuntime();
+  
+  // Wait a moment for services to be registered after initialization
+  // Services are registered during plugin initialization which happens in runtime.initialize()
+  const maxRetries = 5;
+  let retries = 0;
+  let quoteService = runtime.getService("QuoteService");
+  
+  while (!quoteService && retries < maxRetries) {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    quoteService = runtime.getService("QuoteService");
+    retries++;
+  }
+  
+  if (!quoteService) {
+    console.error("[Reconciliation Cron] QuoteService not available after initialization");
+    return NextResponse.json(
+      { error: "QuoteService not registered. Please check plugin configuration." },
+      { status: 503 }
+    );
+  }
 
   const startTime = Date.now();
   await runReconciliationTask();
