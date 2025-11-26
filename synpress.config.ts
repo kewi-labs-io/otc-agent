@@ -10,6 +10,9 @@ const BASE_URL = `http://localhost:${OTC_DESK_PORT}`;
  * - Wallet connection flows
  * - Order creation with transaction signing
  * - Two-party trading (buyer + seller)
+ * 
+ * IMPORTANT: Run with `npx playwright test --config=synpress.config.ts`
+ * The wallet setup is cached in .cache/synpress-cache to prevent re-setup loops.
  */
 export default defineConfig({
   testDir: './tests/synpress',
@@ -20,26 +23,29 @@ export default defineConfig({
   workers: 1,
   
   // Longer timeouts for wallet interactions
-  timeout: 120000,
+  timeout: 180000,
   expect: {
-    timeout: 15000,
+    timeout: 30000,
   },
   
   // Fail fast in CI
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  retries: 0, // No retries for wallet tests - each retry resets wallet state
   
-  reporter: process.env.CI ? [['html'], ['github']] : 'html',
+  reporter: process.env.CI ? [['html'], ['github']] : 'list',
   
   use: {
     baseURL: BASE_URL,
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: 'on-first-retry',
+    video: 'retain-on-failure',
     
     // Longer timeouts for wallet operations
-    actionTimeout: 30000,
-    navigationTimeout: 30000,
+    actionTimeout: 60000,
+    navigationTimeout: 60000,
+    
+    // Headed mode required for MetaMask
+    headless: false,
   },
   
   projects: [
@@ -49,7 +55,11 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         // Required for MetaMask extension
         launchOptions: {
-          args: ['--disable-web-security'],
+          headless: false,
+          args: [
+            '--disable-web-security',
+            '--disable-features=IsolateOrigins,site-per-process',
+          ],
         },
       },
     },

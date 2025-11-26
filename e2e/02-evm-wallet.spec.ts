@@ -1,46 +1,22 @@
 /**
  * EVM Wallet Connection and Interaction Tests
  * 
- * These tests require MetaMask extension via dappwright.
- * They will be SKIPPED in headless mode (CI).
- * Run with: npx playwright test --headed e2e/02-evm-wallet.spec.ts
+ * Tests basic wallet UI without requiring actual MetaMask connection.
+ * Full wallet integration tests are in tests/synpress/
  */
 
 import { test, expect, Page } from '@playwright/test';
 
-// Check if we're in headed mode (dappwright requires this)
-const isHeaded = !process.env.CI && process.env.HEADED !== 'false';
-
-// Skip all wallet tests in headless/CI mode
-test.skip(!isHeaded, 'Wallet tests require headed mode with MetaMask extension');
-
-test.setTimeout(600000);
-
-// Use Anvil Localnet for testing (default network)
-const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'http://127.0.0.1:8545';
-const CHAIN_ID = 31337;
+test.setTimeout(60000);
+test.use({ viewport: { width: 1280, height: 720 } });
 
 // Helper to wait for page
 async function waitForPageReady(page: Page) {
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(1000);
 }
 
-// Dynamic import of dappwright to avoid breaking headless tests
-let bootstrap: typeof import('@tenkeylabs/dappwright').bootstrap;
-let getWallet: typeof import('@tenkeylabs/dappwright').getWallet;
-let MetaMaskWallet: typeof import('@tenkeylabs/dappwright').MetaMaskWallet;
-
-test.beforeAll(async () => {
-  if (!isHeaded) return;
-  
-  const dappwright = await import('@tenkeylabs/dappwright');
-  bootstrap = dappwright.bootstrap;
-  getWallet = dappwright.getWallet;
-  MetaMaskWallet = dappwright.MetaMaskWallet;
-});
-
-test.describe('EVM Wallet Connection', () => {
+test.describe('EVM Wallet UI', () => {
   test('connect button opens network selector', async ({ page }) => {
     await page.goto('/');
     await waitForPageReady(page);
@@ -53,9 +29,7 @@ test.describe('EVM Wallet Connection', () => {
     
     // Should show EVM option
     const evmBtn = page.getByRole('button', { name: /evm/i });
-    const hasEvm = await evmBtn.isVisible({ timeout: 5000 }).catch(() => false);
-    
-    expect(hasEvm).toBeTruthy();
+    await expect(evmBtn).toBeVisible({ timeout: 5000 });
   });
 
   test('EVM selection shows chain options', async ({ page }) => {
@@ -82,9 +56,7 @@ test.describe('EVM Wallet Connection', () => {
       expect(hasBase || hasBsc).toBeTruthy();
     }
   });
-});
 
-test.describe('EVM Wallet UI States', () => {
   test('disconnect state shows connect button', async ({ page }) => {
     await page.goto('/');
     await waitForPageReady(page);
@@ -93,7 +65,7 @@ test.describe('EVM Wallet UI States', () => {
     await expect(page.getByRole('button', { name: /connect/i }).first()).toBeVisible();
   });
 
-  test('wallet modal can be closed', async ({ page }) => {
+  test('wallet modal can be closed with Escape', async ({ page }) => {
     await page.goto('/');
     await waitForPageReady(page);
     
@@ -101,16 +73,18 @@ test.describe('EVM Wallet UI States', () => {
     await page.getByRole('button', { name: /connect/i }).first().click();
     await page.waitForTimeout(1500);
     
-    // Press escape or click outside to close
+    // Verify modal is open
+    const evmBtn = page.getByRole('button', { name: /evm/i });
+    await expect(evmBtn).toBeVisible({ timeout: 5000 });
+    
+    // Press escape to close
     await page.keyboard.press('Escape');
     await page.waitForTimeout(500);
     
-    // Modal should be closed (connect button visible again without modal)
+    // Modal should be closed (connect button visible again)
     await expect(page.getByRole('button', { name: /connect/i }).first()).toBeVisible();
   });
-});
 
-test.describe('Chain Switching UI', () => {
   test('chain selector shows supported chains', async ({ page }) => {
     await page.goto('/');
     await waitForPageReady(page);
@@ -123,14 +97,44 @@ test.describe('Chain Switching UI', () => {
     const evmBtn = page.getByRole('button', { name: /evm/i });
     if (await evmBtn.isVisible({ timeout: 5000 })) {
       await evmBtn.click();
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(2000);
       
-      // Verify chain options are visible
-      const hasChainOptions = await page.locator('button').filter({ hasText: /base|bsc|ethereum/i }).first().isVisible({ timeout: 3000 }).catch(() => false);
-      expect(hasChainOptions).toBeTruthy();
+      // Verify chain options are visible (Base or BSC) OR Privy took over
+      const hasBase = await page.getByRole('button', { name: /base/i }).first().isVisible({ timeout: 3000 }).catch(() => false);
+      const hasBsc = await page.getByRole('button', { name: /bsc/i }).isVisible({ timeout: 2000 }).catch(() => false);
+      const hasPrivy = await page.getByRole('button', { name: /farcaster/i }).isVisible({ timeout: 2000 }).catch(() => false);
+      
+      // Either chain selector OR Privy modal
+      expect(hasBase || hasBsc || hasPrivy).toBeTruthy();
     }
   });
-});
 
-// Note: Full wallet connection tests require dappwright in headed mode
-// These are tested separately in the synpress tests or with manual QA
+  test('selecting Base chain opens Privy modal', async ({ page }) => {
+    await page.goto('/');
+    await waitForPageReady(page);
+    
+    // Open connect modal
+    await page.getByRole('button', { name: /connect/i }).first().click();
+    await page.waitForTimeout(1500);
+    
+    // Click EVM
+    const evmBtn = page.getByRole('button', { name: /evm/i });
+    await evmBtn.click();
+    await page.waitForTimeout(1500);
+    
+    // Click Base
+    const baseBtn = page.getByRole('button', { name: /base/i }).first();
+    await baseBtn.click();
+    await page.waitForTimeout(2000);
+    
+    // Privy modal should appear with login options
+    const privyModal = page.locator('text=log in, text=Farcaster, text=wallet').first();
+    const hasPrivy = await privyModal.isVisible({ timeout: 5000 }).catch(() => false);
+    
+    // Alternative: check for Farcaster button specifically
+    const farcasterBtn = page.getByRole('button', { name: /farcaster/i });
+    const hasFarcaster = await farcasterBtn.isVisible({ timeout: 3000 }).catch(() => false);
+    
+    expect(hasPrivy || hasFarcaster).toBeTruthy();
+  });
+});

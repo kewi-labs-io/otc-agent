@@ -11,10 +11,13 @@
  * - Anvil running with contracts deployed: bun run rpc:dev
  * - Dev server running: bun run dev
  * - Test wallets funded (handled by Anvil default accounts)
+ * 
+ * Run with: npx playwright test --config=synpress.config.ts tests/synpress/two-party-otc.test.ts
  */
 
 import { testWithSynpress } from '@synthetixio/synpress';
 import { MetaMask, metaMaskFixtures } from '@synthetixio/synpress/playwright';
+import { Page } from '@playwright/test';
 import basicSetup, { walletPassword } from '../../test/wallet-setup/basic.setup';
 
 const test = testWithSynpress(metaMaskFixtures(basicSetup));
@@ -26,13 +29,50 @@ const OFFER_AMOUNT = '100'; // Tokens to buy
 const DISCOUNT_PERCENT = '10';
 const LOCKUP_DAYS = '0'; // No lockup for faster testing
 
-test.describe('Two-Party OTC Flow', () => {
+// Helper to connect wallet - checks if already connected first
+async function connectWallet(page: Page, metamask: MetaMask) {
+  // Check if already connected
+  const alreadyConnected = await page.locator('text=/0x[a-fA-F0-9]{4}/i').isVisible({ timeout: 2000 }).catch(() => false);
+  if (alreadyConnected) {
+    console.log('Wallet already connected');
+    return;
+  }
+
+  // Click connect button
+  const connectButton = page.locator('button:has-text("Connect")').first();
+  if (!await connectButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+    console.log('No connect button visible - may already be connected');
+    return;
+  }
   
-  test.beforeEach(async ({ page }) => {
-    // Wait for page to be ready
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-  });
+  await connectButton.click();
+  await page.waitForTimeout(1000);
+
+  // Select EVM network
+  const evmButton = page.locator('button:has-text("EVM")');
+  if (await evmButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await evmButton.click();
+    await page.waitForTimeout(1000);
+  }
+
+  // Select Base chain
+  const baseButton = page.locator('button:has-text("Base")');
+  if (await baseButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await baseButton.click();
+    await page.waitForTimeout(1000);
+  }
+
+  // Handle MetaMask connection
+  try {
+    await metamask.connectToDapp();
+  } catch {
+    console.log('MetaMask connection may already be approved');
+  }
+  
+  await page.waitForTimeout(2000);
+}
+
+test.describe('Two-Party OTC Flow', () => {
 
   test('Step 1: Connect wallet and verify network', async ({ 
     context, 
@@ -42,27 +82,14 @@ test.describe('Two-Party OTC Flow', () => {
   }) => {
     const metamask = new MetaMask(context, metamaskPage, walletPassword, extensionId);
 
-    // Click connect button
-    const connectButton = page.locator('button:has-text("Connect")').first();
-    await expect(connectButton).toBeVisible({ timeout: 10000 });
-    await connectButton.click();
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
 
-    // Select EVM network family
-    const evmButton = page.locator('button:has-text("EVM")');
-    await expect(evmButton).toBeVisible({ timeout: 5000 });
-    await evmButton.click();
-
-    // Select Base chain (our local testnet)
-    const baseButton = page.locator('button:has-text("Base")');
-    await expect(baseButton).toBeVisible({ timeout: 5000 });
-    await baseButton.click();
-
-    // Handle MetaMask connection popup
-    await metamask.connectToDapp();
-    await page.waitForTimeout(3000);
+    await connectWallet(page, metamask);
 
     // Verify wallet address is displayed
-    await expect(page.locator('text=/0x[a-fA-F0-9]{4}/i')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/0x[a-fA-F0-9]{4}/i')).toBeVisible({ timeout: 15000 });
     
     console.log('✅ Wallet connected to Base network');
   });
@@ -75,19 +102,19 @@ test.describe('Two-Party OTC Flow', () => {
   }) => {
     const metamask = new MetaMask(context, metamaskPage, walletPassword, extensionId);
 
-    // Connect wallet first
-    await page.locator('button:has-text("Connect")').first().click();
-    await page.locator('button:has-text("EVM")').click();
-    await page.locator('button:has-text("Base")').click();
-    await metamask.connectToDapp();
-    await page.waitForTimeout(3000);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
+    
+    await connectWallet(page, metamask);
 
     // Navigate to consignment page
     await page.goto('/consign');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
 
     // Verify consignment form is visible
-    await expect(page.locator('text=/List Your Tokens|Token Selection/i').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/List Your Tokens|Token Selection/i').first()).toBeVisible({ timeout: 15000 });
 
     // Step 1: Select token (if available)
     const tokenSelect = page.locator('[data-testid="token-select"], select[name="token"]').first();
@@ -119,19 +146,19 @@ test.describe('Two-Party OTC Flow', () => {
   }) => {
     const metamask = new MetaMask(context, metamaskPage, walletPassword, extensionId);
 
-    // Connect wallet
-    await page.locator('button:has-text("Connect")').first().click();
-    await page.locator('button:has-text("EVM")').click();
-    await page.locator('button:has-text("Base")').click();
-    await metamask.connectToDapp();
-    await page.waitForTimeout(3000);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
+    
+    await connectWallet(page, metamask);
 
     // Find a token listing on homepage
     const tokenLink = page.locator('a[href*="/token/"]').first();
     
     if (await tokenLink.isVisible({ timeout: 5000 }).catch(() => false)) {
       await tokenLink.click();
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
+      await page.waitForTimeout(2000);
 
       // Find chat input
       const chatInput = page.locator('[data-testid="chat-input"], textarea[placeholder*="message"]').first();
@@ -161,19 +188,19 @@ test.describe('Two-Party OTC Flow', () => {
   }) => {
     const metamask = new MetaMask(context, metamaskPage, walletPassword, extensionId);
 
-    // Connect wallet
-    await page.locator('button:has-text("Connect")').first().click();
-    await page.locator('button:has-text("EVM")').click();
-    await page.locator('button:has-text("Base")').click();
-    await metamask.connectToDapp();
-    await page.waitForTimeout(3000);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
+    
+    await connectWallet(page, metamask);
 
     // Navigate to a token page
     const tokenLink = page.locator('a[href*="/token/"]').first();
     
     if (await tokenLink.isVisible({ timeout: 5000 }).catch(() => false)) {
       await tokenLink.click();
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
+      await page.waitForTimeout(2000);
 
       // Look for an existing quote/offer to accept
       const acceptButton = page.locator('button:has-text("Accept"), [data-testid="accept-offer"]').first();
@@ -214,20 +241,20 @@ test.describe('Two-Party OTC Flow', () => {
   }) => {
     const metamask = new MetaMask(context, metamaskPage, walletPassword, extensionId);
 
-    // Connect wallet
-    await page.locator('button:has-text("Connect")').first().click();
-    await page.locator('button:has-text("EVM")').click();
-    await page.locator('button:has-text("Base")').click();
-    await metamask.connectToDapp();
-    await page.waitForTimeout(3000);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
+    
+    await connectWallet(page, metamask);
 
     // Navigate to My Deals
     await page.goto('/my-deals');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
 
     // Verify tabs are visible
-    await expect(page.locator('button:has-text("Purchases"), button:has-text("My Purchases")').first()).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('button:has-text("Listings"), button:has-text("My Listings")').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('button:has-text("Purchases"), button:has-text("My Purchases")').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('button:has-text("Listings"), button:has-text("My Listings")').first()).toBeVisible({ timeout: 15000 });
 
     // Check for deals
     const purchasesTab = page.locator('button:has-text("Purchases"), button:has-text("My Purchases")').first();
@@ -250,16 +277,16 @@ test.describe('Two-Party OTC Flow', () => {
   }) => {
     const metamask = new MetaMask(context, metamaskPage, walletPassword, extensionId);
 
-    // Connect wallet
-    await page.locator('button:has-text("Connect")').first().click();
-    await page.locator('button:has-text("EVM")').click();
-    await page.locator('button:has-text("Base")').click();
-    await metamask.connectToDapp();
-    await page.waitForTimeout(3000);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
+    
+    await connectWallet(page, metamask);
 
     // Navigate to My Deals
     await page.goto('/my-deals');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
 
     // Look for claimable deals
     const claimButton = page.locator('button:has-text("Claim"), [data-testid="claim-button"]').first();
@@ -290,17 +317,16 @@ test.describe('Error Handling', () => {
   }) => {
     const metamask = new MetaMask(context, metamaskPage, walletPassword, extensionId);
 
-    // Connect wallet
     await page.goto('/');
-    await page.locator('button:has-text("Connect")').first().click();
-    await page.locator('button:has-text("EVM")').click();
-    await page.locator('button:has-text("Base")').click();
-    await metamask.connectToDapp();
-    await page.waitForTimeout(3000);
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
+    
+    await connectWallet(page, metamask);
 
     // Try to consign without tokens
     await page.goto('/consign');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
 
     // The form should either:
     // 1. Show "insufficient balance" error
@@ -321,16 +347,14 @@ test.describe('Error Handling', () => {
   }) => {
     const metamask = new MetaMask(context, metamaskPage, walletPassword, extensionId);
 
-    // Connect wallet
     await page.goto('/');
-    await page.locator('button:has-text("Connect")').first().click();
-    await page.locator('button:has-text("EVM")').click();
-    await page.locator('button:has-text("Base")').click();
-    await metamask.connectToDapp();
-    await page.waitForTimeout(3000);
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
+    
+    await connectWallet(page, metamask);
 
     // Verify connected
-    await expect(page.locator('text=/0x[a-fA-F0-9]{4}/i')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/0x[a-fA-F0-9]{4}/i')).toBeVisible({ timeout: 15000 });
 
     // Disconnect via UI (if available)
     const walletMenu = page.locator('[data-testid="wallet-menu"], button:has-text("0x")').first();

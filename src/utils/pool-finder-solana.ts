@@ -1,5 +1,5 @@
 import { Connection, PublicKey } from "@solana/web3.js";
-import { getCached, setCache, withRetryAndCache } from "./retry-cache";
+import { getCached, setCache } from "./retry-cache";
 
 // Cache TTL for Solana pool info (30 seconds)
 const SOLANA_POOL_CACHE_TTL_MS = 30_000;
@@ -98,7 +98,12 @@ export async function findBestSolanaPool(
       );
       await delay(2000); // Wait 2s on rate limit
       try {
-        pumpSwapPools = await findPumpSwapPools(connection, mint, cluster, false);
+        pumpSwapPools = await findPumpSwapPools(
+          connection,
+          mint,
+          cluster,
+          false,
+        );
       } catch (e) {
         console.warn("PumpSwap discovery failed after retry", e);
       }
@@ -173,10 +178,10 @@ async function findPumpSwapPools(
     type ProgramAccount = Awaited<
       ReturnType<typeof connection.getProgramAccounts>
     >[number];
-    
-    let poolsBase: ProgramAccount[] = [];
-    let poolsQuote: ProgramAccount[] = [];
-    
+
+    let poolsBase: readonly ProgramAccount[] = [];
+    let poolsQuote: readonly ProgramAccount[] = [];
+
     try {
       poolsBase = await connection.getProgramAccounts(PUMPSWAP_AMM_PROGRAM, {
         filters: filtersBase,
@@ -186,7 +191,7 @@ async function findPumpSwapPools(
       if (strict) throw e;
       console.warn("PumpSwap base filter failed:", e);
     }
-    
+
     try {
       poolsQuote = await connection.getProgramAccounts(PUMPSWAP_AMM_PROGRAM, {
         filters: filtersQuote,
@@ -234,20 +239,20 @@ async function findPumpSwapPools(
           // Get token account balances sequentially to avoid rate limits
           let baseBalance = { value: { uiAmount: 0 } };
           let quoteBalance = { value: { uiAmount: 0 } };
-          
+
           try {
-            baseBalance = await connection.getTokenAccountBalance(
-              poolBaseTokenAccount,
-            );
+            baseBalance =
+              await connection.getTokenAccountBalance(poolBaseTokenAccount);
             await delay(RPC_CALL_DELAY_MS);
           } catch {
             // Ignore errors, use default
           }
-          
+
           try {
             quoteBalance = await connection.getTokenAccountBalance(
               poolQuoteTokenAccount,
             );
+            await delay(RPC_CALL_DELAY_MS);
           } catch {
             // Ignore errors, use default
           }
@@ -361,10 +366,10 @@ async function findRaydiumPools(
   type RaydiumProgramAccount = Awaited<
     ReturnType<typeof connection.getProgramAccounts>
   >[number];
-  
-  let poolsBase: RaydiumProgramAccount[] = [];
-  let poolsQuote: RaydiumProgramAccount[] = [];
-  
+
+  let poolsBase: readonly RaydiumProgramAccount[] = [];
+  let poolsQuote: readonly RaydiumProgramAccount[] = [];
+
   try {
     poolsBase = await connection.getProgramAccounts(PROGRAM_ID, {
       filters: filtersBase,
@@ -374,7 +379,7 @@ async function findRaydiumPools(
     if (strict) throw e;
     console.warn("Raydium base filter failed:", e);
   }
-  
+
   try {
     poolsQuote = await connection.getProgramAccounts(PROGRAM_ID, {
       filters: filtersQuote,
@@ -456,6 +461,7 @@ async function findRaydiumPools(
       let otherBalance = { value: { uiAmount: 0 } };
       try {
         otherBalance = await connection.getTokenAccountBalance(otherVault);
+        await delay(RPC_CALL_DELAY_MS);
       } catch {
         // Ignore errors, use default
       }

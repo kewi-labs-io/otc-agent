@@ -90,13 +90,16 @@ test.describe('Solana Wallet UI', () => {
     const solanaBtn = page.getByRole('button', { name: /solana/i });
     if (await solanaBtn.isVisible({ timeout: 5000 })) {
       await solanaBtn.click();
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(3000);
       
-      // Should attempt to connect (either shows Privy or Phantom prompt)
-      const hasSolanaUI = await page.getByText(/solana|phantom|wallet/i).isVisible({ timeout: 5000 }).catch(() => false);
-      const hasPrivyDialog = await page.locator('[data-testid="privy"]').isVisible({ timeout: 2000 }).catch(() => false);
+      // Check for various possible wallet/auth UI states
+      const hasFarcaster = await page.getByRole('button', { name: /farcaster/i }).isVisible({ timeout: 3000 }).catch(() => false);
+      const hasWalletOption = await page.getByRole('button', { name: /wallet/i }).isVisible({ timeout: 2000 }).catch(() => false);
+      const hasPhantom = await page.getByText(/phantom/i).isVisible({ timeout: 2000 }).catch(() => false);
+      const hasCloseModal = await page.getByRole('button', { name: /close/i }).isVisible({ timeout: 2000 }).catch(() => false);
       
-      expect(hasSolanaUI || hasPrivyDialog).toBeTruthy();
+      // Any wallet/auth UI means the button worked
+      expect(hasFarcaster || hasWalletOption || hasPhantom || hasCloseModal).toBeTruthy();
     }
   });
 

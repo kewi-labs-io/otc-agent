@@ -5,7 +5,7 @@
 
 import { test, expect, Page } from '@playwright/test';
 
-test.setTimeout(120000);
+test.setTimeout(60000);
 
 // Set a desktop viewport for consistent behavior
 test.use({ viewport: { width: 1280, height: 720 } });
@@ -13,7 +13,7 @@ test.use({ viewport: { width: 1280, height: 720 } });
 // Helper to wait for page to be interactive
 async function waitForPageReady(page: Page) {
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(1000);
 }
 
 test.describe('Multi-Chain Support', () => {
@@ -28,7 +28,6 @@ test.describe('Multi-Chain Support', () => {
     await page.waitForTimeout(1500);
     
     // Should show both EVM and Solana options
-    // Either in a chain selector modal or in the Privy login dialog
     const hasEvmOption = await page.getByRole('button', { name: /evm/i }).isVisible({ timeout: 5000 }).catch(() => false);
     const hasSolanaOption = await page.getByRole('button', { name: /solana/i }).isVisible({ timeout: 5000 }).catch(() => false);
     const hasPrivyDialog = await page.locator('[data-testid="privy"], text=Log in').first().isVisible({ timeout: 2000 }).catch(() => false);
@@ -60,7 +59,7 @@ test.describe('Multi-Chain Support', () => {
     }
   });
 
-  test('no hardcoded Base-only references', async ({ page }) => {
+  test('supports multiple chains not just Base', async ({ page }) => {
     await page.goto('/');
     await waitForPageReady(page);
     
@@ -68,16 +67,17 @@ test.describe('Multi-Chain Support', () => {
     await page.getByRole('button', { name: /connect/i }).first().click();
     await page.waitForTimeout(1500);
     
-    // Should show chain selector modal with chain options (Base, BSC)
-    const hasChainSelector = await page.locator('text=Select Chain, text=Base').first().isVisible({ timeout: 5000 }).catch(() => false);
-    const hasPrivyDialog = await page.locator('[data-testid="privy"], text=Log in').first().isVisible({ timeout: 2000 }).catch(() => false);
+    // Check for EVM option (which includes multiple chains)
+    const hasEvmOption = await page.getByRole('button', { name: /evm/i }).isVisible({ timeout: 5000 }).catch(() => false);
+    const hasSolanaOption = await page.getByRole('button', { name: /solana/i }).isVisible({ timeout: 3000 }).catch(() => false);
     
-    // Either custom UI or Privy fallback
-    expect(hasChainSelector || hasPrivyDialog).toBeTruthy();
+    // Should support multiple networks
+    expect(hasEvmOption || hasSolanaOption).toBeTruthy();
     
     // The UI should NOT say "Base only" or similar exclusionary text
-    const hasBaseOnlyText = await page.getByText(/Base only|only Base/i).isVisible().catch(() => false);
-    expect(hasBaseOnlyText).toBeFalsy();
+    const pageText = await page.textContent('body') || '';
+    expect(pageText.toLowerCase()).not.toContain('base only');
+    expect(pageText.toLowerCase()).not.toContain('only base');
   });
 });
 

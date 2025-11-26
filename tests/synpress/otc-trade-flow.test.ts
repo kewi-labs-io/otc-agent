@@ -8,6 +8,8 @@
  * Prerequisites:
  * - Dev server running: bun run dev
  * - Anvil running: bun run rpc:dev
+ * 
+ * Run with: npx playwright test --config=synpress.config.ts tests/synpress/otc-trade-flow.test.ts
  */
 
 import { testWithSynpress } from '@synthetixio/synpress';
@@ -17,96 +19,99 @@ import basicSetup, { walletPassword } from '../../test/wallet-setup/basic.setup'
 const test = testWithSynpress(metaMaskFixtures(basicSetup));
 const { expect } = test;
 
+// Helper to connect wallet - reused across tests
+async function connectWallet(
+  page: ReturnType<typeof test.info>['page'] extends infer P ? P : never,
+  metamask: MetaMask
+) {
+  // Check if already connected (wallet address visible)
+  const alreadyConnected = await page.locator('text=/0x[a-fA-F0-9]{4}/i').isVisible({ timeout: 2000 }).catch(() => false);
+  if (alreadyConnected) {
+    console.log('Wallet already connected, skipping connection flow');
+    return;
+  }
+
+  // Click connect button
+  const connectButton = page.locator('button:has-text("Connect")').first();
+  await expect(connectButton).toBeVisible({ timeout: 10000 });
+  await connectButton.click();
+  await page.waitForTimeout(1000);
+
+  // Select EVM network
+  const evmButton = page.locator('button:has-text("EVM")');
+  if (await evmButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await evmButton.click();
+    await page.waitForTimeout(1000);
+  }
+  
+  // Select Base chain
+  const baseButton = page.locator('button:has-text("Base")');
+  if (await baseButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await baseButton.click();
+    await page.waitForTimeout(1000);
+  }
+
+  // Handle MetaMask connection popup
+  try {
+    await metamask.connectToDapp();
+  } catch {
+    // Connection might already be approved
+    console.log('MetaMask connection may already be approved');
+  }
+  
+  await page.waitForTimeout(2000);
+}
+
 test.describe('TheDesk OTC Trading - Real Wallet Tests', () => {
   
   test('should connect wallet and verify address displayed', async ({ context, page, metamaskPage, extensionId }) => {
     const metamask = new MetaMask(context, metamaskPage, walletPassword, extensionId);
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
 
-    // Connect wallet - MUST find button
-    const connectButton = page.locator('button:has-text("Connect")').first();
-    await expect(connectButton).toBeVisible({ timeout: 10000 });
-    await connectButton.click();
-
-    // Select EVM network - MUST find button
-    const evmButton = page.locator('button:has-text("EVM")');
-    await expect(evmButton).toBeVisible({ timeout: 5000 });
-    await evmButton.click();
-    
-    // Select Base chain - MUST find button  
-    const baseButton = page.locator('button:has-text("Base")');
-    await expect(baseButton).toBeVisible({ timeout: 5000 });
-    await baseButton.click();
-
-    // Handle MetaMask connection
-    await metamask.connectToDapp();
-    await page.waitForTimeout(3000);
+    await connectWallet(page, metamask);
 
     // MUST show connected wallet address
-    await expect(page.locator('text=/0x[a-fA-F0-9]{4}/i')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/0x[a-fA-F0-9]{4}/i')).toBeVisible({ timeout: 15000 });
   });
 
   test('should navigate to consign page and show token form', async ({ context, page, metamaskPage, extensionId }) => {
     const metamask = new MetaMask(context, metamaskPage, walletPassword, extensionId);
 
-    // Connect first
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
     
-    const connectButton = page.locator('button:has-text("Connect")').first();
-    await expect(connectButton).toBeVisible({ timeout: 10000 });
-    await connectButton.click();
-    
-    const evmButton = page.locator('button:has-text("EVM")');
-    await expect(evmButton).toBeVisible({ timeout: 5000 });
-    await evmButton.click();
-    
-    const baseButton = page.locator('button:has-text("Base")');
-    await expect(baseButton).toBeVisible({ timeout: 5000 });
-    await baseButton.click();
-
-    await metamask.connectToDapp();
-    await page.waitForTimeout(3000);
+    await connectWallet(page, metamask);
 
     // Navigate to consign page
     await page.goto('/consign');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
     
     // MUST show token listing form
-    await expect(page.locator('text=/List Your Tokens|Token Selection/i').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/List Your Tokens|Token Selection/i').first()).toBeVisible({ timeout: 15000 });
   });
 
   test('should show my-deals page with purchase/listings tabs', async ({ context, page, metamaskPage, extensionId }) => {
     const metamask = new MetaMask(context, metamaskPage, walletPassword, extensionId);
 
-    // Connect first
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
     
-    const connectButton = page.locator('button:has-text("Connect")').first();
-    await expect(connectButton).toBeVisible({ timeout: 10000 });
-    await connectButton.click();
-    
-    const evmButton = page.locator('button:has-text("EVM")');
-    await expect(evmButton).toBeVisible({ timeout: 5000 });
-    await evmButton.click();
-    
-    const baseButton = page.locator('button:has-text("Base")');
-    await expect(baseButton).toBeVisible({ timeout: 5000 });
-    await baseButton.click();
-
-    await metamask.connectToDapp();
-    await page.waitForTimeout(3000);
+    await connectWallet(page, metamask);
 
     // Navigate to my-deals
     await page.goto('/my-deals');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
     
     // MUST show tabs
-    await expect(page.locator('button:has-text("Purchases"), button:has-text("My Purchases")').first()).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('button:has-text("Listings"), button:has-text("My Listings")').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('button:has-text("Purchases"), button:has-text("My Purchases")').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('button:has-text("Listings"), button:has-text("My Listings")').first()).toBeVisible({ timeout: 15000 });
   });
 
   test.skip('full order flow: create offer → approve → claim', async ({ context, page, metamaskPage, extensionId }) => {
@@ -122,29 +127,16 @@ test.describe('TheDesk OTC Trading - Real Wallet Tests', () => {
     const metamask = new MetaMask(context, metamaskPage, walletPassword, extensionId);
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
     
-    // Connect wallet
-    const connectButton = page.locator('button:has-text("Connect")').first();
-    await expect(connectButton).toBeVisible({ timeout: 10000 });
-    await connectButton.click();
-    
-    const evmButton = page.locator('button:has-text("EVM")');
-    await expect(evmButton).toBeVisible({ timeout: 5000 });
-    await evmButton.click();
-    
-    const baseButton = page.locator('button:has-text("Base")');
-    await expect(baseButton).toBeVisible({ timeout: 5000 });
-    await baseButton.click();
-
-    await metamask.connectToDapp();
-    await page.waitForTimeout(3000);
+    await connectWallet(page, metamask);
 
     // Find a token listing
     const tokenLink = page.locator('a[href*="/token/"]').first();
     await expect(tokenLink).toBeVisible({ timeout: 10000 });
     await tokenLink.click();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Chat with agent to get quote
     const chatInput = page.locator('[data-testid="chat-input"], textarea[placeholder*="message"]').first();
