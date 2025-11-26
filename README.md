@@ -1,6 +1,6 @@
 # Eliza OTC Desk
 
-Multi-chain AI-powered OTC trading desk with Eliza agent. Supports **Jeju**, Base, BSC, and Solana with full localnet E2E testing.
+Multi-chain AI-powered OTC trading desk with Eliza agent. Supports **Base**, BSC, and Solana with full localnet E2E testing.
 
 ## ✅ Hardhat → Anvil Migration Complete
 
@@ -16,7 +16,7 @@ All references to Hardhat have been replaced with Anvil. See contracts directory
 ## Features
 
 - 🤖 **AI Agent** - Eliza negotiates deals with users
-- ⛓️ **Multi-Chain** - Jeju (default), Base, BSC, Solana
+- ⛓️ **Multi-Chain** - Base, BSC, Solana
 - 🧪 **Real E2E Tests** - Deploys contracts, creates offers, verifies state (NO MOCKS)
 - 🔒 **Production Ready** - Multi-approver, oracle fallback, emergency refunds
 - 🚀 **Auto-Start** - Runs on localnet by default (`bun run dev`)
@@ -108,21 +108,18 @@ docker compose -f docker-compose.localnet.yml down
 
 | Chain | Network | Chain ID | Status | Logo |
 |-------|---------|----------|--------|------|
-| **Jeju** | Mainnet | 420691 | ✅ Default | 🟣 |
-| **Jeju** | Testnet | 420690 | ✅ Default | 🟣 |
-| **Jeju** | Localnet | 1337 | ✅ Default (E2E Tests) | 🟣 |
 | **Base** | Mainnet | 8453 | ✅ Full Support | 🔵 |
 | **Base** | Sepolia | 84532 | ✅ Full Support | 🔵 |
 | **BSC** | Mainnet | 56 | ✅ Full Support | 🟡 |
 | **BSC** | Testnet | 97 | ✅ Full Support | 🟡 |
 | **Solana** | Mainnet/Devnet | - | ✅ Full Support | 🟢 |
 
-**Default:** Jeju Localnet L2 (http://127.0.0.1:9545 - STATIC)  
-**E2E Tests:** Run on Jeju Localnet (Chain ID 1337, L2 Port 9545)
+**Default:** Anvil Localnet (http://127.0.0.1:8545)  
+**E2E Tests:** Run on Anvil Localnet (Chain ID 31337)
 
 ### Network Selection UX
 Users choose between:
-1. **EVM Networks** → Then select Base, BSC, or Jeju
+1. **EVM Networks** → Then select Base or BSC
 2. **Solana** → Direct connection
 
 This provides a clean, hierarchical selection that scales as more EVM chains are added.
@@ -146,7 +143,7 @@ Before running the app, you MUST:
    ```
 3. **Configure Privy Dashboard**:
    - Enable login methods: Wallet, Email, Google, Farcaster
-   - Add chains: Base (8453), BSC (56), Jeju (420691), Anvil/Jeju Local (31337/1337)
+   - Add chains: Base (8453), BSC (56), Anvil Local (31337)
    - Enable Solana (devnet for testing)
 
 ### 📚 Migration Docs
@@ -208,7 +205,7 @@ Production supports any token via the token registration system.
 
 - `src/lib/agent.ts` - Eliza character and negotiation logic
 - `src/lib/plugin-otc-desk` - OTC plugin (providers, actions, quote service)
-- `src/lib/chains.ts` - Jeju chain definitions (mainnet, testnet, localnet)
+- `src/lib/getChain.ts` - Centralized chain configuration
 - `src/lib/getChain.ts` - Centralized chain configuration
 - `src/app/api/*` - API routes
 - `contracts/` - Foundry contracts (EVM)
@@ -250,7 +247,7 @@ bun run dev
 
 ## MetaMask Local Setup
 
-Add network: RPC `http://127.0.0.1:9545` (L2), Chain ID `1337`
+Add network: RPC `http://127.0.0.1:8545`, Chain ID `31337`
 
 Import test account (Anvil default account #0 with 10k ETH):
 ```
@@ -289,8 +286,8 @@ This ensures a smooth user experience even when wallet interactions are rejected
 Create a `.env.local` file with the following configuration:
 
 ```env
-# EVM (Jeju L2)
-NEXT_PUBLIC_RPC_URL=http://127.0.0.1:9545
+# EVM (Anvil Localnet)
+NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8545
 NEXT_PUBLIC_OTC_ADDRESS=<set by deploy>
 APPROVER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
@@ -357,19 +354,6 @@ CRON_SECRET=<your-secure-random-string>
 APPROVER_PRIVATE_KEY=<your-approver-private-key>
 ```
 
-#### Required for Jeju Mainnet Deployment
-
-```env
-# Network Configuration
-NETWORK=jeju-mainnet  # Or leave unset (defaults to Jeju)
-
-# Contract Addresses (Jeju Mainnet)
-NEXT_PUBLIC_JEJU_OTC_ADDRESS=<deployed-contract-address>
-NEXT_PUBLIC_JEJU_RPC_URL=https://rpc.jeju.network
-
-# Database (same as Base)
-DATABASE_POSTGRES_URL=<from-vercel-neon-storage>
-```
 
 #### Troubleshooting Production Issues
 
@@ -386,10 +370,9 @@ DATABASE_POSTGRES_URL=<from-vercel-neon-storage>
 - The code uses `getContractAddress()` which selects the correct address based on `NETWORK`:
   - `NETWORK=base` → Uses `NEXT_PUBLIC_BASE_OTC_ADDRESS`
   - `NETWORK=bsc` → Uses `NEXT_PUBLIC_BSC_OTC_ADDRESS`
-  - `NETWORK=jeju-mainnet` or unset → Uses `NEXT_PUBLIC_JEJU_OTC_ADDRESS`
 
 **Common Mistakes:**
-- ❌ Forgetting to set `NETWORK=base` in production (causes code to default to Jeju mainnet)
+- ❌ Forgetting to set `NETWORK=base` in production
 - ❌ Using `NEXT_PUBLIC_OTC_ADDRESS` instead of chain-specific address (`NEXT_PUBLIC_BASE_OTC_ADDRESS`)
 - ❌ Database URL not configured (Vercel Neon Storage should provide `DATABASE_POSTGRES_URL` automatically)
 
@@ -588,18 +571,18 @@ bun run dev  # Terminal 1
 
 # Then run tests in Terminal 2:
 bun run test:e2e:pages       # Quick smoke test (3-5 min, 13 tests)
-bun run test:e2e             # Full suite (25-35 min, 237 tests) - Runs on Jeju Localnet
+bun run test:e2e             # Full suite (25-35 min, 237 tests) - Runs on Anvil Localnet
 bun run test:e2e:report      # View HTML report
 
 # Verify multi-chain support
-bash scripts/verify-chain-support.sh  # Verify Base, BSC, Jeju support
+bash scripts/verify-chain-support.sh  # Verify Base, BSC support
 
 # Debug failing tests
 bun run test:e2e:headed      # See browser
 bun run test:e2e:debug       # Playwright inspector
 ```
 
-**Test Network:** All Playwright tests run on **Jeju Localnet** (Chain ID 1337, L2 Port 9545)
+**Test Network:** All Playwright tests run on **Anvil Localnet** (Chain ID 31337, Port 8545)
 
 **99% Coverage Achieved:**
 - ✅ **100% pages**: All 8 routes fully tested
@@ -910,10 +893,9 @@ Deploy to Vercel/Netlify/etc with production env vars.
 
 ### Running from Root
 
-All OTC Agent tests auto-run from the Jeju root:
+All OTC Agent tests can be run from the project root:
 
 ```bash
-cd /Users/shawwalters/jeju
 bun run test  # Includes OTC Agent tests
 ```
 

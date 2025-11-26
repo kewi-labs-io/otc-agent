@@ -6,35 +6,24 @@ import {
   localhost,
   type Chain,
 } from "viem/chains";
-import { jejuMainnet, jejuTestnet, jejuLocalnet } from "@/lib/chains";
 
 /**
  * Get the appropriate chain based on environment and configuration
- * Supports: Jeju (mainnet, testnet, localnet), Base, BSC, Anvil/localhost
+ * Supports: Base, BSC, Anvil/localhost
  */
 export function getChain(): Chain {
   const env = process.env.NODE_ENV;
-  const network =
-    process.env.NETWORK || process.env.NEXT_PUBLIC_JEJU_NETWORK || "localnet";
+  const network = process.env.NETWORK || "base";
 
   // Production: Use mainnet chains
   if (env === "production") {
     if (network === "base") return base;
     if (network === "bsc") return bsc;
-    return jejuMainnet;
+    return base; // Default to Base in production
   }
 
   // Development/staging: Support multiple networks
   switch (network) {
-    case "jeju-mainnet":
-    case "mainnet":
-      return jejuMainnet;
-    case "jeju-testnet":
-    case "testnet":
-      return jejuTestnet;
-    case "jeju-localnet":
-    case "localnet":
-      return jejuLocalnet;
     case "base":
       return base;
     case "base-sepolia":
@@ -47,8 +36,8 @@ export function getChain(): Chain {
     case "anvil":
       return localhost;
     default:
-      // Default to Jeju localnet in development
-      return jejuLocalnet;
+      // Default to Base Sepolia in development
+      return baseSepolia;
   }
 }
 
@@ -56,22 +45,9 @@ export function getChain(): Chain {
  * Get RPC URL for the current chain
  */
 export function getRpcUrl(): string {
-  const network =
-    process.env.NETWORK || process.env.NEXT_PUBLIC_JEJU_NETWORK || "localnet";
+  const network = process.env.NETWORK || "base";
 
   switch (network) {
-    case "jeju-mainnet":
-    case "mainnet":
-      return process.env.NEXT_PUBLIC_JEJU_RPC_URL || "https://rpc.jeju.network";
-    case "jeju-testnet":
-    case "testnet":
-      return (
-        process.env.NEXT_PUBLIC_JEJU_RPC_URL ||
-        "https://testnet-rpc.jeju.network"
-      );
-    case "jeju-localnet":
-    case "localnet":
-      return process.env.NEXT_PUBLIC_JEJU_RPC_URL || "http://127.0.0.1:9545";
     case "base":
       return process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
     case "base-sepolia":
@@ -90,6 +66,6 @@ export function getRpcUrl(): string {
     case "anvil":
       return process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
     default:
-      return process.env.NEXT_PUBLIC_JEJU_RPC_URL || "http://127.0.0.1:9545";
+      return process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://sepolia.base.org";
   }
 }

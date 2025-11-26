@@ -8,7 +8,7 @@ import { toast } from "sonner";
 
 /**
  * Network Selection Menu
- * Shows EVM (Base, BSC, Jeju) and Solana as peer options - Privy handles all wallet types
+ * Shows EVM (Base, BSC) and Solana as peer options - Privy handles all wallet types
  */
 export function NetworkMenu() {
   const {
@@ -43,7 +43,7 @@ export function NetworkMenu() {
   return (
     <>
       <div className="inline-flex rounded-lg bg-zinc-100 dark:bg-zinc-900 p-1 border border-zinc-200 dark:border-zinc-800">
-        {/* EVM Network (Base, BSC, Jeju) */}
+        {/* EVM Network (Base, BSC) */}
         <button
           type="button"
           onClick={() => handleNetworkSwitch("evm")}
@@ -52,7 +52,7 @@ export function NetworkMenu() {
               ? "bg-white text-blue-600 dark:bg-zinc-800 dark:text-white shadow-sm"
               : "text-zinc-600 dark:text-zinc-400 hover:bg-white/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-white"
           }`}
-          title="EVM Network (Base, BSC, Jeju)"
+          title="EVM Network (Base, BSC)"
         >
           <EVMLogo className="w-3.5 h-3.5" />
           <span>EVM</span>

@@ -9,14 +9,14 @@
     "splashBackgroundColor": "#000000",
     "webhookUrl": "https://api.neynar.com/f/app/c384db1a-a823-4279-9f77-2b1ea955b4e3/event",
     "subtitle": "AI-Powered OTC Trading",
-    "description": "Trade tokens OTC with Eliza AI agent. Negotiate deals on Base, Jeju, and Solana networks with automated pricing and smart contracts.",
+    "description": "Trade tokens OTC with Eliza AI agent. Negotiate deals on Base, BSC, and Solana networks with automated pricing and smart contracts.",
     "primaryCategory": "utility",
     "tags": ["defi", "trading", "ai", "otc", "base", "solana"],
     "tagline": "AI-powered token trading desk",
     "heroImageUrl": "https://YOUR_VERCEL_URL/opengraph-image.png",
     "requiredChains": [
       "eip155:8453",
-      "eip155:420691",
+      "eip155:56",
       "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
     ]
   },

@@ -82,7 +82,7 @@ For deeper discounts, lockups can extend up to 12 months depending on the listin
 Minimum lockup periods start at 1 week, depending on the token listing.
 
 - How do I buy the tokens?
-You'll need ETH or USDC on the appropriate network (Base, BSC, Jeju, or Solana).
+You'll need ETH or USDC on the appropriate network (Base, BSC, or Solana).
 
 - When do I get my tokens?
 You'll automatically receive your tokens when the lockup period ends.`.trim(),

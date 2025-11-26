@@ -6,11 +6,10 @@ import {
   localhost,
   type Chain as ViemChain,
 } from "viem/chains";
-import { jejuMainnet, jejuTestnet, jejuLocalnet } from "@/lib/chains";
 import { getContracts } from "./contracts";
 
 // String-based chain identifier for database/API (lowercase, URL-safe)
-export type Chain = "ethereum" | "base" | "bsc" | "solana" | "jeju";
+export type Chain = "ethereum" | "base" | "bsc" | "solana";
 export type ChainFamily = "evm" | "solana";
 
 export interface ChainConfig {
@@ -37,47 +36,6 @@ function getNetworkEnvironment(): "local" | "testnet" | "mainnet" {
   if (process.env.NODE_ENV === "development") return "local";
   if (process.env.NEXT_PUBLIC_USE_MAINNET === "true") return "mainnet";
   return "testnet";
-}
-
-// Helper to get current Jeju chain
-function getCurrentJejuChain(): {
-  viem: ViemChain;
-  id: string;
-  name: string;
-  rpc: string;
-  explorer: string;
-} {
-  const env = getNetworkEnvironment();
-
-  if (env === "mainnet") {
-    return {
-      viem: jejuMainnet,
-      id: jejuMainnet.id.toString(),
-      name: "Jeju Network",
-      rpc: process.env.NEXT_PUBLIC_JEJU_RPC_URL || "https://rpc.jeju.network",
-      explorer: "https://explorer.jeju.network",
-    };
-  }
-
-  if (env === "testnet") {
-    return {
-      viem: jejuTestnet,
-      id: jejuTestnet.id.toString(),
-      name: "Jeju Testnet",
-      rpc:
-        process.env.NEXT_PUBLIC_JEJU_RPC_URL ||
-        "https://testnet-rpc.jeju.network",
-      explorer: "https://testnet-explorer.jeju.network",
-    };
-  }
-
-  return {
-    viem: jejuLocalnet,
-    id: jejuLocalnet.id.toString(),
-    name: "Jeju Localnet",
-    rpc: process.env.NEXT_PUBLIC_JEJU_RPC_URL || "http://127.0.0.1:9545",
-    explorer: "http://localhost:4000",
-  };
 }
 
 const env = getNetworkEnvironment();
@@ -198,23 +156,6 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
       type: "solana" as ChainFamily,
     };
   })(),
-  jeju: (() => {
-    const current = getCurrentJejuChain();
-    return {
-      id: current.id,
-      name: current.name,
-      rpcUrl: current.rpc,
-      explorerUrl: current.explorer,
-      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      contracts: {
-        otc: process.env.NEXT_PUBLIC_JEJU_OTC_ADDRESS,
-        usdc: process.env.NEXT_PUBLIC_JEJU_USDC_ADDRESS,
-      },
-      type: "evm" as ChainFamily,
-      viemChain: current.viem,
-      chainId: current.viem.id,
-    };
-  })(),
 };
 
 /**
@@ -256,17 +197,6 @@ export function getChainFromNumericId(chainId: number): Chain | null {
     if (config.chainId === chainId) return key as Chain;
   }
   return null;
-}
-
-/**
- * Check if numeric chain ID is Jeju
- */
-export function isJejuChainId(chainId: number): boolean {
-  return (
-    chainId === jejuMainnet.id ||
-    chainId === jejuTestnet.id ||
-    chainId === jejuLocalnet.id
-  );
 }
 
 /**

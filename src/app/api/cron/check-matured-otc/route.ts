@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
   try {
     OTC_ADDRESS = getContractAddress();
     console.log(
-      `[Check Matured OTC] Using contract address: ${OTC_ADDRESS} for network: ${process.env.NETWORK || process.env.NEXT_PUBLIC_JEJU_NETWORK || "localnet"}`,
+      `[Check Matured OTC] Using contract address: ${OTC_ADDRESS} for network: ${process.env.NETWORK || "localnet"}`,
     );
   } catch (error) {
     console.error("[Check Matured OTC] Failed to get contract address:", error);

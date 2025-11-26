@@ -2,8 +2,39 @@
 import fs from "fs";
 
 async function seedTokens() {
+  // Check if using production networks - skip seed if so
+  const dotenv = await import("dotenv");
+  
+  // Load .env.local if it exists
+  if (fs.existsSync(".env.local")) {
+    dotenv.config({ path: ".env.local" });
+  }
+  
+  const network = process.env.NETWORK || process.env.NEXT_PUBLIC_NETWORK || "localnet";
+  const isProductionNetwork = ["base", "bsc", "mainnet"].includes(network);
+  
+  if (isProductionNetwork) {
+    console.log(`\n✅ Using production network: ${network}`);
+    console.log("   Skipping seed (production contracts already exist)\n");
+    process.exit(0);
+  }
+  
   console.log("\n🌱 Seeding multi-token OTC marketplace...\n");
   
+  // Check for deployment file existence
+  const deploymentPath = "./contracts/deployments/eliza-otc-deployment.json";
+  
+  if (!fs.existsSync(deploymentPath)) {
+    console.log("⚠️  Contracts not deployed yet, skipping seed");
+    console.log("   Run 'npm run dev' to deploy contracts first");
+    process.exit(0);
+  }
+
+  const deployment = JSON.parse(fs.readFileSync(deploymentPath, "utf8"));
+  const elizaAddress = deployment.contracts.elizaToken;
+
+  console.log(`✅ Using elizaOS token from deployment: ${elizaAddress}`);
+
   // Wait for frontend
   let retries = 5;
   while (retries > 0) {
@@ -25,15 +56,15 @@ async function seedTokens() {
   // --- EVM Seeding ---
   const evmDeploymentPath = "./src/config/deployments/local-evm.json";
   if (fs.existsSync(evmDeploymentPath)) {
-    const deployment = JSON.parse(fs.readFileSync(evmDeploymentPath, "utf8"));
+    const evmDeployment = JSON.parse(fs.readFileSync(evmDeploymentPath, "utf8"));
     // Check if deployment is empty (placeholder)
-    if (!deployment.contracts || !deployment.contracts.elizaToken) {
+    if (!evmDeployment.contracts || !evmDeployment.contracts.elizaToken) {
         console.log("⚠️  EVM Deployment empty or invalid, skipping EVM seed");
     } else {
-        const elizaAddress = deployment.contracts.elizaToken;
+        const evmElizaAddress = evmDeployment.contracts.elizaToken;
         const ownerAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Anvil default #0
 
-    console.log(`\n[EVM] Using elizaOS token: ${elizaAddress}`);
+    console.log(`\n[EVM] Using elizaOS token: ${evmElizaAddress}`);
     
     // Register Token
     await fetch("http://localhost:5004/api/tokens", {
@@ -42,7 +73,7 @@ async function seedTokens() {
         body: JSON.stringify({
         symbol: "elizaOS",
         name: "elizaOS (EVM)",
-        contractAddress: elizaAddress,
+        contractAddress: evmElizaAddress,
         chain: "base",
         decimals: 18,
         logoUrl: "/tokens/eliza.svg",
@@ -55,7 +86,7 @@ async function seedTokens() {
     console.log("✅ [EVM] elizaOS token registered");
 
     // Create Consignments
-    const tokenId = `token-base-${elizaAddress.toLowerCase()}`;
+    const tokenId = `token-base-${evmElizaAddress.toLowerCase()}`;
     
     // Negotiable Deal
     await fetch("http://localhost:5004/api/consignments", {

@@ -1,14 +1,11 @@
 import { createConfig, http } from "wagmi";
 import type { Config } from "wagmi";
 import { localhost, base, baseSepolia, bsc, bscTestnet } from "wagmi/chains";
-import { injected, walletConnect } from "wagmi/connectors";
-import { jejuMainnet, jejuTestnet, jejuLocalnet } from "@/lib/chains";
+import { injected } from "wagmi/connectors";
 
 // Custom RPC URLs
 const baseRpcUrl = process.env.NEXT_PUBLIC_BASE_RPC_URL;
 const bscRpcUrl = process.env.NEXT_PUBLIC_BSC_RPC_URL;
-const jejuRpcUrl =
-  process.env.NEXT_PUBLIC_JEJU_RPC_URL || "http://127.0.0.1:9545";
 const anvilRpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
 
 // Determine available chains based on configuration
@@ -18,25 +15,14 @@ function getAvailableChains() {
 
   // Add localnet chains first in dev mode (default)
   if (isDevelopment) {
-    chains.push(jejuLocalnet, localhost);
+    chains.push(localhost);
   }
 
-  // Add Jeju chains (always available)
-  chains.push(jejuMainnet, jejuTestnet);
+  // Add Base chains (always available)
+  chains.push(base, baseSepolia);
 
-  // Add Base if RPC configured or in production
-  if (baseRpcUrl || !isDevelopment) {
-    chains.push(base, baseSepolia);
-  } else if (isDevelopment) {
-    console.warn("⚠️  BASE_RPC_URL not set - Base chains hidden from UI");
-  }
-
-  // Add BSC if RPC configured or in production
-  if (bscRpcUrl || !isDevelopment) {
-    chains.push(bsc, bscTestnet);
-  } else if (isDevelopment) {
-    console.warn("⚠️  BSC_RPC_URL not set - BSC chains hidden from UI");
-  }
+  // Add BSC chains (always available)
+  chains.push(bsc, bscTestnet);
 
   return chains;
 }
@@ -45,11 +31,7 @@ const chains = getAvailableChains();
 
 // Build transports dynamically based on available chains
 function getTransports() {
-  const transports: Record<number, ReturnType<typeof http>> = {
-    [jejuMainnet.id]: http(jejuRpcUrl),
-    [jejuTestnet.id]: http("https://testnet-rpc.jeju.network"),
-    [jejuLocalnet.id]: http(jejuRpcUrl),
-  };
+  const transports: Record<number, ReturnType<typeof http>> = {};
 
   const isDevelopment = process.env.NODE_ENV === "development";
 
@@ -57,22 +39,22 @@ function getTransports() {
     transports[localhost.id] = http(anvilRpcUrl);
   }
 
-  // Add Base transports if configured
+  // Add Base transports
   if (baseRpcUrl) {
     transports[base.id] = http(baseRpcUrl);
     transports[baseSepolia.id] = http(baseRpcUrl);
-  } else if (!isDevelopment) {
-    // In production without custom RPC, use public RPCs
+  } else {
+    // Use public RPCs
     transports[base.id] = http("https://mainnet.base.org");
     transports[baseSepolia.id] = http("https://sepolia.base.org");
   }
 
-  // Add BSC transports if configured
+  // Add BSC transports
   if (bscRpcUrl) {
     transports[bsc.id] = http(bscRpcUrl);
     transports[bscTestnet.id] = http(bscRpcUrl);
-  } else if (!isDevelopment) {
-    // In production without custom RPC, use public RPCs
+  } else {
+    // Use public RPCs
     transports[bsc.id] = http("https://bsc-dataseed1.binance.org");
     transports[bscTestnet.id] = http(
       "https://data-seed-prebsc-1-s1.binance.org:8545",
@@ -83,22 +65,18 @@ function getTransports() {
 }
 
 // Create connectors only on client side to avoid indexedDB SSR errors
+// Note: WalletConnect is handled by Privy, so we only use injected connector here
 function getConnectors() {
   if (typeof window === "undefined") return [];
-  return [
-    injected({ shimDisconnect: true }),
-    walletConnect({
-      projectId: process.env.NEXT_PUBLIC_PROJECT_ID || "demo-project-id",
-    }),
-  ];
+  return [injected({ shimDisconnect: true })];
 }
 
 // Wagmi configuration for Privy integration
 // Privy handles wallet connection, wagmi handles contract interactions
 export const config: Config = createConfig({
-  chains: chains as any,
+  chains: chains as never,
   connectors: getConnectors(),
-  transports: getTransports() as any,
+  transports: getTransports() as never,
   ssr: true,
 });
 

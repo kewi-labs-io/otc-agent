@@ -15,7 +15,6 @@ import {
   useWallets,
   type User as PrivyUser,
 } from "@privy-io/react-auth";
-import { jejuMainnet, jejuTestnet, jejuLocalnet } from "@/lib/chains";
 import { SUPPORTED_CHAINS } from "@/config/chains";
 import type { EVMChain } from "@/types";
 
@@ -67,7 +66,6 @@ type MultiWalletContextValue = {
   paymentPairLabel: string; // e.g. "USDC/ETH" or "USDC/SOL"
   isPhantomInstalled: boolean;
   currentChainId: number | null;
-  isJejuChain: boolean;
 
   // Privy methods
   login: () => void;
@@ -344,15 +342,6 @@ export function MultiWalletProvider({
 
   const isConnected = evmConnected || solanaConnected || privyAuthenticated;
 
-  const isJejuChain = useMemo(() => {
-    if (!chainId) return false;
-    return (
-      chainId === jejuMainnet.id ||
-      chainId === jejuTestnet.id ||
-      chainId === jejuLocalnet.id
-    );
-  }, [chainId]);
-
   const evmNetworkName = useMemo(() => {
     if (!chainId) return "Unknown";
     if (chainId === localhost.id) return "Anvil";
@@ -360,9 +349,6 @@ export function MultiWalletProvider({
     if (chainId === baseSepolia.id) return "Base Sepolia";
     if (chainId === bsc.id) return "BSC";
     if (chainId === bscTestnet.id) return "BSC Testnet";
-    if (chainId === jejuMainnet.id) return "Jeju";
-    if (chainId === jejuTestnet.id) return "Jeju Testnet";
-    if (chainId === jejuLocalnet.id) return "Jeju Localnet";
     return `Chain ${chainId}`;
   }, [chainId]);
 
@@ -379,7 +365,6 @@ export function MultiWalletProvider({
       const chainNames: Record<string, string> = {
         base: "Base",
         bsc: "BSC",
-        jeju: "Jeju",
       };
       const selectedChainName = chainNames[selectedEVMChain] || evmNetworkName;
       return selectedChainName;
@@ -449,7 +434,6 @@ export function MultiWalletProvider({
     paymentPairLabel,
     isPhantomInstalled,
     currentChainId: chainId ?? null,
-    isJejuChain,
     login,
     logout,
     connectWallet,

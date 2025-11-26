@@ -1,8 +1,29 @@
 import { Connection, PublicKey } from "@solana/web3.js";
-import { getCached, setCache } from "./retry-cache";
+import { getCached, setCache, withRetryAndCache } from "./retry-cache";
 
 // Cache TTL for Solana pool info (30 seconds)
 const SOLANA_POOL_CACHE_TTL_MS = 30_000;
+
+// Rate limiting: delay between sequential RPC calls (ms)
+const RPC_CALL_DELAY_MS = 500;
+
+// Helper to check if error is rate limit related
+function isRateLimitError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    return (
+      message.includes("429") ||
+      message.includes("rate limit") ||
+      message.includes("too many requests")
+    );
+  }
+  return false;
+}
+
+// Helper to delay between RPC calls
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export interface SolanaPoolInfo {
   protocol: "Raydium" | "Meteora" | "Orca" | "PumpSwap";
@@ -63,32 +84,46 @@ export async function findBestSolanaPool(
   let pumpSwapPools: SolanaPoolInfo[] = [];
   let raydiumPools: SolanaPoolInfo[] = [];
 
-  // Strategy: Try Parallel first (Fast). If 429/Error, fallback to Sequential (Reliable).
+  // Strategy: Use Sequential execution by default to avoid 429 rate limits
+  // Public RPCs are very restrictive, so sequential is more reliable
   try {
-    // Try parallel execution with strict mode (throws on error)
-    [pumpSwapPools, raydiumPools] = await Promise.all([
-      findPumpSwapPools(connection, mint, cluster, true),
-      findRaydiumPools(connection, mint, cluster, true),
-    ]);
+    // Try PumpSwap first
+    pumpSwapPools = await findPumpSwapPools(connection, mint, cluster, false);
+    // Delay between calls to respect rate limits
+    await delay(RPC_CALL_DELAY_MS);
   } catch (err) {
-    console.warn(
-      "Parallel pool discovery failed (likely 429), falling back to sequential strategy...",
-      err,
-    );
-
-    // Sequential Fallback with exponential backoff
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      pumpSwapPools = await findPumpSwapPools(connection, mint, cluster, false);
-    } catch (e) {
-      console.warn("PumpSwap sequential discovery failed", e);
+    if (isRateLimitError(err)) {
+      console.warn(
+        "PumpSwap pool discovery rate limited, waiting before retry...",
+      );
+      await delay(2000); // Wait 2s on rate limit
+      try {
+        pumpSwapPools = await findPumpSwapPools(connection, mint, cluster, false);
+      } catch (e) {
+        console.warn("PumpSwap discovery failed after retry", e);
+      }
+    } else {
+      console.warn("PumpSwap pool discovery failed:", err);
     }
+  }
 
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      raydiumPools = await findRaydiumPools(connection, mint, cluster, false);
-    } catch (e) {
-      console.warn("Raydium sequential discovery failed", e);
+  try {
+    // Then try Raydium
+    await delay(RPC_CALL_DELAY_MS);
+    raydiumPools = await findRaydiumPools(connection, mint, cluster, false);
+  } catch (err) {
+    if (isRateLimitError(err)) {
+      console.warn(
+        "Raydium pool discovery rate limited, waiting before retry...",
+      );
+      await delay(2000); // Wait 2s on rate limit
+      try {
+        raydiumPools = await findRaydiumPools(connection, mint, cluster, false);
+      } catch (e) {
+        console.warn("Raydium discovery failed after retry", e);
+      }
+    } else {
+      console.warn("Raydium pool discovery failed:", err);
     }
   }
 
@@ -134,24 +169,32 @@ async function findPumpSwapPools(
       { memcmp: { offset: 43, bytes: SOL_MINT.toBase58() } },
     ];
 
-    // Run in parallel
+    // Run sequentially to avoid rate limits
     type ProgramAccount = Awaited<
       ReturnType<typeof connection.getProgramAccounts>
     >[number];
-    const [poolsBase, poolsQuote] = await Promise.all([
-      connection
-        .getProgramAccounts(PUMPSWAP_AMM_PROGRAM, { filters: filtersBase })
-        .catch((e): ProgramAccount[] => {
-          if (strict) throw e;
-          return [];
-        }),
-      connection
-        .getProgramAccounts(PUMPSWAP_AMM_PROGRAM, { filters: filtersQuote })
-        .catch((e): ProgramAccount[] => {
-          if (strict) throw e;
-          return [];
-        }),
-    ]);
+    
+    let poolsBase: ProgramAccount[] = [];
+    let poolsQuote: ProgramAccount[] = [];
+    
+    try {
+      poolsBase = await connection.getProgramAccounts(PUMPSWAP_AMM_PROGRAM, {
+        filters: filtersBase,
+      });
+      await delay(RPC_CALL_DELAY_MS);
+    } catch (e) {
+      if (strict) throw e;
+      console.warn("PumpSwap base filter failed:", e);
+    }
+    
+    try {
+      poolsQuote = await connection.getProgramAccounts(PUMPSWAP_AMM_PROGRAM, {
+        filters: filtersQuote,
+      });
+    } catch (e) {
+      if (strict) throw e;
+      console.warn("PumpSwap quote filter failed:", e);
+    }
 
     const all = [
       ...(Array.isArray(poolsBase) ? poolsBase : []),
@@ -188,15 +231,26 @@ async function findPumpSwapPools(
         }
 
         if (baseToken && otherMint && otherMint.equals(mint)) {
-          // Get token account balances to calculate liquidity
-          const [baseBalance, quoteBalance] = await Promise.all([
-            connection
-              .getTokenAccountBalance(poolBaseTokenAccount)
-              .catch(() => ({ value: { uiAmount: 0 } })),
-            connection
-              .getTokenAccountBalance(poolQuoteTokenAccount)
-              .catch(() => ({ value: { uiAmount: 0 } })),
-          ]);
+          // Get token account balances sequentially to avoid rate limits
+          let baseBalance = { value: { uiAmount: 0 } };
+          let quoteBalance = { value: { uiAmount: 0 } };
+          
+          try {
+            baseBalance = await connection.getTokenAccountBalance(
+              poolBaseTokenAccount,
+            );
+            await delay(RPC_CALL_DELAY_MS);
+          } catch {
+            // Ignore errors, use default
+          }
+          
+          try {
+            quoteBalance = await connection.getTokenAccountBalance(
+              poolQuoteTokenAccount,
+            );
+          } catch {
+            // Ignore errors, use default
+          }
 
           const baseAmount = baseBalance.value.uiAmount || 0;
           const quoteAmount = quoteBalance.value.uiAmount || 0;
@@ -303,24 +357,32 @@ async function findRaydiumPools(
     { memcmp: { offset: 432, bytes: mint.toBase58() } },
   ];
 
-  // Run in parallel
+  // Run sequentially to avoid rate limits
   type RaydiumProgramAccount = Awaited<
     ReturnType<typeof connection.getProgramAccounts>
   >[number];
-  const [poolsBase, poolsQuote] = await Promise.all([
-    connection
-      .getProgramAccounts(PROGRAM_ID, { filters: filtersBase })
-      .catch((e): RaydiumProgramAccount[] => {
-        if (strict) throw e;
-        return [];
-      }),
-    connection
-      .getProgramAccounts(PROGRAM_ID, { filters: filtersQuote })
-      .catch((e): RaydiumProgramAccount[] => {
-        if (strict) throw e;
-        return [];
-      }),
-  ]);
+  
+  let poolsBase: RaydiumProgramAccount[] = [];
+  let poolsQuote: RaydiumProgramAccount[] = [];
+  
+  try {
+    poolsBase = await connection.getProgramAccounts(PROGRAM_ID, {
+      filters: filtersBase,
+    });
+    await delay(RPC_CALL_DELAY_MS);
+  } catch (e) {
+    if (strict) throw e;
+    console.warn("Raydium base filter failed:", e);
+  }
+  
+  try {
+    poolsQuote = await connection.getProgramAccounts(PROGRAM_ID, {
+      filters: filtersQuote,
+    });
+  } catch (e) {
+    if (strict) throw e;
+    console.warn("Raydium quote filter failed:", e);
+  }
 
   const all = [
     ...(Array.isArray(poolsBase) ? poolsBase : []),
@@ -360,7 +422,13 @@ async function findRaydiumPools(
             ? coinVault
             : pcVault;
 
-      const balance = await connection.getTokenAccountBalance(vaultToCheck);
+      let balance = { value: { uiAmount: 0 } };
+      try {
+        balance = await connection.getTokenAccountBalance(vaultToCheck);
+        await delay(RPC_CALL_DELAY_MS);
+      } catch {
+        // Ignore errors, use default
+      }
       const amount = balance.value.uiAmount || 0;
 
       const tvlUsd = baseToken === "USDC" ? amount * 2 : amount * 240 * 2; // SOL ~$240
@@ -385,9 +453,12 @@ async function findRaydiumPools(
           : coinMint.equals(SOL_MINT)
             ? pcVault
             : coinVault;
-      const otherBalance = await connection
-        .getTokenAccountBalance(otherVault)
-        .catch(() => ({ value: { uiAmount: 0 } }));
+      let otherBalance = { value: { uiAmount: 0 } };
+      try {
+        otherBalance = await connection.getTokenAccountBalance(otherVault);
+      } catch {
+        // Ignore errors, use default
+      }
       const otherAmount = otherBalance.value.uiAmount || 0;
 
       if (otherAmount > 0) {

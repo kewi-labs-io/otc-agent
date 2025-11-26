@@ -6,7 +6,7 @@ export async function sendWelcomeNotification(fid: number): Promise<boolean> {
       body: JSON.stringify({
         fid,
         title: "Welcome to Eliza OTC Desk",
-        body: "Start trading with AI-powered negotiation on Base, Jeju, and Solana",
+        body: "Start trading with AI-powered negotiation on Base, BSC, and Solana",
       }),
     });
 

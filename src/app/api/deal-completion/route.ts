@@ -248,10 +248,7 @@ export async function POST(request: NextRequest) {
         offerId,
         OTC_ADDRESS,
         RPC_URL,
-        network:
-          process.env.NETWORK ||
-          process.env.NEXT_PUBLIC_JEJU_NETWORK ||
-          "localnet",
+        network: process.env.NETWORK || "localnet",
       });
 
       const publicClient = createPublicClient({

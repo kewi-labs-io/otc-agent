@@ -10,7 +10,6 @@ import { useOTC } from "@/hooks/contracts/useOTC";
 import type { OTCQuote } from "@/utils/xml-parser";
 import type { Idl, Wallet } from "@coral-xyz/anchor";
 import * as anchor from "@coral-xyz/anchor";
-import type { Transaction, VersionedTransaction } from "@solana/web3.js";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
 import {
   Connection,
@@ -22,7 +21,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { Abi } from "viem";
 import { createPublicClient, http } from "viem";
-import { base } from "viem/chains";
+import { base, bsc } from "viem/chains";
 import { useAccount, useBalance } from "wagmi";
 import { useTransactionErrorHandler } from "@/hooks/useTransactionErrorHandler";
 
@@ -67,7 +66,6 @@ export function AcceptQuoteModal({
     ? (quoteChain === "solana" && activeFamily !== "solana") ||
       ((quoteChain === "base" ||
         quoteChain === "bsc" ||
-        quoteChain === "jeju" ||
         quoteChain === "ethereum") &&
         activeFamily !== "evm")
     : false;
@@ -84,9 +82,24 @@ export function AcceptQuoteModal({
   } = useOTC();
 
   const abi = useMemo(() => otcArtifact.abi as Abi, []);
-  const rpcUrl =
-    (process.env.NEXT_PUBLIC_RPC_URL as string | undefined) ||
-    "http://127.0.0.1:8545";
+
+  // Determine RPC URL based on network configuration
+  // Check NETWORK env var (client-side accessible via NEXT_PUBLIC_ prefix)
+  const network = (process.env.NEXT_PUBLIC_NETWORK || "localnet") as string;
+  const rpcUrl = useMemo(() => {
+    // Use network-specific RPC URLs
+    if (network === "base") {
+      return process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+    }
+    if (network === "bsc") {
+      return (
+        process.env.NEXT_PUBLIC_BSC_RPC_URL ||
+        "https://bsc-dataseed1.binance.org"
+      );
+    }
+    // Default to localhost for localnet/development
+    return process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
+  }, [network]);
 
   // CRITICAL: publicClient chain must match where contract is deployed, NOT wallet chain
   // If RPC is localhost, we're reading from Anvil regardless of wallet network
@@ -95,20 +108,26 @@ export function AcceptQuoteModal({
     [rpcUrl],
   );
 
-  // Always use localhost chain for local RPC (Anvil/Jeju Localnet)
-  const readChain = useMemo(
-    () =>
-      isLocalRpc
-        ? {
-            id: 31337,
-            name: "Localhost",
-            network: "localhost",
-            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-            rpcUrls: { default: { http: [rpcUrl] } },
-          }
-        : base,
-    [isLocalRpc, rpcUrl],
-  );
+  // Determine chain based on network and RPC
+  const readChain = useMemo(() => {
+    if (isLocalRpc) {
+      return {
+        id: 31337,
+        name: "Localhost",
+        network: "localhost",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: { default: { http: [rpcUrl] } },
+      };
+    }
+    if (network === "base") {
+      return base;
+    }
+    if (network === "bsc") {
+      return bsc;
+    }
+    // Default to base for production-like setups
+    return base;
+  }, [isLocalRpc, rpcUrl, network]);
 
   const publicClient = useMemo(
     () => createPublicClient({ chain: readChain, transport: http(rpcUrl) }),
@@ -1195,7 +1214,7 @@ export function AcceptQuoteModal({
                               EVM
                             </div>
                             <div className="text-xs text-white/70">
-                              Base, BSC, Jeju
+                              Base, BSC
                             </div>
                           </div>
                         </button>

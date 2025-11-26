@@ -15,12 +15,12 @@ export default defineWalletSetup(PASSWORD, async (context, walletPage) => {
   const metamask = new MetaMask(context, walletPage, PASSWORD);
   await metamask.importWallet(SELLER_SEED);
 
-  // Add Jeju/Anvil network
+  // Add Anvil network
   const chainId = parseInt(process.env.CHAIN_ID || '31337'); // Anvil default
-  const rpcUrl = process.env.JEJU_RPC_URL || 'http://localhost:8545';
+  const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'http://localhost:8545';
 
   await metamask.addNetwork({
-    name: 'Jeju Localnet',
+    name: 'Anvil Localnet',
     rpcUrl: rpcUrl,
     chainId: chainId,
     symbol: 'ETH',
@@ -31,4 +31,3 @@ export const sellerSetup = {
   walletPassword: PASSWORD,
   seedPhrase: SELLER_SEED,
 };
-

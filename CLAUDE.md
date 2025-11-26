@@ -79,7 +79,7 @@ cd contracts && forge test --match-test "testSpecificFunctionName" -vvv
 
 1. **No Traditional Database**: Uses Eliza runtime cache system as primary storage
 2. **Real Blockchain Testing**: All tests run against actual blockchains - NO MOCKS ALLOWED
-3. **Multi-Chain First**: Native support for Base, BSC, Jeju, Solana
+3. **Multi-Chain First**: Native support for Base, BSC, Solana
 4. **TDD Enforcement**: Tests must pass with real data, never mock data
 
 ### Development Principles
@@ -100,7 +100,7 @@ cd contracts && forge test --match-test "testSpecificFunctionName" -vvv
 Create `.env.local`:
 ```bash
 NEXT_PUBLIC_PRIVY_APP_ID=your-privy-app-id
-NEXT_PUBLIC_RPC_URL=http://127.0.0.1:9545
+NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8545
 POSTGRES_URL=postgres://eliza:password@localhost:5439/eliza
 GROQ_API_KEY=your-groq-key
 COINGECKO_API_KEY=optional-for-token-prices
@@ -109,7 +109,7 @@ BIRDEYE_API_KEY=optional-for-solana-prices
 
 ### Multi-Chain Support
 
-**EVM Chains**: Base, BSC, Jeju (L3), Sepolia testnets
+**EVM Chains**: Base, BSC, Sepolia testnets
 **Solana**: Devnet/Mainnet with Anchor protocol
 **Pricing**: Unified USD pricing across all chains
 **Authentication**: Privy for EVM + native Solana wallets + Farcaster social login

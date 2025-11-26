@@ -2,9 +2,9 @@ import { BrowserContext, test as baseTest } from "@playwright/test";
 import dappwright, { Dappwright, MetaMaskWallet } from "@tenkeylabs/dappwright";
 import type { OfficialOptions } from "@tenkeylabs/dappwright";
 
-// Use Jeju Localnet for testing (default network)
-const JEJU_RPC = process.env.NEXT_PUBLIC_JEJU_RPC_URL || 'http://127.0.0.1:9545';
-const JEJU_CHAIN_ID = 1337;
+// Use Anvil Localnet for testing (default network)
+const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'http://127.0.0.1:8545';
+const CHAIN_ID = 31337;
 
 let sharedContext: BrowserContext | undefined;
 let sharedWallet: Dappwright | undefined;
@@ -31,17 +31,17 @@ export const test = baseTest.extend<{
       };
       const [wallet, _page, context] = await dappwright.bootstrap("", options);
 
-      // Add Jeju Localnet network (primary test network)
+      // Add Anvil Localnet network (primary test network)
       await wallet.addNetwork({
-        networkName: "Jeju Localnet",
-        rpc: JEJU_RPC,
-        chainId: JEJU_CHAIN_ID,
+        networkName: "Anvil Localnet",
+        rpc: RPC_URL,
+        chainId: CHAIN_ID,
         symbol: "ETH",
       });
 
       // Ensure wallet is unlocked and on the right network
       await wallet.signin();
-      await wallet.switchNetwork("Jeju Localnet");
+      await wallet.switchNetwork("Anvil Localnet");
 
       sharedContext = context;
       sharedWallet = wallet;

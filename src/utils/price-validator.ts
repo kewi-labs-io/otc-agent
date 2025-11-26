@@ -22,7 +22,6 @@ const COINGECKO_CHAIN_MAP: Record<string, string> = {
   solana: "solana",
   bsc: "binance-smart-chain",
   ethereum: "ethereum",
-  // Note: "jeju" is not on CoinGecko - will fail open for validation
 };
 
 // Cache TTL for CoinGecko prices (30 seconds)

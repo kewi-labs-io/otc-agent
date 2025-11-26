@@ -35,10 +35,10 @@ test.describe('TheDesk OTC Trading - Real Wallet Tests', () => {
     await expect(evmButton).toBeVisible({ timeout: 5000 });
     await evmButton.click();
     
-    // Select Jeju chain - MUST find button  
-    const jejuButton = page.locator('button:has-text("Jeju")');
-    await expect(jejuButton).toBeVisible({ timeout: 5000 });
-    await jejuButton.click();
+    // Select Base chain - MUST find button  
+    const baseButton = page.locator('button:has-text("Base")');
+    await expect(baseButton).toBeVisible({ timeout: 5000 });
+    await baseButton.click();
 
     // Handle MetaMask connection
     await metamask.connectToDapp();
@@ -63,9 +63,9 @@ test.describe('TheDesk OTC Trading - Real Wallet Tests', () => {
     await expect(evmButton).toBeVisible({ timeout: 5000 });
     await evmButton.click();
     
-    const jejuButton = page.locator('button:has-text("Jeju")');
-    await expect(jejuButton).toBeVisible({ timeout: 5000 });
-    await jejuButton.click();
+    const baseButton = page.locator('button:has-text("Base")');
+    await expect(baseButton).toBeVisible({ timeout: 5000 });
+    await baseButton.click();
 
     await metamask.connectToDapp();
     await page.waitForTimeout(3000);
@@ -93,9 +93,9 @@ test.describe('TheDesk OTC Trading - Real Wallet Tests', () => {
     await expect(evmButton).toBeVisible({ timeout: 5000 });
     await evmButton.click();
     
-    const jejuButton = page.locator('button:has-text("Jeju")');
-    await expect(jejuButton).toBeVisible({ timeout: 5000 });
-    await jejuButton.click();
+    const baseButton = page.locator('button:has-text("Base")');
+    await expect(baseButton).toBeVisible({ timeout: 5000 });
+    await baseButton.click();
 
     await metamask.connectToDapp();
     await page.waitForTimeout(3000);
@@ -133,9 +133,9 @@ test.describe('TheDesk OTC Trading - Real Wallet Tests', () => {
     await expect(evmButton).toBeVisible({ timeout: 5000 });
     await evmButton.click();
     
-    const jejuButton = page.locator('button:has-text("Jeju")');
-    await expect(jejuButton).toBeVisible({ timeout: 5000 });
-    await jejuButton.click();
+    const baseButton = page.locator('button:has-text("Base")');
+    await expect(baseButton).toBeVisible({ timeout: 5000 });
+    await baseButton.click();
 
     await metamask.connectToDapp();
     await page.waitForTimeout(3000);

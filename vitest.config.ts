@@ -12,6 +12,8 @@ export default defineConfig({
     reporters: ['verbose'],
     sequence: {
       hooks: 'stack',
+      // Run tests sequentially to avoid RPC rate limiting (429 errors)
+      concurrent: false,
     },
   },
   resolve: {

@@ -22,5 +22,4 @@ remappings = [
 # RPC endpoints
 [rpc_endpoints]
 localhost = "http://127.0.0.1:8545"
-jeju_localnet = "http://127.0.0.1:9545"
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { BaseLogo, BscLogo, JejuLogo } from "@/components/icons/index";
+import { BaseLogo, BscLogo } from "@/components/icons/index";
 import type { EVMChain } from "@/types";
 
 interface EVMChainSelectorProps {
@@ -41,19 +41,6 @@ export function EVMChainSelector({
               <BscLogo className="w-8 h-8 sm:w-10 sm:h-10" />
             </div>
             <div className="text-xl sm:text-2xl font-bold">BSC</div>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onSelectChain("jeju")}
-          className="group rounded-xl p-6 sm:p-8 text-center transition-all duration-200 cursor-pointer text-white bg-gradient-to-br from-purple-600 to-purple-800 border-2 border-purple-700 hover:border-purple-600 hover:brightness-110 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-purple-600 focus:ring-offset-2 focus:ring-offset-zinc-900"
-        >
-          <div className="flex items-center justify-center gap-4">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-white/10 flex items-center justify-center group-hover:bg-white/20 transition-colors">
-              <JejuLogo className="w-8 h-8 sm:w-10 sm:h-10" />
-            </div>
-            <div className="text-xl sm:text-2xl font-bold">Jeju</div>
           </div>
         </button>
       </div>

@@ -9,8 +9,7 @@ import type { Address } from "viem";
  */
 export function getContractAddress(): Address {
   const env = process.env.NODE_ENV;
-  const network =
-    process.env.NETWORK || process.env.NEXT_PUBLIC_JEJU_NETWORK || "localnet";
+  const network = process.env.NETWORK || "base";
 
   // Production: Use mainnet addresses
   if (env === "production") {
@@ -32,13 +31,11 @@ export function getContractAddress(): Address {
       }
       return address as Address;
     }
-    // Default to Jeju mainnet in production
-    const address = process.env.NEXT_PUBLIC_JEJU_OTC_ADDRESS;
+    // Default to Base in production
+    const address = process.env.NEXT_PUBLIC_BASE_OTC_ADDRESS;
     if (!address) {
-      // Fallback if Jeju is not available/configured, use a placeholder or skip
-      // This prevents build failure if Jeju isn't the active target
       console.warn(
-        `NEXT_PUBLIC_JEJU_OTC_ADDRESS is missing in production. Jeju functionality may be broken.`,
+        `NEXT_PUBLIC_BASE_OTC_ADDRESS is missing in production. Base functionality may be broken.`,
       );
       return "0x0000000000000000000000000000000000000000" as Address;
     }
@@ -47,19 +44,6 @@ export function getContractAddress(): Address {
 
   // Development/staging: Support multiple networks
   switch (network) {
-    case "jeju-mainnet":
-    case "mainnet":
-      return (process.env.NEXT_PUBLIC_JEJU_OTC_ADDRESS ||
-        process.env.NEXT_PUBLIC_OTC_ADDRESS) as Address;
-    case "jeju-testnet":
-    case "testnet":
-      return (process.env.NEXT_PUBLIC_JEJU_OTC_ADDRESS ||
-        process.env.NEXT_PUBLIC_OTC_ADDRESS) as Address;
-    case "jeju-localnet":
-    case "localnet":
-      return (process.env.NEXT_PUBLIC_JEJU_OTC_ADDRESS ||
-        process.env.NEXT_PUBLIC_OTC_ADDRESS ||
-        "0x0000000000000000000000000000000000000000") as Address;
     case "base":
       return (process.env.NEXT_PUBLIC_BASE_OTC_ADDRESS ||
         process.env.NEXT_PUBLIC_OTC_ADDRESS) as Address;
@@ -77,8 +61,8 @@ export function getContractAddress(): Address {
       return (process.env.NEXT_PUBLIC_OTC_ADDRESS ||
         "0x0000000000000000000000000000000000000000") as Address;
     default:
-      // Default to Jeju localnet in development
-      return (process.env.NEXT_PUBLIC_JEJU_OTC_ADDRESS ||
+      // Default to Base Sepolia in development
+      return (process.env.NEXT_PUBLIC_BASE_OTC_ADDRESS ||
         process.env.NEXT_PUBLIC_OTC_ADDRESS ||
         "0x0000000000000000000000000000000000000000") as Address;
   }

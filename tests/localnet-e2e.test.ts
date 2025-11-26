@@ -2,7 +2,7 @@
  * TRUE LOCALNET E2E TEST - NO MOCKS
  * 
  * This test:
- * 1. Starts Jeju Localnet (http://127.0.0.1:9545)
+ * 1. Starts Anvil Localnet (http://127.0.0.1:8545)
  * 2. Deploys OTC contracts
  * 3. Creates real offers on-chain
  * 4. Verifies contract state
@@ -31,7 +31,7 @@ type ContractWriteParams = ContractReadParams & {
 };
 
 const TEST_TIMEOUT = 300000; // 5 minutes
-const JEJU_RPC_URL = process.env.NEXT_PUBLIC_JEJU_RPC_URL || 'http://127.0.0.1:9545';
+const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'http://127.0.0.1:8545';
 
 // Anvil default accounts
 const OWNER_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as `0x${string}`;
@@ -115,8 +115,8 @@ beforeAll(async () => {
   console.log('╚══════════════════════════════════════════════════════════╝\n');
   
   try {
-    // Step 1: Start Anvil Node (acts as Jeju Localnet for testing)
-    console.log('🔧 Starting Jeju Localnet (Anvil)...');
+    // Step 1: Start Anvil Node (localnet for testing)
+    console.log('🔧 Starting Anvil Localnet...');
     
     // Kill any existing Anvil nodes
     await runShellCommand('pkill -9 -f "anvil" 2>/dev/null || true');
@@ -136,7 +136,7 @@ beforeAll(async () => {
     throw new Error('Anvil node failed to start');
   }
   
-  console.log('  ✅ Jeju Localnet ready\n');
+  console.log('  ✅ Anvil Localnet ready\n');
   
   // Step 2: Deploy OTC Contracts
   console.log('📦 Deploying OTC contracts to localnet...');
@@ -528,9 +528,6 @@ describe('Multi-Chain Support Verification', () => {
     console.log('\n🌐 Verifying Multi-Chain Configuration\n');
     
     const chains = [
-      { name: 'Jeju Mainnet', id: 420691 },
-      { name: 'Jeju Testnet', id: 420690 },
-      { name: 'Jeju Localnet', id: 1337 },
       { name: 'Base', id: 8453 },
       { name: 'Base Sepolia', id: 84532 },
       { name: 'BSC', id: 56 },
@@ -542,7 +539,7 @@ describe('Multi-Chain Support Verification', () => {
       console.log(`  ✅ ${chain.name} (${chain.id})`);
     }
     
-    expect(chains.length).toBe(8);
+    expect(chains.length).toBe(5);
   });
 });
 
@@ -562,7 +559,7 @@ describe('Final E2E Verification', () => {
     console.log('');
     
     console.log('🎯 Real Blockchain Interactions:');
-    console.log('  ✓ Deployed contracts to Jeju Localnet');
+    console.log('  ✓ Deployed contracts to Anvil Localnet');
     console.log('  ✓ Created offer on-chain');
     console.log('  ✓ Approved offer on-chain');
     console.log('  ✓ Verified contract state');

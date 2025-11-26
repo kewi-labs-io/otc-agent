@@ -1,11 +1,11 @@
 #!/bin/bash
-# Verification script to ensure Base, BSC, and Jeju support is complete
+# Verification script to ensure Base and BSC support is complete
 
 # Get script directory and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "🔍 Verifying multi-chain support (Base, BSC, Jeju)..."
+echo "🔍 Verifying multi-chain support (Base, BSC)..."
 echo "📁 Project root: $PROJECT_ROOT"
 echo ""
 
@@ -46,14 +46,6 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
-# Check for Jeju logo
-if [ -f "$PROJECT_ROOT/src/components/icons/jeju-logo.tsx" ]; then
-  echo "✅ Jeju logo component exists"
-else
-  echo "❌ Jeju logo component missing"
-  ERRORS=$((ERRORS + 1))
-fi
-
 # Check multiwallet context has selectedEVMChain
 if grep -q "selectedEVMChain" "$PROJECT_ROOT/src/components/multiwallet.tsx"; then
   echo "✅ Multiwallet context has selectedEVMChain state"
@@ -62,26 +54,9 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
-# Check that tests use Jeju Localnet
-JEJU_TESTS=$(grep -r "Jeju Localnet" "$PROJECT_ROOT/e2e" --include="*.spec.ts" 2>/dev/null | wc -l)
-if [ "$JEJU_TESTS" -gt 10 ]; then
-  echo "✅ Playwright tests configured for Jeju Localnet ($JEJU_TESTS references)"
-else
-  echo "❌ Playwright tests not properly configured for Jeju Localnet"
-  ERRORS=$((ERRORS + 1))
-fi
-
-# Check test startup script uses Jeju
-if grep -q "Jeju Localnet" "$PROJECT_ROOT/scripts/test-playwright-start.sh"; then
-  echo "✅ Test startup script configured for Jeju"
-else
-  echo "❌ Test startup script not configured for Jeju"
-  ERRORS=$((ERRORS + 1))
-fi
-
-# Check chain types include all three chains
-if grep -q '"base" | "bsc" | "jeju"' "$PROJECT_ROOT/src/types/index.ts"; then
-  echo "✅ EVMChain type includes Base, BSC, and Jeju"
+# Check chain types include Base and BSC
+if grep -q '"base" | "bsc"' "$PROJECT_ROOT/src/types/index.ts"; then
+  echo "✅ EVMChain type includes Base and BSC"
 else
   echo "❌ EVMChain type incomplete"
   ERRORS=$((ERRORS + 1))

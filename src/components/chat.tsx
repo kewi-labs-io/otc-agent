@@ -750,7 +750,6 @@ function ChatHeader({
       ? (currentQuote.tokenChain === "solana" && activeFamily !== "solana") ||
         ((currentQuote.tokenChain === "base" ||
           currentQuote.tokenChain === "bsc" ||
-          currentQuote.tokenChain === "jeju" ||
           currentQuote.tokenChain === "ethereum") &&
           activeFamily !== "evm")
       : false;
@@ -1011,9 +1010,7 @@ function ChatBody({
                         <EVMLogo className="w-8 h-8 sm:w-10 sm:h-10" />
                       </div>
                       <div className="text-xl sm:text-2xl font-bold">EVM</div>
-                      <div className="text-xs text-white/70">
-                        Base, BSC, Jeju
-                      </div>
+                      <div className="text-xs text-white/70">Base, BSC</div>
                     </div>
                   </button>
                   <button

@@ -149,7 +149,7 @@ export default function HowItWorksContent() {
                     <EVMLogo className="w-10 h-10 sm:w-12 sm:h-12" />
                   </div>
                   <div className="text-2xl sm:text-3xl font-bold">EVM</div>
-                  <div className="text-xs text-white/70">Base, BSC, Jeju</div>
+                  <div className="text-xs text-white/70">Base, BSC</div>
                 </div>
               </button>
               <button

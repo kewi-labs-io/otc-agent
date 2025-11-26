@@ -23,7 +23,7 @@ export type {
 // CHAIN TYPES
 //==============================================================================
 
-export type EVMChain = "base" | "bsc" | "jeju";
+export type EVMChain = "base" | "bsc";
 export type { Chain, ChainFamily, ChainConfig } from "@/config/chains";
 export {
   SUPPORTED_CHAINS,
@@ -32,7 +32,6 @@ export {
   getChainConfig,
   getChainFromId,
   getChainFromNumericId,
-  isJejuChainId,
 } from "@/config/chains";
 
 //==============================================================================

@@ -16,11 +16,10 @@ const DealFilters = dynamic(
 
 function MarketplaceContent() {
   const [filters, setFilters] = useState({
-    chains: ["ethereum", "base", "bsc", "jeju", "solana"] as (
+    chains: ["ethereum", "base", "bsc", "solana"] as (
       | "ethereum"
       | "base"
       | "bsc"
-      | "jeju"
       | "solana"
     )[],
     minMarketCap: 0,

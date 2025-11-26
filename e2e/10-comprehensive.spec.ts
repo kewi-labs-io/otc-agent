@@ -8,9 +8,9 @@ import { BrowserContext } from 'playwright-core';
 import { bootstrap, Dappwright, getWallet, MetaMaskWallet } from '@tenkeylabs/dappwright';
 
 base.setTimeout(600000);
-// Use Jeju Localnet for testing (default network)
-const JEJU_RPC = process.env.NEXT_PUBLIC_JEJU_RPC_URL || 'http://127.0.0.1:9545';
-const JEJU_CHAIN_ID = 1337;
+// Use Anvil Localnet for testing (default network)
+const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL_URL || 'http://127.0.0.1:8545';
+const CHAIN_ID = 31337;
 
 
 export const test = base.extend<{ wallet: Dappwright }, { walletContext: BrowserContext }>({
@@ -24,13 +24,13 @@ export const test = base.extend<{ wallet: Dappwright }, { walletContext: Browser
       });
 
       await wallet.addNetwork({
-        networkName: 'Jeju Localnet',
-        rpc: JEJU_RPC,
-        chainId: JEJU_CHAIN_ID,
+        networkName: 'Anvil Localnet',
+        rpc: RPC_URL,
+        chainId: CHAIN_ID,
         symbol: 'ETH',
       });
 
-      await wallet.switchNetwork('Jeju Localnet');
+      await wallet.switchNetwork('Anvil Localnet');
 
       await use(context);
       await context.close();
@@ -149,7 +149,7 @@ test.describe('Input Field Coverage', () => {
     await page.getByRole('button', { name: /connect/i }).first().click();
     await page.getByRole('button', { name: /evm/i }).click();
     await page.waitForTimeout(1000);
-    await page.getByRole('button', { name: /jeju/i }).click();
+    await page.getByRole('button', { name: /base/i }).click();
     await page.waitForTimeout(2000);
     await wallet.approve();
     await page.waitForTimeout(4000);
@@ -273,7 +273,7 @@ test.describe('Timestamp and Date Formatting', () => {
     await page.getByRole('button', { name: /connect/i }).first().click();
     await page.getByRole('button', { name: /evm/i }).click();
     await page.waitForTimeout(1000);
-    await page.getByRole('button', { name: /jeju/i }).click();
+    await page.getByRole('button', { name: /base/i }).click();
     await page.waitForTimeout(2000);
     await wallet.approve();
     await page.waitForTimeout(4000);
@@ -356,7 +356,7 @@ test.describe('Icon and SVG Coverage', () => {
     await page.getByRole('button', { name: /connect/i }).first().click();
     await page.getByRole('button', { name: /evm/i }).click();
     await page.waitForTimeout(1000);
-    await page.getByRole('button', { name: /jeju/i }).click();
+    await page.getByRole('button', { name: /base/i }).click();
     await page.waitForTimeout(2000);
     
     // Should show Base logo
@@ -430,7 +430,7 @@ test.describe('Markdown and Rich Text', () => {
     await page.getByRole('button', { name: /connect/i }).first().click();
     await page.getByRole('button', { name: /evm/i }).click();
     await page.waitForTimeout(1000);
-    await page.getByRole('button', { name: /jeju/i }).click();
+    await page.getByRole('button', { name: /base/i }).click();
     await page.waitForTimeout(2000);
     await wallet.approve();
     await page.waitForTimeout(4000);
@@ -504,14 +504,14 @@ test.describe('Animation and Transition Coverage', () => {
     // Should be visible and animated
     await page.getByRole('button', { name: /evm/i }).click();
     await page.waitForTimeout(1000);
-    await expect(page.getByRole('button', { name: /jeju/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /base/i })).toBeVisible();
     
     // Close
     await page.keyboard.press('Escape');
     await page.waitForTimeout(500);
     
     // Should close smoothly
-    const isClosed = !await page.getByRole('button', { name: /jeju/i }).isVisible().catch(() => true);
+    const isClosed = !await page.getByRole('button', { name: /base/i }).isVisible().catch(() => true);
     expect(isClosed).toBe(true);
   });
 
@@ -774,7 +774,7 @@ test.describe('Wallet Balance Display', () => {
     await page.getByRole('button', { name: /connect/i }).first().click();
     await page.getByRole('button', { name: /evm/i }).click();
     await page.waitForTimeout(1000);
-    await page.getByRole('button', { name: /jeju/i }).click();
+    await page.getByRole('button', { name: /base/i }).click();
     await page.waitForTimeout(2000);
     await wallet.approve();
     await page.waitForTimeout(4000);

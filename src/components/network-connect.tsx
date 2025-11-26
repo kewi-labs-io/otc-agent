@@ -9,7 +9,7 @@ import { EVMChainSelectorModal } from "@/components/evm-chain-selector-modal";
 
 /**
  * NetworkConnectButton - Unified wallet connection
- * Shows modal to choose EVM (Base, BSC, Jeju) or Solana network
+ * Shows modal to choose EVM (Base, BSC) or Solana network
  * - EVM: Uses Privy for EVM wallet connection (MetaMask, Coinbase, etc.)
  * - Solana: Uses Solana wallet-adapter for native Solana wallets (Phantom, Solflare, etc.)
  *
@@ -85,9 +85,7 @@ export function NetworkConnectButton({
                         <div className="text-2xl sm:text-3xl font-bold">
                           EVM
                         </div>
-                        <div className="text-xs text-white/70">
-                          Base, BSC, Jeju
-                        </div>
+                        <div className="text-xs text-white/70">Base, BSC</div>
                       </div>
                     </button>
                     <button

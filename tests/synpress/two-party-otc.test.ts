@@ -52,10 +52,10 @@ test.describe('Two-Party OTC Flow', () => {
     await expect(evmButton).toBeVisible({ timeout: 5000 });
     await evmButton.click();
 
-    // Select Jeju chain (our local testnet)
-    const jejuButton = page.locator('button:has-text("Jeju")');
-    await expect(jejuButton).toBeVisible({ timeout: 5000 });
-    await jejuButton.click();
+    // Select Base chain (our local testnet)
+    const baseButton = page.locator('button:has-text("Base")');
+    await expect(baseButton).toBeVisible({ timeout: 5000 });
+    await baseButton.click();
 
     // Handle MetaMask connection popup
     await metamask.connectToDapp();
@@ -64,7 +64,7 @@ test.describe('Two-Party OTC Flow', () => {
     // Verify wallet address is displayed
     await expect(page.locator('text=/0x[a-fA-F0-9]{4}/i')).toBeVisible({ timeout: 10000 });
     
-    console.log('✅ Wallet connected to Jeju network');
+    console.log('✅ Wallet connected to Base network');
   });
 
   test('Step 2: Seller creates consignment', async ({ 
@@ -78,7 +78,7 @@ test.describe('Two-Party OTC Flow', () => {
     // Connect wallet first
     await page.locator('button:has-text("Connect")').first().click();
     await page.locator('button:has-text("EVM")').click();
-    await page.locator('button:has-text("Jeju")').click();
+    await page.locator('button:has-text("Base")').click();
     await metamask.connectToDapp();
     await page.waitForTimeout(3000);
 
@@ -122,7 +122,7 @@ test.describe('Two-Party OTC Flow', () => {
     // Connect wallet
     await page.locator('button:has-text("Connect")').first().click();
     await page.locator('button:has-text("EVM")').click();
-    await page.locator('button:has-text("Jeju")').click();
+    await page.locator('button:has-text("Base")').click();
     await metamask.connectToDapp();
     await page.waitForTimeout(3000);
 
@@ -164,7 +164,7 @@ test.describe('Two-Party OTC Flow', () => {
     // Connect wallet
     await page.locator('button:has-text("Connect")').first().click();
     await page.locator('button:has-text("EVM")').click();
-    await page.locator('button:has-text("Jeju")').click();
+    await page.locator('button:has-text("Base")').click();
     await metamask.connectToDapp();
     await page.waitForTimeout(3000);
 
@@ -217,7 +217,7 @@ test.describe('Two-Party OTC Flow', () => {
     // Connect wallet
     await page.locator('button:has-text("Connect")').first().click();
     await page.locator('button:has-text("EVM")').click();
-    await page.locator('button:has-text("Jeju")').click();
+    await page.locator('button:has-text("Base")').click();
     await metamask.connectToDapp();
     await page.waitForTimeout(3000);
 
@@ -253,7 +253,7 @@ test.describe('Two-Party OTC Flow', () => {
     // Connect wallet
     await page.locator('button:has-text("Connect")').first().click();
     await page.locator('button:has-text("EVM")').click();
-    await page.locator('button:has-text("Jeju")').click();
+    await page.locator('button:has-text("Base")').click();
     await metamask.connectToDapp();
     await page.waitForTimeout(3000);
 
@@ -294,7 +294,7 @@ test.describe('Error Handling', () => {
     await page.goto('/');
     await page.locator('button:has-text("Connect")').first().click();
     await page.locator('button:has-text("EVM")').click();
-    await page.locator('button:has-text("Jeju")').click();
+    await page.locator('button:has-text("Base")').click();
     await metamask.connectToDapp();
     await page.waitForTimeout(3000);
 
@@ -325,7 +325,7 @@ test.describe('Error Handling', () => {
     await page.goto('/');
     await page.locator('button:has-text("Connect")').first().click();
     await page.locator('button:has-text("EVM")').click();
-    await page.locator('button:has-text("Jeju")').click();
+    await page.locator('button:has-text("Base")').click();
     await metamask.connectToDapp();
     await page.waitForTimeout(3000);
 

@@ -10,7 +10,7 @@ import { MetaMask } from '@synthetixio/synpress/playwright';
  * etc.
  * 
  * Chain configuration:
- * - Jeju/Anvil: chainId 31337 at http://localhost:8545
+ * - Anvil: chainId 31337 at http://localhost:8545
  */
 
 const SEED_PHRASE = process.env.SEED_PHRASE || 'test test test test test test test test test test test junk';
@@ -23,20 +23,20 @@ const setupWallet = defineWalletSetup(PASSWORD, async (context, walletPage) => {
   // Import wallet with test seed
   await metamask.importWallet(SEED_PHRASE);
 
-  // Add Jeju/Anvil network
+  // Add Anvil network
   // Anvil default chainId is 31337
   const chainId = parseInt(process.env.CHAIN_ID || '31337');
-  const rpcUrl = process.env.JEJU_RPC_URL || process.env.NEXT_PUBLIC_RPC_URL || 'http://localhost:8545';
+  const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'http://localhost:8545';
   
   await metamask.addNetwork({
-    name: 'Jeju Localnet',
+    name: 'Anvil Localnet',
     rpcUrl: rpcUrl,
     chainId: chainId,
     symbol: 'ETH',
   });
 
-  // Switch to Jeju network
-  await metamask.switchNetwork('Jeju Localnet');
+  // Switch to Anvil network
+  await metamask.switchNetwork('Anvil Localnet');
 });
 
 // Export password for tests to use with MetaMask class

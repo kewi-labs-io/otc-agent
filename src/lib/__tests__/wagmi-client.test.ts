@@ -15,26 +15,9 @@ describe("wagmi-client chain availability", () => {
   });
 
   describe("Chain configuration based on environment", () => {
-    it("should include Jeju chains by default", () => {
-      // Since we can't easily re-import the module, we test the expected behavior
+    it("should include Base and BSC chains by default", () => {
+      // Base and BSC chains should always be available
       expect(process.env).toBeDefined();
-      // Jeju chains should always be available
-    });
-
-    it("should warn when Base RPC URL is missing in development", () => {
-      (process.env as { NODE_ENV?: string }).NODE_ENV = "development";
-      delete process.env.NEXT_PUBLIC_BASE_RPC_URL;
-
-      // In real implementation, this would trigger a console.warn
-      // Test documents expected behavior
-      expect(process.env.NEXT_PUBLIC_BASE_RPC_URL).toBeUndefined();
-    });
-
-    it("should warn when BSC RPC URL is missing in development", () => {
-      (process.env as { NODE_ENV?: string }).NODE_ENV = "development";
-      delete process.env.NEXT_PUBLIC_BSC_RPC_URL;
-
-      expect(process.env.NEXT_PUBLIC_BSC_RPC_URL).toBeUndefined();
     });
 
     it("should include Base chains when RPC URL is configured", () => {
@@ -60,21 +43,11 @@ describe("wagmi-client chain availability", () => {
   });
 
   describe("Transport configuration", () => {
-    it("should use custom Jeju RPC URL from environment", () => {
-      const customUrl = "http://custom-jeju-rpc:9545";
-      process.env.NEXT_PUBLIC_JEJU_RPC_URL = customUrl;
+    it("should use custom Base RPC URL from environment", () => {
+      const customUrl = "https://custom-base-rpc.example.com";
+      process.env.NEXT_PUBLIC_BASE_RPC_URL = customUrl;
 
-      expect(process.env.NEXT_PUBLIC_JEJU_RPC_URL).toBe(customUrl);
-    });
-
-    it("should default to localhost for Jeju localnet", () => {
-      delete process.env.NEXT_PUBLIC_JEJU_RPC_URL;
-      const expectedDefault = "http://127.0.0.1:9545";
-
-      // Default should be localhost
-      expect(process.env.NEXT_PUBLIC_JEJU_RPC_URL || expectedDefault).toBe(
-        expectedDefault,
-      );
+      expect(process.env.NEXT_PUBLIC_BASE_RPC_URL).toBe(customUrl);
     });
 
     it("should use Anvil localhost by default", () => {
@@ -113,9 +86,9 @@ describe("wagmi-client chain availability", () => {
     });
 
     it("should handle malformed URLs gracefully", () => {
-      process.env.NEXT_PUBLIC_JEJU_RPC_URL = "not-a-valid-url";
+      process.env.NEXT_PUBLIC_BASE_RPC_URL = "not-a-valid-url";
       // Implementation should handle this or fail gracefully
-      expect(process.env.NEXT_PUBLIC_JEJU_RPC_URL).toBe("not-a-valid-url");
+      expect(process.env.NEXT_PUBLIC_BASE_RPC_URL).toBe("not-a-valid-url");
     });
   });
 });

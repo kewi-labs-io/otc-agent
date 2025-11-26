@@ -12,7 +12,6 @@ const chainIcons: Record<Chain, { icon: string; label: string }> = {
   base: { icon: "🔵", label: "Base" },
   bsc: { icon: "🟡", label: "BSC" },
   solana: { icon: "◎", label: "SOL" },
-  jeju: { icon: "🟣", label: "Jeju" },
 };
 
 export function ChainSelector({ selected, onChange }: ChainSelectorProps) {
