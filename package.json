@@ -129,6 +129,7 @@
     "dev:cleanup": "sh -c 'echo \"Cleaning up OTC Desk port 5004...\"; lsof -t -i:5004 | xargs kill -9 2>/dev/null || true; echo \"Cleanup complete\"'",
     "start": "next start -p 5004",
     "build": "./scripts/ensure-deployments.sh && next build",
+    "build:next-only": "next build",
     "seed": "bun scripts/seed-tokens.ts",
     "rpc:dev": "sh -c 'bun run rpc:check && echo \"Using existing RPC at localhost:8545\" || (bun run rpc:start & sleep 3 && bun run rpc:deploy) && tail -f /dev/null'",
     "rpc:start": "./scripts/start-anvil.sh",
