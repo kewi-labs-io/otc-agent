@@ -12,6 +12,9 @@ const SELLER_SEED = process.env.SELLER_SEED_PHRASE || 'test test test test test 
 const PASSWORD = process.env.WALLET_PASSWORD || 'Tester@1234';
 
 export default defineWalletSetup(PASSWORD, async (context, walletPage) => {
+  // Wait for page to be fully loaded in CI
+  await walletPage.waitForLoadState('domcontentloaded');
+  
   const metamask = new MetaMask(context, walletPage, PASSWORD);
   await metamask.importWallet(SELLER_SEED);
 
@@ -19,12 +22,16 @@ export default defineWalletSetup(PASSWORD, async (context, walletPage) => {
   const chainId = parseInt(process.env.CHAIN_ID || '31337'); // Anvil default
   const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'http://localhost:8545';
 
-  await metamask.addNetwork({
-    name: 'Anvil Localnet',
-    rpcUrl: rpcUrl,
-    chainId: chainId,
-    symbol: 'ETH',
-  });
+  try {
+    await metamask.addNetwork({
+      name: 'Anvil Localnet',
+      rpcUrl: rpcUrl,
+      chainId: chainId,
+      symbol: 'ETH',
+    });
+  } catch (e) {
+    console.log('Network may already be added, continuing...', e);
+  }
 });
 
 export const sellerSetup = {

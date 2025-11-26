@@ -21,6 +21,9 @@ const PASSWORD = process.env.WALLET_PASSWORD || 'Tester@1234';
 
 // Wallet setup function - this runs ONCE and is cached
 const setupWallet = defineWalletSetup(PASSWORD, async (context, walletPage) => {
+  // Wait for page to be fully loaded in CI
+  await walletPage.waitForLoadState('domcontentloaded');
+  
   const metamask = new MetaMask(context, walletPage, PASSWORD);
   
   // Import wallet with test seed
@@ -37,17 +40,17 @@ const setupWallet = defineWalletSetup(PASSWORD, async (context, walletPage) => {
       chainId: chainId,
       symbol: 'ETH',
     });
-  } catch {
+  } catch (e) {
     // Network may already exist - that's fine
-    console.log('Network may already be added, continuing...');
+    console.log('Network may already be added, continuing...', e);
   }
 
   // Switch to Anvil network
   try {
     await metamask.switchNetwork('Anvil Localnet');
-  } catch {
+  } catch (e) {
     // Already on the network or network doesn't exist yet
-    console.log('Could not switch network, continuing...');
+    console.log('Could not switch network, continuing...', e);
   }
 });
 
