@@ -173,20 +173,38 @@ jobs:
       - name: Ensure deployment configs exist
         run: ./scripts/ensure-deployments.sh
 
-      - name: Install Playwright browsers
-        run: bunx playwright install chromium --with-deps
+      - name: Install Playwright browsers with deps
+        run: |
+          # Install chromium with all dependencies for extension support
+          bunx playwright install chromium --with-deps
+          # Also install system Chrome for better extension compatibility
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable || true
 
-      - name: Install xvfb
-        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: Install xvfb and display dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth libgtk-3-0 libnotify-dev libgconf-2-4 libnss3 libxss1 libasound2 libxtst6
+
+      - name: Start virtual display
+        run: |
+          # Start Xvfb on display :99
+          Xvfb :99 -screen 0 1920x1080x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+          sleep 2
 
       - name: Build Synpress wallet cache
         run: |
-          # Build the MetaMask wallet cache with xvfb
-          xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' \
-            bunx synpress --force
+          # Build the MetaMask wallet cache with debug mode
+          bunx synpress --force --debug 2>&1 | head -200 || true
         env:
+          DISPLAY: ':99'
           WALLET_PASSWORD: 'Tester@1234'
           SEED_PHRASE: 'test test test test test test test test test test test junk'
+          # Use a specific MetaMask version known to work
+          METAMASK_VERSION: '11.9.1'
+          # Chrome flags for CI
+          CHROME_ARGS: '--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu'
 
       - name: Build application
         run: bun run build:next-only
@@ -209,14 +227,14 @@ jobs:
             sleep 2
           done
           
-          # Run synpress tests with xvfb
-          xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' \
-            bunx playwright test --config=synpress.config.ts --reporter=github
+          # Run synpress tests
+          bunx playwright test --config=synpress.config.ts --reporter=github
           TEST_EXIT=$?
           
           kill $SERVER_PID 2>/dev/null || true
           exit $TEST_EXIT
         env:
+          DISPLAY: ':99'
           CI: 'true'
           WALLET_PASSWORD: 'Tester@1234'
           NEXT_PUBLIC_E2E_TEST: '1'

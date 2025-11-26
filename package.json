@@ -178,5 +178,8 @@
     "sharp",
     "unrs-resolver",
     "handlebars"
-  ]
+  ],
+  "overrides": {
+    "playwright-core": "1.48.2"
+  }
 }

@@ -59,6 +59,16 @@ export default defineConfig({
           args: [
             '--disable-web-security',
             '--disable-features=IsolateOrigins,site-per-process',
+            // CI-specific flags for extension loading
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-software-rasterizer',
+            // Extension loading flags
+            '--allow-insecure-localhost',
+            '--disable-extensions-except=',
+            '--load-extension=',
           ],
         },
       },
