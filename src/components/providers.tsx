@@ -74,13 +74,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 "phantom",
               ],
             },
-            // External wallet connectors for Solana
-            // Privy will auto-detect installed Solana wallets via walletList above
-            externalWallets: {
-              solana: {
-                connectors: [],
-              },
-            },
             // Embedded wallets for users without external wallets
             embeddedWallets: {
               ethereum: {
