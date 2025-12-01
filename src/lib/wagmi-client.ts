@@ -2,6 +2,7 @@ import { createConfig, http } from "wagmi";
 import type { Config } from "wagmi";
 import { localhost, base, baseSepolia, bsc, bscTestnet } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
+import { farcasterFrame } from "@farcaster/frame-wagmi-connector";
 
 // Custom RPC URLs
 const baseRpcUrl = process.env.NEXT_PUBLIC_BASE_RPC_URL;
@@ -66,9 +67,13 @@ function getTransports() {
 
 // Create connectors only on client side to avoid indexedDB SSR errors
 // Note: WalletConnect is handled by Privy, so we only use injected connector here
+// farcasterFrame connector is prioritized when in Farcaster context
 function getConnectors() {
   if (typeof window === "undefined") return [];
-  return [injected({ shimDisconnect: true })];
+  return [
+    farcasterFrame(), // Prioritize Farcaster wallet when in Farcaster Mini App context
+    injected({ shimDisconnect: true }), // Fallback for browser wallets
+  ];
 }
 
 // Wagmi configuration for Privy integration

@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { useChainId, useDisconnect } from "wagmi";
+import { useChainId, useDisconnect, useConnect, useAccount } from "wagmi";
 import { base, baseSepolia, bsc, bscTestnet, localhost } from "wagmi/chains";
 import {
   usePrivy,
@@ -101,6 +101,10 @@ export function MultiWalletProvider({
   // Get all connected wallets from Privy
   const { wallets } = useWallets();
   const { disconnect: disconnectWagmi } = useDisconnect();
+  
+  // Wagmi hooks for Farcaster Frame connector auto-connect
+  const { connect: connectWagmi, connectors } = useConnect();
+  const { isConnected: isWagmiConnected } = useAccount();
 
   // Identify EVM and Solana wallets
   // Type assertion needed as Privy types don't fully expose chainType
@@ -222,6 +226,31 @@ export function MultiWalletProvider({
         setIsFarcasterContext(false);
       });
   }, []);
+
+  // Auto-connect with Farcaster Frame connector when in Farcaster context
+  // This ensures transactions use Farcaster wallet instead of browser wallets
+  useEffect(() => {
+    if (!isFarcasterContext || isWagmiConnected || !connectors?.length) return;
+
+    // Find Farcaster Frame connector
+    const farcasterConnector = connectors.find((c) => c.id === "farcasterFrame");
+    if (!farcasterConnector) {
+      console.warn(
+        "[MultiWallet] Farcaster Frame connector not found in wagmi connectors",
+      );
+      return;
+    }
+
+    // Auto-connect with Farcaster Frame connector
+    try {
+      console.log(
+        "[MultiWallet] Auto-connecting with Farcaster Frame connector...",
+      );
+      connectWagmi({ connector: farcasterConnector });
+    } catch (error) {
+      console.warn("[MultiWallet] Auto-connect failed:", error);
+    }
+  }, [isFarcasterContext, isWagmiConnected, connectors, connectWagmi]);
 
   // Connect Solana wallet - maps to Privy connectWallet
   const connectSolanaWallet = useCallback(() => {
