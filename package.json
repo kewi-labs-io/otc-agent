@@ -47,7 +47,7 @@
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-slot": "^1.2.3",
-    "@rainbow-me/rainbowkit": "^2.2.8",
+    "@rainbow-me/rainbowkit": "^2.2.9",
     "@solana/spl-token": "^0.4.14",
     "@solana/wallet-adapter-react": "^0.15.39",
     "@solana/wallet-adapter-react-ui": "^0.9.39",
@@ -55,7 +55,7 @@
     "@solana/web3.js": "^1.98.4",
     "@tailwindcss/postcss": "^4.1.13",
     "@tailwindcss/typography": "^0.5.19",
-    "@tanstack/react-query": "^5.90.2",
+    "@tanstack/react-query": "^5.90.11",
     "@types/chai": "^5.2.2",
     "@types/uuid": "^11.0.0",
     "@uiw/codemirror-theme-github": "4.25.2",
@@ -96,8 +96,8 @@
     "tailwindcss": "^3.4.0",
     "use-sync-external-store": "^1.5.0",
     "uuid": "^13.0.0",
-    "viem": "2.17.11",
-    "wagmi": "2.12.24",
+    "viem": "^2.21.54",
+    "wagmi": "^2.15.3",
     "zod": "^4.1.11"
   },
   "devDependencies": {
@@ -192,8 +192,8 @@
   },
   "resolutions": {
     "ox": "^0.9.17",
-    "viem": "2.17.11",
-    "@base-org/account>viem": "2.17.11",
+    "viem": "^2.21.54",
+    "@base-org/account>viem": "^2.21.54",
     "@base-org/account>ox": "^0.9.17"
   }
 }
