@@ -23,23 +23,33 @@ import { getContracts } from "@/config/contracts";
 // Helper to get OTC address from deployments or env
 function getOtcAddress(): Address | undefined {
   // Try environment variables first
-  const envAddress = process.env.NEXT_PUBLIC_BASE_OTC_ADDRESS || 
-                     process.env.NEXT_PUBLIC_OTC_ADDRESS;
+  const envAddress =
+    process.env.NEXT_PUBLIC_BASE_OTC_ADDRESS ||
+    process.env.NEXT_PUBLIC_OTC_ADDRESS;
   if (envAddress) {
     console.log("[useOTC] Using OTC address from env:", envAddress);
     return envAddress as Address;
   }
-  
+
   // Fallback to deployment config
-  const network = process.env.NEXT_PUBLIC_NETWORK as "local" | "testnet" | "mainnet" | undefined;
+  const network = process.env.NEXT_PUBLIC_NETWORK as
+    | "local"
+    | "testnet"
+    | "mainnet"
+    | undefined;
   const deployments = getContracts(network || "testnet");
   const configAddress = deployments.evm?.contracts?.otc;
-  
+
   if (configAddress) {
-    console.log("[useOTC] Using OTC address from deployment config:", configAddress, "network:", network || "testnet");
+    console.log(
+      "[useOTC] Using OTC address from deployment config:",
+      configAddress,
+      "network:",
+      network || "testnet",
+    );
     return configAddress as Address;
   }
-  
+
   console.warn("[useOTC] No OTC address found in env or deployment config");
   return undefined;
 }
@@ -530,28 +540,36 @@ export function useOTC(): {
   async function approveToken(tokenAddress: Address, amount: bigint) {
     if (!account) throw new Error("No wallet connected");
     if (!otcAddress) throw new Error("OTC contract address not configured");
-    
+
     const network = process.env.NEXT_PUBLIC_NETWORK || "testnet";
     console.log("[useOTC] approveToken - network config:", network);
     console.log("[useOTC] approveToken - token:", tokenAddress);
     console.log("[useOTC] approveToken - spender (OTC):", otcAddress);
     console.log("[useOTC] approveToken - wallet chainId:", chainId);
     console.log("[useOTC] approveToken - amount:", amount.toString());
-    
+
     // Warn if there might be a network mismatch
     const isMainnetConfig = network === "mainnet";
     const isMainnetWallet = chainId === 8453; // Base mainnet
     const isTestnetWallet = chainId === 84532; // Base Sepolia
-    
+
     if (isMainnetConfig && isTestnetWallet) {
-      console.error("[useOTC] NETWORK MISMATCH: App is configured for mainnet but wallet is on Base Sepolia");
-      throw new Error("Network mismatch: Please switch your wallet to Base mainnet");
+      console.error(
+        "[useOTC] NETWORK MISMATCH: App is configured for mainnet but wallet is on Base Sepolia",
+      );
+      throw new Error(
+        "Network mismatch: Please switch your wallet to Base mainnet",
+      );
     }
     if (!isMainnetConfig && isMainnetWallet) {
-      console.error("[useOTC] NETWORK MISMATCH: App is configured for testnet but wallet is on Base mainnet");
-      throw new Error("Network mismatch: Please switch your wallet to Base Sepolia (testnet) or set NEXT_PUBLIC_NETWORK=mainnet");
+      console.error(
+        "[useOTC] NETWORK MISMATCH: App is configured for testnet but wallet is on Base mainnet",
+      );
+      throw new Error(
+        "Network mismatch: Please switch your wallet to Base Sepolia (testnet) or set NEXT_PUBLIC_NETWORK=mainnet",
+      );
     }
-    
+
     return writeContractAsync({
       address: tokenAddress,
       abi: erc20Abi,

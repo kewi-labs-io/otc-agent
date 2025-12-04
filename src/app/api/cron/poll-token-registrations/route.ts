@@ -98,7 +98,9 @@ async function pollBaseRegistrations() {
 
       // Fetch token metadata
       // Use type assertion to bypass viem's strict authorizationList requirement
-      const readContract = client.readContract as (params: unknown) => Promise<unknown>;
+      const readContract = client.readContract as (
+        params: unknown,
+      ) => Promise<unknown>;
       const [symbol, name, decimals] = await Promise.all([
         readContract({
           address: tokenAddress as `0x${string}`,

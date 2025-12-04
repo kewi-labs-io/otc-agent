@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     if (!response.ok) {
       return NextResponse.json(
         { error: `Failed to fetch image: ${response.status}` },
-        { status: 502 }
+        { status: 502 },
       );
     }
 
@@ -74,4 +74,3 @@ function getExtensionFromUrl(url: string): string | null {
     return null;
   }
 }
-

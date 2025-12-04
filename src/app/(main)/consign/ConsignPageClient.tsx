@@ -7,22 +7,34 @@ import { usePrivy } from "@privy-io/react-auth";
 import type { TokenWithBalance } from "@/components/consignment-form/token-selection-step";
 
 const TokenSelectionStep = dynamic(
-  () => import("@/components/consignment-form/token-selection-step").then((m) => m.TokenSelectionStep),
-  { ssr: false }
+  () =>
+    import("@/components/consignment-form/token-selection-step").then(
+      (m) => m.TokenSelectionStep,
+    ),
+  { ssr: false },
 );
 const FormStep = dynamic(
-  () => import("@/components/consignment-form/form-step").then((m) => m.FormStep),
-  { ssr: false }
+  () =>
+    import("@/components/consignment-form/form-step").then((m) => m.FormStep),
+  { ssr: false },
 );
 const ReviewStep = dynamic(
-  () => import("@/components/consignment-form/review-step").then((m) => m.ReviewStep),
-  { ssr: false }
+  () =>
+    import("@/components/consignment-form/review-step").then(
+      (m) => m.ReviewStep,
+    ),
+  { ssr: false },
 );
 
 function getRequiredChain(tokenId: string): "evm" | "solana" | null {
   if (!tokenId) return null;
   if (tokenId.includes("solana")) return "solana";
-  if (tokenId.includes("base") || tokenId.includes("evm") || tokenId.includes("bsc")) return "evm";
+  if (
+    tokenId.includes("base") ||
+    tokenId.includes("evm") ||
+    tokenId.includes("bsc")
+  )
+    return "evm";
   return null;
 }
 
@@ -64,15 +76,21 @@ export default function ConsignPageClient() {
   const { login, ready: privyReady } = usePrivy();
 
   const [step, setStep] = useState(1);
-  const [selectedToken, setSelectedToken] = useState<TokenWithBalance | null>(null);
+  const [selectedToken, setSelectedToken] = useState<TokenWithBalance | null>(
+    null,
+  );
   const [formData, setFormData] = useState(INITIAL_FORM_DATA);
 
-  const currentAddress = activeFamily === "solana" ? solanaPublicKey : evmAddress;
+  const currentAddress =
+    activeFamily === "solana" ? solanaPublicKey : evmAddress;
   const displayAddress = currentAddress
     ? `${currentAddress.slice(0, 6)}...${currentAddress.slice(-4)}`
     : null;
 
-  const requiredChain = useMemo(() => getRequiredChain(formData.tokenId), [formData.tokenId]);
+  const requiredChain = useMemo(
+    () => getRequiredChain(formData.tokenId),
+    [formData.tokenId],
+  );
 
   const isConnectedToRequiredChain = useMemo(() => {
     if (!requiredChain) return hasWallet;
@@ -110,13 +128,14 @@ export default function ConsignPageClient() {
       if (chain) setActiveFamily(chain);
       privyAuthenticated ? connectWallet() : login();
     },
-    [setActiveFamily, privyAuthenticated, connectWallet, login]
+    [setActiveFamily, privyAuthenticated, connectWallet, login],
   );
 
   const handleTokenSelect = useCallback((token: TokenWithBalance) => {
     setSelectedToken(token);
     // Auto-set deal amounts based on token balance
-    const humanBalance = Number(BigInt(token.balance)) / Math.pow(10, token.decimals);
+    const humanBalance =
+      Number(BigInt(token.balance)) / Math.pow(10, token.decimals);
     const minDeal = Math.max(1, Math.floor(humanBalance * 0.01));
     const maxDeal = Math.floor(humanBalance);
     setFormData((prev) => ({
@@ -129,7 +148,9 @@ export default function ConsignPageClient() {
   return (
     <main className="flex-1 px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8">
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl sm:text-3xl font-bold mb-2">List Your Tokens for OTC</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold mb-2">
+          List Your Tokens for OTC
+        </h1>
         <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400 mb-4">
           Sell your tokens at a discount with a lockup period
         </p>
@@ -147,7 +168,9 @@ export default function ConsignPageClient() {
                   <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                     {displayAddress || "Not connected"}
                   </p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{networkLabel}</p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {networkLabel}
+                  </p>
                 </div>
               </div>
               {!isFarcasterContext && (
@@ -176,7 +199,12 @@ export default function ConsignPageClient() {
           </div>
           <div className="flex justify-between text-xs text-zinc-600 dark:text-zinc-400">
             {STEP_LABELS.map((label, idx) => (
-              <span key={label} className={step === idx + 1 ? "text-orange-500 font-medium" : ""}>
+              <span
+                key={label}
+                className={
+                  step === idx + 1 ? "text-orange-500 font-medium" : ""
+                }
+              >
                 {label}
               </span>
             ))}

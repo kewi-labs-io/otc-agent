@@ -10,11 +10,12 @@ import {
 /**
  * Get the appropriate chain based on environment and configuration
  * Supports: Base, BSC, Anvil/localhost
- * 
+ *
  * Priority: NEXT_PUBLIC_NETWORK > NETWORK > NODE_ENV inference
  */
 export function getChain(): Chain {
-  const network = process.env.NEXT_PUBLIC_NETWORK || process.env.NETWORK || "testnet";
+  const network =
+    process.env.NEXT_PUBLIC_NETWORK || process.env.NETWORK || "testnet";
 
   // Handle unified network names
   if (network === "mainnet") return base;
@@ -44,7 +45,8 @@ export function getChain(): Chain {
  * Get RPC URL for the current chain
  */
 export function getRpcUrl(): string {
-  const network = process.env.NEXT_PUBLIC_NETWORK || process.env.NETWORK || "testnet";
+  const network =
+    process.env.NEXT_PUBLIC_NETWORK || process.env.NETWORK || "testnet";
 
   // Handle unified network names
   if (network === "mainnet") {
@@ -85,6 +87,12 @@ export function getRpcUrl(): string {
  * Check if current network is local (Anvil/localhost)
  */
 export function isLocalNetwork(): boolean {
-  const network = process.env.NEXT_PUBLIC_NETWORK || process.env.NETWORK || "testnet";
-  return network === "local" || network === "localnet" || network === "localhost" || network === "anvil";
+  const network =
+    process.env.NEXT_PUBLIC_NETWORK || process.env.NETWORK || "testnet";
+  return (
+    network === "local" ||
+    network === "localnet" ||
+    network === "localhost" ||
+    network === "anvil"
+  );
 }

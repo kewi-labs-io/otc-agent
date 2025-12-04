@@ -24,20 +24,29 @@ interface CachedWalletResponse {
   cachedAt: number;
 }
 
-async function getCachedWalletResponse(address: string): Promise<CachedWalletResponse["tokens"] | null> {
+async function getCachedWalletResponse(
+  address: string,
+): Promise<CachedWalletResponse["tokens"] | null> {
   try {
     const runtime = await agentRuntime.getRuntime();
-    const cached = await runtime.getCache<CachedWalletResponse>(`solana-wallet:${address}`);
+    const cached = await runtime.getCache<CachedWalletResponse>(
+      `solana-wallet:${address}`,
+    );
     if (!cached) return null;
     if (Date.now() - cached.cachedAt >= WALLET_CACHE_TTL_MS) return null;
-    console.log(`[Solana Balances] Using cached wallet data (${cached.tokens.length} tokens)`);
+    console.log(
+      `[Solana Balances] Using cached wallet data (${cached.tokens.length} tokens)`,
+    );
     return cached.tokens;
   } catch {
     return null;
   }
 }
 
-async function setCachedWalletResponse(address: string, tokens: CachedWalletResponse["tokens"]): Promise<void> {
+async function setCachedWalletResponse(
+  address: string,
+  tokens: CachedWalletResponse["tokens"],
+): Promise<void> {
   try {
     const runtime = await agentRuntime.getRuntime();
     await runtime.setCache(`solana-wallet:${address}`, {
@@ -48,7 +57,6 @@ async function setCachedWalletResponse(address: string, tokens: CachedWalletResp
     // Ignore
   }
 }
-
 
 // Alternative IPFS gateways to try if main one fails
 const IPFS_GATEWAYS = [
@@ -61,10 +69,12 @@ const IPFS_GATEWAYS = [
 /**
  * Try to fetch image from multiple IPFS gateways
  */
-async function fetchWithIpfsGatewayFallback(imageUrl: string): Promise<Response | null> {
+async function fetchWithIpfsGatewayFallback(
+  imageUrl: string,
+): Promise<Response | null> {
   // Extract IPFS hash from various URL formats
   let ipfsHash: string | null = null;
-  
+
   // Match various IPFS URL patterns
   const patterns = [
     /ipfs\.io\/ipfs\/([a-zA-Z0-9]+)/,
@@ -73,7 +83,7 @@ async function fetchWithIpfsGatewayFallback(imageUrl: string): Promise<Response 
     /dweb\.link\/ipfs\/([a-zA-Z0-9]+)/,
     /gateway\.pinata\.cloud\/ipfs\/([a-zA-Z0-9]+)/,
   ];
-  
+
   for (const pattern of patterns) {
     const match = imageUrl.match(pattern);
     if (match) {
@@ -81,11 +91,11 @@ async function fetchWithIpfsGatewayFallback(imageUrl: string): Promise<Response 
       break;
     }
   }
-  
+
   // If it's an IPFS URL, try multiple gateways
   if (ipfsHash) {
     const ipfsPath = `/ipfs/${ipfsHash}`;
-    
+
     for (const gateway of IPFS_GATEWAYS) {
       try {
         const gatewayUrl = `${gateway}${ipfsPath}`;
@@ -103,7 +113,7 @@ async function fetchWithIpfsGatewayFallback(imageUrl: string): Promise<Response 
     }
     return null;
   }
-  
+
   // For non-IPFS URLs, just fetch directly
   return fetch(imageUrl, {
     headers: { "User-Agent": "OTC-Desk/1.0" },
@@ -115,9 +125,11 @@ async function fetchWithIpfsGatewayFallback(imageUrl: string): Promise<Response 
  * Cache an image URL to Vercel Blob storage
  * Returns the cached blob URL, or null if caching fails (don't return broken IPFS URLs)
  */
-async function cacheImageToBlob(imageUrl: string | null): Promise<string | null> {
+async function cacheImageToBlob(
+  imageUrl: string | null,
+): Promise<string | null> {
   if (!imageUrl) return null;
-  
+
   // Skip if already a blob URL
   if (imageUrl.includes("blob.vercel-storage.com")) {
     return imageUrl;
@@ -200,7 +212,10 @@ interface CodexBalanceItem {
 /**
  * Fetch balances from Codex API (faster, enriched data)
  */
-async function fetchFromCodex(walletAddress: string, codexKey: string): Promise<CachedWalletResponse["tokens"] | null> {
+async function fetchFromCodex(
+  walletAddress: string,
+  codexKey: string,
+): Promise<CachedWalletResponse["tokens"] | null> {
   const query = `
     query GetBalances($input: BalancesInput!) {
       balances(input: $input) {
@@ -229,7 +244,7 @@ async function fetchFromCodex(walletAddress: string, codexKey: string): Promise<
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": codexKey,
+        Authorization: codexKey,
       },
       body: JSON.stringify({
         query,
@@ -267,14 +282,15 @@ async function fetchFromCodex(walletAddress: string, codexKey: string): Promise<
 
     // Transform to our format
     const tokens = items
-      .filter(item => item.token) // Skip items without token metadata
-      .map(item => {
+      .filter((item) => item.token) // Skip items without token metadata
+      .map((item) => {
         const token = item.token;
         // For native SOL, use Wrapped SOL mint
-        const mint = item.tokenAddress === "native" 
-          ? "So11111111111111111111111111111111111111112" 
-          : item.tokenAddress;
-        
+        const mint =
+          item.tokenAddress === "native"
+            ? "So11111111111111111111111111111111111111112"
+            : item.tokenAddress;
+
         return {
           mint,
           amount: parseInt(item.balance),
@@ -282,15 +298,20 @@ async function fetchFromCodex(walletAddress: string, codexKey: string): Promise<
           symbol: token?.symbol ?? "SPL",
           name: token?.name ?? "Unknown",
           logoURI: token?.info?.imageSmallUrl ?? null,
-          priceUsd: item.balanceUsd && item.shiftedBalance > 0 
-            ? parseFloat(item.balanceUsd) / item.shiftedBalance 
-            : 0,
+          priceUsd:
+            item.balanceUsd && item.shiftedBalance > 0
+              ? parseFloat(item.balanceUsd) / item.shiftedBalance
+              : 0,
           balanceUsd: item.balanceUsd ? parseFloat(item.balanceUsd) : 0,
         };
       })
-      .filter(t => t.balanceUsd >= 0.01 || t.amount > 100 * Math.pow(10, t.decimals))
+      .filter(
+        (t) =>
+          t.balanceUsd >= 0.01 || t.amount > 100 * Math.pow(10, t.decimals),
+      )
       .sort((a, b) => {
-        if (a.balanceUsd > 0 && b.balanceUsd > 0) return b.balanceUsd - a.balanceUsd;
+        if (a.balanceUsd > 0 && b.balanceUsd > 0)
+          return b.balanceUsd - a.balanceUsd;
         if (a.balanceUsd > 0) return -1;
         if (b.balanceUsd > 0) return 1;
         return b.amount - a.amount;
@@ -316,7 +337,7 @@ export async function GET(request: NextRequest) {
   if (!walletAddress) {
     return NextResponse.json(
       { error: "Wallet address required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -335,11 +356,15 @@ export async function GET(request: NextRequest) {
     console.log("[Solana Balances] Trying Codex API...");
     const codexTokens = await fetchFromCodex(walletAddress, codexKey);
     if (codexTokens && codexTokens.length > 0) {
-      console.log(`[Solana Balances] Codex returned ${codexTokens.length} tokens`);
+      console.log(
+        `[Solana Balances] Codex returned ${codexTokens.length} tokens`,
+      );
       await setCachedWalletResponse(walletAddress, codexTokens);
       return NextResponse.json({ tokens: codexTokens, source: "codex" });
     }
-    console.log("[Solana Balances] Codex returned no results, falling back to Helius");
+    console.log(
+      "[Solana Balances] Codex returned no results, falling back to Helius",
+    );
   }
 
   // Fall back to Helius
@@ -361,15 +386,18 @@ export async function GET(request: NextRequest) {
           params: [
             walletAddress,
             { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" },
-            { encoding: "jsonParsed" }
-          ]
+            { encoding: "jsonParsed" },
+          ],
         }),
         signal: AbortSignal.timeout(10000),
-      }
+      },
     );
 
     if (!balancesResponse.ok) {
-      console.error("[Solana Balances] Helius balances error:", balancesResponse.status);
+      console.error(
+        "[Solana Balances] Helius balances error:",
+        balancesResponse.status,
+      );
       return NextResponse.json({ tokens: [] });
     }
 
@@ -393,17 +421,20 @@ export async function GET(request: NextRequest) {
 
     const balancesData = await balancesResponse.json();
     const accounts = (balancesData.result?.value || []) as TokenAccount[];
-    
-    console.log(`[Solana Balances] RPC returned ${accounts.length} token accounts`);
-    
+
+    console.log(
+      `[Solana Balances] RPC returned ${accounts.length} token accounts`,
+    );
+
     // Filter to tokens with balance > 0
     const tokensWithBalance = accounts
-      .map(acc => {
+      .map((acc) => {
         const info = acc.account.data.parsed.info;
         const decimals = info.tokenAmount.decimals;
         const rawAmount = parseInt(info.tokenAmount.amount || "0");
         // Calculate humanBalance ourselves in case uiAmount is null
-        const humanBalance = info.tokenAmount.uiAmount ?? (rawAmount / Math.pow(10, decimals));
+        const humanBalance =
+          info.tokenAmount.uiAmount ?? rawAmount / Math.pow(10, decimals);
         return {
           mint: info.mint,
           amount: rawAmount,
@@ -411,9 +442,11 @@ export async function GET(request: NextRequest) {
           humanBalance,
         };
       })
-      .filter(t => t.amount > 0); // Any non-zero balance
-    
-    console.log(`[Solana Balances] Found ${tokensWithBalance.length} tokens with balance > 0`);
+      .filter((t) => t.amount > 0); // Any non-zero balance
+
+    console.log(
+      `[Solana Balances] Found ${tokensWithBalance.length} tokens with balance > 0`,
+    );
 
     if (tokensWithBalance.length === 0) {
       return NextResponse.json({ tokens: [] });
@@ -428,10 +461,13 @@ export async function GET(request: NextRequest) {
       };
       token_info?: { symbol?: string; decimals?: number };
     }
-    
-    const allMints = tokensWithBalance.map(t => t.mint);
-    const metadata: Record<string, { symbol: string; name: string; logoURI: string | null }> = {};
-    
+
+    const allMints = tokensWithBalance.map((t) => t.mint);
+    const metadata: Record<
+      string,
+      { symbol: string; name: string; logoURI: string | null }
+    > = {};
+
     // Batch fetch ALL metadata (100 at a time) - faster than individual cache lookups!
     for (let i = 0; i < allMints.length; i += 100) {
       const batch = allMints.slice(i, i + 100);
@@ -448,16 +484,19 @@ export async function GET(request: NextRequest) {
               params: { ids: batch },
             }),
             signal: AbortSignal.timeout(8000),
-          }
+          },
         );
-        
+
         if (metadataResponse.ok) {
           const data = await metadataResponse.json();
           const assets = (data.result || []) as HeliusAsset[];
           for (const asset of assets) {
             if (asset?.id) {
               metadata[asset.id] = {
-                symbol: asset.content?.metadata?.symbol || asset.token_info?.symbol || "SPL",
+                symbol:
+                  asset.content?.metadata?.symbol ||
+                  asset.token_info?.symbol ||
+                  "SPL",
                 name: asset.content?.metadata?.name || "Unknown",
                 logoURI: asset.content?.links?.image || null,
               };
@@ -468,24 +507,28 @@ export async function GET(request: NextRequest) {
         // Continue without this batch's metadata
       }
     }
-    
-    console.log(`[Solana Balances] Got metadata for ${Object.keys(metadata).length} tokens`);
+
+    console.log(
+      `[Solana Balances] Got metadata for ${Object.keys(metadata).length} tokens`,
+    );
 
     // Step 3: Get prices from Jupiter (batch, fast)
-    const mints = tokensWithBalance.map(t => t.mint);
+    const mints = tokensWithBalance.map((t) => t.mint);
     const prices: Record<string, number> = {};
-    
-    console.log(`[Solana Balances] Fetching prices for ${mints.length} tokens...`);
-    
+
+    console.log(
+      `[Solana Balances] Fetching prices for ${mints.length} tokens...`,
+    );
+
     // Jupiter price API - fetch in batches of 100
     for (let i = 0; i < mints.length; i += 100) {
       const batch = mints.slice(i, i + 100);
       try {
         const priceResponse = await fetch(
           `https://api.jup.ag/price/v2?ids=${batch.join(",")}`,
-          { signal: AbortSignal.timeout(10000) }
+          { signal: AbortSignal.timeout(10000) },
         );
-        
+
         if (priceResponse.ok) {
           const priceData = await priceResponse.json();
           if (priceData.data) {
@@ -495,45 +538,56 @@ export async function GET(request: NextRequest) {
             }
           }
         } else {
-          console.log(`[Solana Balances] Jupiter batch ${i/100 + 1} returned ${priceResponse.status}`);
+          console.log(
+            `[Solana Balances] Jupiter batch ${i / 100 + 1} returned ${priceResponse.status}`,
+          );
         }
       } catch (err) {
-        console.log(`[Solana Balances] Jupiter batch ${i/100 + 1} failed:`, err);
+        console.log(
+          `[Solana Balances] Jupiter batch ${i / 100 + 1} failed:`,
+          err,
+        );
       }
     }
-    console.log(`[Solana Balances] Jupiter returned ${Object.keys(prices).length} prices`);
+    console.log(
+      `[Solana Balances] Jupiter returned ${Object.keys(prices).length} prices`,
+    );
 
     // Step 4: Check blob cache for unreliable image URLs (parallel)
     const unreliableUrls = Object.values(metadata)
-      .map(m => m.logoURI)
-      .filter(url => url && (
-        url.includes("ipfs.io/ipfs/") ||
-        url.includes("storage.auto.fun") ||
-        url.includes(".mypinata.cloud")
-      )) as string[];
-    
+      .map((m) => m.logoURI)
+      .filter(
+        (url) =>
+          url &&
+          (url.includes("ipfs.io/ipfs/") ||
+            url.includes("storage.auto.fun") ||
+            url.includes(".mypinata.cloud")),
+      ) as string[];
+
     const cachedBlobUrls: Record<string, string> = {};
     if (unreliableUrls.length > 0) {
       const blobChecks = await Promise.all(
-        unreliableUrls.map(async url => {
+        unreliableUrls.map(async (url) => {
           const urlHash = crypto.createHash("md5").update(url).digest("hex");
           const blobPath = `token-images/${urlHash}.png`;
           const existing = await head(blobPath).catch(() => null);
           return { url, blobUrl: existing?.url || null };
-        })
+        }),
       );
       for (const { url, blobUrl } of blobChecks) {
         if (blobUrl) cachedBlobUrls[url] = blobUrl;
       }
     }
-    console.log(`[Solana Balances] Found ${Object.keys(cachedBlobUrls).length} cached blob images`);
+    console.log(
+      `[Solana Balances] Found ${Object.keys(cachedBlobUrls).length} cached blob images`,
+    );
 
     // Step 5: Combine everything
-    const tokensWithData = tokensWithBalance.map(token => {
+    const tokensWithData = tokensWithBalance.map((token) => {
       const meta = metadata[token.mint];
       const priceUsd = prices[token.mint] || 0;
       const rawLogoUrl = meta?.logoURI || null;
-      
+
       // Get reliable URL: blob cache > reliable URL > null
       let logoURI: string | null = null;
       if (rawLogoUrl) {
@@ -541,13 +595,15 @@ export async function GET(request: NextRequest) {
           logoURI = rawLogoUrl;
         } else if (cachedBlobUrls[rawLogoUrl]) {
           logoURI = cachedBlobUrls[rawLogoUrl];
-        } else if (!rawLogoUrl.includes("ipfs.io/ipfs/") && 
-                   !rawLogoUrl.includes("storage.auto.fun") &&
-                   !rawLogoUrl.includes(".mypinata.cloud")) {
+        } else if (
+          !rawLogoUrl.includes("ipfs.io/ipfs/") &&
+          !rawLogoUrl.includes("storage.auto.fun") &&
+          !rawLogoUrl.includes(".mypinata.cloud")
+        ) {
           logoURI = rawLogoUrl;
         }
       }
-      
+
       return {
         mint: token.mint,
         amount: token.amount,
@@ -562,36 +618,40 @@ export async function GET(request: NextRequest) {
         _originalLogoUrl: rawLogoUrl,
       };
     });
-    
+
     // Filter: only show tokens worth listing (>$0.01 or >100 tokens if no price)
     const MIN_USD_VALUE = 0.01;
     const MIN_TOKENS_NO_PRICE = 100;
-    
-    const filteredTokens = tokensWithData.filter(t => {
+
+    const filteredTokens = tokensWithData.filter((t) => {
       if (t.priceUsd > 0) return t.balanceUsd >= MIN_USD_VALUE;
       return t.humanBalance >= MIN_TOKENS_NO_PRICE;
     });
-    
+
     // Sort: priced tokens by value, then unpriced by balance
     filteredTokens.sort((a, b) => {
-      if (a.balanceUsd > 0 && b.balanceUsd > 0) return b.balanceUsd - a.balanceUsd;
+      if (a.balanceUsd > 0 && b.balanceUsd > 0)
+        return b.balanceUsd - a.balanceUsd;
       if (a.balanceUsd > 0) return -1;
       if (b.balanceUsd > 0) return 1;
       return b.humanBalance - a.humanBalance;
     });
-    
-    console.log(`[Solana Balances] ${tokensWithBalance.length} total -> ${filteredTokens.length} after filter`);
+
+    console.log(
+      `[Solana Balances] ${tokensWithBalance.length} total -> ${filteredTokens.length} after filter`,
+    );
 
     // Fire-and-forget: cache unreliable images in background for next request
     for (const token of filteredTokens.slice(0, 30)) {
-      const originalUrl = (token as { _originalLogoUrl?: string })._originalLogoUrl;
+      const originalUrl = (token as { _originalLogoUrl?: string })
+        ._originalLogoUrl;
       if (originalUrl && !originalUrl.includes("blob.vercel-storage.com")) {
         cacheImageToBlob(originalUrl).catch(() => {});
       }
     }
 
     // Format response
-    const enrichedTokens = filteredTokens.map(t => ({
+    const enrichedTokens = filteredTokens.map((t) => ({
       mint: t.mint,
       amount: t.amount,
       decimals: t.decimals,
@@ -611,4 +671,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ tokens: [] });
   }
 }
-

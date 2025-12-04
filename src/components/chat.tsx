@@ -50,7 +50,10 @@ type ChatAction =
   | { type: "SET_OFFER_GLOWING"; payload: boolean }
   | { type: "SET_CLEAR_CHAT_MODAL"; payload: boolean }
   | { type: "RESET_CHAT"; payload: { roomId: string } }
-  | { type: "USER_CONNECTED"; payload: { entityId: string; roomId: string | null } }
+  | {
+      type: "USER_CONNECTED";
+      payload: { entityId: string; roomId: string | null };
+    }
   | { type: "USER_DISCONNECTED" };
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
@@ -264,16 +267,22 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         // Format messages using helper function
         const formattedMessages = rawMessages
           .map((msg: any) => parseRoomMessage(msg, roomId))
-          .filter((msg: ChatMessage | null): msg is ChatMessage => msg !== null);
+          .filter(
+            (msg: ChatMessage | null): msg is ChatMessage => msg !== null,
+          );
 
         // Sort by timestamp
-        formattedMessages.sort((a: ChatMessage, b: ChatMessage) => (a.createdAt || 0) - (b.createdAt || 0));
+        formattedMessages.sort(
+          (a: ChatMessage, b: ChatMessage) =>
+            (a.createdAt || 0) - (b.createdAt || 0),
+        );
 
         dispatch({ type: "SET_MESSAGES", payload: formattedMessages });
 
         // Update last message timestamp
         if (formattedMessages.length > 0) {
-          lastMessageTimestampRef.current = formattedMessages[formattedMessages.length - 1].createdAt;
+          lastMessageTimestampRef.current =
+            formattedMessages[formattedMessages.length - 1].createdAt;
         }
       }
       dispatch({ type: "SET_LOADING_HISTORY", payload: false });
@@ -312,11 +321,15 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         if (newMessages.length > 0) {
           const formattedMessages = newMessages
             .map((msg: any) => parseRoomMessage(msg, roomId))
-            .filter((msg: ChatMessage | null): msg is ChatMessage => msg !== null);
+            .filter(
+              (msg: ChatMessage | null): msg is ChatMessage => msg !== null,
+            );
 
           // Use ref to get current messages without triggering effect restart
           const currentMessages = messagesRef.current;
-          const withoutOptimistic = currentMessages.filter((m) => !m.isUserMessage);
+          const withoutOptimistic = currentMessages.filter(
+            (m) => !m.isUserMessage,
+          );
 
           // Merge with new messages and dedupe by server ID
           const byServerId = new Map<string, ChatMessage>();
@@ -333,7 +346,8 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
           dispatch({ type: "SET_MESSAGES", payload: merged });
 
           // Update last message timestamp
-          const lastNewMessage = formattedMessages[formattedMessages.length - 1];
+          const lastNewMessage =
+            formattedMessages[formattedMessages.length - 1];
           lastMessageTimestampRef.current = lastNewMessage.createdAt;
 
           // Check if we received an agent message
@@ -497,7 +511,9 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
       if (!msg || msg.name === USER_NAME) continue;
 
       const parsed = parseMessageXML(
-        typeof msg.text === "string" ? msg.text : (msg as any).content?.text || "",
+        typeof msg.text === "string"
+          ? msg.text
+          : (msg as any).content?.text || "",
       );
 
       if (parsed?.type === "otc_quote" && parsed.data) {
@@ -518,7 +534,10 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
           // Update the ref and state
           previousQuoteIdRef.current = newQuoteId;
           if ("tokenSymbol" in newQuote) {
-            dispatch({ type: "SET_CURRENT_QUOTE", payload: newQuote as OTCQuote });
+            dispatch({
+              type: "SET_CURRENT_QUOTE",
+              payload: newQuote as OTCQuote,
+            });
           }
         }
         break;
@@ -565,7 +584,9 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
 
     // Reset chat and create new room in the background
     if (!entityId) {
-      console.warn("[Chat] No entityId during deal completion - cannot reset chat");
+      console.warn(
+        "[Chat] No entityId during deal completion - cannot reset chat",
+      );
       return;
     }
 
@@ -600,7 +621,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
   const handleSwitchChain = useCallback(
     (targetChain: "evm" | "solana") => {
       setActiveFamily(targetChain);
-      
+
       // If not connected to that chain, prompt connect/login
       if (targetChain === "solana" && !solanaConnected) {
         privyAuthenticated ? connectWallet() : login();
@@ -608,7 +629,14 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         privyAuthenticated ? connectWallet() : login();
       }
     },
-    [setActiveFamily, solanaConnected, evmConnected, privyAuthenticated, connectWallet, login],
+    [
+      setActiveFamily,
+      solanaConnected,
+      evmConnected,
+      privyAuthenticated,
+      connectWallet,
+      login,
+    ],
   );
 
   // Memoized setters for child components
@@ -638,7 +666,9 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         currentQuote={currentQuote}
         onAcceptOffer={handleAcceptOffer}
         isOfferGlowing={isOfferGlowing}
-        onClearChat={() => dispatch({ type: "SET_CLEAR_CHAT_MODAL", payload: true })}
+        onClearChat={() =>
+          dispatch({ type: "SET_CLEAR_CHAT_MODAL", payload: true })
+        }
         onConnect={handleConnect}
         privyReady={privyReady}
         activeFamily={activeFamily}
@@ -654,7 +684,9 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
       {/* Clear Chat Confirmation Modal */}
       <Dialog
         open={showClearChatModal}
-        onClose={() => dispatch({ type: "SET_CLEAR_CHAT_MODAL", payload: false })}
+        onClose={() =>
+          dispatch({ type: "SET_CLEAR_CHAT_MODAL", payload: false })
+        }
       >
         <div className="bg-white dark:bg-zinc-900 max-w-md rounded-lg overflow-hidden">
           <h3 className="text-xl font-semibold bg-red-500 dark:bg-red-500 mb-4 px-4 py-2 rounded-t-lg">
@@ -668,7 +700,9 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
             </p>
             <div className="flex gap-3 justify-end">
               <Button
-                onClick={() => dispatch({ type: "SET_CLEAR_CHAT_MODAL", payload: false })}
+                onClick={() =>
+                  dispatch({ type: "SET_CLEAR_CHAT_MODAL", payload: false })
+                }
                 className="bg-zinc-200 dark:bg-zinc-800 rounded-lg"
               >
                 <div className="px-4 py-2">Cancel</div>

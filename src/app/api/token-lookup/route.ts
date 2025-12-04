@@ -34,7 +34,10 @@ function isEvmAddress(address: string): boolean {
 /**
  * Look up Solana token via Codex API
  */
-async function lookupSolanaToken(address: string, codexKey: string): Promise<TokenInfo | null> {
+async function lookupSolanaToken(
+  address: string,
+  codexKey: string,
+): Promise<TokenInfo | null> {
   const query = `
     query GetToken($input: TokenInput!) {
       token(input: $input) {
@@ -54,7 +57,7 @@ async function lookupSolanaToken(address: string, codexKey: string): Promise<Tok
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": codexKey,
+        Authorization: codexKey,
       },
       body: JSON.stringify({
         query,
@@ -72,7 +75,7 @@ async function lookupSolanaToken(address: string, codexKey: string): Promise<Tok
 
     const data = await response.json();
     const token = data.data?.token;
-    
+
     if (!token) return null;
 
     return {
@@ -94,14 +97,12 @@ async function lookupSolanaToken(address: string, codexKey: string): Promise<Tok
  * Look up EVM token via Alchemy API
  */
 async function lookupEvmToken(
-  address: string, 
-  chain: string, 
-  alchemyKey: string
+  address: string,
+  chain: string,
+  alchemyKey: string,
 ): Promise<TokenInfo | null> {
-  const alchemyNetwork = chain === "bsc" 
-    ? "bnb-mainnet" 
-    : "base-mainnet";
-  
+  const alchemyNetwork = chain === "bsc" ? "bnb-mainnet" : "base-mainnet";
+
   const url = `https://${alchemyNetwork}.g.alchemy.com/v2/${alchemyKey}`;
 
   try {
@@ -121,7 +122,7 @@ async function lookupEvmToken(
 
     const data = await response.json();
     const result = data.result;
-    
+
     if (!result || !result.symbol) return null;
 
     return {
@@ -142,7 +143,7 @@ async function lookupEvmToken(
 /**
  * GET /api/token-lookup?address=0x...&chain=base
  * GET /api/token-lookup?address=So111...
- * 
+ *
  * Looks up a single token by contract address.
  * Auto-detects chain if not provided for Solana addresses.
  */
@@ -151,10 +152,7 @@ export async function GET(request: NextRequest) {
   let chain = request.nextUrl.searchParams.get("chain");
 
   if (!address) {
-    return NextResponse.json(
-      { error: "Address required" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Address required" }, { status: 400 });
   }
 
   // Auto-detect chain from address format
@@ -164,7 +162,7 @@ export async function GET(request: NextRequest) {
   if (!looksLikeSolana && !looksLikeEvm) {
     return NextResponse.json(
       { error: "Invalid address format" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -180,7 +178,7 @@ export async function GET(request: NextRequest) {
     if (!codexKey) {
       return NextResponse.json(
         { error: "Solana token lookup not configured" },
-        { status: 503 }
+        { status: 503 },
       );
     }
     token = await lookupSolanaToken(address, codexKey);
@@ -189,7 +187,7 @@ export async function GET(request: NextRequest) {
     if (!alchemyKey) {
       return NextResponse.json(
         { error: "EVM token lookup not configured" },
-        { status: 503 }
+        { status: 503 },
       );
     }
     token = await lookupEvmToken(address, chain, alchemyKey);
@@ -198,13 +196,12 @@ export async function GET(request: NextRequest) {
   if (!token) {
     return NextResponse.json(
       { error: "Token not found", address, chain },
-      { status: 404 }
+      { status: 404 },
     );
   }
 
-  return NextResponse.json({ 
-    success: true, 
+  return NextResponse.json({
+    success: true,
     token,
   });
 }
-

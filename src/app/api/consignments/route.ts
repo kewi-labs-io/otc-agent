@@ -46,7 +46,9 @@ export async function GET(request: NextRequest) {
       if (c.chain === "solana") {
         return c.consignerAddress === consignerAddress;
       }
-      return c.consignerAddress.toLowerCase() === consignerAddress.toLowerCase();
+      return (
+        c.consignerAddress.toLowerCase() === consignerAddress.toLowerCase()
+      );
     });
   }
 
@@ -60,7 +62,8 @@ export async function GET(request: NextRequest) {
       } else {
         const requester = requesterAddress.toLowerCase();
         if (c.consignerAddress.toLowerCase() === requester) return true;
-        if (c.allowedBuyers?.some(b => b.toLowerCase() === requester)) return true;
+        if (c.allowedBuyers?.some((b) => b.toLowerCase() === requester))
+          return true;
       }
       return false;
     });

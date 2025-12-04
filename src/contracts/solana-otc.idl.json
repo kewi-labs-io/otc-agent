@@ -8,16 +8,7 @@
   "instructions": [
     {
       "name": "approve_offer",
-      "discriminator": [
-        10,
-        201,
-        79,
-        52,
-        36,
-        85,
-        172,
-        94
-      ],
+      "discriminator": [10, 201, 79, 52, 36, 85, 172, 94],
       "accounts": [
         {
           "name": "desk"
@@ -40,16 +31,7 @@
     },
     {
       "name": "auto_claim",
-      "discriminator": [
-        184,
-        222,
-        148,
-        135,
-        212,
-        37,
-        111,
-        148
-      ],
+      "discriminator": [184, 222, 148, 135, 212, 37, 111, 148],
       "accounts": [
         {
           "name": "desk",
@@ -71,16 +53,7 @@
     },
     {
       "name": "cancel_offer",
-      "discriminator": [
-        92,
-        203,
-        223,
-        40,
-        92,
-        89,
-        53,
-        119
-      ],
+      "discriminator": [92, 203, 223, 40, 92, 89, 53, 119],
       "accounts": [
         {
           "name": "desk"
@@ -101,16 +74,7 @@
       "docs": [
         "Cancel an offer that was created from a consignment, restoring tokens"
       ],
-      "discriminator": [
-        4,
-        162,
-        105,
-        232,
-        112,
-        52,
-        232,
-        211
-      ],
+      "discriminator": [4, 162, 105, 232, 112, 52, 232, 211],
       "accounts": [
         {
           "name": "desk"
@@ -132,16 +96,7 @@
     },
     {
       "name": "claim",
-      "discriminator": [
-        62,
-        198,
-        214,
-        193,
-        213,
-        159,
-        108,
-        210
-      ],
+      "discriminator": [62, 198, 214, 193, 213, 159, 108, 210],
       "accounts": [
         {
           "name": "desk",
@@ -183,16 +138,7 @@
     },
     {
       "name": "create_consignment",
-      "discriminator": [
-        64,
-        222,
-        27,
-        197,
-        210,
-        171,
-        113,
-        85
-      ],
+      "discriminator": [64, 222, 27, 197, 210, 171, 113, 85],
       "accounts": [
         {
           "name": "desk",
@@ -293,16 +239,7 @@
         "Create an offer for a registered token (using TokenRegistry for pricing)",
         "This replaces the old create_offer that used desk.token_mint"
       ],
-      "discriminator": [
-        237,
-        233,
-        192,
-        168,
-        248,
-        7,
-        249,
-        241
-      ],
+      "discriminator": [237, 233, 192, 168, 248, 7, 249, 241],
       "accounts": [
         {
           "name": "desk",
@@ -310,9 +247,7 @@
         },
         {
           "name": "token_registry",
-          "docs": [
-            "Token registry for pricing - must belong to this desk"
-          ]
+          "docs": ["Token registry for pricing - must belong to this desk"]
         },
         {
           "name": "desk_token_treasury",
@@ -354,16 +289,7 @@
     },
     {
       "name": "create_offer_from_consignment",
-      "discriminator": [
-        129,
-        162,
-        108,
-        121,
-        60,
-        158,
-        85,
-        12
-      ],
+      "discriminator": [129, 162, 108, 121, 60, 158, 85, 12],
       "accounts": [
         {
           "name": "desk",
@@ -419,16 +345,7 @@
       "docs": [
         "Deposit tokens into desk treasury for a specific registered token"
       ],
-      "discriminator": [
-        176,
-        83,
-        229,
-        18,
-        191,
-        143,
-        176,
-        150
-      ],
+      "discriminator": [176, 83, 229, 18, 191, 143, 176, 150],
       "accounts": [
         {
           "name": "desk",
@@ -436,9 +353,7 @@
         },
         {
           "name": "token_registry",
-          "docs": [
-            "Token registry - must belong to this desk"
-          ]
+          "docs": ["Token registry - must belong to this desk"]
         },
         {
           "name": "owner",
@@ -467,16 +382,7 @@
     },
     {
       "name": "emergency_refund_sol",
-      "discriminator": [
-        6,
-        39,
-        12,
-        169,
-        134,
-        224,
-        217,
-        236
-      ],
+      "discriminator": [6, 39, 12, 169, 134, 224, 217, 236],
       "accounts": [
         {
           "name": "desk",
@@ -512,16 +418,7 @@
     },
     {
       "name": "emergency_refund_usdc",
-      "discriminator": [
-        230,
-        142,
-        139,
-        67,
-        34,
-        70,
-        132,
-        114
-      ],
+      "discriminator": [230, 142, 139, 67, 34, 70, 132, 114],
       "accounts": [
         {
           "name": "desk",
@@ -561,16 +458,7 @@
     },
     {
       "name": "fulfill_offer_sol",
-      "discriminator": [
-        91,
-        58,
-        99,
-        49,
-        225,
-        190,
-        226,
-        208
-      ],
+      "discriminator": [91, 58, 99, 49, 225, 190, 226, 208],
       "accounts": [
         {
           "name": "desk",
@@ -582,9 +470,7 @@
         },
         {
           "name": "desk_token_treasury",
-          "docs": [
-            "Token treasury - must match the token_mint in the offer"
-          ],
+          "docs": ["Token treasury - must match the token_mint in the offer"],
           "writable": true
         },
         {
@@ -606,16 +492,7 @@
     },
     {
       "name": "fulfill_offer_usdc",
-      "discriminator": [
-        88,
-        24,
-        117,
-        132,
-        109,
-        16,
-        200,
-        42
-      ],
+      "discriminator": [88, 24, 117, 132, 109, 16, 200, 42],
       "accounts": [
         {
           "name": "desk",
@@ -627,9 +504,7 @@
         },
         {
           "name": "desk_token_treasury",
-          "docs": [
-            "Token treasury - must match the token_mint in the offer"
-          ],
+          "docs": ["Token treasury - must match the token_mint in the offer"],
           "writable": true
         },
         {
@@ -663,16 +538,7 @@
     },
     {
       "name": "init_desk",
-      "discriminator": [
-        215,
-        181,
-        95,
-        245,
-        31,
-        190,
-        64,
-        208
-      ],
+      "discriminator": [215, 181, 95, 245, 31, 190, 64, 208],
       "accounts": [
         {
           "name": "payer",
@@ -712,23 +578,12 @@
     },
     {
       "name": "pause",
-      "discriminator": [
-        211,
-        22,
-        221,
-        251,
-        74,
-        121,
-        193,
-        47
-      ],
+      "discriminator": [211, 22, 221, 251, 74, 121, 193, 47],
       "accounts": [
         {
           "name": "owner",
           "signer": true,
-          "relations": [
-            "desk"
-          ]
+          "relations": ["desk"]
         },
         {
           "name": "desk",
@@ -739,16 +594,7 @@
     },
     {
       "name": "register_token",
-      "discriminator": [
-        32,
-        146,
-        36,
-        240,
-        80,
-        183,
-        36,
-        84
-      ],
+      "discriminator": [32, 146, 36, 240, 80, 183, 36, 84],
       "accounts": [
         {
           "name": "desk"
@@ -768,16 +614,7 @@
             "seeds": [
               {
                 "kind": "const",
-                "value": [
-                  114,
-                  101,
-                  103,
-                  105,
-                  115,
-                  116,
-                  114,
-                  121
-                ]
+                "value": [114, 101, 103, 105, 115, 116, 114, 121]
               },
               {
                 "kind": "account",
@@ -799,10 +636,7 @@
         {
           "name": "price_feed_id",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         },
         {
@@ -817,23 +651,12 @@
     },
     {
       "name": "set_agent",
-      "discriminator": [
-        154,
-        74,
-        121,
-        91,
-        137,
-        19,
-        101,
-        166
-      ],
+      "discriminator": [154, 74, 121, 91, 137, 19, 101, 166],
       "accounts": [
         {
           "name": "owner",
           "signer": true,
-          "relations": [
-            "desk"
-          ]
+          "relations": ["desk"]
         },
         {
           "name": "desk",
@@ -849,23 +672,12 @@
     },
     {
       "name": "set_approver",
-      "discriminator": [
-        139,
-        202,
-        200,
-        122,
-        109,
-        173,
-        219,
-        116
-      ],
+      "discriminator": [139, 202, 200, 122, 109, 173, 219, 116],
       "accounts": [
         {
           "name": "owner",
           "signer": true,
-          "relations": [
-            "desk"
-          ]
+          "relations": ["desk"]
         },
         {
           "name": "desk",
@@ -885,23 +697,12 @@
     },
     {
       "name": "set_emergency_refund",
-      "discriminator": [
-        50,
-        122,
-        104,
-        94,
-        38,
-        3,
-        94,
-        114
-      ],
+      "discriminator": [50, 122, 104, 94, 38, 3, 94, 114],
       "accounts": [
         {
           "name": "owner",
           "signer": true,
-          "relations": [
-            "desk"
-          ]
+          "relations": ["desk"]
         },
         {
           "name": "desk",
@@ -921,23 +722,12 @@
     },
     {
       "name": "set_limits",
-      "discriminator": [
-        207,
-        50,
-        250,
-        67,
-        211,
-        33,
-        70,
-        91
-      ],
+      "discriminator": [207, 50, 250, 67, 211, 33, 70, 91],
       "accounts": [
         {
           "name": "owner",
           "signer": true,
-          "relations": [
-            "desk"
-          ]
+          "relations": ["desk"]
         },
         {
           "name": "desk",
@@ -974,16 +764,7 @@
         "Production should primarily use Pyth oracle or on-chain pool pricing",
         "NOTE: This function should be restricted via access control in production"
       ],
-      "discriminator": [
-        8,
-        45,
-        176,
-        142,
-        238,
-        40,
-        144,
-        66
-      ],
+      "discriminator": [8, 45, 176, 142, 238, 40, 144, 66],
       "accounts": [
         {
           "name": "token_registry",
@@ -1006,23 +787,12 @@
     },
     {
       "name": "set_prices",
-      "discriminator": [
-        155,
-        1,
-        215,
-        185,
-        100,
-        8,
-        177,
-        186
-      ],
+      "discriminator": [155, 1, 215, 185, 100, 8, 177, 186],
       "accounts": [
         {
           "name": "owner",
           "signer": true,
-          "relations": [
-            "desk"
-          ]
+          "relations": ["desk"]
         },
         {
           "name": "desk",
@@ -1050,23 +820,12 @@
     },
     {
       "name": "set_pyth_feeds",
-      "discriminator": [
-        224,
-        165,
-        68,
-        184,
-        36,
-        43,
-        110,
-        239
-      ],
+      "discriminator": [224, 165, 68, 184, 36, 43, 110, 239],
       "accounts": [
         {
           "name": "owner",
           "signer": true,
-          "relations": [
-            "desk"
-          ]
+          "relations": ["desk"]
         },
         {
           "name": "desk",
@@ -1077,42 +836,25 @@
         {
           "name": "token_feed_id",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         },
         {
           "name": "sol_feed_id",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         }
       ]
     },
     {
       "name": "set_restrict_fulfill",
-      "discriminator": [
-        118,
-        193,
-        197,
-        120,
-        177,
-        116,
-        219,
-        110
-      ],
+      "discriminator": [118, 193, 197, 120, 177, 116, 219, 110],
       "accounts": [
         {
           "name": "owner",
           "signer": true,
-          "relations": [
-            "desk"
-          ]
+          "relations": ["desk"]
         },
         {
           "name": "desk",
@@ -1128,16 +870,7 @@
     },
     {
       "name": "set_token_oracle_feed",
-      "discriminator": [
-        129,
-        244,
-        129,
-        183,
-        255,
-        22,
-        55,
-        232
-      ],
+      "discriminator": [129, 244, 129, 183, 255, 22, 55, 232],
       "accounts": [
         {
           "name": "token_registry",
@@ -1155,33 +888,19 @@
         {
           "name": "feed_id",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         }
       ]
     },
     {
       "name": "unpause",
-      "discriminator": [
-        169,
-        144,
-        4,
-        38,
-        10,
-        141,
-        188,
-        255
-      ],
+      "discriminator": [169, 144, 4, 38, 10, 141, 188, 255],
       "accounts": [
         {
           "name": "owner",
           "signer": true,
-          "relations": [
-            "desk"
-          ]
+          "relations": ["desk"]
         },
         {
           "name": "desk",
@@ -1192,16 +911,7 @@
     },
     {
       "name": "update_prices_from_pyth",
-      "discriminator": [
-        124,
-        93,
-        27,
-        114,
-        82,
-        224,
-        4,
-        8
-      ],
+      "discriminator": [124, 93, 27, 114, 82, 224, 4, 8],
       "accounts": [
         {
           "name": "desk",
@@ -1209,21 +919,15 @@
         },
         {
           "name": "token_price_feed",
-          "docs": [
-            "Pyth price feed account for token/USD"
-          ]
+          "docs": ["Pyth price feed account for token/USD"]
         },
         {
           "name": "sol_price_feed",
-          "docs": [
-            "Pyth price feed account for SOL/USD"
-          ]
+          "docs": ["Pyth price feed account for SOL/USD"]
         },
         {
           "name": "payer",
-          "docs": [
-            "Anyone can update prices from oracle"
-          ],
+          "docs": ["Anyone can update prices from oracle"],
           "signer": true
         }
       ],
@@ -1231,19 +935,13 @@
         {
           "name": "token_feed_id",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         },
         {
           "name": "sol_feed_id",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         },
         {
@@ -1254,16 +952,7 @@
     },
     {
       "name": "update_token_price_from_pool",
-      "discriminator": [
-        59,
-        55,
-        110,
-        144,
-        135,
-        80,
-        147,
-        141
-      ],
+      "discriminator": [59, 55, 110, 144, 135, 80, 147, 141],
       "accounts": [
         {
           "name": "token_registry",
@@ -1291,16 +980,7 @@
         "Update token price from PumpSwap / Pump.fun bonding curve",
         "PumpSwap uses a bonding curve model with virtual reserves"
       ],
-      "discriminator": [
-        16,
-        228,
-        28,
-        92,
-        2,
-        190,
-        100,
-        85
-      ],
+      "discriminator": [16, 228, 28, 92, 2, 190, 100, 85],
       "accounts": [
         {
           "name": "token_registry",
@@ -1311,9 +991,7 @@
         },
         {
           "name": "sol_vault",
-          "docs": [
-            "In PumpSwap, the bonding curve account itself holds SOL"
-          ]
+          "docs": ["In PumpSwap, the bonding curve account itself holds SOL"]
         },
         {
           "name": "token_vault",
@@ -1331,16 +1009,7 @@
     },
     {
       "name": "update_token_price_from_pyth",
-      "discriminator": [
-        242,
-        100,
-        102,
-        106,
-        171,
-        26,
-        235,
-        31
-      ],
+      "discriminator": [242, 100, 102, 106, 171, 26, 235, 31],
       "accounts": [
         {
           "name": "token_registry",
@@ -1366,16 +1035,7 @@
     },
     {
       "name": "withdraw_consignment",
-      "discriminator": [
-        126,
-        79,
-        236,
-        43,
-        149,
-        153,
-        112,
-        71
-      ],
+      "discriminator": [126, 79, 236, 43, 149, 153, 112, 71],
       "accounts": [
         {
           "name": "consignment",
@@ -1415,16 +1075,7 @@
     },
     {
       "name": "withdraw_sol",
-      "discriminator": [
-        145,
-        131,
-        74,
-        136,
-        65,
-        137,
-        42,
-        38
-      ],
+      "discriminator": [145, 131, 74, 136, 65, 137, 42, 38],
       "accounts": [
         {
           "name": "desk",
@@ -1456,26 +1107,13 @@
     },
     {
       "name": "withdraw_tokens",
-      "docs": [
-        "Withdraw tokens from desk treasury for any registered token"
-      ],
-      "discriminator": [
-        2,
-        4,
-        225,
-        61,
-        19,
-        182,
-        106,
-        170
-      ],
+      "docs": ["Withdraw tokens from desk treasury for any registered token"],
+      "discriminator": [2, 4, 225, 61, 19, 182, 106, 170],
       "accounts": [
         {
           "name": "owner",
           "signer": true,
-          "relations": [
-            "desk"
-          ]
+          "relations": ["desk"]
         },
         {
           "name": "desk",
@@ -1483,9 +1121,7 @@
         },
         {
           "name": "token_registry",
-          "docs": [
-            "Token registry - must belong to this desk"
-          ]
+          "docs": ["Token registry - must belong to this desk"]
         },
         {
           "name": "desk_signer",
@@ -1513,23 +1149,12 @@
     },
     {
       "name": "withdraw_usdc",
-      "discriminator": [
-        114,
-        49,
-        72,
-        184,
-        27,
-        156,
-        243,
-        155
-      ],
+      "discriminator": [114, 49, 72, 184, 27, 156, 243, 155],
       "accounts": [
         {
           "name": "owner",
           "signer": true,
-          "relations": [
-            "desk"
-          ]
+          "relations": ["desk"]
         },
         {
           "name": "desk",
@@ -1563,187 +1188,61 @@
   "accounts": [
     {
       "name": "Consignment",
-      "discriminator": [
-        158,
-        104,
-        234,
-        9,
-        1,
-        189,
-        75,
-        228
-      ]
+      "discriminator": [158, 104, 234, 9, 1, 189, 75, 228]
     },
     {
       "name": "Desk",
-      "discriminator": [
-        33,
-        28,
-        147,
-        6,
-        226,
-        158,
-        166,
-        73
-      ]
+      "discriminator": [33, 28, 147, 6, 226, 158, 166, 73]
     },
     {
       "name": "Offer",
-      "discriminator": [
-        215,
-        88,
-        60,
-        71,
-        170,
-        162,
-        73,
-        229
-      ]
+      "discriminator": [215, 88, 60, 71, 170, 162, 73, 229]
     },
     {
       "name": "PriceUpdateV2",
-      "discriminator": [
-        34,
-        241,
-        35,
-        99,
-        157,
-        126,
-        244,
-        205
-      ]
+      "discriminator": [34, 241, 35, 99, 157, 126, 244, 205]
     },
     {
       "name": "TokenRegistry",
-      "discriminator": [
-        227,
-        255,
-        152,
-        118,
-        84,
-        200,
-        145,
-        120
-      ]
+      "discriminator": [227, 255, 152, 118, 84, 200, 145, 120]
     }
   ],
   "events": [
     {
       "name": "LimitsUpdated",
-      "discriminator": [
-        160,
-        131,
-        108,
-        76,
-        91,
-        80,
-        118,
-        137
-      ]
+      "discriminator": [160, 131, 108, 76, 91, 80, 118, 137]
     },
     {
       "name": "OfferApproved",
-      "discriminator": [
-        3,
-        213,
-        10,
-        239,
-        132,
-        77,
-        249,
-        127
-      ]
+      "discriminator": [3, 213, 10, 239, 132, 77, 249, 127]
     },
     {
       "name": "OfferCancelled",
-      "discriminator": [
-        45,
-        42,
-        175,
-        214,
-        51,
-        192,
-        154,
-        9
-      ]
+      "discriminator": [45, 42, 175, 214, 51, 192, 154, 9]
     },
     {
       "name": "OfferCreated",
-      "discriminator": [
-        31,
-        236,
-        215,
-        144,
-        75,
-        45,
-        157,
-        87
-      ]
+      "discriminator": [31, 236, 215, 144, 75, 45, 157, 87]
     },
     {
       "name": "OfferPaid",
-      "discriminator": [
-        37,
-        6,
-        79,
-        206,
-        50,
-        150,
-        29,
-        31
-      ]
+      "discriminator": [37, 6, 79, 206, 50, 150, 29, 31]
     },
     {
       "name": "Paused",
-      "discriminator": [
-        172,
-        248,
-        5,
-        253,
-        49,
-        255,
-        255,
-        232
-      ]
+      "discriminator": [172, 248, 5, 253, 49, 255, 255, 232]
     },
     {
       "name": "PricesUpdated",
-      "discriminator": [
-        208,
-        47,
-        38,
-        134,
-        151,
-        224,
-        207,
-        37
-      ]
+      "discriminator": [208, 47, 38, 134, 151, 224, 207, 37]
     },
     {
       "name": "RestrictFulfillUpdated",
-      "discriminator": [
-        90,
-        219,
-        161,
-        137,
-        20,
-        103,
-        227,
-        171
-      ]
+      "discriminator": [90, 219, 161, 137, 20, 103, 227, 171]
     },
     {
       "name": "TokensClaimed",
-      "discriminator": [
-        25,
-        128,
-        244,
-        55,
-        241,
-        136,
-        200,
-        91
-      ]
+      "discriminator": [25, 128, 244, 55, 241, 136, 200, 91]
     }
   ],
   "errors": [
@@ -2029,10 +1528,7 @@
           {
             "name": "sol_price_feed_id",
             "type": {
-              "array": [
-                "u8",
-                32
-              ]
+              "array": ["u8", 32]
             }
           },
           {
@@ -2062,10 +1558,7 @@
           {
             "name": "token_price_feed_id",
             "type": {
-              "array": [
-                "u8",
-                32
-              ]
+              "array": ["u8", 32]
             }
           },
           {
@@ -2313,9 +1806,7 @@
     },
     {
       "name": "PoolType",
-      "docs": [
-        "Pool type for on-chain price discovery"
-      ],
+      "docs": ["Pool type for on-chain price discovery"],
       "type": {
         "kind": "enum",
         "variants": [
@@ -2348,10 +1839,7 @@
               "`FeedId` but avoid the type alias because of compatibility issues with Anchor's `idl-build` feature."
             ],
             "type": {
-              "array": [
-                "u8",
-                32
-              ]
+              "array": ["u8", 32]
             }
           },
           {
@@ -2368,9 +1856,7 @@
           },
           {
             "name": "publish_time",
-            "docs": [
-              "The timestamp of this price update in seconds"
-            ],
+            "docs": ["The timestamp of this price update in seconds"],
             "type": "i64"
           },
           {
@@ -2498,10 +1984,7 @@
           {
             "name": "price_feed_id",
             "type": {
-              "array": [
-                "u8",
-                32
-              ]
+              "array": ["u8", 32]
             }
           },
           {

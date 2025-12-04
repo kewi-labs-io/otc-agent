@@ -47,7 +47,7 @@ export function SubmissionModal({
   const [isComplete, setIsComplete] = useState(false);
   const [hasStartedProcessing, setHasStartedProcessing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false); // Guard against concurrent processing
-  
+
   // Calculate initial steps once based on activeFamily at mount time
   const [initialActiveFamily] = useState(activeFamily);
   const [steps, setSteps] = useState<SubmissionStep[]>(() => [
@@ -87,7 +87,7 @@ export function SubmissionModal({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
-  
+
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
@@ -99,7 +99,14 @@ export function SubmissionModal({
           setIsComplete(false);
           setHasStartedProcessing(false);
           setIsProcessing(false);
-          setSteps(prev => prev.map(s => ({ ...s, status: "pending" as const, errorMessage: undefined, txHash: undefined })));
+          setSteps((prev) =>
+            prev.map((s) => ({
+              ...s,
+              status: "pending" as const,
+              errorMessage: undefined,
+              txHash: undefined,
+            })),
+          );
         }
       }, 300);
       return () => clearTimeout(timer);
@@ -115,12 +122,20 @@ export function SubmissionModal({
   const processNextStep = async () => {
     const currentStep = steps[currentStepIndex];
     if (!currentStep) {
-      console.log("[SubmissionModal] No current step at index:", currentStepIndex);
+      console.log(
+        "[SubmissionModal] No current step at index:",
+        currentStepIndex,
+      );
       setIsProcessing(false);
       return;
     }
 
-    console.log("[SubmissionModal] Processing step:", currentStep.id, "index:", currentStepIndex);
+    console.log(
+      "[SubmissionModal] Processing step:",
+      currentStep.id,
+      "index:",
+      currentStepIndex,
+    );
     updateStep(currentStep.id, { status: "processing" });
 
     try {
@@ -159,7 +174,11 @@ export function SubmissionModal({
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      console.error("[SubmissionModal] Step failed:", currentStep.id, errorMessage);
+      console.error(
+        "[SubmissionModal] Step failed:",
+        currentStep.id,
+        errorMessage,
+      );
       setIsProcessing(false);
       updateStep(currentStep.id, {
         status: "error",
@@ -202,7 +221,9 @@ export function SubmissionModal({
       // Convert human-readable amounts to raw amounts with decimals
       const toRawAmount = (humanAmount: string): string => {
         const parsed = parseFloat(humanAmount) || 0;
-        const raw = BigInt(Math.floor(parsed * Math.pow(10, selectedTokenDecimals)));
+        const raw = BigInt(
+          Math.floor(parsed * Math.pow(10, selectedTokenDecimals)),
+        );
         return raw.toString();
       };
 
@@ -255,7 +276,7 @@ export function SubmissionModal({
   const retryStep = async (stepId: string) => {
     const stepIndex = steps.findIndex((s) => s.id === stepId);
     if (stepIndex === -1) return;
-    
+
     // Guard against retry while already processing
     if (isProcessing) {
       console.log("[SubmissionModal] Already processing, ignoring retry");

@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { TokenDealsSection } from "./token-deals-section";
 import { useTokenCache } from "@/hooks/useTokenCache";
-import type { OTCConsignment, Token, TokenMarketData } from "@/services/database";
+import type {
+  OTCConsignment,
+  Token,
+  TokenMarketData,
+} from "@/services/database";
 
 interface DealsGridProps {
   filters: {
@@ -24,7 +28,9 @@ interface TokenGroup {
 }
 
 // --- Helper: Group consignments by tokenId ---
-function groupConsignmentsByToken(consignments: OTCConsignment[]): TokenGroup[] {
+function groupConsignmentsByToken(
+  consignments: OTCConsignment[],
+): TokenGroup[] {
   // Deduplicate by ID
   const uniqueMap = new Map(consignments.map((c) => [c.id, c]));
   const unique = Array.from(uniqueMap.values());
@@ -34,7 +40,12 @@ function groupConsignmentsByToken(consignments: OTCConsignment[]): TokenGroup[] 
   for (const consignment of unique) {
     let group = grouped.get(consignment.tokenId);
     if (!group) {
-      group = { tokenId: consignment.tokenId, token: null, marketData: null, consignments: [] };
+      group = {
+        tokenId: consignment.tokenId,
+        token: null,
+        marketData: null,
+        consignments: [],
+      };
       grouped.set(consignment.tokenId, group);
     }
     group.consignments.push(consignment);
@@ -44,9 +55,17 @@ function groupConsignmentsByToken(consignments: OTCConsignment[]): TokenGroup[] 
 }
 
 function TokenGroupLoader({ tokenGroup }: { tokenGroup: TokenGroup }) {
-  const { token, marketData: cachedMarketData } = useTokenCache(tokenGroup.tokenId);
+  const { token, marketData: cachedMarketData } = useTokenCache(
+    tokenGroup.tokenId,
+  );
   if (!token) return null;
-  return <TokenDealsSection token={token} marketData={cachedMarketData} consignments={tokenGroup.consignments} />;
+  return (
+    <TokenDealsSection
+      token={token}
+      marketData={cachedMarketData}
+      consignments={tokenGroup.consignments}
+    />
+  );
 }
 
 export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
@@ -59,14 +78,17 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
       try {
         const params = new URLSearchParams();
         filters.chains.forEach((chain) => params.append("chains", chain));
-        filters.negotiableTypes.forEach((type) => params.append("negotiableTypes", type));
+        filters.negotiableTypes.forEach((type) =>
+          params.append("negotiableTypes", type),
+        );
         if (filters.isFractionalized) params.append("isFractionalized", "true");
 
         const response = await fetch(`/api/consignments?${params.toString()}`);
         const data = await response.json();
 
         if (data.success) {
-          const consignmentsList = (data.consignments || []) as OTCConsignment[];
+          const consignmentsList = (data.consignments ||
+            []) as OTCConsignment[];
           setTokenGroups(groupConsignmentsByToken(consignmentsList));
         }
       } finally {
@@ -81,7 +103,9 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
   const filteredGroups = useMemo(() => {
     if (!searchQuery) return tokenGroups;
     const query = searchQuery.toLowerCase();
-    return tokenGroups.filter((group) => group.tokenId.toLowerCase().includes(query));
+    return tokenGroups.filter((group) =>
+      group.tokenId.toLowerCase().includes(query),
+    );
   }, [tokenGroups, searchQuery]);
 
   if (isLoading) {

@@ -44,7 +44,14 @@ interface RegisterTokenModalProps {
   defaultChain?: Chain;
 }
 
-type Step = "scan" | "select" | "oracle" | "confirm" | "register" | "syncing" | "success";
+type Step =
+  | "scan"
+  | "select"
+  | "oracle"
+  | "confirm"
+  | "register"
+  | "syncing"
+  | "success";
 
 // --- Consolidated Wizard State ---
 interface WizardState {
@@ -77,7 +84,15 @@ type WizardAction =
   | { type: "SET_SYNC_STATUS"; payload: string }
   | { type: "RESET" }
   | { type: "START_ORACLE_SEARCH"; payload: ScannedToken }
-  | { type: "ORACLE_FOUND"; payload: { poolInfo?: PoolInfo; solanaPoolInfo?: SolanaPoolInfo; oracleInfo?: SolanaOracleInfo; warning?: string | null } }
+  | {
+      type: "ORACLE_FOUND";
+      payload: {
+        poolInfo?: PoolInfo;
+        solanaPoolInfo?: SolanaPoolInfo;
+        oracleInfo?: SolanaOracleInfo;
+        warning?: string | null;
+      };
+    }
   | { type: "START_REGISTRATION" }
   | { type: "REGISTRATION_SUCCESS"; payload: string };
 
@@ -141,9 +156,21 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
         step: "confirm",
       };
     case "START_REGISTRATION":
-      return { ...state, loading: true, error: null, step: "register", txHash: null, syncStatus: "" };
+      return {
+        ...state,
+        loading: true,
+        error: null,
+        step: "register",
+        txHash: null,
+        syncStatus: "",
+      };
     case "REGISTRATION_SUCCESS":
-      return { ...state, txHash: action.payload, step: "success", loading: false };
+      return {
+        ...state,
+        txHash: action.payload,
+        step: "success",
+        loading: false,
+      };
     default:
       return state;
   }
@@ -171,29 +198,63 @@ export function RegisterTokenModal({
   defaultChain = "base",
 }: RegisterTokenModalProps) {
   const { user, authenticated } = usePrivy();
-  const { solanaWallet, solanaPublicKey, evmAddress: multiWalletEvmAddress, activeFamily } = useMultiWallet();
+  const {
+    solanaWallet,
+    solanaPublicKey,
+    evmAddress: multiWalletEvmAddress,
+    activeFamily,
+  } = useMultiWallet();
   const { writeContractAsync } = useWriteContract();
   const publicClient = usePublicClient();
   const chainId = useChainId();
   const { connection } = useConnection();
 
   // Determine initial chain based on active wallet family
-  const initialChain: Chain = defaultChain === "solana" || activeFamily === "solana" ? "solana" : defaultChain;
+  const initialChain: Chain =
+    defaultChain === "solana" || activeFamily === "solana"
+      ? "solana"
+      : defaultChain;
 
   // --- Consolidated State ---
-  const [state, dispatch] = useReducer(wizardReducer, { ...initialWizardState, selectedChain: initialChain });
-  const { step, selectedChain, tokens, selectedToken, poolInfo, solanaPoolInfo, oracleInfo, loading, error, warning, txHash, syncStatus } = state;
+  const [state, dispatch] = useReducer(wizardReducer, {
+    ...initialWizardState,
+    selectedChain: initialChain,
+  });
+  const {
+    step,
+    selectedChain,
+    tokens,
+    selectedToken,
+    poolInfo,
+    solanaPoolInfo,
+    oracleInfo,
+    loading,
+    error,
+    warning,
+    txHash,
+    syncStatus,
+  } = state;
 
   // Get wallet addresses - prefer multiWallet values which are more reliable
   const evmAddress = multiWalletEvmAddress || user?.wallet?.address;
   const solanaAccount = user?.linkedAccounts?.find(
-    (acc: { type: string }) => acc.type === "wallet" && (acc as { chainType?: string }).chainType === "solana",
+    (acc: { type: string }) =>
+      acc.type === "wallet" &&
+      (acc as { chainType?: string }).chainType === "solana",
   );
-  const solanaAddress = solanaPublicKey || 
-    (solanaAccount && "address" in solanaAccount ? (solanaAccount as { address: string }).address : undefined);
-  
+  const solanaAddress =
+    solanaPublicKey ||
+    (solanaAccount && "address" in solanaAccount
+      ? (solanaAccount as { address: string }).address
+      : undefined);
+
   // Debug logging
-  console.log("[RegisterTokenModal] Wallet addresses:", { evmAddress, solanaAddress, activeFamily, selectedChain });
+  console.log("[RegisterTokenModal] Wallet addresses:", {
+    evmAddress,
+    solanaAddress,
+    activeFamily,
+    selectedChain,
+  });
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -216,12 +277,19 @@ export function RegisterTokenModal({
         throw new Error(`No ${selectedChain} wallet connected`);
       }
 
-      console.log(`[RegisterTokenModal] Scanning ${selectedChain} wallet:`, address);
+      console.log(
+        `[RegisterTokenModal] Scanning ${selectedChain} wallet:`,
+        address,
+      );
       const scannedTokens = await scanWalletTokens(address, selectedChain);
       console.log("[RegisterTokenModal] Found tokens:", scannedTokens.length);
 
       if (scannedTokens.length === 0) {
-        dispatch({ type: "SET_ERROR", payload: "No tokens found in your wallet. Try adding a token manually below." });
+        dispatch({
+          type: "SET_ERROR",
+          payload:
+            "No tokens found in your wallet. Try adding a token manually below.",
+        });
         dispatch({ type: "SET_STEP", payload: "select" });
         return;
       }
@@ -230,99 +298,127 @@ export function RegisterTokenModal({
       dispatch({ type: "SET_STEP", payload: "select" });
     } catch (err) {
       console.error("[RegisterTokenModal] Scan error:", err);
-      dispatch({ type: "SET_ERROR", payload: err instanceof Error ? err.message : "Failed to scan wallet" });
+      dispatch({
+        type: "SET_ERROR",
+        payload: err instanceof Error ? err.message : "Failed to scan wallet",
+      });
     } finally {
       dispatch({ type: "SET_LOADING", payload: false });
     }
   }, [selectedChain, solanaAddress, evmAddress]);
 
   // Select token and find oracle
-  const handleSelectToken = useCallback(async (token: ScannedToken) => {
-    dispatch({ type: "START_ORACLE_SEARCH", payload: token });
+  const handleSelectToken = useCallback(
+    async (token: ScannedToken) => {
+      dispatch({ type: "START_ORACLE_SEARCH", payload: token });
 
-    try {
-      let foundPoolInfo: PoolInfo | undefined;
-      let foundSolanaPoolInfo: SolanaPoolInfo | undefined;
-      let foundOracleInfo: SolanaOracleInfo | undefined;
-      let foundWarning: string | null = null;
+      try {
+        let foundPoolInfo: PoolInfo | undefined;
+        let foundSolanaPoolInfo: SolanaPoolInfo | undefined;
+        let foundOracleInfo: SolanaOracleInfo | undefined;
+        let foundWarning: string | null = null;
 
-      if (selectedChain === "base" || selectedChain === "bsc") {
-        let targetChainId: number;
-        if (selectedChain === "bsc") {
-          targetChainId = chainId === 56 || chainId === 97 ? chainId : 56;
-        } else {
-          targetChainId = chainId === 8453 || chainId === 84532 ? chainId : 8453;
-        }
-        const pool = await findBestPool(token.address, targetChainId);
-
-        if (!pool) {
-          const dexName = selectedChain === "bsc" ? "PancakeSwap V3" : "Uniswap V3 or Aerodrome";
-          throw new Error(`No ${dexName} pool found for this token`);
-        }
-
-        const validation = await validatePoolLiquidity(pool);
-        if (!validation.valid) {
-          throw new Error(validation.warning || "Pool validation failed");
-        }
-
-        foundPoolInfo = pool;
-
-        const priceCheck = await checkPriceDivergence(token.address, selectedChain, pool.priceUsd || 0);
-        if (!priceCheck.valid && priceCheck.warning) {
-          foundWarning = priceCheck.warning;
-        }
-      } else if (selectedChain === "solana") {
-        const cluster = connection.rpcEndpoint.includes("devnet") ? "devnet" : "mainnet";
-
-        const bestPool = await findBestSolanaPool(token.address, cluster);
-        if (bestPool) {
-          foundSolanaPoolInfo = bestPool;
-          // Map pool protocol to oracle type for proper on-chain registration
-          let oracleType: SolanaOracleInfo["type"];
-          if (bestPool.protocol === "PumpSwap") {
-            oracleType = "pumpswap";
-          } else if (bestPool.protocol === "Raydium") {
-            oracleType = "raydium";
-          } else if (bestPool.protocol === "Orca") {
-            oracleType = "orca";
+        if (selectedChain === "base" || selectedChain === "bsc") {
+          let targetChainId: number;
+          if (selectedChain === "bsc") {
+            targetChainId = chainId === 56 || chainId === 97 ? chainId : 56;
           } else {
-            oracleType = "jupiter"; // fallback
+            targetChainId =
+              chainId === 8453 || chainId === 84532 ? chainId : 8453;
           }
-          foundOracleInfo = {
-            type: oracleType,
-            address: bestPool.address,
-            poolAddress: bestPool.address,
-            liquidity: bestPool.tvlUsd,
-            valid: true,
-            warning: bestPool.tvlUsd < 10000 ? "Low Liquidity" : undefined,
-          };
+          const pool = await findBestPool(token.address, targetChainId);
 
-          const priceCheck = await checkPriceDivergence(token.address, "solana", bestPool.priceUsd || 0);
+          if (!pool) {
+            const dexName =
+              selectedChain === "bsc"
+                ? "PancakeSwap V3"
+                : "Uniswap V3 or Aerodrome";
+            throw new Error(`No ${dexName} pool found for this token`);
+          }
+
+          const validation = await validatePoolLiquidity(pool);
+          if (!validation.valid) {
+            throw new Error(validation.warning || "Pool validation failed");
+          }
+
+          foundPoolInfo = pool;
+
+          const priceCheck = await checkPriceDivergence(
+            token.address,
+            selectedChain,
+            pool.priceUsd || 0,
+          );
           if (!priceCheck.valid && priceCheck.warning) {
             foundWarning = priceCheck.warning;
           }
-        } else {
-          const oracle = await findSolanaOracle(token.address);
-          if (oracle) {
-            const validation = await validateSolanaOracle(oracle);
-            if (!validation.valid) throw new Error(validation.message);
-            foundOracleInfo = oracle;
+        } else if (selectedChain === "solana") {
+          const cluster = connection.rpcEndpoint.includes("devnet")
+            ? "devnet"
+            : "mainnet";
+
+          const bestPool = await findBestSolanaPool(token.address, cluster);
+          if (bestPool) {
+            foundSolanaPoolInfo = bestPool;
+            // Map pool protocol to oracle type for proper on-chain registration
+            let oracleType: SolanaOracleInfo["type"];
+            if (bestPool.protocol === "PumpSwap") {
+              oracleType = "pumpswap";
+            } else if (bestPool.protocol === "Raydium") {
+              oracleType = "raydium";
+            } else if (bestPool.protocol === "Orca") {
+              oracleType = "orca";
+            } else {
+              oracleType = "jupiter"; // fallback
+            }
+            foundOracleInfo = {
+              type: oracleType,
+              address: bestPool.address,
+              poolAddress: bestPool.address,
+              liquidity: bestPool.tvlUsd,
+              valid: true,
+              warning: bestPool.tvlUsd < 10000 ? "Low Liquidity" : undefined,
+            };
+
+            const priceCheck = await checkPriceDivergence(
+              token.address,
+              "solana",
+              bestPool.priceUsd || 0,
+            );
+            if (!priceCheck.valid && priceCheck.warning) {
+              foundWarning = priceCheck.warning;
+            }
           } else {
-            throw new Error("No liquid pool or oracle found for this token");
+            const oracle = await findSolanaOracle(token.address);
+            if (oracle) {
+              const validation = await validateSolanaOracle(oracle);
+              if (!validation.valid) throw new Error(validation.message);
+              foundOracleInfo = oracle;
+            } else {
+              throw new Error("No liquid pool or oracle found for this token");
+            }
           }
         }
-      }
 
-      dispatch({
-        type: "ORACLE_FOUND",
-        payload: { poolInfo: foundPoolInfo, solanaPoolInfo: foundSolanaPoolInfo, oracleInfo: foundOracleInfo, warning: foundWarning },
-      });
-    } catch (err) {
-      dispatch({ type: "SET_ERROR", payload: err instanceof Error ? err.message : "Failed to find oracle" });
-      dispatch({ type: "SET_STEP", payload: "select" });
-      dispatch({ type: "SET_LOADING", payload: false });
-    }
-  }, [selectedChain, chainId, connection.rpcEndpoint]);
+        dispatch({
+          type: "ORACLE_FOUND",
+          payload: {
+            poolInfo: foundPoolInfo,
+            solanaPoolInfo: foundSolanaPoolInfo,
+            oracleInfo: foundOracleInfo,
+            warning: foundWarning,
+          },
+        });
+      } catch (err) {
+        dispatch({
+          type: "SET_ERROR",
+          payload: err instanceof Error ? err.message : "Failed to find oracle",
+        });
+        dispatch({ type: "SET_STEP", payload: "select" });
+        dispatch({ type: "SET_LOADING", payload: false });
+      }
+    },
+    [selectedChain, chainId, connection.rpcEndpoint],
+  );
 
   // Register token
   const handleRegister = useCallback(async () => {
@@ -343,9 +439,18 @@ export function RegisterTokenModal({
 
       dispatch({ type: "SET_TX_HASH", payload: hash });
 
-      dispatch({ type: "SET_SYNC_STATUS", payload: "Waiting for transaction confirmation..." });
-      if ((selectedChain === "base" || selectedChain === "bsc") && publicClient && hash) {
-        await publicClient.waitForTransactionReceipt({ hash: hash as `0x${string}` });
+      dispatch({
+        type: "SET_SYNC_STATUS",
+        payload: "Waiting for transaction confirmation...",
+      });
+      if (
+        (selectedChain === "base" || selectedChain === "bsc") &&
+        publicClient &&
+        hash
+      ) {
+        await publicClient.waitForTransactionReceipt({
+          hash: hash as `0x${string}`,
+        });
       } else if (selectedChain === "solana") {
         await new Promise((resolve) => setTimeout(resolve, 3000));
       }
@@ -359,7 +464,10 @@ export function RegisterTokenModal({
       dispatch({ type: "REGISTRATION_SUCCESS", payload: hash });
       onSuccess?.();
     } catch (err) {
-      dispatch({ type: "SET_ERROR", payload: err instanceof Error ? err.message : "Registration failed" });
+      dispatch({
+        type: "SET_ERROR",
+        payload: err instanceof Error ? err.message : "Registration failed",
+      });
       dispatch({ type: "SET_STEP", payload: "confirm" });
       dispatch({ type: "SET_LOADING", payload: false });
     }
@@ -374,7 +482,10 @@ export function RegisterTokenModal({
     if (!selectedToken) throw new Error("No token selected");
 
     dispatch({ type: "SET_STEP", payload: "syncing" });
-    dispatch({ type: "SET_SYNC_STATUS", payload: "Registering token to database..." });
+    dispatch({
+      type: "SET_SYNC_STATUS",
+      payload: "Registering token to database...",
+    });
 
     try {
       const response = await fetch("/api/tokens", {
@@ -396,64 +507,95 @@ export function RegisterTokenModal({
         throw new Error(data.error || "Failed to register token to database");
       }
 
-      dispatch({ type: "SET_SYNC_STATUS", payload: "Token registered successfully!" });
+      dispatch({
+        type: "SET_SYNC_STATUS",
+        payload: "Token registered successfully!",
+      });
     } catch (err) {
       console.error("Database registration error:", err);
-      dispatch({ type: "SET_SYNC_STATUS", payload: "Token registered on-chain (database sync pending)" });
+      dispatch({
+        type: "SET_SYNC_STATUS",
+        payload: "Token registered on-chain (database sync pending)",
+      });
     }
   }, [selectedToken]);
 
   /**
    * Sync token to database immediately after on-chain registration
    */
-  const syncTokenToDatabase = useCallback(async (transactionHash: string) => {
-    dispatch({ type: "SET_STEP", payload: "syncing" });
-    dispatch({ type: "SET_SYNC_STATUS", payload: "Syncing token to database..." });
-
-    try {
-      const syncResponse = await fetch("/api/tokens/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chain: selectedChain, transactionHash }),
+  const syncTokenToDatabase = useCallback(
+    async (transactionHash: string) => {
+      dispatch({ type: "SET_STEP", payload: "syncing" });
+      dispatch({
+        type: "SET_SYNC_STATUS",
+        payload: "Syncing token to database...",
       });
 
-      const syncData = await syncResponse.json();
-      if (!syncData.success) {
-        throw new Error(syncData.error || "Sync failed");
-      }
+      try {
+        const syncResponse = await fetch("/api/tokens/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chain: selectedChain, transactionHash }),
+        });
 
-      dispatch({ type: "SET_SYNC_STATUS", payload: "Waiting for token to appear in database..." });
-      const maxAttempts = 15;
-      let attempts = 0;
-
-      while (attempts < maxAttempts) {
-        const response = await fetch(`/api/tokens?chain=${selectedChain}&isActive=true`);
-        const data = await response.json();
-
-        if (data.success && data.tokens && selectedToken) {
-          const tokenFound = data.tokens.find((t: { contractAddress: string }) => {
-            if (selectedChain === "solana") {
-              return t.contractAddress === selectedToken.address;
-            }
-            return t.contractAddress.toLowerCase() === selectedToken.address.toLowerCase();
-          });
-
-          if (tokenFound) {
-            dispatch({ type: "SET_SYNC_STATUS", payload: "Token synced successfully!" });
-            return;
-          }
+        const syncData = await syncResponse.json();
+        if (!syncData.success) {
+          throw new Error(syncData.error || "Sync failed");
         }
 
-        attempts++;
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
+        dispatch({
+          type: "SET_SYNC_STATUS",
+          payload: "Waiting for token to appear in database...",
+        });
+        const maxAttempts = 15;
+        let attempts = 0;
 
-      dispatch({ type: "SET_SYNC_STATUS", payload: "Sync completed (token may already be registered)" });
-    } catch (err) {
-      console.error("Sync error:", err);
-      dispatch({ type: "SET_SYNC_STATUS", payload: "Sync in progress (will complete automatically)..." });
-    }
-  }, [selectedChain, selectedToken]);
+        while (attempts < maxAttempts) {
+          const response = await fetch(
+            `/api/tokens?chain=${selectedChain}&isActive=true`,
+          );
+          const data = await response.json();
+
+          if (data.success && data.tokens && selectedToken) {
+            const tokenFound = data.tokens.find(
+              (t: { contractAddress: string }) => {
+                if (selectedChain === "solana") {
+                  return t.contractAddress === selectedToken.address;
+                }
+                return (
+                  t.contractAddress.toLowerCase() ===
+                  selectedToken.address.toLowerCase()
+                );
+              },
+            );
+
+            if (tokenFound) {
+              dispatch({
+                type: "SET_SYNC_STATUS",
+                payload: "Token synced successfully!",
+              });
+              return;
+            }
+          }
+
+          attempts++;
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+
+        dispatch({
+          type: "SET_SYNC_STATUS",
+          payload: "Sync completed (token may already be registered)",
+        });
+      } catch (err) {
+        console.error("Sync error:", err);
+        dispatch({
+          type: "SET_SYNC_STATUS",
+          payload: "Sync in progress (will complete automatically)...",
+        });
+      }
+    },
+    [selectedChain, selectedToken],
+  );
 
   // Register token on EVM chains (Base or BSC)
   const registerEvmToken = async (): Promise<string> => {
@@ -586,7 +728,7 @@ export function RegisterTokenModal({
             args: [
               { name: "priceFeedId", type: { array: ["u8", 32] } },
               { name: "poolAddress", type: "publicKey" },
-              { name: "poolType", type: "u8" },  // 0=None, 1=Raydium, 2=Orca, 3=PumpSwap
+              { name: "poolType", type: "u8" }, // 0=None, 1=Raydium, 2=Orca, 3=PumpSwap
             ],
           },
         ],
@@ -914,7 +1056,8 @@ export function RegisterTokenModal({
                 <div className="flex justify-between">
                   <span className="text-sm font-medium">Oracle:</span>
                   <span className="text-sm">
-                    {(selectedChain === "base" || selectedChain === "bsc") && poolInfo
+                    {(selectedChain === "base" || selectedChain === "bsc") &&
+                    poolInfo
                       ? formatPoolInfo(poolInfo)
                       : selectedChain === "solana" && solanaPoolInfo
                         ? `${solanaPoolInfo.protocol} Pool (${solanaPoolInfo.baseToken}) - TVL: $${Math.floor(solanaPoolInfo.tvlUsd).toLocaleString()}`

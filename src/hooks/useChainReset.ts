@@ -37,11 +37,12 @@ export function useChainReset() {
       // Only enable chain reset detection for local development with local validators
       const network = process.env.NEXT_PUBLIC_NETWORK;
       const isLocalNetwork = network === "local" || network === "localnet";
-      const isDevWithoutNetwork = !network && process.env.NODE_ENV === "development";
-      
+      const isDevWithoutNetwork =
+        !network && process.env.NODE_ENV === "development";
+
       // Don't run chain reset checks when connected to real networks
       if (isLocalNetwork || isDevWithoutNetwork) {
-      setState((prev) => ({ ...prev, checksEnabled: true }));
+        setState((prev) => ({ ...prev, checksEnabled: true }));
       }
     }
   }, [mounted]);

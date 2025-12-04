@@ -38,12 +38,12 @@ async function scanEvmTokens(
       signal: AbortSignal.timeout(60000), // 60s timeout for initial load
     });
     const data = await response.json();
-    
+
     if (data.error) {
       console.error("[WalletScanner] EVM balances error:", data.error);
       // Return empty but don't throw - let UI show "no tokens" state
     }
-    
+
     interface EvmToken {
       contractAddress: string;
       symbol: string;
@@ -54,10 +54,10 @@ async function scanEvmTokens(
       priceUsd?: number;
       balanceUsd?: number;
     }
-    
-    const tokens = data.tokens as EvmToken[] || [];
-    
-    return tokens.map(t => ({
+
+    const tokens = (data.tokens as EvmToken[]) || [];
+
+    return tokens.map((t) => ({
       address: t.contractAddress,
       symbol: t.symbol,
       name: t.name,
@@ -79,7 +79,10 @@ async function scanEvmTokens(
  * Scan wallet for all SPL tokens on Solana
  * Uses backend API which handles everything (balances + metadata + prices)
  */
-async function scanSolanaTokens(address: string, forceRefresh = false): Promise<ScannedToken[]> {
+async function scanSolanaTokens(
+  address: string,
+  forceRefresh = false,
+): Promise<ScannedToken[]> {
   try {
     // Backend API does everything: balances, metadata, prices in optimized calls
     const url = `/api/solana-balances?address=${address}${forceRefresh ? "&refresh=true" : ""}`;
@@ -104,10 +107,10 @@ async function scanSolanaTokens(address: string, forceRefresh = false): Promise<
       priceUsd?: number;
       balanceUsd?: number;
     }
-    
+
     const tokens = (data.tokens || []) as SolanaToken[];
-    
-    return tokens.map(t => ({
+
+    return tokens.map((t) => ({
       address: t.mint,
       symbol: t.symbol || "SPL",
       name: t.name || "SPL Token",
@@ -143,7 +146,9 @@ async function getRegisteredAddresses(chain: Chain): Promise<Set<string>> {
     return new Set(
       registeredTokens.map((t) =>
         // EVM addresses are case-insensitive, Solana addresses are case-sensitive
-        chain === "solana" ? t.contractAddress : t.contractAddress.toLowerCase(),
+        chain === "solana"
+          ? t.contractAddress
+          : t.contractAddress.toLowerCase(),
       ),
     );
   } catch {

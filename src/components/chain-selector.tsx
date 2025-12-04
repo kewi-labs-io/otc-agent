@@ -21,9 +21,7 @@ export function ChainSelector({ selected, onChange }: ChainSelectorProps) {
   };
 
   const currentValue =
-    selected.length === allChains.length
-      ? "all"
-      : selected[0] || "all";
+    selected.length === allChains.length ? "all" : selected[0] || "all";
 
   return (
     <div className="flex items-center gap-2">
@@ -45,4 +43,3 @@ export function ChainSelector({ selected, onChange }: ChainSelectorProps) {
     </div>
   );
 }
-

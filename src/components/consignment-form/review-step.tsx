@@ -71,13 +71,11 @@ export function ReviewStep({
   selectedTokenSymbol = "TOKEN",
   selectedTokenDecimals = 18,
 }: ReviewStepProps) {
-  const { activeFamily, evmAddress, solanaPublicKey, solanaWallet } = useMultiWallet();
+  const { activeFamily, evmAddress, solanaPublicKey, solanaWallet } =
+    useMultiWallet();
   const { address } = useAccount();
-  const {
-    createConsignmentOnChain,
-    approveToken,
-    getRequiredGasDeposit,
-  } = useOTC();
+  const { createConsignmentOnChain, approveToken, getRequiredGasDeposit } =
+    useOTC();
   const [copied, setCopied] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tokenAddress, setTokenAddress] = useState<string | null>(null);
@@ -93,7 +91,9 @@ export function ReviewStep({
     return { chain, address };
   };
 
-  const { chain: tokenChain, address: rawTokenAddress } = getTokenInfo(formData.tokenId);
+  const { chain: tokenChain, address: rawTokenAddress } = getTokenInfo(
+    formData.tokenId,
+  );
 
   const getDisplayAddress = (addr: string) => {
     if (!addr || addr.length <= 12) return addr;
@@ -118,7 +118,8 @@ export function ReviewStep({
 
   const handleOpenModal = async () => {
     setError(null);
-    const consignerAddress = activeFamily === "solana" ? solanaPublicKey : evmAddress;
+    const consignerAddress =
+      activeFamily === "solana" ? solanaPublicKey : evmAddress;
 
     if (!consignerAddress) {
       setError("Please connect your wallet before creating a consignment");
@@ -155,23 +156,33 @@ export function ReviewStep({
       // Token address comes directly from tokenId (format: token-{chain}-{address})
       if (!rawTokenAddress) {
         setError("Token address not found in tokenId");
-        console.error("[ReviewStep] No token address in tokenId:", formData.tokenId);
+        console.error(
+          "[ReviewStep] No token address in tokenId:",
+          formData.tokenId,
+        );
         return;
       }
-      
+
       setIsLoading(true);
       try {
-        console.log("[ReviewStep] Using token address from tokenId:", rawTokenAddress);
+        console.log(
+          "[ReviewStep] Using token address from tokenId:",
+          rawTokenAddress,
+        );
         setTokenAddress(rawTokenAddress);
-        
+
         console.log("[ReviewStep] Fetching gas deposit requirement...");
         const fetchedGasDeposit = await getRequiredGasDeposit();
         console.log("[ReviewStep] Gas deposit:", fetchedGasDeposit?.toString());
-        
+
         setGasDeposit(fetchedGasDeposit);
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        console.error("[ReviewStep] Failed to fetch gas deposit:", errorMessage);
+        const errorMessage =
+          err instanceof Error ? err.message : "Unknown error";
+        console.error(
+          "[ReviewStep] Failed to fetch gas deposit:",
+          errorMessage,
+        );
         // Use a default gas deposit if the RPC call fails
         console.log("[ReviewStep] Using default gas deposit of 0.001 ETH");
         setGasDeposit(BigInt(1000000000000000)); // 0.001 ETH default
@@ -189,11 +200,15 @@ export function ReviewStep({
       // Return a placeholder since Solana uses delegated authority differently
       return "solana-approval-pending";
     }
-    
+
     // EVM path
     if (!tokenAddress) throw new Error("Token address not found");
     // Convert human-readable amount to raw amount with decimals
-    const rawAmount = BigInt(Math.floor(parseFloat(formData.amount) * Math.pow(10, selectedTokenDecimals)));
+    const rawAmount = BigInt(
+      Math.floor(
+        parseFloat(formData.amount) * Math.pow(10, selectedTokenDecimals),
+      ),
+    );
     const txHash = await approveToken(tokenAddress as `0x${string}`, rawAmount);
     return txHash as string;
   };
@@ -215,68 +230,79 @@ export function ReviewStep({
       }
 
       const connection = new Connection(SOLANA_RPC, "confirmed");
-      
+
       // Adapt our wallet adapter to Anchor's Wallet interface
       const anchorWallet = {
         publicKey: new SolPubkey(solanaWallet.publicKey.toBase58()),
         signTransaction: solanaWallet.signTransaction,
         signAllTransactions: solanaWallet.signAllTransactions,
       } as Wallet;
-      
+
       const provider = new anchor.AnchorProvider(connection, anchorWallet, {
         commitment: "confirmed",
       });
-      
+
       console.log("[ReviewStep] Fetching Solana IDL...");
       const idl = await fetchSolanaIdl();
       console.log("[ReviewStep] IDL loaded, creating program...");
       const program = new anchor.Program(idl, provider);
-      
+
       const desk = new SolPubkey(SOLANA_DESK);
       const tokenMintPk = new SolPubkey(rawTokenAddress);
       const consignerPk = new SolPubkey(solanaWallet.publicKey.toBase58());
-      
+
       console.log("[ReviewStep] Token mint:", tokenMintPk.toString());
       console.log("[ReviewStep] Desk:", desk.toString());
       console.log("[ReviewStep] Consigner:", consignerPk.toString());
-      
+
       // Get consigner's token ATA
       const consignerTokenAta = await getAssociatedTokenAddress(
         tokenMintPk,
         consignerPk,
-        false
+        false,
       );
-      
+
       // Get desk's token treasury
       const deskTokenTreasury = await getAssociatedTokenAddress(
         tokenMintPk,
         desk,
-        true // allowOwnerOffCurve for PDA
+        true, // allowOwnerOffCurve for PDA
       );
-      
+
       console.log("[ReviewStep] Consigner ATA:", consignerTokenAta.toString());
       console.log("[ReviewStep] Desk Treasury:", deskTokenTreasury.toString());
-      
+
       // Generate consignment keypair (required as signer in the program)
       const consignmentKeypair = Keypair.generate();
-      console.log("[ReviewStep] Consignment keypair:", consignmentKeypair.publicKey.toString());
-      
+      console.log(
+        "[ReviewStep] Consignment keypair:",
+        consignmentKeypair.publicKey.toString(),
+      );
+
       // Convert amounts to raw values
       const rawAmount = new anchor.BN(
-        Math.floor(parseFloat(formData.amount) * Math.pow(10, selectedTokenDecimals)).toString()
+        Math.floor(
+          parseFloat(formData.amount) * Math.pow(10, selectedTokenDecimals),
+        ).toString(),
       );
       const rawMinDeal = new anchor.BN(
-        Math.floor(parseFloat(formData.minDealAmount) * Math.pow(10, selectedTokenDecimals)).toString()
+        Math.floor(
+          parseFloat(formData.minDealAmount) *
+            Math.pow(10, selectedTokenDecimals),
+        ).toString(),
       );
       const rawMaxDeal = new anchor.BN(
-        Math.floor(parseFloat(formData.maxDealAmount) * Math.pow(10, selectedTokenDecimals)).toString()
+        Math.floor(
+          parseFloat(formData.maxDealAmount) *
+            Math.pow(10, selectedTokenDecimals),
+        ).toString(),
       );
-      
+
       console.log("[ReviewStep] Creating consignment on Solana...");
       console.log("[ReviewStep] Amount:", rawAmount.toString());
       console.log("[ReviewStep] Min deal:", rawMinDeal.toString());
       console.log("[ReviewStep] Max deal:", rawMaxDeal.toString());
-      
+
       // Call createConsignment instruction
       const txSignature = await program.methods
         .createConsignment(
@@ -293,7 +319,7 @@ export function ReviewStep({
           formData.isFractionalized,
           formData.isPrivate,
           formData.maxPriceVolatilityBps,
-          new anchor.BN(formData.maxTimeToExecuteSeconds)
+          new anchor.BN(formData.maxTimeToExecuteSeconds),
         )
         .accounts({
           desk: desk,
@@ -307,9 +333,9 @@ export function ReviewStep({
         })
         .signers([consignmentKeypair])
         .rpc();
-      
+
       console.log("[ReviewStep] Solana transaction signature:", txSignature);
-      
+
       // The consignment ID is the public key of the consignment account
       return {
         txHash: txSignature,
@@ -321,9 +347,23 @@ export function ReviewStep({
     if (!gasDeposit) throw new Error("Gas deposit not calculated");
 
     // Convert human-readable amounts to raw amounts with decimals
-    const rawAmount = BigInt(Math.floor(parseFloat(formData.amount) * Math.pow(10, selectedTokenDecimals)));
-    const rawMinDeal = BigInt(Math.floor(parseFloat(formData.minDealAmount) * Math.pow(10, selectedTokenDecimals)));
-    const rawMaxDeal = BigInt(Math.floor(parseFloat(formData.maxDealAmount) * Math.pow(10, selectedTokenDecimals)));
+    const rawAmount = BigInt(
+      Math.floor(
+        parseFloat(formData.amount) * Math.pow(10, selectedTokenDecimals),
+      ),
+    );
+    const rawMinDeal = BigInt(
+      Math.floor(
+        parseFloat(formData.minDealAmount) *
+          Math.pow(10, selectedTokenDecimals),
+      ),
+    );
+    const rawMaxDeal = BigInt(
+      Math.floor(
+        parseFloat(formData.maxDealAmount) *
+          Math.pow(10, selectedTokenDecimals),
+      ),
+    );
 
     const result: { txHash: `0x${string}`; consignmentId: bigint } =
       await createConsignmentOnChain({
@@ -363,20 +403,26 @@ export function ReviewStep({
         <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
           Review Your Listing
         </h3>
-        <p className="text-sm text-zinc-500">Confirm the details before creating</p>
+        <p className="text-sm text-zinc-500">
+          Confirm the details before creating
+        </p>
       </div>
 
       {/* Token Info */}
       <div className="flex items-center gap-3 p-4 rounded-xl bg-gradient-to-br from-orange-500/10 to-amber-500/10 border border-orange-500/20">
         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center">
-          <span className="text-white font-bold text-lg">{selectedTokenSymbol.charAt(0)}</span>
+          <span className="text-white font-bold text-lg">
+            {selectedTokenSymbol.charAt(0)}
+          </span>
         </div>
         <div className="flex-1">
           <p className="font-semibold text-lg text-zinc-900 dark:text-zinc-100">
             {formatAmount(formData.amount)} {selectedTokenSymbol}
           </p>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-500 font-mono">{getDisplayAddress(rawTokenAddress)}</span>
+            <span className="text-xs text-zinc-500 font-mono">
+              {getDisplayAddress(rawTokenAddress)}
+            </span>
             <button
               onClick={handleCopyToken}
               className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors"
@@ -407,13 +453,18 @@ export function ReviewStep({
         {formData.isNegotiable ? (
           <>
             <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-              <span className="text-zinc-600 dark:text-zinc-400">Discount Range</span>
+              <span className="text-zinc-600 dark:text-zinc-400">
+                Discount Range
+              </span>
               <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                {formData.minDiscountBps / 100}% – {formData.maxDiscountBps / 100}%
+                {formData.minDiscountBps / 100}% –{" "}
+                {formData.maxDiscountBps / 100}%
               </span>
             </div>
             <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-              <span className="text-zinc-600 dark:text-zinc-400">Lockup Range</span>
+              <span className="text-zinc-600 dark:text-zinc-400">
+                Lockup Range
+              </span>
               <span className="font-medium text-zinc-900 dark:text-zinc-100">
                 {formData.minLockupDays} – {formData.maxLockupDays} days
               </span>
@@ -440,13 +491,16 @@ export function ReviewStep({
           <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
             <span className="text-zinc-600 dark:text-zinc-400">Deal Size</span>
             <span className="font-medium text-zinc-900 dark:text-zinc-100">
-              {formatAmount(formData.minDealAmount)} – {formatAmount(formData.maxDealAmount)} {selectedTokenSymbol}
-          </span>
-        </div>
+              {formatAmount(formData.minDealAmount)} –{" "}
+              {formatAmount(formData.maxDealAmount)} {selectedTokenSymbol}
+            </span>
+          </div>
         )}
 
         <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-          <span className="text-zinc-600 dark:text-zinc-400">Fractionalized</span>
+          <span className="text-zinc-600 dark:text-zinc-400">
+            Fractionalized
+          </span>
           <span className="font-medium text-zinc-900 dark:text-zinc-100">
             {formData.isFractionalized ? "Yes" : "No"}
           </span>
@@ -507,7 +561,9 @@ export function ReviewStep({
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         formData={formData}
-        consignerAddress={activeFamily === "solana" ? solanaPublicKey || "" : evmAddress || ""}
+        consignerAddress={
+          activeFamily === "solana" ? solanaPublicKey || "" : evmAddress || ""
+        }
         chain={tokenChain || (activeFamily === "solana" ? "solana" : "base")}
         activeFamily={activeFamily}
         selectedTokenDecimals={selectedTokenDecimals}

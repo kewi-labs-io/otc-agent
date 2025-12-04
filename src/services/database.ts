@@ -288,8 +288,9 @@ export class MarketDataDB {
     const runtime = await agentRuntime.getRuntime();
     const normalizedId = normalizeTokenId(tokenId);
     return (
-      (await runtime.getCache<TokenMarketData>(`market_data:${normalizedId}`)) ??
-      null
+      (await runtime.getCache<TokenMarketData>(
+        `market_data:${normalizedId}`,
+      )) ?? null
     );
   }
 }
@@ -364,7 +365,9 @@ export class ConsignmentDB {
     const runtime = await agentRuntime.getRuntime();
     const normalizedId = normalizeTokenId(tokenId);
     const consignmentIds =
-      (await runtime.getCache<string[]>(`token_consignments:${normalizedId}`)) ?? [];
+      (await runtime.getCache<string[]>(
+        `token_consignments:${normalizedId}`,
+      )) ?? [];
     const consignments = await Promise.all(
       consignmentIds.map((id) =>
         runtime.getCache<OTCConsignment>(`consignment:${id}`),

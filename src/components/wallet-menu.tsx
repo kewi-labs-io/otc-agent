@@ -31,7 +31,9 @@ export function WalletMenu() {
     const addr = activeFamily === "solana" ? solanaPublicKey : evmAddress;
     return {
       currentAddress: addr,
-      displayAddress: addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : "Loading...",
+      displayAddress: addr
+        ? `${addr.slice(0, 6)}...${addr.slice(-4)}`
+        : "Loading...",
       fullAddress: addr || "",
     };
   }, [activeFamily, solanaPublicKey, evmAddress]);
@@ -41,7 +43,10 @@ export function WalletMenu() {
     if (!isOpen) return;
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
@@ -61,13 +66,22 @@ export function WalletMenu() {
     setIsOpen(false);
     const targetFamily = activeFamily === "solana" ? "evm" : "solana";
 
-    if ((targetFamily === "evm" && evmConnected) || (targetFamily === "solana" && solanaConnected)) {
+    if (
+      (targetFamily === "evm" && evmConnected) ||
+      (targetFamily === "solana" && solanaConnected)
+    ) {
       setActiveFamily(targetFamily);
     } else {
       connectWallet();
       setActiveFamily(targetFamily);
     }
-  }, [activeFamily, evmConnected, solanaConnected, setActiveFamily, connectWallet]);
+  }, [
+    activeFamily,
+    evmConnected,
+    solanaConnected,
+    setActiveFamily,
+    connectWallet,
+  ]);
 
   const handleSwitchWallet = useCallback(() => {
     setIsOpen(false);
@@ -233,7 +247,6 @@ export function WalletMenu() {
           </div>
         </div>
       )}
-
     </div>
   );
 }

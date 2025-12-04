@@ -21,7 +21,7 @@ function getSolanaNetwork(): WalletAdapterNetwork {
  */
 function getSolanaEndpoint(): string {
   const configUrl = SUPPORTED_CHAINS.solana.rpcUrl;
-  
+
   // If it's a relative path (proxy), construct full URL
   if (configUrl.startsWith("/")) {
     if (typeof window !== "undefined") {
@@ -30,7 +30,7 @@ function getSolanaEndpoint(): string {
     // SSR fallback - will be replaced on client
     return "https://api.mainnet-beta.solana.com";
   }
-  
+
   return configUrl;
 }
 

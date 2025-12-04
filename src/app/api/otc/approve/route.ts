@@ -24,7 +24,10 @@ import type { QuoteMemory } from "@/types";
 
 // Helper to safely read from contract bypassing viem's strict authorizationList requirement
 type ReadContractFn = (params: unknown) => Promise<unknown>;
-const safeReadContract = <T>(client: { readContract: ReadContractFn }, params: unknown): Promise<T> => {
+const safeReadContract = <T>(
+  client: { readContract: ReadContractFn },
+  params: unknown,
+): Promise<T> => {
   return client.readContract(params) as Promise<T>;
 };
 
@@ -185,8 +188,18 @@ export async function POST(request: NextRequest) {
     // Fetch offer to get payment details and token mint
     // In token-agnostic architecture, each offer stores its own token_mint
     type ProgramAccountsFetch = {
-      offer: { fetch: (address: SolanaPublicKey) => Promise<{ currency: number; id: import("@coral-xyz/anchor").BN; tokenMint: SolanaPublicKey }> };
-      desk: { fetch: (address: SolanaPublicKey) => Promise<{ usdcMint: SolanaPublicKey }> };
+      offer: {
+        fetch: (address: SolanaPublicKey) => Promise<{
+          currency: number;
+          id: import("@coral-xyz/anchor").BN;
+          tokenMint: SolanaPublicKey;
+        }>;
+      };
+      desk: {
+        fetch: (
+          address: SolanaPublicKey,
+        ) => Promise<{ usdcMint: SolanaPublicKey }>;
+      };
     };
     const programAccounts = program.account as unknown as ProgramAccountsFetch;
     const offerData = await programAccounts.offer.fetch(offer);
@@ -543,7 +556,8 @@ export async function POST(request: NextRequest) {
   });
 
   console.log("[Approve API] Sending approval tx...");
-  const txHash: `0x${string}` = await walletClient.writeContract(approveRequest);
+  const txHash: `0x${string}` =
+    await walletClient.writeContract(approveRequest);
 
   console.log("[Approve API] Waiting for confirmation...", txHash);
   const approvalReceipt = await publicClient.waitForTransactionReceipt({
@@ -729,12 +743,15 @@ export async function POST(request: NextRequest) {
   }
 
   // Check if approver should also fulfill
-  const requireApproverToFulfill = await safeReadContract<boolean>(publicClient, {
-    address: OTC_ADDRESS,
-    abi,
-    functionName: "requireApproverToFulfill",
-    args: [],
-  });
+  const requireApproverToFulfill = await safeReadContract<boolean>(
+    publicClient,
+    {
+      address: OTC_ADDRESS,
+      abi,
+      functionName: "requireApproverToFulfill",
+      args: [],
+    },
+  );
 
   console.log(
     "[Approve API] requireApproverToFulfill:",

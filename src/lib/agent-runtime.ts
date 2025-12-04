@@ -103,7 +103,7 @@ class AgentRuntimeManager {
 
     // Priority 4: Create new runtime with single initialization promise
     this.initializationPromise = this.createRuntime();
-    
+
     try {
       const runtime = await this.initializationPromise;
       return runtime;
@@ -194,9 +194,9 @@ class AgentRuntimeManager {
       agentId: RUNTIME_AGENT_ID,
       settings: {
         GROQ_API_KEY: process.env.GROQ_API_KEY || "",
-        SMALL_GROQ_MODEL:
-          process.env.SMALL_GROQ_MODEL || "qwen/qwen3-32b",
-        LARGE_GROQ_MODEL: process.env.LARGE_GROQ_MODEL || "moonshotai/kimi-k2-instruct-0905",
+        SMALL_GROQ_MODEL: process.env.SMALL_GROQ_MODEL || "qwen/qwen3-32b",
+        LARGE_GROQ_MODEL:
+          process.env.LARGE_GROQ_MODEL || "moonshotai/kimi-k2-instruct-0905",
         POSTGRES_URL: postgresUrl,
         ...agent.character.settings,
       },

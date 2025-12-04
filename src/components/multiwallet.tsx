@@ -38,7 +38,7 @@ type MultiWalletContextValue = {
   // null when no wallet is connected
   activeFamily: ChainFamily | null;
   setActiveFamily: (family: ChainFamily) => void;
-  
+
   // EVM-specific chain selection (Base, BSC, etc.)
   selectedEVMChain: EVMChain;
   setSelectedEVMChain: (chain: EVMChain) => void;
@@ -123,11 +123,15 @@ export function MultiWalletProvider({
   // === Derived wallet state ===
   // Check BOTH Privy wallets array AND wagmi direct connection AND Privy user linkedAccounts
   const privyEvmWallet = useMemo(
-    () => wallets.find((w) => (w as { chainType?: string }).chainType === "ethereum"),
+    () =>
+      wallets.find(
+        (w) => (w as { chainType?: string }).chainType === "ethereum",
+      ),
     [wallets],
   );
   const privySolanaWallet = useMemo(
-    () => wallets.find((w) => (w as { chainType?: string }).chainType === "solana"),
+    () =>
+      wallets.find((w) => (w as { chainType?: string }).chainType === "solana"),
     [wallets],
   );
 
@@ -135,7 +139,9 @@ export function MultiWalletProvider({
   const linkedEvmAddress = useMemo(() => {
     if (!privyUser?.linkedAccounts) return undefined;
     const evmAccount = privyUser.linkedAccounts.find(
-      (a) => a.type === "wallet" && (a as { chainType?: string }).chainType === "ethereum"
+      (a) =>
+        a.type === "wallet" &&
+        (a as { chainType?: string }).chainType === "ethereum",
     );
     return (evmAccount as { address?: string })?.address;
   }, [privyUser?.linkedAccounts]);
@@ -143,7 +149,9 @@ export function MultiWalletProvider({
   const linkedSolanaAddress = useMemo(() => {
     if (!privyUser?.linkedAccounts) return undefined;
     const solanaAccount = privyUser.linkedAccounts.find(
-      (a) => a.type === "wallet" && (a as { chainType?: string }).chainType === "solana"
+      (a) =>
+        a.type === "wallet" &&
+        (a as { chainType?: string }).chainType === "solana",
     );
     return (solanaAccount as { address?: string })?.address;
   }, [privyUser?.linkedAccounts]);
@@ -151,27 +159,31 @@ export function MultiWalletProvider({
   // Track if we have ACTIVE wallets (in the wallets array) vs just linked accounts
   const hasActiveEvmWallet = !!privyEvmWallet || isWagmiConnected;
   const hasActiveSolanaWallet = !!privySolanaWallet;
-  
+
   // EVM: connected if Privy has wallet OR wagmi is directly connected OR linked account
   const evmConnected = hasActiveEvmWallet || !!linkedEvmAddress;
-  const evmAddress = privyEvmWallet?.address || wagmiAddress || linkedEvmAddress;
-  
+  const evmAddress =
+    privyEvmWallet?.address || wagmiAddress || linkedEvmAddress;
+
   // Solana: through Privy wallets array OR linked accounts
   const solanaConnected = hasActiveSolanaWallet || !!linkedSolanaAddress;
   const solanaPublicKey = privySolanaWallet?.address || linkedSolanaAddress;
-  
+
   // For Solana adapter, use the Privy wallet
   const solanaWalletRaw = privySolanaWallet;
 
   // === User preference state ===
   // Persisted to localStorage to remember user's chain choice across sessions
-  const [preferredFamily, setPreferredFamily] = useState<ChainFamily | null>(() => {
-    if (typeof window === "undefined") return null;
-    const saved = localStorage.getItem("otc-preferred-chain");
-    if (saved === "evm" || saved === "solana") return saved;
-    return null;
-  });
-  const [selectedEVMChain, setSelectedEVMChainState] = useState<EVMChain>("base");
+  const [preferredFamily, setPreferredFamily] = useState<ChainFamily | null>(
+    () => {
+      if (typeof window === "undefined") return null;
+      const saved = localStorage.getItem("otc-preferred-chain");
+      if (saved === "evm" || saved === "solana") return saved;
+      return null;
+    },
+  );
+  const [selectedEVMChain, setSelectedEVMChainState] =
+    useState<EVMChain>("base");
 
   // Persist preference to localStorage
   useEffect(() => {
@@ -179,34 +191,40 @@ export function MultiWalletProvider({
       localStorage.setItem("otc-preferred-chain", preferredFamily);
     }
   }, [preferredFamily]);
-  
+
   // Listen for localStorage changes (from PrivyProvider onSuccess callback)
   useEffect(() => {
     if (typeof window === "undefined") return;
-    
+
     const handleStorageChange = () => {
       const saved = localStorage.getItem("otc-preferred-chain");
       if (saved === "evm" || saved === "solana") {
         if (saved !== preferredFamily) {
-          console.log("[MultiWallet] Preference changed via localStorage:", saved);
+          console.log(
+            "[MultiWallet] Preference changed via localStorage:",
+            saved,
+          );
           setPreferredFamily(saved);
         }
       }
     };
-    
+
     // Check on mount in case it was set before this component mounted
     handleStorageChange();
-    
+
     // Listen for storage events (from other tabs or from parent components)
     window.addEventListener("storage", handleStorageChange);
-    
+
     // Also listen for custom event from same window
     const handleCustomEvent = () => handleStorageChange();
     window.addEventListener("otc-chain-preference-changed", handleCustomEvent);
-    
+
     return () => {
       window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("otc-chain-preference-changed", handleCustomEvent);
+      window.removeEventListener(
+        "otc-chain-preference-changed",
+        handleCustomEvent,
+      );
     };
   }, [preferredFamily]);
 
@@ -215,22 +233,32 @@ export function MultiWalletProvider({
   useEffect(() => {
     // Only run if authenticated but no preference set yet
     if (!privyAuthenticated || preferredFamily) return;
-    
+
     // Check what's actually in the PRIVY wallets array (not linked accounts or wagmi)
     // This reflects what the user just connected with
     // Check Solana FIRST since it's explicit (user chose Solana wallet)
     if (privySolanaWallet) {
-      console.log("[MultiWallet] Setting preference to Solana (privy solana wallet detected)");
+      console.log(
+        "[MultiWallet] Setting preference to Solana (privy solana wallet detected)",
+      );
       setPreferredFamily("solana");
     } else if (privyEvmWallet) {
-      console.log("[MultiWallet] Setting preference to EVM (privy evm wallet detected)");
+      console.log(
+        "[MultiWallet] Setting preference to EVM (privy evm wallet detected)",
+      );
       setPreferredFamily("evm");
     } else if (isWagmiConnected) {
       // Wagmi connection without privy wallet means external wallet
       console.log("[MultiWallet] Setting preference to EVM (wagmi connected)");
       setPreferredFamily("evm");
     }
-  }, [privyAuthenticated, preferredFamily, isWagmiConnected, privyEvmWallet, privySolanaWallet]);
+  }, [
+    privyAuthenticated,
+    preferredFamily,
+    isWagmiConnected,
+    privyEvmWallet,
+    privySolanaWallet,
+  ]);
 
   // === Derived active family ===
   // Single source of truth: derived from connection state + preference
@@ -238,31 +266,39 @@ export function MultiWalletProvider({
     // If user has a preference AND that wallet is connected, honor it
     if (preferredFamily === "solana" && solanaConnected) return "solana";
     if (preferredFamily === "evm" && evmConnected) return "evm";
-    
+
     // No explicit preference - prioritize ACTIVE wallets (in wallets array) over linked accounts
     // If user has an active wallet, use that chain
     if (hasActiveSolanaWallet) return "solana";
     if (hasActiveEvmWallet) return "evm";
-    
+
     // No active wallets - only linked accounts exist
     // If only one chain is linked, use that
     if (solanaConnected && !evmConnected) return "solana";
     if (evmConnected && !solanaConnected) return "evm";
-    
+
     // Both linked but no active wallet and no preference
     // Return "evm" as default but log that user should choose
     // The UI should show chain switcher buttons in this case
     if (evmConnected && solanaConnected) {
-      console.log("[MultiWallet] Both chains linked, no active wallet - defaulting to EVM. Use chain switcher to change.");
+      console.log(
+        "[MultiWallet] Both chains linked, no active wallet - defaulting to EVM. Use chain switcher to change.",
+      );
       return "evm";
     }
-    
+
     if (evmConnected) return "evm";
     if (solanaConnected) return "solana";
-    
+
     // No wallet connected
     return null;
-  }, [preferredFamily, evmConnected, solanaConnected, hasActiveEvmWallet, hasActiveSolanaWallet]);
+  }, [
+    preferredFamily,
+    evmConnected,
+    solanaConnected,
+    hasActiveEvmWallet,
+    hasActiveSolanaWallet,
+  ]);
 
   // === Environment detection ===
   const [isFarcasterContext, setIsFarcasterContext] = useState(false);
@@ -340,7 +376,9 @@ export function MultiWalletProvider({
     }
 
     createAdapter();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [solanaWalletRaw]);
 
   // === Action handlers ===
@@ -377,8 +415,14 @@ export function MultiWalletProvider({
     [privyEvmWallet, evmConnected],
   );
 
-  const connectSolanaWallet = useCallback(() => connectWallet(), [connectWallet]);
-  const switchSolanaWallet = useCallback(() => connectWallet(), [connectWallet]);
+  const connectSolanaWallet = useCallback(
+    () => connectWallet(),
+    [connectWallet],
+  );
+  const switchSolanaWallet = useCallback(
+    () => connectWallet(),
+    [connectWallet],
+  );
 
   const disconnect = useCallback(async () => {
     if (evmConnected) disconnectWagmi();
@@ -422,7 +466,17 @@ export function MultiWalletProvider({
       hasWallet,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [evmConnected, solanaConnected, activeFamily, hasWallet, evmAddress, solanaPublicKey, preferredFamily, hasActiveEvmWallet, hasActiveSolanaWallet]);
+  }, [
+    evmConnected,
+    solanaConnected,
+    activeFamily,
+    hasWallet,
+    evmAddress,
+    solanaPublicKey,
+    preferredFamily,
+    hasActiveEvmWallet,
+    hasActiveSolanaWallet,
+  ]);
 
   const evmNetworkName = useMemo(() => {
     if (!chainId) return "Unknown";
@@ -436,7 +490,8 @@ export function MultiWalletProvider({
     return chainNames[chainId] ?? `Chain ${chainId}`;
   }, [chainId]);
 
-  const solanaNetworkName = process.env.NODE_ENV === "development" ? "Devnet" : "Mainnet";
+  const solanaNetworkName =
+    process.env.NODE_ENV === "development" ? "Devnet" : "Mainnet";
 
   const networkLabel = useMemo(() => {
     if (activeFamily === "evm") {
@@ -451,7 +506,14 @@ export function MultiWalletProvider({
       return isFarcasterContext ? "Farcaster" : "Signed In";
     }
     return "Not connected";
-  }, [activeFamily, selectedEVMChain, evmNetworkName, solanaNetworkName, privyAuthenticated, isFarcasterContext]);
+  }, [
+    activeFamily,
+    selectedEVMChain,
+    evmNetworkName,
+    solanaNetworkName,
+    privyAuthenticated,
+    isFarcasterContext,
+  ]);
 
   const entityId = useMemo(() => {
     if (activeFamily === "evm" && evmAddress) return evmAddress.toLowerCase();
@@ -459,7 +521,13 @@ export function MultiWalletProvider({
     // Fallback for social-only auth
     if (privyAuthenticated && privyUser?.id) return privyUser.id;
     return null;
-  }, [activeFamily, evmAddress, solanaPublicKey, privyAuthenticated, privyUser]);
+  }, [
+    activeFamily,
+    evmAddress,
+    solanaPublicKey,
+    privyAuthenticated,
+    privyUser,
+  ]);
 
   const paymentPairLabel = activeFamily === "solana" ? "USDC/SOL" : "USDC/ETH";
 

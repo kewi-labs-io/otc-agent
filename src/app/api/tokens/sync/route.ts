@@ -157,7 +157,9 @@ async function syncEvmToken(
 
         // Fetch token metadata
         // Use type assertion to bypass viem's strict authorizationList requirement
-        const readContract = client.readContract as (params: unknown) => Promise<unknown>;
+        const readContract = client.readContract as (
+          params: unknown,
+        ) => Promise<unknown>;
         const [symbol, name, decimals] = await Promise.all([
           readContract({
             address: tokenAddress as `0x${string}`,
@@ -195,7 +197,10 @@ async function syncEvmToken(
           `[Sync ${chain.toUpperCase()}] ✅ Registered ${symbol} (${tokenAddress})`,
         );
       } catch (error) {
-        console.error(`[Sync ${chain.toUpperCase()}] Failed to process event:`, error);
+        console.error(
+          `[Sync ${chain.toUpperCase()}] Failed to process event:`,
+          error,
+        );
       }
     }
 

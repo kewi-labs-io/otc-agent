@@ -46,7 +46,9 @@ export class ConsignmentService {
     }
 
     if (BigInt(params.amount) < BigInt(params.minDealAmount)) {
-      throw new Error(`Total amount (${params.amount}) must be at least minDealAmount (${params.minDealAmount})`);
+      throw new Error(
+        `Total amount (${params.amount}) must be at least minDealAmount (${params.minDealAmount})`,
+      );
     }
 
     if (params.minDiscountBps > params.maxDiscountBps) {
@@ -150,8 +152,8 @@ export class ConsignmentService {
           ? filters.requesterAddress!
           : filters.requesterAddress!.toLowerCase();
         if (isSolana) {
-        if (c.consignerAddress === requester) return true;
-        if (c.allowedBuyers?.includes(requester)) return true;
+          if (c.consignerAddress === requester) return true;
+          if (c.allowedBuyers?.includes(requester)) return true;
         } else {
           if (c.consignerAddress.toLowerCase() === requester) return true;
           if (c.allowedBuyers?.some((b) => b.toLowerCase() === requester))

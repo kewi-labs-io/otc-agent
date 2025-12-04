@@ -63,7 +63,6 @@ export function MyListingsTab({ listings, onRefresh }: MyListingsTabProps) {
           />
         ))}
       </div>
-
     </div>
   );
 }

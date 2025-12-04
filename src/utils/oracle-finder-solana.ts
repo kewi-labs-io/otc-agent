@@ -244,7 +244,7 @@ export function formatOracleInfo(oracle: SolanaOracleInfo): string {
   const tvl = oracle.liquidity
     ? ` - TVL: $${oracle.liquidity.toLocaleString()}`
     : "";
-    
+
   switch (oracle.type) {
     case "pyth":
       return "Pyth Price Feed (Most Reliable)";

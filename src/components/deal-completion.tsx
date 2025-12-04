@@ -44,11 +44,19 @@ export function DealCompletion({ quote }: DealCompletionProps) {
   // Memoized derived values
   const { discountPercent, roi, maturityDate } = useMemo(() => {
     const dp = quote.discountBps / 100;
-    const r = quote.discountedUsd > 0 ? (quote.discountUsd / quote.discountedUsd) * 100 : 0;
+    const r =
+      quote.discountedUsd > 0
+        ? (quote.discountUsd / quote.discountedUsd) * 100
+        : 0;
     const md = new Date();
     md.setMonth(md.getMonth() + quote.lockupMonths);
     return { discountPercent: dp, roi: r, maturityDate: md };
-  }, [quote.discountBps, quote.discountedUsd, quote.discountUsd, quote.lockupMonths]);
+  }, [
+    quote.discountBps,
+    quote.discountedUsd,
+    quote.discountUsd,
+    quote.lockupMonths,
+  ]);
 
   const projectedYield = 0; // No yield; discount-only instrument
 
@@ -60,7 +68,11 @@ export function DealCompletion({ quote }: DealCompletionProps) {
         hasPostedRef.current = true;
 
         // Skip POST if quote is already executed or has no data
-        if (quote.status !== "executed" && quote.tokenAmount && quote.tokenAmount !== "0") {
+        if (
+          quote.status !== "executed" &&
+          quote.tokenAmount &&
+          quote.tokenAmount !== "0"
+        ) {
           try {
             await fetch("/api/deal-completion", {
               method: "POST",

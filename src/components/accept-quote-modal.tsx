@@ -64,7 +64,10 @@ type ModalAction =
   | { type: "SET_REQUIRE_APPROVER"; payload: boolean }
   | { type: "SET_CONTRACT_VALID"; payload: boolean }
   | { type: "SET_SOLANA_TOKEN_MINT"; payload: string | null }
-  | { type: "RESET"; payload: { tokenAmount: number; currency: "ETH" | "USDC" | "SOL" } }
+  | {
+      type: "RESET";
+      payload: { tokenAmount: number; currency: "ETH" | "USDC" | "SOL" };
+    }
   | { type: "START_TRANSACTION" }
   | { type: "TRANSACTION_ERROR"; payload: string };
 
@@ -99,7 +102,12 @@ function modalReducer(state: ModalState, action: ModalAction): ModalState {
     case "START_TRANSACTION":
       return { ...state, error: null, isProcessing: true, step: "creating" };
     case "TRANSACTION_ERROR":
-      return { ...state, error: action.payload, isProcessing: false, step: "amount" };
+      return {
+        ...state,
+        error: action.payload,
+        isProcessing: false,
+        step: "amount",
+      };
     default:
       return state;
   }
@@ -149,17 +157,22 @@ export function AcceptQuoteModal({
   const networkEnv = (process.env.NEXT_PUBLIC_NETWORK || "testnet") as string;
   const isMainnet = networkEnv === "mainnet";
   const isLocal = networkEnv === "local" || networkEnv === "localnet";
-  
+
   const rpcUrl = useMemo(() => {
     if (isLocal) {
-    return process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
+      return process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
     }
     // Use Base RPC for EVM (mainnet or testnet)
-    return process.env.NEXT_PUBLIC_BASE_RPC_URL || 
-      (isMainnet ? "https://mainnet.base.org" : "https://sepolia.base.org");
+    return (
+      process.env.NEXT_PUBLIC_BASE_RPC_URL ||
+      (isMainnet ? "https://mainnet.base.org" : "https://sepolia.base.org")
+    );
   }, [isLocal, isMainnet]);
 
-  const isLocalRpc = useMemo(() => /localhost|127\.0\.0\.1/.test(rpcUrl), [rpcUrl]);
+  const isLocalRpc = useMemo(
+    () => /localhost|127\.0\.0\.1/.test(rpcUrl),
+    [rpcUrl],
+  );
 
   const readChain = useMemo(() => {
     if (isLocalRpc) {
@@ -182,7 +195,13 @@ export function AcceptQuoteModal({
 
   // --- Consolidated State ---
   const initialState: ModalState = {
-    tokenAmount: Math.min(ONE_MILLION, Math.max(MIN_TOKENS, initialQuote?.tokenAmount ? Number(initialQuote.tokenAmount) : 1000)),
+    tokenAmount: Math.min(
+      ONE_MILLION,
+      Math.max(
+        MIN_TOKENS,
+        initialQuote?.tokenAmount ? Number(initialQuote.tokenAmount) : 1000,
+      ),
+    ),
     currency: activeFamily === "solana" ? "SOL" : "ETH",
     step: "amount",
     isProcessing: false,
@@ -193,14 +212,27 @@ export function AcceptQuoteModal({
   };
 
   const [state, dispatch] = useReducer(modalReducer, initialState);
-  const { tokenAmount, currency, step, isProcessing, error, requireApprover, contractValid, solanaTokenMint } = state;
+  const {
+    tokenAmount,
+    currency,
+    step,
+    isProcessing,
+    error,
+    requireApprover,
+    contractValid,
+    solanaTokenMint,
+  } = state;
 
   const { handleTransactionError } = useTransactionErrorHandler();
   const { login, ready: privyReady } = usePrivy();
   const isSolanaActive = activeFamily === "solana";
-  const SOLANA_RPC = (process.env.NEXT_PUBLIC_SOLANA_RPC as string | undefined) || "http://127.0.0.1:8899";
+  const SOLANA_RPC =
+    (process.env.NEXT_PUBLIC_SOLANA_RPC as string | undefined) ||
+    "http://127.0.0.1:8899";
   const SOLANA_DESK = process.env.NEXT_PUBLIC_SOLANA_DESK as string | undefined;
-  const SOLANA_USDC_MINT = process.env.NEXT_PUBLIC_SOLANA_USDC_MINT as string | undefined;
+  const SOLANA_USDC_MINT = process.env.NEXT_PUBLIC_SOLANA_USDC_MINT as
+    | string
+    | undefined;
 
   // Wallet balances for display and MAX calculation
   const ethBalance = useBalance({ address });
@@ -214,7 +246,15 @@ export function AcceptQuoteModal({
       dispatch({
         type: "RESET",
         payload: {
-          tokenAmount: Math.min(ONE_MILLION, Math.max(MIN_TOKENS, initialQuote?.tokenAmount ? Number(initialQuote.tokenAmount) : 1000)),
+          tokenAmount: Math.min(
+            ONE_MILLION,
+            Math.max(
+              MIN_TOKENS,
+              initialQuote?.tokenAmount
+                ? Number(initialQuote.tokenAmount)
+                : 1000,
+            ),
+          ),
           currency: activeFamily === "solana" ? "SOL" : "ETH",
         },
       });
@@ -224,7 +264,7 @@ export function AcceptQuoteModal({
   // Look up Solana token mint from database based on quote symbol
   useEffect(() => {
     if (!isOpen || !isSolanaActive || !initialQuote?.tokenSymbol) return;
-    
+
     (async () => {
       try {
         const res = await fetch(`/api/tokens?chain=solana`);
@@ -232,10 +272,13 @@ export function AcceptQuoteModal({
         if (data.success && data.tokens) {
           const token = data.tokens.find(
             (t: { symbol: string; contractAddress: string }) =>
-              t.symbol.toUpperCase() === initialQuote.tokenSymbol.toUpperCase()
+              t.symbol.toUpperCase() === initialQuote.tokenSymbol.toUpperCase(),
           );
           if (token) {
-            dispatch({ type: "SET_SOLANA_TOKEN_MINT", payload: token.contractAddress });
+            dispatch({
+              type: "SET_SOLANA_TOKEN_MINT",
+              payload: token.contractAddress,
+            });
           }
         }
       } catch (err) {
@@ -273,9 +316,15 @@ export function AcceptQuoteModal({
       });
 
       if (!code || code === "0x") {
-        console.error(`[AcceptQuote] No contract at ${otcAddress} on ${readChain.name}.`);
+        console.error(
+          `[AcceptQuote] No contract at ${otcAddress} on ${readChain.name}.`,
+        );
         dispatch({ type: "SET_CONTRACT_VALID", payload: false });
-        dispatch({ type: "SET_ERROR", payload: "Contract not found. Ensure Anvil node is running and contracts are deployed." });
+        dispatch({
+          type: "SET_ERROR",
+          payload:
+            "Contract not found. Ensure Anvil node is running and contracts are deployed.",
+        });
         return;
       }
 
@@ -283,7 +332,9 @@ export function AcceptQuoteModal({
 
       // Read contract state
       // Use type assertion to bypass viem's strict authorizationList requirement
-      const readContract = publicClient.readContract as (params: unknown) => Promise<unknown>;
+      const readContract = publicClient.readContract as (
+        params: unknown,
+      ) => Promise<unknown>;
       const flag = (await readContract({
         address: otcAddress as `0x${string}`,
         abi: abi as Abi,
@@ -324,12 +375,18 @@ export function AcceptQuoteModal({
     return Math.max(MIN_TOKENS, Math.min(ONE_MILLION, v));
   }, [maxTokenPerOrder]);
 
-  const clampAmount = useCallback((value: number) =>
-    Math.min(contractMaxTokens, Math.max(MIN_TOKENS, Math.floor(value))), [contractMaxTokens]);
-  
-  const setTokenAmount = useCallback((value: number) => {
-    dispatch({ type: "SET_TOKEN_AMOUNT", payload: clampAmount(value) });
-  }, [clampAmount]);
+  const clampAmount = useCallback(
+    (value: number) =>
+      Math.min(contractMaxTokens, Math.max(MIN_TOKENS, Math.floor(value))),
+    [contractMaxTokens],
+  );
+
+  const setTokenAmount = useCallback(
+    (value: number) => {
+      dispatch({ type: "SET_TOKEN_AMOUNT", payload: clampAmount(value) });
+    },
+    [clampAmount],
+  );
 
   const setCurrency = useCallback((value: "ETH" | "USDC" | "SOL") => {
     dispatch({ type: "SET_CURRENCY", payload: value });
@@ -344,7 +401,9 @@ export function AcceptQuoteModal({
   async function readNextOfferId(): Promise<bigint> {
     if (!otcAddress) throw new Error("Missing OTC address");
     // Use type assertion to bypass viem's strict authorizationList requirement
-    const readContract = publicClient.readContract as (params: unknown) => Promise<unknown>;
+    const readContract = publicClient.readContract as (
+      params: unknown,
+    ) => Promise<unknown>;
     return (await readContract({
       address: otcAddress as `0x${string}`,
       abi: abi as Abi,
@@ -374,7 +433,9 @@ export function AcceptQuoteModal({
   async function readOffer(offerId: bigint): Promise<OfferTuple> {
     if (!otcAddress) throw new Error("Missing OTC address");
     // Use type assertion to bypass viem's strict authorizationList requirement
-    const readContract = publicClient.readContract as (params: unknown) => Promise<unknown>;
+    const readContract = publicClient.readContract as (
+      params: unknown,
+    ) => Promise<unknown>;
     return (await readContract({
       address: otcAddress as `0x${string}`,
       abi: abi as Abi,
@@ -454,13 +515,21 @@ export function AcceptQuoteModal({
 
     // CRITICAL: Quote must exist
     if (!initialQuote?.quoteId) {
-      dispatch({ type: "SET_ERROR", payload: "No quote ID available. Please request a quote from the chat first." });
+      dispatch({
+        type: "SET_ERROR",
+        payload:
+          "No quote ID available. Please request a quote from the chat first.",
+      });
       return;
     }
 
     // Block if contract isn't valid (EVM only)
     if (!isSolanaActive && !contractValid) {
-      dispatch({ type: "SET_ERROR", payload: "Contract not available. Please ensure Anvil node is running and contracts are deployed." });
+      dispatch({
+        type: "SET_ERROR",
+        payload:
+          "Contract not available. Please ensure Anvil node is running and contracts are deployed.",
+      });
       return;
     }
 
@@ -473,7 +542,9 @@ export function AcceptQuoteModal({
       const txError = {
         ...error,
         message: error.message,
-        cause: error.cause as { reason?: string; code?: string | number } | undefined,
+        cause: error.cause as
+          | { reason?: string; code?: string | number }
+          | undefined,
         details: (error as { details?: string }).details,
         shortMessage: (error as { shortMessage?: string }).shortMessage,
       };
@@ -481,7 +552,13 @@ export function AcceptQuoteModal({
       dispatch({ type: "TRANSACTION_ERROR", payload: errorMessage });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walletConnected, initialQuote?.quoteId, isSolanaActive, contractValid, handleTransactionError]);
+  }, [
+    walletConnected,
+    initialQuote?.quoteId,
+    isSolanaActive,
+    contractValid,
+    handleTransactionError,
+  ]);
 
   const executeTransaction = async () => {
     /**
@@ -607,11 +684,7 @@ export function AcceptQuoteModal({
 
       // Derive token registry PDA for multi-token support
       const [tokenRegistryPda] = SolPubkey.findProgramAddressSync(
-        [
-          Buffer.from("registry"),
-          desk.toBuffer(),
-          tokenMintPk.toBuffer(),
-        ],
+        [Buffer.from("registry"), desk.toBuffer(), tokenMintPk.toBuffer()],
         program.programId,
       );
       console.log("Token registry PDA:", tokenRegistryPda.toString());
@@ -697,7 +770,11 @@ export function AcceptQuoteModal({
 
       // Save deal completion to database
       if (!initialQuote?.quoteId) {
-        dispatch({ type: "TRANSACTION_ERROR", payload: "No quote ID - you must get a quote from the chat before buying." });
+        dispatch({
+          type: "TRANSACTION_ERROR",
+          payload:
+            "No quote ID - you must get a quote from the chat before buying.",
+        });
         return;
       }
 
@@ -1008,7 +1085,7 @@ export function AcceptQuoteModal({
   const handleConnectForChain = (requiredChain: "solana" | "evm") => {
     console.log(`[AcceptQuote] Connecting for ${requiredChain}...`);
     if (requiredChain === "solana") {
-    setActiveFamily("solana");
+      setActiveFamily("solana");
     } else {
       setActiveFamily("evm");
     }
@@ -1071,15 +1148,24 @@ export function AcceptQuoteModal({
                     . Please switch networks to continue.
                   </p>
                   <div className="flex gap-2">
-                      <Button
-                      onClick={() => handleConnectForChain(quoteChain === "solana" ? "solana" : "evm")}
+                    <Button
+                      onClick={() =>
+                        handleConnectForChain(
+                          quoteChain === "solana" ? "solana" : "evm",
+                        )
+                      }
                       className={`!h-8 !px-3 !text-xs ${quoteChain === "solana" ? "bg-gradient-to-br from-[#9945FF] to-[#14F195]" : "bg-gradient-to-br from-blue-600 to-blue-800"} hover:brightness-110`}
-                      >
-                        <div className="flex items-center gap-2">
-                        {quoteChain === "solana" ? <SolanaLogo className="w-4 h-4" /> : <EVMLogo className="w-4 h-4" />}
-                        Connect {quoteChain === "solana" ? "Solana" : "EVM"} Wallet
-                        </div>
-                      </Button>
+                    >
+                      <div className="flex items-center gap-2">
+                        {quoteChain === "solana" ? (
+                          <SolanaLogo className="w-4 h-4" />
+                        ) : (
+                          <EVMLogo className="w-4 h-4" />
+                        )}
+                        Connect {quoteChain === "solana" ? "Solana" : "EVM"}{" "}
+                        Wallet
+                      </div>
+                    </Button>
                     <Button
                       onClick={onClose}
                       className="!h-8 !px-3 !text-xs bg-zinc-800 hover:bg-zinc-700"
@@ -1259,16 +1345,27 @@ export function AcceptQuoteModal({
                         {privyReady ? "Connect Wallet" : "Loading..."}
                       </Button>
                       <p className="text-xs text-zinc-500 mt-4">
-                        Supports Farcaster, MetaMask, Phantom, Coinbase Wallet & more
+                        Supports Farcaster, MetaMask, Phantom, Coinbase Wallet &
+                        more
                       </p>
-                            </div>
+                    </div>
                   </div>
                 </div>
                 <div className="p-3 sm:p-4 text-xs text-zinc-400">
                   {quoteChain ? (
-                    <>This token is on <span className="font-semibold">{quoteChain === "solana" ? "Solana" : quoteChain.toUpperCase()}</span>. Connect a compatible wallet to buy.</>
+                    <>
+                      This token is on{" "}
+                      <span className="font-semibold">
+                        {quoteChain === "solana"
+                          ? "Solana"
+                          : quoteChain.toUpperCase()}
+                      </span>
+                      . Connect a compatible wallet to buy.
+                    </>
                   ) : (
-                    <>Connect a wallet to continue and complete your purchase.</>
+                    <>
+                      Connect a wallet to continue and complete your purchase.
+                    </>
                   )}
                 </div>
               </div>

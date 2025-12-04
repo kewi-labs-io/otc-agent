@@ -85,7 +85,9 @@ export async function GET(request: NextRequest) {
       abi,
       functionName: "offers",
       args: [i],
-    } as unknown as Parameters<typeof publicClient.readContract>[0])) as RawOfferData;
+    } as unknown as Parameters<
+      typeof publicClient.readContract
+    >[0])) as RawOfferData;
 
     // Offer struct indices (from OTC.sol):
     // 0: consignmentId, 1: tokenId, 2: beneficiary, 3: tokenAmount, 4: discountBps,
@@ -96,21 +98,31 @@ export async function GET(request: NextRequest) {
     if (!Array.isArray(offerData)) continue;
 
     const [
-      ,              // 0: consignmentId
-      ,              // 1: tokenId
-      beneficiary,   // 2: beneficiary
-      ,              // 3: tokenAmount
-      ,              // 4: discountBps
-      ,              // 5: createdAt
-      unlockTime,    // 6: unlockTime
-      ,              // 7: priceUsdPerToken
-      ,              // 8: maxPriceDeviation
-      ,              // 9: ethUsdPrice
-      ,              // 10: currency
-      ,              // 11: approved
-      paid,          // 12: paid
-      fulfilled,     // 13: fulfilled
-      cancelled,     // 14: cancelled
+      ,
+      ,
+      // 0: consignmentId
+      // 1: tokenId
+      beneficiary, // 2: beneficiary
+      ,
+      ,
+      ,
+      // 3: tokenAmount
+      // 4: discountBps
+      // 5: createdAt
+      unlockTime, // 6: unlockTime
+      ,
+      ,
+      ,
+      ,
+      ,
+      // 7: priceUsdPerToken
+      // 8: maxPriceDeviation
+      // 9: ethUsdPrice
+      // 10: currency
+      // 11: approved
+      paid, // 12: paid
+      fulfilled, // 13: fulfilled
+      cancelled, // 14: cancelled
     ] = offerData;
 
     // Matured = paid, not fulfilled, not cancelled, and unlockTime passed

@@ -22,19 +22,31 @@ interface CachedTokenMetadata {
   logoUrl?: string;
 }
 
-async function getCachedMetadata(chain: string, address: string): Promise<CachedTokenMetadata | null> {
+async function getCachedMetadata(
+  chain: string,
+  address: string,
+): Promise<CachedTokenMetadata | null> {
   try {
     const runtime = await agentRuntime.getRuntime();
-    return await runtime.getCache<CachedTokenMetadata>(`evm-metadata:${chain}:${address.toLowerCase()}`);
+    return await runtime.getCache<CachedTokenMetadata>(
+      `evm-metadata:${chain}:${address.toLowerCase()}`,
+    );
   } catch {
     return null;
   }
 }
 
-async function setCachedMetadata(chain: string, address: string, metadata: CachedTokenMetadata): Promise<void> {
+async function setCachedMetadata(
+  chain: string,
+  address: string,
+  metadata: CachedTokenMetadata,
+): Promise<void> {
   try {
     const runtime = await agentRuntime.getRuntime();
-    await runtime.setCache(`evm-metadata:${chain}:${address.toLowerCase()}`, metadata);
+    await runtime.setCache(
+      `evm-metadata:${chain}:${address.toLowerCase()}`,
+      metadata,
+    );
   } catch {
     // Ignore
   }
@@ -51,20 +63,31 @@ interface CachedWalletBalances {
   cachedAt: number;
 }
 
-async function getCachedWalletBalances(chain: string, address: string): Promise<TokenBalance[] | null> {
+async function getCachedWalletBalances(
+  chain: string,
+  address: string,
+): Promise<TokenBalance[] | null> {
   try {
     const runtime = await agentRuntime.getRuntime();
-    const cached = await runtime.getCache<CachedWalletBalances>(`evm-wallet:${chain}:${address.toLowerCase()}`);
+    const cached = await runtime.getCache<CachedWalletBalances>(
+      `evm-wallet:${chain}:${address.toLowerCase()}`,
+    );
     if (!cached) return null;
     if (Date.now() - cached.cachedAt >= WALLET_CACHE_TTL_MS) return null;
-    console.log(`[EVM Balances] Using cached wallet data (${cached.tokens.length} tokens)`);
+    console.log(
+      `[EVM Balances] Using cached wallet data (${cached.tokens.length} tokens)`,
+    );
     return cached.tokens;
   } catch {
     return null;
   }
 }
 
-async function setCachedWalletBalances(chain: string, address: string, tokens: TokenBalance[]): Promise<void> {
+async function setCachedWalletBalances(
+  chain: string,
+  address: string,
+  tokens: TokenBalance[],
+): Promise<void> {
   try {
     const runtime = await agentRuntime.getRuntime();
     await runtime.setCache(`evm-wallet:${chain}:${address.toLowerCase()}`, {
@@ -80,9 +103,11 @@ async function setCachedWalletBalances(chain: string, address: string, tokens: T
  * Cache an image URL to Vercel Blob storage
  * Returns the cached blob URL, or null if caching fails
  */
-async function cacheImageToBlob(imageUrl: string | null): Promise<string | null> {
+async function cacheImageToBlob(
+  imageUrl: string | null,
+): Promise<string | null> {
   if (!imageUrl) return null;
-  
+
   // Skip if already a blob URL
   if (imageUrl.includes("blob.vercel-storage.com")) {
     return imageUrl;
@@ -147,7 +172,10 @@ const MIN_TOKEN_BALANCE = 1; // At least 1 token (human-readable)
 const MIN_VALUE_USD = 0.001; // $0.001 minimum if we have a price (basically nothing)
 
 // Chain configs
-const CHAIN_CONFIG: Record<string, { alchemyNetwork: string; coingeckoPlatform: string }> = {
+const CHAIN_CONFIG: Record<
+  string,
+  { alchemyNetwork: string; coingeckoPlatform: string }
+> = {
   base: {
     alchemyNetwork: "base-mainnet",
     coingeckoPlatform: "base",
@@ -163,10 +191,15 @@ interface CachedPrice {
   cachedAt: number;
 }
 
-async function getCachedPrice(chain: string, address: string): Promise<number | null> {
+async function getCachedPrice(
+  chain: string,
+  address: string,
+): Promise<number | null> {
   try {
     const runtime = await agentRuntime.getRuntime();
-    const cached = await runtime.getCache<CachedPrice>(`token-price:${chain}:${address.toLowerCase()}`);
+    const cached = await runtime.getCache<CachedPrice>(
+      `token-price:${chain}:${address.toLowerCase()}`,
+    );
     if (!cached) return null;
     if (Date.now() - cached.cachedAt >= PRICE_CACHE_TTL_MS) return null;
     return cached.priceUsd;
@@ -175,7 +208,11 @@ async function getCachedPrice(chain: string, address: string): Promise<number | 
   }
 }
 
-async function setCachedPrice(chain: string, address: string, priceUsd: number): Promise<void> {
+async function setCachedPrice(
+  chain: string,
+  address: string,
+  priceUsd: number,
+): Promise<void> {
   try {
     const runtime = await agentRuntime.getRuntime();
     await runtime.setCache(`token-price:${chain}:${address.toLowerCase()}`, {
@@ -193,7 +230,7 @@ async function setCachedPrice(chain: string, address: string, priceUsd: number):
 async function fetchAlchemyBalances(
   address: string,
   chain: string,
-  apiKey: string
+  apiKey: string,
 ): Promise<TokenBalance[]> {
   const config = CHAIN_CONFIG[chain];
   if (!config) return [];
@@ -215,26 +252,36 @@ async function fetchAlchemyBalances(
     });
 
     if (!balancesResponse.ok) {
-      console.error("[EVM Balances] getTokenBalances failed:", balancesResponse.status);
+      console.error(
+        "[EVM Balances] getTokenBalances failed:",
+        balancesResponse.status,
+      );
       return [];
     }
 
     const balancesData = await balancesResponse.json();
-    
+
     if (balancesData.error) {
-      console.error("[EVM Balances] Alchemy error:", balancesData.error.message);
+      console.error(
+        "[EVM Balances] Alchemy error:",
+        balancesData.error.message,
+      );
       return [];
     }
 
     const tokenBalances = balancesData.result?.tokenBalances || [];
-    
-    // Filter non-zero balances
-    const nonZeroBalances = tokenBalances.filter((t: { tokenBalance: string }) => {
-      const bal = t.tokenBalance;
-      return bal && bal !== "0x0" && bal !== "0x" && BigInt(bal) > 0n;
-    });
 
-    console.log(`[EVM Balances] Found ${nonZeroBalances.length} tokens with balance > 0`);
+    // Filter non-zero balances
+    const nonZeroBalances = tokenBalances.filter(
+      (t: { tokenBalance: string }) => {
+        const bal = t.tokenBalance;
+        return bal && bal !== "0x0" && bal !== "0x" && BigInt(bal) > 0n;
+      },
+    );
+
+    console.log(
+      `[EVM Balances] Found ${nonZeroBalances.length} tokens with balance > 0`,
+    );
 
     if (nonZeroBalances.length === 0) return [];
 
@@ -243,12 +290,12 @@ async function fetchAlchemyBalances(
       nonZeroBalances.map(async (t: { contractAddress: string }) => ({
         addr: t.contractAddress.toLowerCase(),
         cached: await getCachedMetadata(chain, t.contractAddress.toLowerCase()),
-      }))
+      })),
     );
-    
+
     const cachedMetadata: Record<string, CachedTokenMetadata> = {};
     const needsMetadata: string[] = [];
-    
+
     for (const { addr, cached } of cacheResults) {
       if (cached) {
         cachedMetadata[addr] = cached;
@@ -256,8 +303,10 @@ async function fetchAlchemyBalances(
         needsMetadata.push(addr);
       }
     }
-    
-    console.log(`[EVM Balances] ${Object.keys(cachedMetadata).length} cached, ${needsMetadata.length} need metadata`);
+
+    console.log(
+      `[EVM Balances] ${Object.keys(cachedMetadata).length} cached, ${needsMetadata.length} need metadata`,
+    );
 
     // Step 3: Fetch metadata for uncached tokens (parallel, fast)
     if (needsMetadata.length > 0) {
@@ -275,57 +324,63 @@ async function fetchAlchemyBalances(
               }),
               signal: AbortSignal.timeout(5000),
             });
-            
+
             if (metaRes.ok) {
               const metaData = await metaRes.json();
               const result = metaData.result || {};
-              
+
               const metadata: CachedTokenMetadata = {
                 symbol: result.symbol || "ERC20",
                 name: result.name || "Unknown Token",
                 decimals: result.decimals || 18,
                 logoUrl: result.logo || undefined,
               };
-              
+
               // Cache permanently
               setCachedMetadata(chain, contractAddress, metadata);
-              
+
               // Fire-and-forget image caching
               if (result.logo) {
                 cacheImageToBlob(result.logo).catch(() => {});
               }
-              
+
               return { contractAddress, metadata };
             }
           } catch {}
-          
-          return { 
-            contractAddress, 
-            metadata: { symbol: "ERC20", name: "Unknown Token", decimals: 18 } 
+
+          return {
+            contractAddress,
+            metadata: { symbol: "ERC20", name: "Unknown Token", decimals: 18 },
           };
-        })
+        }),
       );
-      
+
       for (const { contractAddress, metadata } of metadataResults) {
         cachedMetadata[contractAddress] = metadata;
       }
     }
 
     // Step 4: Build token list
-    const tokens: TokenBalance[] = nonZeroBalances.map((tokenData: { contractAddress: string; tokenBalance: string }) => {
-      const contractAddress = tokenData.contractAddress.toLowerCase();
-      const balance = BigInt(tokenData.tokenBalance).toString();
-      const metadata = cachedMetadata[contractAddress] || { symbol: "ERC20", name: "Unknown", decimals: 18 };
-      
-      return {
-        contractAddress,
-        symbol: metadata.symbol,
-        name: metadata.name,
-        decimals: metadata.decimals,
-        balance,
-        logoUrl: metadata.logoUrl,
-      };
-    });
+    const tokens: TokenBalance[] = nonZeroBalances.map(
+      (tokenData: { contractAddress: string; tokenBalance: string }) => {
+        const contractAddress = tokenData.contractAddress.toLowerCase();
+        const balance = BigInt(tokenData.tokenBalance).toString();
+        const metadata = cachedMetadata[contractAddress] || {
+          symbol: "ERC20",
+          name: "Unknown",
+          decimals: 18,
+        };
+
+        return {
+          contractAddress,
+          symbol: metadata.symbol,
+          name: metadata.name,
+          decimals: metadata.decimals,
+          balance,
+          logoUrl: metadata.logoUrl,
+        };
+      },
+    );
 
     return tokens;
   } catch (error) {
@@ -339,28 +394,29 @@ async function fetchAlchemyBalances(
  */
 async function fetchDeFiLlamaPrices(
   chain: string,
-  addresses: string[]
+  addresses: string[],
 ): Promise<Record<string, number>> {
   if (addresses.length === 0) return {};
-  
+
   // DeFiLlama chain identifiers
-  const llamaChain = chain === "base" ? "base" : chain === "bsc" ? "bsc" : chain;
-  
+  const llamaChain =
+    chain === "base" ? "base" : chain === "bsc" ? "bsc" : chain;
+
   try {
     // DeFiLlama accepts comma-separated list of chain:address
-    const coins = addresses.map(a => `${llamaChain}:${a}`).join(",");
+    const coins = addresses.map((a) => `${llamaChain}:${a}`).join(",");
     const url = `https://coins.llama.fi/prices/current/${coins}`;
-    
+
     const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    
+
     if (!response.ok) {
       console.log("[EVM Balances] DeFiLlama API error:", response.status);
       return {};
     }
-    
+
     const data = await response.json();
     const prices: Record<string, number> = {};
-    
+
     // Response format: { coins: { "chain:address": { price: number, ... } } }
     if (data.coins) {
       for (const [key, priceData] of Object.entries(data.coins)) {
@@ -371,8 +427,10 @@ async function fetchDeFiLlamaPrices(
         }
       }
     }
-    
-    console.log(`[EVM Balances] DeFiLlama returned ${Object.keys(prices).length} prices`);
+
+    console.log(
+      `[EVM Balances] DeFiLlama returned ${Object.keys(prices).length} prices`,
+    );
     return prices;
   } catch (error) {
     console.error("[EVM Balances] DeFiLlama error:", error);
@@ -385,40 +443,43 @@ async function fetchDeFiLlamaPrices(
  */
 async function fetchCoinGeckoPrices(
   chain: string,
-  addresses: string[]
+  addresses: string[],
 ): Promise<Record<string, number>> {
   if (addresses.length === 0) return {};
-  
+
   const config = CHAIN_CONFIG[chain];
   if (!config) return {};
 
   try {
     const addressList = addresses.join(",");
     const apiKey = process.env.COINGECKO_API_KEY;
-    
+
     const url = apiKey
       ? `https://pro-api.coingecko.com/api/v3/simple/token_price/${config.coingeckoPlatform}?contract_addresses=${addressList}&vs_currencies=usd`
       : `https://api.coingecko.com/api/v3/simple/token_price/${config.coingeckoPlatform}?contract_addresses=${addressList}&vs_currencies=usd`;
-    
+
     const headers: HeadersInit = {};
     if (apiKey) {
       headers["X-Cg-Pro-Api-Key"] = apiKey;
     }
-    
-    const response = await fetch(url, { headers, signal: AbortSignal.timeout(10000) });
-    
+
+    const response = await fetch(url, {
+      headers,
+      signal: AbortSignal.timeout(10000),
+    });
+
     if (!response.ok) return {};
-    
+
     const data = await response.json();
     const prices: Record<string, number> = {};
-    
+
     for (const [address, priceData] of Object.entries(data)) {
       const usd = (priceData as { usd?: number })?.usd;
       if (typeof usd === "number") {
         prices[address.toLowerCase()] = usd;
       }
     }
-    
+
     return prices;
   } catch {
     return {};
@@ -430,23 +491,25 @@ async function fetchCoinGeckoPrices(
  */
 async function fetchPrices(
   chain: string,
-  addresses: string[]
+  addresses: string[],
 ): Promise<Record<string, number>> {
   if (addresses.length === 0) return {};
-  
+
   // Try DeFiLlama first (better coverage for newer tokens)
   const llamaPrices = await fetchDeFiLlamaPrices(chain, addresses);
-  
+
   // Find addresses still missing prices
-  const missingAddresses = addresses.filter(a => !llamaPrices[a.toLowerCase()]);
-  
+  const missingAddresses = addresses.filter(
+    (a) => !llamaPrices[a.toLowerCase()],
+  );
+
   if (missingAddresses.length === 0) {
     return llamaPrices;
   }
-  
+
   // Try CoinGecko for remaining
   const geckoprices = await fetchCoinGeckoPrices(chain, missingAddresses);
-  
+
   return { ...llamaPrices, ...geckoprices };
 }
 
@@ -471,17 +534,18 @@ export async function GET(request: NextRequest) {
     if (cachedTokens) {
       return NextResponse.json({ tokens: cachedTokens });
     }
-    
-    const alchemyKey = process.env.ALCHEMY_API_KEY || process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
-    
+
+    const alchemyKey =
+      process.env.ALCHEMY_API_KEY || process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
+
     if (!alchemyKey) {
       console.error("[EVM Balances] ALCHEMY_API_KEY is required - add to .env");
-      return NextResponse.json({ 
-        tokens: [], 
-        error: "ALCHEMY_API_KEY required" 
+      return NextResponse.json({
+        tokens: [],
+        error: "ALCHEMY_API_KEY required",
       });
     }
-    
+
     console.log("[EVM Balances] Using Alchemy API");
     const tokens = await fetchAlchemyBalances(address, chain, alchemyKey);
 
@@ -490,19 +554,21 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch prices for tokens that don't have them
-    const tokensNeedingPrices = tokens.filter(t => !t.priceUsd);
+    const tokensNeedingPrices = tokens.filter((t) => !t.priceUsd);
     if (tokensNeedingPrices.length > 0) {
       // Check price cache (parallel lookups)
       const priceCacheResults = await Promise.all(
-        tokensNeedingPrices.map(async t => ({
+        tokensNeedingPrices.map(async (t) => ({
           addr: t.contractAddress,
           cached: await getCachedPrice(chain, t.contractAddress),
-        }))
+        })),
       );
-      
+
       const uncachedAddresses: string[] = [];
       for (const { addr, cached } of priceCacheResults) {
-        const token = tokensNeedingPrices.find(t => t.contractAddress === addr);
+        const token = tokensNeedingPrices.find(
+          (t) => t.contractAddress === addr,
+        );
         if (token) {
           if (cached !== null) {
             token.priceUsd = cached;
@@ -511,7 +577,7 @@ export async function GET(request: NextRequest) {
           }
         }
       }
-      
+
       // Fetch uncached prices (DeFiLlama + CoinGecko)
       if (uncachedAddresses.length > 0) {
         const prices = await fetchPrices(chain, uncachedAddresses);
@@ -531,17 +597,18 @@ export async function GET(request: NextRequest) {
     // Calculate USD values
     for (const token of tokens) {
       if (!token.balanceUsd && token.priceUsd) {
-        const humanBalance = Number(BigInt(token.balance)) / Math.pow(10, token.decimals);
+        const humanBalance =
+          Number(BigInt(token.balance)) / Math.pow(10, token.decimals);
         token.balanceUsd = humanBalance * token.priceUsd;
       }
     }
 
     // Filter only obvious dust - show tokens without prices too
-    const filteredTokens = tokens.filter(t => {
+    const filteredTokens = tokens.filter((t) => {
       const humanBalance = Number(BigInt(t.balance)) / Math.pow(10, t.decimals);
       const balanceUsd = t.balanceUsd || 0;
       const hasPrice = t.priceUsd && t.priceUsd > 0;
-      
+
       // If we have a price, use minimal USD filter
       if (hasPrice && balanceUsd < MIN_VALUE_USD) {
         return false;
@@ -554,23 +621,25 @@ export async function GET(request: NextRequest) {
     filteredTokens.sort((a, b) => {
       const aHasPrice = a.priceUsd && a.priceUsd > 0;
       const bHasPrice = b.priceUsd && b.priceUsd > 0;
-      
+
       // Priced tokens come first
       if (aHasPrice && !bHasPrice) return -1;
       if (!aHasPrice && bHasPrice) return 1;
-      
+
       // Both priced: sort by USD value
       if (aHasPrice && bHasPrice) {
         return (b.balanceUsd || 0) - (a.balanceUsd || 0);
       }
-      
+
       // Both unpriced: sort by token balance
       const aBalance = Number(BigInt(a.balance)) / Math.pow(10, a.decimals);
       const bBalance = Number(BigInt(b.balance)) / Math.pow(10, b.decimals);
       return bBalance - aBalance;
     });
 
-    console.log(`[EVM Balances] ${tokens.length} total -> ${filteredTokens.length} after dust filter`);
+    console.log(
+      `[EVM Balances] ${tokens.length} total -> ${filteredTokens.length} after dust filter`,
+    );
 
     // Cache the result for 30 seconds
     await setCachedWalletBalances(chain, address, filteredTokens);
@@ -581,4 +650,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ tokens: [] });
   }
 }
-

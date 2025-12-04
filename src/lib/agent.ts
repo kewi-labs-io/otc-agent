@@ -15,7 +15,8 @@ const character: Character = {
   plugins: [],
   settings: {
     SMALL_GROQ_MODEL: process.env.SMALL_GROQ_MODEL || "qwen/qwen3-32b",
-    LARGE_GROQ_MODEL: process.env.LARGE_GROQ_MODEL || "moonshotai/kimi-k2-instruct-0905",
+    LARGE_GROQ_MODEL:
+      process.env.LARGE_GROQ_MODEL || "moonshotai/kimi-k2-instruct-0905",
     POSTGRES_URL:
       process.env.POSTGRES_URL ||
       process.env.POSTGRES_DATABASE_URL ||

@@ -83,4 +83,3 @@ export function formatTokenAmount(amount: string | number): string {
     return num.toLocaleString();
   }
 }
-

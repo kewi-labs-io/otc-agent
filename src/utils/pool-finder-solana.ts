@@ -35,7 +35,7 @@ export interface SolanaPoolInfo {
   priceUsd?: number;
   baseToken: "SOL" | "USDC";
   // PumpSwap-specific vault addresses (for on-chain price updates)
-  solVault?: string;   // SOL vault account (lamports)
+  solVault?: string; // SOL vault account (lamports)
   tokenVault?: string; // Token vault account (SPL tokens)
 }
 
@@ -314,14 +314,20 @@ async function findPumpSwapPools(
           // If baseMint is SOL/USDC, then poolBaseTokenAccount holds SOL/USDC
           const isSolBase = baseMint.equals(SOL_MINT);
           const isUsdcBase = baseMint.equals(USDC_MINT);
-          
+
           // For price updates, we need the SOL vault and token vault
           // SOL vault: holds the SOL (lamports) - for SOL pairs
           // Token vault: holds the SPL tokens
-          const solVault = isSolBase ? poolBaseTokenAccount.toBase58() : 
-                          (quoteMint.equals(SOL_MINT) ? poolQuoteTokenAccount.toBase58() : undefined);
-          const tokenVault = isSolBase || isUsdcBase ? poolQuoteTokenAccount.toBase58() : poolBaseTokenAccount.toBase58();
-          
+          const solVault = isSolBase
+            ? poolBaseTokenAccount.toBase58()
+            : quoteMint.equals(SOL_MINT)
+              ? poolQuoteTokenAccount.toBase58()
+              : undefined;
+          const tokenVault =
+            isSolBase || isUsdcBase
+              ? poolQuoteTokenAccount.toBase58()
+              : poolBaseTokenAccount.toBase58();
+
           pools.push({
             protocol: "PumpSwap",
             address: account.pubkey.toBase58(),

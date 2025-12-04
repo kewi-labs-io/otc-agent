@@ -70,8 +70,13 @@ function getLockupLabel(createdAt: bigint, unlockTime: bigint): string {
 }
 
 // --- Helper: Transform Solana deals from API to offer format ---
-function transformSolanaDeal(deal: DealFromAPI, walletAddress: string): OfferWithQuoteId {
-  const createdTs = deal.createdAt ? new Date(deal.createdAt).getTime() / 1000 : Date.now() / 1000;
+function transformSolanaDeal(
+  deal: DealFromAPI,
+  walletAddress: string,
+): OfferWithQuoteId {
+  const createdTs = deal.createdAt
+    ? new Date(deal.createdAt).getTime() / 1000
+    : Date.now() / 1000;
   const lockupDays = 180;
   const tokenAmountBigInt = BigInt(deal.tokenAmount || "0") * BigInt(1e18);
 
@@ -84,7 +89,8 @@ function transformSolanaDeal(deal: DealFromAPI, walletAddress: string): OfferWit
     unlockTime: BigInt(Math.floor(createdTs + lockupDays * 86400)),
     priceUsdPerToken: BigInt(100_000_000),
     ethUsdPrice: BigInt(10_000_000_000),
-    currency: deal.paymentCurrency === "SOL" || deal.paymentCurrency === "ETH" ? 0 : 1,
+    currency:
+      deal.paymentCurrency === "SOL" || deal.paymentCurrency === "ETH" ? 0 : 1,
     approved: true,
     paid: true,
     fulfilled: false,
@@ -96,8 +102,13 @@ function transformSolanaDeal(deal: DealFromAPI, walletAddress: string): OfferWit
 }
 
 // --- Helper: Transform EVM deal from API to offer format ---
-function transformEvmDeal(deal: DealFromAPI, walletAddress: string): OfferWithQuoteId {
-  const createdTs = deal.createdAt ? new Date(deal.createdAt).getTime() / 1000 : Date.now() / 1000;
+function transformEvmDeal(
+  deal: DealFromAPI,
+  walletAddress: string,
+): OfferWithQuoteId {
+  const createdTs = deal.createdAt
+    ? new Date(deal.createdAt).getTime() / 1000
+    : Date.now() / 1000;
   const lockupDays = deal.lockupMonths ? deal.lockupMonths * 30 : 150;
   const tokenAmountBigInt = BigInt(deal.tokenAmount || "0") * BigInt(1e18);
 
@@ -125,7 +136,7 @@ function transformEvmDeal(deal: DealFromAPI, walletAddress: string): OfferWithQu
 function mergeDealsWithOffers(
   dbDeals: DealFromAPI[],
   contractOffers: any[],
-  walletAddress: string
+  walletAddress: string,
 ): OfferWithQuoteId[] {
   const result: OfferWithQuoteId[] = [];
   const processedOfferIds = new Set<string>();
@@ -150,7 +161,13 @@ function mergeDealsWithOffers(
   const contractOnlyOffers = contractOffers.filter((o) => {
     const offerId = o.id.toString();
     if (processedOfferIds.has(offerId)) return false;
-    return o?.id != null && o?.tokenAmount > 0n && o?.paid && !o?.fulfilled && !o?.cancelled;
+    return (
+      o?.id != null &&
+      o?.tokenAmount > 0n &&
+      o?.paid &&
+      !o?.fulfilled &&
+      !o?.cancelled
+    );
   });
 
   result.push(...contractOnlyOffers.map((o) => ({ ...o, quoteId: undefined })));
@@ -158,13 +175,13 @@ function mergeDealsWithOffers(
 }
 
 export function MyDealsContent() {
-  const { 
-    activeFamily, 
-    setActiveFamily, 
-    evmAddress, 
-    solanaPublicKey, 
-    hasWallet, 
-    evmConnected, 
+  const {
+    activeFamily,
+    setActiveFamily,
+    evmAddress,
+    solanaPublicKey,
+    hasWallet,
+    evmConnected,
     solanaConnected,
     disconnect,
     networkLabel,
@@ -187,7 +204,13 @@ export function MyDealsContent() {
     if (!solanaConnected) {
       privyAuthenticated ? connectWallet() : login();
     }
-  }, [setActiveFamily, solanaConnected, privyAuthenticated, connectWallet, login]);
+  }, [
+    setActiveFamily,
+    solanaConnected,
+    privyAuthenticated,
+    connectWallet,
+    login,
+  ]);
 
   // Use connectWallet if already authenticated, login if not
   const handleConnect = useCallback(() => {
@@ -199,10 +222,11 @@ export function MyDealsContent() {
   }, [disconnect]);
 
   const networkName = activeFamily === "solana" ? "Solana" : "EVM";
-  
+
   // Current wallet address based on active family
-  const currentAddress = activeFamily === "solana" ? solanaPublicKey : evmAddress;
-  const displayAddress = currentAddress 
+  const currentAddress =
+    activeFamily === "solana" ? solanaPublicKey : evmAddress;
+  const displayAddress = currentAddress
     ? `${currentAddress.slice(0, 6)}...${currentAddress.slice(-4)}`
     : null;
   const {
@@ -218,7 +242,10 @@ export function MyDealsContent() {
   );
   const [sortAsc] = useState(true);
   const [refunding, setRefunding] = useState<bigint | null>(null);
-  const [refundStatus, setRefundStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [refundStatus, setRefundStatus] = useState<{
+    type: "success" | "error" | "info";
+    message: string;
+  } | null>(null);
   const [solanaDeals, setSolanaDeals] = useState<DealFromAPI[]>([]);
   const [evmDeals, setEvmDeals] = useState<DealFromAPI[]>([]);
   const [myListings, setMyListings] = useState<OTCConsignment[]>([]);
@@ -226,9 +253,7 @@ export function MyDealsContent() {
   const refreshListings = useCallback(async () => {
     // Solana addresses are Base58 and case-sensitive, EVM addresses are case-insensitive
     const walletAddr =
-      activeFamily === "solana"
-        ? solanaPublicKey
-        : evmAddress?.toLowerCase();
+      activeFamily === "solana" ? solanaPublicKey : evmAddress?.toLowerCase();
 
     if (!walletAddr) {
       setSolanaDeals([]);
@@ -266,11 +291,20 @@ export function MyDealsContent() {
   const inProgress = useMemo(() => {
     if (activeFamily === "solana") {
       const walletAddress = solanaPublicKey?.toString() || "";
-      return solanaDeals.map((deal) => transformSolanaDeal(deal, walletAddress));
+      return solanaDeals.map((deal) =>
+        transformSolanaDeal(deal, walletAddress),
+      );
     }
 
     return mergeDealsWithOffers(evmDeals, myOffers ?? [], evmAddress || "");
-  }, [myOffers, activeFamily, solanaDeals, evmDeals, solanaPublicKey, evmAddress]);
+  }, [
+    myOffers,
+    activeFamily,
+    solanaDeals,
+    evmDeals,
+    solanaPublicKey,
+    evmAddress,
+  ]);
 
   const sorted = useMemo(() => {
     const list = [...inProgress];
@@ -292,7 +326,7 @@ export function MyDealsContent() {
         <div className="text-center space-y-6 max-w-md mx-auto px-4">
           <h1 className="text-2xl sm:text-3xl font-semibold">My Deals</h1>
           <p className="text-zinc-600 dark:text-zinc-400">
-            {privyAuthenticated 
+            {privyAuthenticated
               ? "Connect a wallet to view your OTC deals and token listings."
               : "Sign in to view your OTC deals and token listings."}
           </p>
@@ -302,7 +336,11 @@ export function MyDealsContent() {
             disabled={!privyReady}
             className="!px-8 !py-3 !text-base"
           >
-            {privyReady ? (privyAuthenticated ? "Connect Wallet" : "Sign In") : "Loading..."}
+            {privyReady
+              ? privyAuthenticated
+                ? "Connect Wallet"
+                : "Sign In"
+              : "Loading..."}
           </Button>
           <p className="text-xs text-zinc-500 dark:text-zinc-500">
             Connect with Farcaster, MetaMask, Phantom, or other wallets
@@ -402,15 +440,17 @@ export function MyDealsContent() {
 
               {/* Status Message */}
               {refundStatus && (
-                <div className={`mb-4 p-3 rounded-lg border ${
-                  refundStatus.type === 'success' 
-                    ? 'bg-green-500/10 border-green-500/20 text-green-700 dark:text-green-400'
-                    : refundStatus.type === 'error'
-                    ? 'bg-red-500/10 border-red-500/20 text-red-700 dark:text-red-400'
-                    : 'bg-blue-500/10 border-blue-500/20 text-blue-700 dark:text-blue-400'
-                }`}>
+                <div
+                  className={`mb-4 p-3 rounded-lg border ${
+                    refundStatus.type === "success"
+                      ? "bg-green-500/10 border-green-500/20 text-green-700 dark:text-green-400"
+                      : refundStatus.type === "error"
+                        ? "bg-red-500/10 border-red-500/20 text-red-700 dark:text-red-400"
+                        : "bg-blue-500/10 border-blue-500/20 text-blue-700 dark:text-blue-400"
+                  }`}
+                >
                   <p className="text-sm">{refundStatus.message}</p>
-                  <button 
+                  <button
                     onClick={() => setRefundStatus(null)}
                     className="text-xs underline mt-1 opacity-70 hover:opacity-100"
                   >
@@ -425,172 +465,185 @@ export function MyDealsContent() {
                 </div>
               ) : inProgress.length === 0 ? (
                 <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-6 text-zinc-600 dark:text-zinc-400">
-                  No active {networkName} deals. Create one from the chat to get started.
+                  No active {networkName} deals. Create one from the chat to get
+                  started.
                 </div>
               ) : (
                 <div className="space-y-4">
-              {sorted.map((o, index) => {
-                const now = Math.floor(Date.now() / 1000);
-                const matured = Number(o.unlockTime) <= now;
-                const discountPct = Number(o.discountBps ?? 0n) / 100;
-                const lockup = getLockupLabel(o.createdAt, o.unlockTime);
-                const offerWithQuote = o as OfferWithQuoteId;
-                const uniqueKey =
-                  offerWithQuote.quoteId || o.id.toString() || `deal-${index}`;
+                  {sorted.map((o, index) => {
+                    const now = Math.floor(Date.now() / 1000);
+                    const matured = Number(o.unlockTime) <= now;
+                    const discountPct = Number(o.discountBps ?? 0n) / 100;
+                    const lockup = getLockupLabel(o.createdAt, o.unlockTime);
+                    const offerWithQuote = o as OfferWithQuoteId;
+                    const uniqueKey =
+                      offerWithQuote.quoteId ||
+                      o.id.toString() ||
+                      `deal-${index}`;
 
-                return (
-                  <div
-                    key={uniqueKey}
-                    className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 sm:p-6 space-y-4"
-                  >
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      <div>
-                        <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
-                          Amount
-                        </div>
-                        <div className="font-semibold">
-                          {formatTokenAmount(o.tokenAmount)} tokens
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
-                          Maturity Date
-                        </div>
-                        <div className="font-semibold">
-                          {formatDate(o.unlockTime)}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
-                          Discount
-                        </div>
-                        <span className="inline-flex items-center rounded-full bg-orange-600/15 text-orange-700 dark:text-orange-400 px-2 py-0.5 text-xs font-medium">
-                          {discountPct.toFixed(0)}%
-                        </span>
-                      </div>
-
-                      <div>
-                        <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
-                          Lockup Duration
-                        </div>
-                        <span className="inline-flex items-center rounded-full bg-zinc-500/10 text-zinc-700 dark:text-zinc-300 px-2 py-0.5 text-xs font-medium">
-                          {lockup}
-                        </span>
-                      </div>
-
-                      <div>
-                        <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
-                          Status
-                        </div>
-                        {matured ? (
-                          <span className="inline-flex items-center rounded-full bg-orange-600/15 text-orange-700 dark:text-orange-400 px-2 py-0.5 text-xs font-medium">
-                            Ready to Claim
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-amber-600/15 text-amber-700 dark:text-amber-400 px-2 py-0.5 text-xs font-medium">
-                            Locked
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
-                      <Button
-                        color="zinc"
-                        onClick={async () => {
-                          if (o.quoteId) {
-                            window.location.href = `/deal/${o.quoteId}`;
-                            return;
-                          }
-
-                          console.log(
-                            "[MyDeals] No quoteId, looking up by offerId:",
-                            o.id?.toString(),
-                          );
-
-                          const response = await fetch(
-                            `/api/quote/by-offer/${o.id}`,
-                          );
-                          if (response.redirected) {
-                            window.location.href = response.url;
-                          } else if (response.ok) {
-                            const data = await response.json();
-                            if (data.quoteId) {
-                              window.location.href = `/deal/${data.quoteId}`;
-                            } else {
-                              throw new Error("No quoteId in response");
-                            }
-                          } else {
-                            throw new Error(
-                              `Failed to lookup quote: ${response.status}`,
-                            );
-                          }
-                        }}
-                        className="!px-4 !py-2"
+                    return (
+                      <div
+                        key={uniqueKey}
+                        className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 sm:p-6 space-y-4"
                       >
-                        View Deal
-                      </Button>
-                      {matured && (
-                        <Button
-                          color="orange"
-                          disabled={isClaiming}
-                          onClick={async () => {
-                            await claim(o.id);
-                          }}
-                          className="!px-4 !py-2"
-                        >
-                          {isClaiming ? "Withdrawing…" : "Withdraw"}
-                        </Button>
-                      )}
-                      {emergencyRefundsEnabled && !matured && (
-                        <Button
-                          color="red"
-                          disabled={refunding === o.id}
-                          onClick={async () => {
-                            setRefundStatus(null);
-                            const createdAt = Number(o.createdAt);
-                            const now = Math.floor(Date.now() / 1000);
-                            const daysSinceCreation =
-                              (now - createdAt) / (24 * 60 * 60);
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          <div>
+                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
+                              Amount
+                            </div>
+                            <div className="font-semibold">
+                              {formatTokenAmount(o.tokenAmount)} tokens
+                            </div>
+                          </div>
 
-                            if (daysSinceCreation < 90) {
-                              const daysRemaining = Math.ceil(90 - daysSinceCreation);
-                              console.log(`[MyDeals] Refund not available yet, ${daysRemaining} days remaining`);
-                              setRefundStatus({
-                                type: 'info',
-                                message: `Emergency refund available in ${daysRemaining} days`,
-                              });
-                              return;
-                            }
+                          <div>
+                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
+                              Maturity Date
+                            </div>
+                            <div className="font-semibold">
+                              {formatDate(o.unlockTime)}
+                            </div>
+                          </div>
 
-                            // Proceed with refund
-                            setRefunding(o.id);
-                            try {
-                              await emergencyRefund(o.id);
-                              console.log("[MyDeals] Refund successful");
-                              setRefundStatus({ type: 'success', message: 'Refund successful' });
-                            } catch (err) {
-                              console.error("[MyDeals] Refund failed:", err);
-                              setRefundStatus({
-                                type: 'error',
-                                message: `Refund failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-                              });
-                            } finally {
-                              setRefunding(null);
-                            }
-                          }}
-                          title="Request emergency refund (90+ days)"
-                          className="!px-4 !py-2"
-                        >
-                          {refunding === o.id ? "Refunding..." : "Refund"}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                          <div>
+                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
+                              Discount
+                            </div>
+                            <span className="inline-flex items-center rounded-full bg-orange-600/15 text-orange-700 dark:text-orange-400 px-2 py-0.5 text-xs font-medium">
+                              {discountPct.toFixed(0)}%
+                            </span>
+                          </div>
+
+                          <div>
+                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
+                              Lockup Duration
+                            </div>
+                            <span className="inline-flex items-center rounded-full bg-zinc-500/10 text-zinc-700 dark:text-zinc-300 px-2 py-0.5 text-xs font-medium">
+                              {lockup}
+                            </span>
+                          </div>
+
+                          <div>
+                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
+                              Status
+                            </div>
+                            {matured ? (
+                              <span className="inline-flex items-center rounded-full bg-orange-600/15 text-orange-700 dark:text-orange-400 px-2 py-0.5 text-xs font-medium">
+                                Ready to Claim
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full bg-amber-600/15 text-amber-700 dark:text-amber-400 px-2 py-0.5 text-xs font-medium">
+                                Locked
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                          <Button
+                            color="zinc"
+                            onClick={async () => {
+                              if (o.quoteId) {
+                                window.location.href = `/deal/${o.quoteId}`;
+                                return;
+                              }
+
+                              console.log(
+                                "[MyDeals] No quoteId, looking up by offerId:",
+                                o.id?.toString(),
+                              );
+
+                              const response = await fetch(
+                                `/api/quote/by-offer/${o.id}`,
+                              );
+                              if (response.redirected) {
+                                window.location.href = response.url;
+                              } else if (response.ok) {
+                                const data = await response.json();
+                                if (data.quoteId) {
+                                  window.location.href = `/deal/${data.quoteId}`;
+                                } else {
+                                  throw new Error("No quoteId in response");
+                                }
+                              } else {
+                                throw new Error(
+                                  `Failed to lookup quote: ${response.status}`,
+                                );
+                              }
+                            }}
+                            className="!px-4 !py-2"
+                          >
+                            View Deal
+                          </Button>
+                          {matured && (
+                            <Button
+                              color="orange"
+                              disabled={isClaiming}
+                              onClick={async () => {
+                                await claim(o.id);
+                              }}
+                              className="!px-4 !py-2"
+                            >
+                              {isClaiming ? "Withdrawing…" : "Withdraw"}
+                            </Button>
+                          )}
+                          {emergencyRefundsEnabled && !matured && (
+                            <Button
+                              color="red"
+                              disabled={refunding === o.id}
+                              onClick={async () => {
+                                setRefundStatus(null);
+                                const createdAt = Number(o.createdAt);
+                                const now = Math.floor(Date.now() / 1000);
+                                const daysSinceCreation =
+                                  (now - createdAt) / (24 * 60 * 60);
+
+                                if (daysSinceCreation < 90) {
+                                  const daysRemaining = Math.ceil(
+                                    90 - daysSinceCreation,
+                                  );
+                                  console.log(
+                                    `[MyDeals] Refund not available yet, ${daysRemaining} days remaining`,
+                                  );
+                                  setRefundStatus({
+                                    type: "info",
+                                    message: `Emergency refund available in ${daysRemaining} days`,
+                                  });
+                                  return;
+                                }
+
+                                // Proceed with refund
+                                setRefunding(o.id);
+                                try {
+                                  await emergencyRefund(o.id);
+                                  console.log("[MyDeals] Refund successful");
+                                  setRefundStatus({
+                                    type: "success",
+                                    message: "Refund successful",
+                                  });
+                                } catch (err) {
+                                  console.error(
+                                    "[MyDeals] Refund failed:",
+                                    err,
+                                  );
+                                  setRefundStatus({
+                                    type: "error",
+                                    message: `Refund failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+                                  });
+                                } finally {
+                                  setRefunding(null);
+                                }
+                              }}
+                              title="Request emergency refund (90+ days)"
+                              className="!px-4 !py-2"
+                            >
+                              {refunding === o.id ? "Refunding..." : "Refund"}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </>
