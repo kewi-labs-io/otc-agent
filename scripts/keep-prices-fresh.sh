@@ -2,7 +2,7 @@
 # Keep price feeds fresh by periodically hitting the market-data API
 # This prevents stale price errors during development
 
-API_URL="${NEXT_PUBLIC_APP_URL:-http://localhost:5004}"
+API_URL="${NEXT_PUBLIC_APP_URL:-http://localhost:4444}"
 INTERVAL=60  # Refresh every 60 seconds
 
 echo "🔄 Price refresh daemon started (interval: ${INTERVAL}s)"

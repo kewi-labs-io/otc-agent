@@ -48,7 +48,13 @@ export class MarketDataService {
     tokenAddress: string,
     chain: Chain,
   ): Promise<TokenMarketData> {
-    const platformId = chain === "ethereum" ? "ethereum" : "base";
+    // Map chain to CoinGecko platform ID
+    const platformId =
+      chain === "bsc"
+        ? "binance-smart-chain"
+        : chain === "base"
+          ? "base"
+          : "ethereum";
     const url = this.coingeckoApiKey
       ? `https://pro-api.coingecko.com/api/v3/simple/token_price/${platformId}?contract_addresses=${tokenAddress}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true`
       : `https://api.coingecko.com/api/v3/simple/token_price/${platformId}?contract_addresses=${tokenAddress}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true`;
@@ -83,6 +89,7 @@ export class MarketDataService {
   private async fetchSolanaData(
     tokenAddress: string,
   ): Promise<TokenMarketData> {
+    // Solana addresses are Base58 encoded and case-sensitive - preserve original case
     // In local development without Birdeye, return mock data
     // The actual price comes from on-chain (desk.token_usd_price_8d)
     if (!this.birdeyeApiKey) {
@@ -93,7 +100,7 @@ export class MarketDataService {
       if (isLocalnet) {
         // Return placeholder data for localnet - actual price from on-chain
         return {
-          tokenId: `token-solana-${tokenAddress.toLowerCase()}`,
+          tokenId: `token-solana-${tokenAddress}`,
           priceUsd: 1.0, // Default $1, actual price set on-chain via set_prices
           marketCap: 1000000,
           volume24h: 10000,
@@ -120,7 +127,7 @@ export class MarketDataService {
     const data: BirdeyeResponse = await response.json();
 
     return {
-      tokenId: `token-solana-${tokenAddress.toLowerCase()}`,
+      tokenId: `token-solana-${tokenAddress}`,
       priceUsd: data.data.value,
       marketCap: data.data.value * data.data.liquidity,
       volume24h: data.data.volume24h,

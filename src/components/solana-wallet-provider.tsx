@@ -2,38 +2,36 @@
 
 import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
 import { ConnectionProvider } from "@solana/wallet-adapter-react";
-import { clusterApiUrl } from "@solana/web3.js";
 import { useMemo } from "react";
+import { SUPPORTED_CHAINS } from "@/config/chains";
 
 /**
- * Get Solana network environment consistent with config/chains.ts
+ * Get Solana network from unified chain config
  */
 function getSolanaNetwork(): WalletAdapterNetwork {
-  // Check for explicit mainnet flag (same as config/chains.ts)
-  if (process.env.NEXT_PUBLIC_USE_MAINNET === "true") {
-    return WalletAdapterNetwork.Mainnet;
-  }
-
-  // Development uses devnet (or localnet if configured)
-  if (process.env.NODE_ENV === "development") {
-    return WalletAdapterNetwork.Devnet;
-  }
-
-  // Production defaults to testnet unless mainnet flag is set
-  return WalletAdapterNetwork.Devnet;
+  const solanaConfig = SUPPORTED_CHAINS.solana;
+  if (solanaConfig.id === "solana-mainnet") return WalletAdapterNetwork.Mainnet;
+  if (solanaConfig.id === "solana-devnet") return WalletAdapterNetwork.Devnet;
+  if (solanaConfig.id === "solana-localnet") return WalletAdapterNetwork.Devnet;
+  return WalletAdapterNetwork.Mainnet;
 }
 
 /**
- * Get Solana RPC endpoint, preferring custom RPC if set
+ * Get Solana RPC endpoint - supports proxy path or full URL
  */
-function getSolanaEndpoint(network: WalletAdapterNetwork): string {
-  // Use custom RPC if configured (for localnet or custom nodes)
-  const customRpc = process.env.NEXT_PUBLIC_SOLANA_RPC;
-  if (customRpc) {
-    return customRpc;
+function getSolanaEndpoint(): string {
+  const configUrl = SUPPORTED_CHAINS.solana.rpcUrl;
+  
+  // If it's a relative path (proxy), construct full URL
+  if (configUrl.startsWith("/")) {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}${configUrl}`;
+    }
+    // SSR fallback - will be replaced on client
+    return "https://api.mainnet-beta.solana.com";
   }
-
-  return clusterApiUrl(network);
+  
+  return configUrl;
 }
 
 export function SolanaWalletProvider({
@@ -42,12 +40,13 @@ export function SolanaWalletProvider({
   children: React.ReactNode;
 }) {
   const network = useMemo(() => getSolanaNetwork(), []);
-  const endpoint = useMemo(() => getSolanaEndpoint(network), [network]);
+  const endpoint = useMemo(() => getSolanaEndpoint(), []);
 
   // Debug: Log when provider mounts
   console.log("[SolanaConnectionProvider] Provider initialized with:", {
     network,
     endpoint,
+    chainConfig: SUPPORTED_CHAINS.solana.id,
   });
 
   return (

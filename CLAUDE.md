@@ -9,7 +9,7 @@ This is a **multi-chain AI-powered OTC (Over-The-Counter) trading desk** that in
 ## Development Environment
 
 **Package Manager**: Bun (required - do not use npm)
-**Port**: 5004
+**Port**: 4444
 **Database**: PostgreSQL with pgvector (auto-starts on port 5439)
 
 ### Essential Commands

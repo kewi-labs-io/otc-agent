@@ -4,7 +4,6 @@ import React from "react";
 import { ConsignmentRow } from "./consignment-row";
 import { Button } from "./button";
 import { useMultiWallet } from "./multiwallet";
-import { EVMChainSelectorModal } from "./evm-chain-selector-modal";
 import type { OTCConsignment } from "@/types";
 
 interface MyListingsTabProps {
@@ -13,26 +12,7 @@ interface MyListingsTabProps {
 }
 
 export function MyListingsTab({ listings, onRefresh }: MyListingsTabProps) {
-  const {
-    activeFamily,
-    setActiveFamily,
-    connectSolanaWallet,
-    isPhantomInstalled,
-  } = useMultiWallet();
-  const [showEVMChainSelector, setShowEVMChainSelector] = React.useState(false);
-
-  const handleSwitchToEvm = () => {
-    setShowEVMChainSelector(true);
-  };
-
-  const handleSwitchToSolana = () => {
-    if (!isPhantomInstalled) {
-      alert("Please install Phantom or Solflare wallet to use Solana.");
-      return;
-    }
-    setActiveFamily("solana");
-    connectSolanaWallet();
-  };
+  const { activeFamily } = useMultiWallet();
 
   const networkName = activeFamily === "solana" ? "Solana" : "EVM";
   if (listings.length === 0) {
@@ -56,34 +36,12 @@ export function MyListingsTab({ listings, onRefresh }: MyListingsTabProps) {
     <div>
       {/* Network Info Banner */}
       <div className="mb-6 p-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex-1 min-w-[200px]">
-            <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-              Showing {networkName} Listings
-            </p>
-            <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-              Switch networks to view listings on other chains
-            </p>
-          </div>
-          <div className="flex gap-2">
-            {activeFamily !== "evm" && (
-              <button
-                onClick={handleSwitchToEvm}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors whitespace-nowrap"
-              >
-                Switch to EVM
-              </button>
-            )}
-            {activeFamily !== "solana" && (
-              <button
-                onClick={handleSwitchToSolana}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors whitespace-nowrap"
-              >
-                Switch to Solana
-              </button>
-            )}
-          </div>
-        </div>
+        <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+          Showing {networkName} Listings
+        </p>
+        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+          Disconnect and reconnect with a different wallet to view other chains
+        </p>
       </div>
 
       <div className="flex justify-between items-center mb-6">
@@ -106,10 +64,6 @@ export function MyListingsTab({ listings, onRefresh }: MyListingsTabProps) {
         ))}
       </div>
 
-      <EVMChainSelectorModal
-        isOpen={showEVMChainSelector}
-        onClose={() => setShowEVMChainSelector(false)}
-      />
     </div>
   );
 }

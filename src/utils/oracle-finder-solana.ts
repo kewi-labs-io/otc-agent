@@ -2,7 +2,7 @@
 // import { Connection } from "@solana/web3.js";
 
 export interface SolanaOracleInfo {
-  type: "pyth" | "jupiter" | "raydium";
+  type: "pyth" | "jupiter" | "raydium" | "orca" | "pumpswap";
   address: string;
   feedId?: string; // For Pyth
   poolAddress?: string; // For AMM pools
@@ -202,6 +202,35 @@ export function validateSolanaOracle(oracle: SolanaOracleInfo): {
     }
   }
 
+  if (oracle.type === "orca") {
+    if (oracle.liquidity && oracle.liquidity >= 50000) {
+      return {
+        valid: true,
+        message: `Orca Whirlpool available (TVL: $${oracle.liquidity.toLocaleString()})`,
+      };
+    } else {
+      return {
+        valid: false,
+        message: "Orca pool liquidity too low",
+      };
+    }
+  }
+
+  if (oracle.type === "pumpswap") {
+    // PumpSwap/Pump.fun bonding curves typically have lower liquidity but are still valid
+    if (oracle.liquidity && oracle.liquidity >= 10000) {
+      return {
+        valid: true,
+        message: `PumpSwap bonding curve available (TVL: $${oracle.liquidity.toLocaleString()})`,
+      };
+    } else {
+      return {
+        valid: false,
+        message: "PumpSwap bonding curve liquidity too low (min $10k required)",
+      };
+    }
+  }
+
   return {
     valid: false,
     message: "Unknown oracle type",
@@ -212,16 +241,21 @@ export function validateSolanaOracle(oracle: SolanaOracleInfo): {
  * Format oracle info for display
  */
 export function formatOracleInfo(oracle: SolanaOracleInfo): string {
+  const tvl = oracle.liquidity
+    ? ` - TVL: $${oracle.liquidity.toLocaleString()}`
+    : "";
+    
   switch (oracle.type) {
     case "pyth":
       return "Pyth Price Feed (Most Reliable)";
     case "jupiter":
       return "Jupiter Aggregator";
     case "raydium":
-      const tvl = oracle.liquidity
-        ? ` - TVL: $${oracle.liquidity.toLocaleString()}`
-        : "";
       return `Raydium Pool${tvl}`;
+    case "orca":
+      return `Orca Whirlpool${tvl}`;
+    case "pumpswap":
+      return `PumpSwap Bonding Curve${tvl}`;
     default:
       return "Unknown Oracle";
   }

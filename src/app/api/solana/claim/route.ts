@@ -120,9 +120,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Get token accounts
-  const deskData = await programAccounts.desk.fetch(desk);
-  const tokenMint = new PublicKey(deskData.tokenMint);
+  // Get token accounts - use offer.tokenMint for multi-token support
+  // In token-agnostic architecture, each offer stores its own token_mint
+  const tokenMint = new PublicKey(offerData.tokenMint);
   const deskTokenTreasury = await getAssociatedTokenAddress(
     tokenMint,
     desk,

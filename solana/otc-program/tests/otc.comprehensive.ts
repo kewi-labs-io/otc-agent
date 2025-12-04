@@ -167,12 +167,10 @@ describe("OTC Comprehensive Tests", () => {
         .initDesk(minUsdAmount, quoteExpirySecs)
         .accounts({
           payer: owner.publicKey,
-          // owner: owner.publicKey,
+          owner: owner.publicKey,
           agent: agent.publicKey,
-          tokenMint,
           usdcMint,
           desk: desk.publicKey,
-          // systemProgram: SystemProgram.programId,
         })
         .signers([owner, desk])
         .rpc();
@@ -209,7 +207,7 @@ describe("OTC Comprehensive Tests", () => {
       // We should change definition of tokenRegistry to PublicKey.
       
       await program.methods
-        .registerToken([...priceFeedId], PublicKey.default) // Use default for pool_address
+        .registerToken([...priceFeedId], PublicKey.default, 0) // Use default for pool_address, 0=PoolType::None
         .accounts({
           desk: desk.publicKey,
           payer: owner.publicKey,
@@ -988,10 +986,10 @@ describe("OTC Comprehensive Tests", () => {
         .depositTokens(depositAmount)
         .accounts({
           desk: desk.publicKey,
-          // owner: owner.publicKey,
+          tokenRegistry: tokenRegistry,
+          owner: owner.publicKey,
           ownerTokenAta,
           deskTokenTreasury,
-          // tokenProgram: TOKEN_PROGRAM_ID,
         })
         .signers([owner])
         .rpc();
@@ -1008,12 +1006,11 @@ describe("OTC Comprehensive Tests", () => {
       await program.methods
         .withdrawTokens(withdrawAmount)
         .accounts({
-          // owner: owner.publicKey,
           desk: desk.publicKey,
+          tokenRegistry: tokenRegistry,
           deskSigner: desk.publicKey,
           deskTokenTreasury,
           ownerTokenAta,
-          // tokenProgram: TOKEN_PROGRAM_ID,
         })
         .signers([owner, desk])
         .rpc();

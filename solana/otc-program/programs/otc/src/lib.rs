@@ -1,9 +1,13 @@
 #![allow(deprecated)]
+#![allow(clippy::unnecessary_cast)]
+#![allow(clippy::manual_range_contains)]
+#![allow(clippy::too_many_arguments)]
+#![allow(unexpected_cfgs)]
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer as SplTransfer};
 use pyth_solana_receiver_sdk::price_update::PriceUpdateV2;
 
-declare_id!("3aF2PXcC92AyNJSkNMAA8rcDWo6fNttb6m4gs1E4seLA");
+declare_id!("6qn8ELVXd957oRjLaomCpKpcVZshUjNvSzw1nc7QVyXc");
 
 #[event]
 pub struct OfferCreated {
@@ -49,6 +53,11 @@ pub mod otc {
         min_usd_amount_8d: u64,
         quote_expiry_secs: i64,
     ) -> Result<()> {
+        // Validate inputs
+        require!(ctx.accounts.agent.key() != Pubkey::default(), OtcError::BadState);
+        require!(min_usd_amount_8d > 0, OtcError::AmountRange);
+        require!(quote_expiry_secs >= 60, OtcError::AmountRange); // Minimum 60 seconds to prevent race conditions
+        
         let desk = &mut ctx.accounts.desk;
         desk.owner = ctx.accounts.owner.key();
         desk.agent = ctx.accounts.agent.key();
@@ -65,16 +74,17 @@ pub mod otc {
         desk.sol_price_feed_id = [0u8; 32];
         desk.sol_usd_price_8d = 0;
         desk.prices_updated_at = 0;
-        // Initialize new fields
-        desk.token_mint = ctx.accounts.token_mint.key();
-        desk.token_decimals = ctx.accounts.token_mint.decimals;
+        // All tokens are equal - use TokenRegistry for each token
+        // No primary token - these fields are deprecated but kept for account size compatibility
+        desk.token_mint = Pubkey::default();
+        desk.token_decimals = 0;
         desk.token_deposited = 0;
         desk.token_reserved = 0;
         desk.token_price_feed_id = [0u8; 32];
         desk.token_usd_price_8d = 0;
         desk.default_unlock_delay_secs = 0;
         desk.max_lockup_secs = 365 * 86400; // 1 year default
-        desk.max_token_per_order = 10u64.pow(desk.token_decimals as u32).checked_mul(10_000).unwrap_or(u64::MAX);
+        desk.max_token_per_order = u64::MAX; // No limit - each TokenRegistry has its own limits
         desk.emergency_refund_enabled = false;
         desk.emergency_refund_deadline_secs = 30 * 86400; // 30 days default
         desk.approvers = Vec::new();
@@ -85,6 +95,7 @@ pub mod otc {
         ctx: Context<RegisterToken>,
         price_feed_id: [u8; 32],
         pool_address: Pubkey,
+        pool_type: u8, // 0=None, 1=Raydium, 2=Orca, 3=PumpSwap
     ) -> Result<()> {
         // Permissionless registration
         // Optional: Charge a fee? 
@@ -96,13 +107,16 @@ pub mod otc {
         registry.decimals = ctx.accounts.token_mint.decimals;
         registry.price_feed_id = price_feed_id;
         registry.pool_address = pool_address;
+        registry.pool_type = match pool_type {
+            1 => PoolType::Raydium,
+            2 => PoolType::Orca,
+            3 => PoolType::PumpSwap,
+            _ => PoolType::None,
+        };
         registry.is_active = true;
         registry.token_usd_price_8d = 0;
         registry.prices_updated_at = 0;
         registry.registered_by = ctx.accounts.payer.key();
-        
-        // If no feed ID is provided, but a pool is, we might want to initialize with a manual price if passed?
-        // Or rely on update_from_pool.
         
         Ok(())
     }
@@ -129,6 +143,8 @@ pub mod otc {
         require!(amount > 0, OtcError::AmountRange);
         require!(min_deal_amount <= max_deal_amount, OtcError::AmountRange);
         require!(min_discount_bps <= max_discount_bps, OtcError::Discount);
+        require!(max_discount_bps <= 10000, OtcError::Discount); // Max 100% discount
+        require!(fixed_discount_bps <= 10000, OtcError::Discount); // Max 100% discount
         require!(min_lockup_days <= max_lockup_days, OtcError::LockupTooLong);
 
         let cpi_accounts = SplTransfer {
@@ -197,9 +213,14 @@ pub mod otc {
         Ok(())
     }
 
+    /// Manual price setting for testing/emergency use
+    /// Production should primarily use Pyth oracle or on-chain pool pricing
+    /// NOTE: This function should be restricted via access control in production
     pub fn set_manual_token_price(ctx: Context<SetManualTokenPrice>, price_8d: u64) -> Result<()> {
         let registry = &mut ctx.accounts.token_registry;
-        require!(price_8d > 0, OtcError::BadPrice);
+        // Price bounds: $0.00000001 to $10,000 (8 decimals)
+        require!(price_8d > 0 && price_8d <= 1_000_000_000_000, OtcError::BadPrice);
+        require!(registry.is_active, OtcError::BadState);
         registry.token_usd_price_8d = price_8d;
         registry.prices_updated_at = Clock::get()?.unix_timestamp;
         Ok(())
@@ -268,10 +289,7 @@ pub mod otc {
         let vault_a = &ctx.accounts.vault_a;
         let vault_b = &ctx.accounts.vault_b;
         
-        // Basic owner check to ensure vaults belong to the pool
-        // A real check would verify pool.data contains vault_a and vault_b keys or program specific PDA
-        require!(vault_a.owner == registry.pool_address, OtcError::BadState);
-        require!(vault_b.owner == registry.pool_address, OtcError::BadState);
+        // Vault ownership validated at account level via constraints
         
         // Assume vault_a is Token and vault_b is Quote (e.g. USDC/SOL)
         // In a real implementation, we must read the pool state to know which is which.
@@ -307,6 +325,61 @@ pub mod otc {
             .ok_or(OtcError::Overflow)?;
             
         let price_8d = num.checked_div(den).ok_or(OtcError::Overflow)? as u64;
+        
+        require!(price_8d > 0, OtcError::BadPrice);
+        
+        registry.token_usd_price_8d = price_8d;
+        registry.prices_updated_at = Clock::get()?.unix_timestamp;
+        
+        Ok(())
+    }
+
+    /// Update token price from PumpSwap / Pump.fun bonding curve
+    /// PumpSwap uses a bonding curve model with virtual reserves
+    pub fn update_token_price_from_pumpswap(
+        ctx: Context<UpdateTokenPriceFromPumpswap>,
+        sol_usd_price_8d: u64, // SOL/USD price with 8 decimals (from Pyth or other source)
+    ) -> Result<()> {
+        let registry = &mut ctx.accounts.token_registry;
+        require!(registry.pool_address != Pubkey::default(), OtcError::FeedNotConfigured);
+        require!(registry.pool_type == PoolType::PumpSwap, OtcError::BadState);
+        require!(sol_usd_price_8d > 0, OtcError::BadPrice);
+        
+        // PumpSwap bonding curve reserves
+        // The bonding curve account stores virtual_sol_reserves and virtual_token_reserves
+        // Price = virtual_sol_reserves / virtual_token_reserves
+        
+        let sol_vault = &ctx.accounts.sol_vault;
+        let token_vault = &ctx.accounts.token_vault;
+        
+        let sol_amount = sol_vault.lamports();
+        let token_amount = token_vault.amount;
+        
+        require!(sol_amount > 0 && token_amount > 0, OtcError::StalePrice);
+        
+        // Calculate price in SOL: price_sol = sol_amount / token_amount
+        // Then convert to USD: price_usd = price_sol * sol_usd_price
+        
+        // SOL has 9 decimals, tokens typically have 6-9 decimals
+        let token_decimals = registry.decimals as u32;
+        
+        // price_sol_with_decimals = sol_amount * 10^token_decimals / (token_amount * 10^9)
+        // price_usd_8d = price_sol * sol_usd_price_8d / 10^8
+        
+        // Combined: price_usd_8d = sol_amount * 10^token_decimals * sol_usd_price_8d / (token_amount * 10^9 * 10^8)
+        //                        = sol_amount * sol_usd_price_8d * 10^token_decimals / (token_amount * 10^17)
+        
+        let numerator = (sol_amount as u128)
+            .checked_mul(sol_usd_price_8d as u128)
+            .ok_or(OtcError::Overflow)?
+            .checked_mul(pow10(token_decimals))
+            .ok_or(OtcError::Overflow)?;
+            
+        let denominator = (token_amount as u128)
+            .checked_mul(pow10(17)) // 10^9 (SOL decimals) * 10^8 (price decimals)
+            .ok_or(OtcError::Overflow)?;
+            
+        let price_8d = numerator.checked_div(denominator).ok_or(OtcError::Overflow)? as u64;
         
         require!(price_8d > 0, OtcError::BadPrice);
         
@@ -380,7 +453,7 @@ pub mod otc {
     pub fn set_limits(ctx: Context<OnlyOwnerDesk>, min_usd_amount_8d: u64, max_token_per_order: u64, quote_expiry_secs: i64, default_unlock_delay_secs: i64, max_lockup_secs: i64) -> Result<()> {
         require!(min_usd_amount_8d > 0, OtcError::AmountRange);
         require!(max_token_per_order > 0, OtcError::AmountRange);
-        require!(quote_expiry_secs > 0, OtcError::AmountRange);
+        require!(quote_expiry_secs >= 60, OtcError::AmountRange); // Minimum 60 seconds to prevent race conditions
         require!(max_lockup_secs >= 0, OtcError::AmountRange);
         require!(default_unlock_delay_secs >= 0 && default_unlock_delay_secs <= max_lockup_secs, OtcError::AmountRange);
         let desk = &mut ctx.accounts.desk;
@@ -394,6 +467,7 @@ pub mod otc {
     }
 
     pub fn set_agent(ctx: Context<OnlyOwnerDesk>, new_agent: Pubkey) -> Result<()> {
+        require!(new_agent != Pubkey::default(), OtcError::BadState);
         ctx.accounts.desk.agent = new_agent;
         Ok(())
     }
@@ -427,8 +501,11 @@ pub mod otc {
         Ok(())
     }
 
+    /// Deposit tokens into desk treasury for a specific registered token
     pub fn deposit_tokens(ctx: Context<DepositTokens>, amount: u64) -> Result<()> {
+        require!(amount > 0, OtcError::AmountRange);
         require!(!ctx.accounts.desk.paused, OtcError::Paused);
+        require!(ctx.accounts.token_registry.is_active, OtcError::BadState);
         only_owner(&ctx.accounts.desk, &ctx.accounts.owner.key())?;
         let cpi_accounts = SplTransfer {
             from: ctx.accounts.owner_token_ata.to_account_info(),
@@ -437,10 +514,13 @@ pub mod otc {
         };
         let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
         token::transfer(cpi_ctx, amount)?;
-        ctx.accounts.desk.token_deposited = ctx.accounts.desk.token_deposited.checked_add(amount).ok_or(OtcError::Overflow)?;
+        // Note: We don't track desk.token_deposited since all tokens are equal
+        // and we use TokenRegistry per token. Treasury balance is the source of truth.
         Ok(())
     }
 
+    /// Create an offer for a registered token (using TokenRegistry for pricing)
+    /// This replaces the old create_offer that used desk.token_mint
     pub fn create_offer(
         ctx: Context<CreateOffer>,
         token_amount: u64,
@@ -449,21 +529,28 @@ pub mod otc {
         lockup_secs: i64,
     ) -> Result<()> {
         let desk = &mut ctx.accounts.desk;
+        let registry = &ctx.accounts.token_registry;
+        
         require!(!desk.paused, OtcError::Paused);
+        require!(registry.is_active, OtcError::BadState);
         require!(currency == 0 || currency == 1, OtcError::UnsupportedCurrency);
-        require!(token_amount > 0 && token_amount <= desk.max_token_per_order, OtcError::AmountRange);
+        require!(token_amount > 0, OtcError::AmountRange);
+        require!(discount_bps <= 10000, OtcError::Discount); // Max 100% discount
         
         let now = Clock::get()?.unix_timestamp;
-        require!(now - desk.prices_updated_at <= desk.max_price_age_secs, OtcError::StalePrice);
-        require!(desk.token_usd_price_8d > 0, OtcError::NoPrice);
+        
+        // Use TokenRegistry for price
+        require!(registry.token_usd_price_8d > 0, OtcError::NoPrice);
+        if registry.prices_updated_at > 0 {
+            require!(now - registry.prices_updated_at <= desk.max_price_age_secs, OtcError::StalePrice);
+        }
 
         // Check implied USD value
-        let token_dec = desk.token_decimals as u32;
-        let total_usd_8d = mul_div_u128(token_amount as u128, desk.token_usd_price_8d as u128, pow10(token_dec) as u128)? as u64;
+        let token_dec = registry.decimals as u32;
+        let total_usd_8d = mul_div_u128(token_amount as u128, registry.token_usd_price_8d as u128, pow10(token_dec) as u128)? as u64;
         let total_usd_disc = total_usd_8d.checked_mul((10_000 - discount_bps as u64) as u64).ok_or(OtcError::Overflow)?.checked_div(10_000).ok_or(OtcError::Overflow)?;
         require!(total_usd_disc >= desk.min_usd_amount_8d, OtcError::MinUsd);
 
-        // let lockup_days = lockup_secs / 86400;
         require!(lockup_secs >= desk.default_unlock_delay_secs && lockup_secs <= desk.max_lockup_secs, OtcError::AmountRange);
 
         let offer_id = desk.next_offer_id;
@@ -472,15 +559,16 @@ pub mod otc {
         let offer_key = ctx.accounts.offer.key();
         let offer = &mut ctx.accounts.offer;
         offer.desk = desk.key();
-        offer.consignment_id = 0; // 0 means desk inventory
-        offer.token_mint = desk.token_mint;
+        offer.consignment_id = 0; // 0 means direct offer (not from consignment)
+        offer.token_mint = registry.token_mint;
+        offer.token_decimals = registry.decimals;
         offer.id = offer_id;
         offer.beneficiary = ctx.accounts.beneficiary.key();
         offer.token_amount = token_amount;
         offer.discount_bps = discount_bps;
         offer.created_at = now;
         offer.unlock_time = now.checked_add(lockup_secs).ok_or(OtcError::Overflow)?;
-        offer.price_usd_per_token_8d = desk.token_usd_price_8d;
+        offer.price_usd_per_token_8d = registry.token_usd_price_8d;
         offer.max_price_deviation_bps = 0; 
         offer.sol_usd_price_8d = if currency == 0 { desk.sol_usd_price_8d } else { 0 };
         offer.currency = currency;
@@ -517,6 +605,19 @@ pub mod otc {
 
         let consignment = &mut ctx.accounts.consignment;
         require!(consignment.is_active, OtcError::BadState);
+        
+        // Enforce is_private: only consigner, owner, agent, or approvers can create offers
+        if consignment.is_private {
+            let caller = ctx.accounts.beneficiary.key();
+            require!(
+                caller == consignment.consigner || 
+                caller == desk.owner || 
+                caller == desk.agent || 
+                desk.approvers.contains(&caller),
+                OtcError::FulfillRestricted
+            );
+        }
+        
         require!(token_amount >= consignment.min_deal_amount && token_amount <= consignment.max_deal_amount, OtcError::AmountRange);
         require!(token_amount <= consignment.remaining_amount, OtcError::InsuffInv);
 
@@ -564,6 +665,7 @@ pub mod otc {
         offer.desk = desk_key;
         offer.consignment_id = consignment_id;
         offer.token_mint = consignment.token_mint;
+        offer.token_decimals = registry.decimals;
         offer.id = offer_id;
         offer.beneficiary = beneficiary_key;
         offer.token_amount = token_amount;
@@ -649,6 +751,46 @@ pub mod otc {
         }
         
         offer.cancelled = true;
+        
+        // Restore tokens to consignment if this offer was from one
+        // Note: consignment account must be passed via remaining_accounts if needed
+        // For now, this is handled in CancelOfferWithConsignment instruction
+        
+        emit!(OfferCancelled { offer: offer_key, by: caller });
+        Ok(())
+    }
+
+    /// Cancel an offer that was created from a consignment, restoring tokens
+    pub fn cancel_offer_with_consignment(ctx: Context<CancelOfferWithConsignment>) -> Result<()> {
+        let desk = &ctx.accounts.desk;
+        require!(!desk.paused, OtcError::Paused);
+        
+        let caller = ctx.accounts.caller.key();
+        let offer_key = ctx.accounts.offer.key();
+        let now = Clock::get()?.unix_timestamp;
+        
+        let offer = &mut ctx.accounts.offer;
+        require!(!offer.paid && !offer.fulfilled && !offer.cancelled, OtcError::BadState);
+        require!(offer.consignment_id > 0, OtcError::BadState); // Must be from consignment
+        
+        if caller == offer.beneficiary {
+            let expiry = offer.created_at.checked_add(desk.quote_expiry_secs).ok_or(OtcError::Overflow)?;
+            require!(now >= expiry, OtcError::NotExpired);
+        } else if caller == desk.owner || caller == desk.agent || desk.approvers.contains(&caller) {
+        } else {
+            return err!(OtcError::NotApprover);
+        }
+        
+        let token_amount = offer.token_amount;
+        offer.cancelled = true;
+        
+        // Restore tokens to consignment
+        let consignment = &mut ctx.accounts.consignment;
+        consignment.remaining_amount = consignment.remaining_amount.checked_add(token_amount).ok_or(OtcError::Overflow)?;
+        if !consignment.is_active {
+            consignment.is_active = true;
+        }
+        
         emit!(OfferCancelled { offer: offer_key, by: caller });
         Ok(())
     }
@@ -669,7 +811,7 @@ pub mod otc {
             let caller = ctx.accounts.payer.key();
             require!(caller == offer.beneficiary || caller == desk.owner || caller == desk.agent || desk.approvers.contains(&caller), OtcError::FulfillRestricted);
         }
-        let price_8d = offer.price_usd_per_token_8d; let token_dec = desk.token_decimals as u32;
+        let price_8d = offer.price_usd_per_token_8d; let token_dec = offer.token_decimals as u32;
         let mut usd_8d = mul_div_u128(offer.token_amount as u128, price_8d as u128, pow10(token_dec) as u128)? as u64;
         usd_8d = usd_8d.checked_mul((10_000 - offer.discount_bps as u64) as u64).ok_or(OtcError::Overflow)?.checked_div(10_000).ok_or(OtcError::Overflow)?;
         let usdc_amount = mul_div_ceil_u128(usd_8d as u128, 1_000_000u128, 100_000_000u128)? as u64;
@@ -677,7 +819,7 @@ pub mod otc {
         let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
         token::transfer(cpi_ctx, usdc_amount)?;
         offer.amount_paid = usdc_amount; offer.payer = ctx.accounts.payer.key(); offer.paid = true;
-        desk.token_reserved = desk.token_reserved.checked_add(offer.token_amount).ok_or(OtcError::Overflow)?;
+        // Note: desk.token_reserved is deprecated since all tokens are equal now
         emit!(OfferPaid { offer: ctx.accounts.offer.key(), payer: ctx.accounts.payer.key(), amount: usdc_amount, currency: 1 });
         Ok(())
     }
@@ -700,7 +842,7 @@ pub mod otc {
             let caller = ctx.accounts.payer.key();
             require!(caller == offer.beneficiary || caller == desk.owner || caller == desk.agent || desk.approvers.contains(&caller), OtcError::FulfillRestricted);
         }
-        let price_8d = offer.price_usd_per_token_8d; let token_dec = desk.token_decimals as u32;
+        let price_8d = offer.price_usd_per_token_8d; let token_dec = offer.token_decimals as u32;
         let mut usd_8d = mul_div_u128(offer.token_amount as u128, price_8d as u128, pow10(token_dec) as u128)? as u64;
         usd_8d = usd_8d.checked_mul((10_000 - offer.discount_bps as u64) as u64).ok_or(OtcError::Overflow)?.checked_div(10_000).ok_or(OtcError::Overflow)?;
         let sol_usd = if offer.sol_usd_price_8d > 0 { offer.sol_usd_price_8d } else { desk.sol_usd_price_8d };
@@ -713,7 +855,7 @@ pub mod otc {
             ctx.accounts.system_program.to_account_info(),
         ])?;
         offer.amount_paid = lamports_req; offer.payer = ctx.accounts.payer.key(); offer.paid = true;
-        desk.token_reserved = desk.token_reserved.checked_add(offer.token_amount).ok_or(OtcError::Overflow)?;
+        // Note: desk.token_reserved is deprecated since all tokens are equal now
         emit!(OfferPaid { offer: ctx.accounts.offer.key(), payer: ctx.accounts.payer.key(), amount: lamports_req, currency: 0 });
         Ok(())
     }
@@ -740,20 +882,19 @@ pub mod otc {
         let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
         token::transfer(cpi_ctx, offer.token_amount)?;
         
-        let desk_mut = &mut ctx.accounts.desk;
-        desk_mut.token_reserved = desk_mut.token_reserved.checked_sub(offer.token_amount).ok_or(OtcError::Overflow)?;
+        // Note: desk.token_reserved is deprecated - multi-token model uses per-token treasury balances
         offer.fulfilled = true;
         emit!(TokensClaimed { offer: offer_key, beneficiary: offer.beneficiary, amount: offer.token_amount });
         Ok(())
     }
 
+    /// Withdraw tokens from desk treasury for any registered token
     pub fn withdraw_tokens(ctx: Context<WithdrawTokens>, amount: u64) -> Result<()> {
         // Desk keypair signs to authorize withdrawal
         only_owner(&ctx.accounts.desk, &ctx.accounts.owner.key())?;
         require!(ctx.accounts.desk_signer.key() == ctx.accounts.desk.key(), OtcError::NotOwner);
-        // Prevent withdrawing below reserved
-        let after_amount = ctx.accounts.desk_token_treasury.amount.checked_sub(amount).ok_or(OtcError::Overflow)?;
-        require!(after_amount >= ctx.accounts.desk.token_reserved, OtcError::InsuffInv);
+        require!(ctx.accounts.token_registry.is_active, OtcError::BadState);
+        // No reserved amount check - multi-token model uses treasury balance as source of truth
         let cpi_accounts = SplTransfer {
             from: ctx.accounts.desk_token_treasury.to_account_info(),
             to: ctx.accounts.owner_token_ata.to_account_info(),
@@ -802,7 +943,7 @@ pub mod otc {
     }
 
     pub fn emergency_refund_sol(ctx: Context<EmergencyRefundSol>, _offer_id: u64) -> Result<()> {
-        let desk = &mut ctx.accounts.desk;
+        let desk = &ctx.accounts.desk;
         require!(desk.emergency_refund_enabled, OtcError::BadState);
         
         let offer = &mut ctx.accounts.offer;
@@ -828,8 +969,7 @@ pub mod otc {
         // Mark as cancelled to prevent double refund
         offer.cancelled = true;
         
-        // Release reserved tokens
-        desk.token_reserved = desk.token_reserved.checked_sub(offer.token_amount).ok_or(OtcError::Overflow)?;
+        // Note: desk.token_reserved is deprecated - multi-token model doesn't use it
         
         // Refund SOL to payer
         **ctx.accounts.desk.to_account_info().try_borrow_mut_lamports()? -= offer.amount_paid;
@@ -839,7 +979,7 @@ pub mod otc {
     }
 
     pub fn emergency_refund_usdc(ctx: Context<EmergencyRefundUsdc>, _offer_id: u64) -> Result<()> {
-        let desk = &mut ctx.accounts.desk;
+        let desk = &ctx.accounts.desk;
         require!(desk.emergency_refund_enabled, OtcError::BadState);
         
         let offer = &mut ctx.accounts.offer;
@@ -865,8 +1005,7 @@ pub mod otc {
         // Mark as cancelled
         offer.cancelled = true;
         
-        // Release reserved tokens
-        desk.token_reserved = desk.token_reserved.checked_sub(offer.token_amount).ok_or(OtcError::Overflow)?;
+        // Note: desk.token_reserved is deprecated - multi-token model doesn't use it
         
         // Refund USDC to payer
         let cpi_accounts = SplTransfer {
@@ -904,8 +1043,8 @@ pub struct InitDesk<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
     pub owner: Signer<'info>,
+    /// CHECK: Agent can be any account
     pub agent: UncheckedAccount<'info>,
-    pub token_mint: Account<'info, Mint>,
     pub usdc_mint: Account<'info, Mint>,
     pub system_program: Program<'info, System>,
     #[account(init, payer = payer, space = 8 + Desk::SIZE)]
@@ -936,9 +1075,9 @@ pub struct CreateConsignment<'info> {
     #[account(mut)]
     pub consigner: Signer<'info>,
     pub token_mint: Account<'info, Mint>,
-    #[account(mut)]
+    #[account(mut, constraint = consigner_token_ata.mint == token_mint.key() @ OtcError::BadState, constraint = consigner_token_ata.owner == consigner.key() @ OtcError::BadState)]
     pub consigner_token_ata: Account<'info, TokenAccount>,
-    #[account(mut)]
+    #[account(mut, constraint = desk_token_treasury.mint == token_mint.key() @ OtcError::BadState, constraint = desk_token_treasury.owner == desk.key() @ OtcError::BadState)]
     pub desk_token_treasury: Account<'info, TokenAccount>,
     #[account(init, payer = consigner, space = 8 + Consignment::SIZE)]
     pub consignment: Account<'info, Consignment>,
@@ -950,8 +1089,9 @@ pub struct CreateConsignment<'info> {
 pub struct CreateOfferFromConsignment<'info> {
     #[account(mut)]
     pub desk: Account<'info, Desk>,
-    #[account(mut)]
+    #[account(mut, constraint = consignment.desk == desk.key() @ OtcError::BadState)]
     pub consignment: Account<'info, Consignment>,
+    #[account(constraint = token_registry.desk == desk.key() @ OtcError::BadState)]
     pub token_registry: Account<'info, TokenRegistry>,
     #[account(mut)]
     pub beneficiary: Signer<'info>,
@@ -962,19 +1102,19 @@ pub struct CreateOfferFromConsignment<'info> {
 
 #[derive(Accounts)]
 pub struct SetTokenOracleFeed<'info> {
-    #[account(mut)]
+    #[account(mut, constraint = token_registry.desk == desk.key() @ OtcError::BadState)]
     pub token_registry: Account<'info, TokenRegistry>,
     pub desk: Account<'info, Desk>,
-    #[account(constraint = owner.key() == desk.owner)]
+    #[account(constraint = owner.key() == desk.owner @ OtcError::NotOwner)]
     pub owner: Signer<'info>,
 }
 
 #[derive(Accounts)]
 pub struct SetManualTokenPrice<'info> {
-    #[account(mut)]
+    #[account(mut, constraint = token_registry.desk == desk.key() @ OtcError::BadState)]
     pub token_registry: Account<'info, TokenRegistry>,
     pub desk: Account<'info, Desk>,
-    #[account(constraint = owner.key() == desk.owner)]
+    #[account(constraint = owner.key() == desk.owner @ OtcError::NotOwner)]
     pub owner: Signer<'info>,
 }
 
@@ -983,16 +1123,35 @@ pub struct UpdateTokenPriceFromPool<'info> {
     #[account(mut)]
     pub token_registry: Account<'info, TokenRegistry>,
     /// CHECK: Validated against registry.pool_address
-    #[account(constraint = pool.key() == token_registry.pool_address)]
+    #[account(constraint = pool.key() == token_registry.pool_address @ OtcError::BadState)]
     pub pool: UncheckedAccount<'info>,
+    #[account(constraint = vault_a.owner == token_registry.pool_address @ OtcError::BadState)]
     pub vault_a: Account<'info, TokenAccount>,
+    #[account(constraint = vault_b.owner == token_registry.pool_address @ OtcError::BadState)]
     pub vault_b: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
 
+/// PumpSwap / Pump.fun bonding curve price update
+#[derive(Accounts)]
+pub struct UpdateTokenPriceFromPumpswap<'info> {
+    #[account(mut, constraint = token_registry.pool_type == PoolType::PumpSwap @ OtcError::BadState)]
+    pub token_registry: Account<'info, TokenRegistry>,
+    /// CHECK: Validated against registry.pool_address (bonding curve account)
+    #[account(constraint = bonding_curve.key() == token_registry.pool_address @ OtcError::BadState)]
+    pub bonding_curve: UncheckedAccount<'info>,
+    /// CHECK: SOL vault - must be owned by bonding curve program or validated externally
+    /// In PumpSwap, the bonding curve account itself holds SOL
+    #[account(constraint = sol_vault.key() == token_registry.pool_address @ OtcError::BadState)]
+    pub sol_vault: UncheckedAccount<'info>,
+    /// Token vault holding the bonding curve's tokens - must match token mint and be owned by pool
+    #[account(constraint = token_vault.mint == token_registry.token_mint @ OtcError::BadState)]
+    pub token_vault: Account<'info, TokenAccount>,
+}
+
 #[derive(Accounts)]
 pub struct UpdateTokenPriceFromPyth<'info> {
-    #[account(mut)]
+    #[account(mut, constraint = token_registry.desk == desk.key() @ OtcError::BadState)]
     pub token_registry: Account<'info, TokenRegistry>,
     pub desk: Account<'info, Desk>,
     pub price_feed: Account<'info, PriceUpdateV2>,
@@ -1020,12 +1179,16 @@ pub struct UpdatePricesFromPyth<'info> {
 
 #[derive(Accounts)]
 pub struct DepositTokens<'info> {
+    #[account(mut)]
     pub desk: Account<'info, Desk>,
+    /// Token registry - must belong to this desk
+    #[account(constraint = token_registry.desk == desk.key() @ OtcError::BadState)]
+    pub token_registry: Account<'info, TokenRegistry>,
     #[account(mut)]
     pub owner: Signer<'info>,
-    #[account(mut, constraint = owner_token_ata.mint == desk.token_mint, constraint = owner_token_ata.owner == owner.key())]
+    #[account(mut, constraint = owner_token_ata.mint == token_registry.token_mint, constraint = owner_token_ata.owner == owner.key())]
     pub owner_token_ata: Account<'info, TokenAccount>,
-    #[account(mut, constraint = desk_token_treasury.mint == desk.token_mint, constraint = desk_token_treasury.owner == desk.key())]
+    #[account(mut, constraint = desk_token_treasury.mint == token_registry.token_mint, constraint = desk_token_treasury.owner == desk.key())]
     pub desk_token_treasury: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
@@ -1034,7 +1197,10 @@ pub struct DepositTokens<'info> {
 pub struct CreateOffer<'info> {
     #[account(mut)]
     pub desk: Account<'info, Desk>,
-    #[account(mut, constraint = desk_token_treasury.mint == desk.token_mint, constraint = desk_token_treasury.owner == desk.key())]
+    /// Token registry for pricing - must belong to this desk
+    #[account(constraint = token_registry.desk == desk.key() @ OtcError::BadState)]
+    pub token_registry: Account<'info, TokenRegistry>,
+    #[account(mut, constraint = desk_token_treasury.mint == token_registry.token_mint, constraint = desk_token_treasury.owner == desk.key())]
     pub desk_token_treasury: Account<'info, TokenAccount>,
     #[account(mut)]
     pub beneficiary: Signer<'info>,
@@ -1046,7 +1212,7 @@ pub struct CreateOffer<'info> {
 #[derive(Accounts)]
 pub struct ApproveOffer<'info> {
     pub desk: Account<'info, Desk>,
-    #[account(mut)]
+    #[account(mut, constraint = offer.desk == desk.key() @ OtcError::BadState)]
     pub offer: Account<'info, Offer>,
     pub approver: Signer<'info>,
 }
@@ -1054,8 +1220,18 @@ pub struct ApproveOffer<'info> {
 #[derive(Accounts)]
 pub struct CancelOffer<'info> {
     pub desk: Account<'info, Desk>,
-    #[account(mut)]
+    #[account(mut, constraint = offer.desk == desk.key() @ OtcError::BadState)]
     pub offer: Account<'info, Offer>,
+    pub caller: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct CancelOfferWithConsignment<'info> {
+    pub desk: Account<'info, Desk>,
+    #[account(mut, constraint = offer.desk == desk.key() @ OtcError::BadState)]
+    pub offer: Account<'info, Offer>,
+    #[account(mut, constraint = consignment.desk == desk.key() @ OtcError::BadState, constraint = consignment.id == offer.consignment_id @ OtcError::BadState)]
+    pub consignment: Account<'info, Consignment>,
     pub caller: Signer<'info>,
 }
 
@@ -1063,9 +1239,10 @@ pub struct CancelOffer<'info> {
 pub struct FulfillOfferUsdc<'info> {
     #[account(mut)]
     pub desk: Account<'info, Desk>,
-    #[account(mut)]
+    #[account(mut, constraint = offer.desk == desk.key() @ OtcError::BadState)]
     pub offer: Account<'info, Offer>,
-    #[account(mut, constraint = desk_token_treasury.mint == desk.token_mint, constraint = desk_token_treasury.owner == desk.key())]
+    /// Token treasury - must match the token_mint in the offer
+    #[account(mut, constraint = desk_token_treasury.mint == offer.token_mint, constraint = desk_token_treasury.owner == desk.key())]
     pub desk_token_treasury: Account<'info, TokenAccount>,
     #[account(mut, constraint = desk_usdc_treasury.mint == desk.usdc_mint, constraint = desk_usdc_treasury.owner == desk.key())]
     pub desk_usdc_treasury: Account<'info, TokenAccount>,
@@ -1081,9 +1258,10 @@ pub struct FulfillOfferUsdc<'info> {
 pub struct FulfillOfferSol<'info> {
     #[account(mut)]
     pub desk: Account<'info, Desk>,
-    #[account(mut)]
+    #[account(mut, constraint = offer.desk == desk.key() @ OtcError::BadState)]
     pub offer: Account<'info, Offer>,
-    #[account(mut, constraint = desk_token_treasury.mint == desk.token_mint, constraint = desk_token_treasury.owner == desk.key())]
+    /// Token treasury - must match the token_mint in the offer
+    #[account(mut, constraint = desk_token_treasury.mint == offer.token_mint, constraint = desk_token_treasury.owner == desk.key())]
     pub desk_token_treasury: Account<'info, TokenAccount>,
     #[account(mut)]
     pub payer: Signer<'info>,
@@ -1095,12 +1273,14 @@ pub struct Claim<'info> {
     #[account(mut)]
     pub desk: Account<'info, Desk>,
     pub desk_signer: Signer<'info>,
-    #[account(mut)]
+    #[account(mut, constraint = offer.desk == desk.key() @ OtcError::BadState)]
     pub offer: Account<'info, Offer>,
-    #[account(mut)]
+    /// Treasury must match the token in the offer and be owned by desk
+    #[account(mut, constraint = desk_token_treasury.mint == offer.token_mint, constraint = desk_token_treasury.owner == desk.key() @ OtcError::BadState)]
     pub desk_token_treasury: Account<'info, TokenAccount>,
-    #[account(mut)]
+    #[account(mut, constraint = beneficiary_token_ata.mint == offer.token_mint, constraint = beneficiary_token_ata.owner == offer.beneficiary @ OtcError::BadState)]
     pub beneficiary_token_ata: Account<'info, TokenAccount>,
+    /// CHECK: Validated against offer.beneficiary in instruction
     pub beneficiary: UncheckedAccount<'info>,
     pub token_program: Program<'info, Token>,
 }
@@ -1110,10 +1290,13 @@ pub struct WithdrawTokens<'info> {
     pub owner: Signer<'info>,
     #[account(mut, has_one = owner)]
     pub desk: Account<'info, Desk>,
+    /// Token registry - must belong to this desk
+    #[account(constraint = token_registry.desk == desk.key() @ OtcError::BadState)]
+    pub token_registry: Account<'info, TokenRegistry>,
     pub desk_signer: Signer<'info>,
-    #[account(mut)]
+    #[account(mut, constraint = desk_token_treasury.mint == token_registry.token_mint, constraint = desk_token_treasury.owner == desk.key() @ OtcError::BadState)]
     pub desk_token_treasury: Account<'info, TokenAccount>,
-    #[account(mut)]
+    #[account(mut, constraint = owner_token_ata.mint == token_registry.token_mint)]
     pub owner_token_ata: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
@@ -1123,25 +1306,27 @@ pub struct WithdrawUsdc<'info> {
     pub owner: Signer<'info>,
     #[account(mut, has_one = owner)]
     pub desk: Account<'info, Desk>,
+    #[account(constraint = desk_signer.key() == desk.key() @ OtcError::NotOwner)]
     pub desk_signer: Signer<'info>,
-    #[account(mut)]
+    #[account(mut, constraint = desk_usdc_treasury.mint == desk.usdc_mint @ OtcError::BadState, constraint = desk_usdc_treasury.owner == desk.key() @ OtcError::BadState)]
     pub desk_usdc_treasury: Account<'info, TokenAccount>,
-    #[account(mut)]
+    #[account(mut, constraint = to_usdc_ata.mint == desk.usdc_mint @ OtcError::BadState)]
     pub to_usdc_ata: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
 pub struct WithdrawConsignment<'info> {
-    #[account(mut)]
+    #[account(mut, constraint = consignment.desk == desk.key() @ OtcError::BadState)]
     pub consignment: Account<'info, Consignment>,
     pub desk: Account<'info, Desk>,
+    #[account(constraint = desk_signer.key() == desk.key() @ OtcError::NotOwner)]
     pub desk_signer: Signer<'info>,
     #[account(mut)]
     pub consigner: Signer<'info>,
-    #[account(mut)]
+    #[account(mut, constraint = desk_token_treasury.mint == consignment.token_mint @ OtcError::BadState, constraint = desk_token_treasury.owner == desk.key() @ OtcError::BadState)]
     pub desk_token_treasury: Account<'info, TokenAccount>,
-    #[account(mut)]
+    #[account(mut, constraint = consigner_token_ata.mint == consignment.token_mint @ OtcError::BadState, constraint = consigner_token_ata.owner == consigner.key() @ OtcError::BadState)]
     pub consigner_token_ata: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
@@ -1163,11 +1348,11 @@ pub struct EmergencyRefundSol<'info> {
     #[account(mut)]
     pub desk: Account<'info, Desk>,
     pub desk_signer: Signer<'info>,
-    #[account(mut)]
+    #[account(mut, constraint = offer.desk == desk.key() @ OtcError::BadState)]
     pub offer: Account<'info, Offer>,
     pub caller: Signer<'info>,
-    /// CHECK: payer to refund
-    #[account(mut)]
+    /// CHECK: payer to refund - validated against offer.payer in instruction
+    #[account(mut, constraint = payer_refund.key() == offer.payer @ OtcError::BadState)]
     pub payer_refund: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -1177,12 +1362,12 @@ pub struct EmergencyRefundUsdc<'info> {
     #[account(mut)]
     pub desk: Account<'info, Desk>,
     pub desk_signer: Signer<'info>,
-    #[account(mut)]
+    #[account(mut, constraint = offer.desk == desk.key() @ OtcError::BadState)]
     pub offer: Account<'info, Offer>,
     pub caller: Signer<'info>,
-    #[account(mut)]
+    #[account(mut, constraint = desk_usdc_treasury.owner == desk.key() @ OtcError::BadState)]
     pub desk_usdc_treasury: Account<'info, TokenAccount>,
-    #[account(mut)]
+    #[account(mut, constraint = payer_usdc_refund.owner == offer.payer @ OtcError::BadState)]
     pub payer_usdc_refund: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
@@ -1227,20 +1412,31 @@ pub struct Desk {
 
 impl Desk { pub const SIZE: usize = 32+32+32+1+8+8+8+1+4+(32*32)+8+8+1+32+8+8+32+1+8+8+32+8+8+8+8+1+8; }
 
+/// Pool type for on-chain price discovery
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PoolType {
+    #[default]
+    None,           // No pool configured
+    Raydium,        // Raydium CPMM
+    Orca,           // Orca Whirlpool
+    PumpSwap,       // Pump.fun bonding curve / PumpSwap
+}
+
 #[account]
 pub struct TokenRegistry {
     pub desk: Pubkey,
     pub token_mint: Pubkey,
     pub decimals: u8,
     pub price_feed_id: [u8; 32], // Pyth feed ID
-    pub pool_address: Pubkey,    // AMM Pool Address (e.g. Raydium)
+    pub pool_address: Pubkey,    // AMM Pool Address (e.g. Raydium, Orca, PumpSwap)
+    pub pool_type: PoolType,     // Type of pool for price calculation
     pub is_active: bool,
     pub token_usd_price_8d: u64,
     pub prices_updated_at: i64,
     pub registered_by: Pubkey,
 }
 
-impl TokenRegistry { pub const SIZE: usize = 32+32+1+32+32+1+8+8+32; }
+impl TokenRegistry { pub const SIZE: usize = 32+32+1+32+32+1+1+8+8+32; } // +1 for pool_type
 
 #[account]
 pub struct Consignment {
@@ -1274,6 +1470,7 @@ pub struct Offer {
     pub desk: Pubkey,
     pub consignment_id: u64,
     pub token_mint: Pubkey,
+    pub token_decimals: u8,  // Store decimals so fulfillment doesn't need TokenRegistry
     pub id: u64,
     pub beneficiary: Pubkey,
     pub token_amount: u64,
@@ -1292,13 +1489,13 @@ pub struct Offer {
     pub amount_paid: u64,
 }
 
-impl Offer { pub const SIZE: usize = 32+8+32+8+32+8+2+8+8+8+2+8+1+1+1+1+1+32+8; }
+impl Offer { pub const SIZE: usize = 32+8+32+1+8+32+8+2+8+8+8+2+8+1+1+1+1+1+32+8; }
 
-fn available_inventory(desk: &Desk, treasury_balance: u64) -> u64 {
-    if treasury_balance < desk.token_reserved {
-        return 0;
-    }
-    treasury_balance - desk.token_reserved
+/// Returns available inventory for a token treasury
+/// Note: desk.token_reserved is deprecated - now all tokens are equal and tracked separately
+/// In the multi-token model, each token has its own treasury and the balance is the available amount
+fn available_inventory(_desk: &Desk, treasury_balance: u64) -> u64 {
+    treasury_balance
 }
 fn only_owner(desk: &Desk, who: &Pubkey) -> Result<()> { require!(*who == desk.owner, OtcError::NotOwner); Ok(()) }
 fn must_be_approver(desk: &Desk, who: &Pubkey) -> Result<()> { require!((*who == desk.agent) || desk.approvers.contains(who), OtcError::NotApprover); Ok(()) }

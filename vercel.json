@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/poll-token-registrations",
-      "schedule": "* * * * *"
+      "schedule": "*/5 * * * *"
     }
   ]
 }

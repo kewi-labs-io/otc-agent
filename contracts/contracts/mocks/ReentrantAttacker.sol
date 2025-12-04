@@ -14,7 +14,7 @@ interface IOTCDesk {
 }
 
 contract ReentrantAttacker {
-  IOTCDesk public desk;
+  IOTCDesk public immutable desk;
   uint256 public targetOfferId;
 
   constructor(IOTCDesk desk_) {

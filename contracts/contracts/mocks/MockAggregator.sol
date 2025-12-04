@@ -5,7 +5,7 @@ import {IAggregatorV3} from "../interfaces/IAggregatorV3.sol";
 
 contract MockAggregatorV3 is IAggregatorV3 {
   int256 private _answer;
-  uint8 private _decimals;
+  uint8 private immutable _decimals;
   uint80 private _roundId;
   uint80 private _answeredInRound;
   uint256 private _startedAt;

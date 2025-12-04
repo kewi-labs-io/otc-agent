@@ -56,4 +56,14 @@ dev-*.log
 solana/otc-program/test-ledger/
 solana/otc-program/target/src/config/deployments/local-*.json
 
+# Solana keypairs - NEVER commit these (contain private keys)
+*-keypair.json
+solana/otc-program/*-keypair.json
+solana/otc-program/deployer-keypair.json
+solana/otc-program/desk-keypair.json
+solana/otc-program/desk-keypair.json
+
+
 .cache-synpress/
+test-ledger/
+contracts/mythril-out/

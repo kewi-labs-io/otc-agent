@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "preinstall": "which bun > /dev/null 2>&1 || (echo 'Bun not found. Install from https://bun.sh' && exit 1)",
-    "build": "export PATH=\"$HOME/.local/share/solana/install/active_release/bin:$HOME/.cargo/bin:$HOME/.avm/binaries/anchor-0.31.1:$PATH\" && RUSTUP_TOOLCHAIN=nightly-2024-12-31 anchor build",
-    "test": "export PATH=\"$HOME/.local/share/solana/install/active_release/bin:$HOME/.cargo/bin:$HOME/.avm/binaries/anchor-0.31.1:$PATH\" && RUSTUP_TOOLCHAIN=nightly-2024-12-31 anchor test",
-    "test:local": "bun test:anchor",
-    "test:anchor": "export PATH=\"$HOME/.local/share/solana/install/active_release/bin:$HOME/.cargo/bin:$HOME/.avm/binaries/anchor-0.31.1:$PATH\" && RUSTUP_TOOLCHAIN=nightly-2024-12-31 bun --bun anchor test"
+    "build": "export PATH=\"$HOME/.local/share/solana/install/active_release/bin:$HOME/.cargo/bin:$HOME/.avm/bin:$PATH\" && anchor build",
+    "lint": "cd programs/otc && cargo clippy -- -D warnings",
+    "test": "export PATH=\"$HOME/.local/share/solana/install/active_release/bin:$HOME/.cargo/bin:$HOME/.avm/bin:$PATH\" && anchor test",
+    "test:local": "bun run test",
+    "test:anchor": "export PATH=\"$HOME/.local/share/solana/install/active_release/bin:$HOME/.cargo/bin:$HOME/.avm/bin:$PATH\" && bun --bun anchor test"
   },
   "devDependencies": {
     "@coral-xyz/anchor": "0.31.1",

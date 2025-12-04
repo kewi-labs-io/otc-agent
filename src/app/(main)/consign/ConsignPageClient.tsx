@@ -1,208 +1,223 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useMultiWallet } from "@/components/multiwallet";
-import { EVMChainSelectorModal } from "@/components/evm-chain-selector-modal";
+import { usePrivy } from "@privy-io/react-auth";
+import type { TokenWithBalance } from "@/components/consignment-form/token-selection-step";
 
 const TokenSelectionStep = dynamic(
-  () =>
-    import("@/components/consignment-form/token-selection-step").then(
-      (m) => m.TokenSelectionStep,
-    ),
-  { ssr: false },
+  () => import("@/components/consignment-form/token-selection-step").then((m) => m.TokenSelectionStep),
+  { ssr: false }
 );
-const AmountStep = dynamic(
-  () =>
-    import("@/components/consignment-form/amount-step").then(
-      (m) => m.AmountStep,
-    ),
-  { ssr: false },
-);
-const NegotiationParamsStep = dynamic(
-  () =>
-    import("@/components/consignment-form/negotiation-params-step").then(
-      (m) => m.NegotiationParamsStep,
-    ),
-  { ssr: false },
-);
-const DealStructureStep = dynamic(
-  () =>
-    import("@/components/consignment-form/deal-structure-step").then(
-      (m) => m.DealStructureStep,
-    ),
-  { ssr: false },
+const FormStep = dynamic(
+  () => import("@/components/consignment-form/form-step").then((m) => m.FormStep),
+  { ssr: false }
 );
 const ReviewStep = dynamic(
-  () =>
-    import("@/components/consignment-form/review-step").then(
-      (m) => m.ReviewStep,
-    ),
-  { ssr: false },
+  () => import("@/components/consignment-form/review-step").then((m) => m.ReviewStep),
+  { ssr: false }
 );
+
+function getRequiredChain(tokenId: string): "evm" | "solana" | null {
+  if (!tokenId) return null;
+  if (tokenId.includes("solana")) return "solana";
+  if (tokenId.includes("base") || tokenId.includes("evm") || tokenId.includes("bsc")) return "evm";
+  return null;
+}
+
+const STEP_LABELS = ["Select", "Configure", "Review"];
+
+const INITIAL_FORM_DATA = {
+  tokenId: "",
+  amount: "",
+  isNegotiable: true,
+  fixedDiscountBps: 1000,
+  fixedLockupDays: 180,
+  minDiscountBps: 500,
+  maxDiscountBps: 2000,
+  minLockupDays: 7,
+  maxLockupDays: 365,
+  minDealAmount: "1000",
+  maxDealAmount: "100000",
+  isFractionalized: true,
+  isPrivate: false,
+  maxPriceVolatilityBps: 1000,
+  maxTimeToExecuteSeconds: 1800,
+};
 
 export default function ConsignPageClient() {
   const {
-    isConnected,
+    hasWallet,
     activeFamily,
     setActiveFamily,
-    connectSolanaWallet,
-    isPhantomInstalled,
+    evmConnected,
+    solanaConnected,
+    evmAddress,
+    solanaPublicKey,
+    networkLabel,
+    disconnect,
+    connectWallet,
+    privyAuthenticated,
+    isFarcasterContext,
   } = useMultiWallet();
+  const { login, ready: privyReady } = usePrivy();
 
   const [step, setStep] = useState(1);
-  const [showEVMChainSelector, setShowEVMChainSelector] = React.useState(false);
+  const [selectedToken, setSelectedToken] = useState<TokenWithBalance | null>(null);
+  const [formData, setFormData] = useState(INITIAL_FORM_DATA);
 
-  const [formData, setFormData] = useState({
-    tokenId: "",
-    amount: "",
-    isNegotiable: true,
-    fixedDiscountBps: 1000,
-    fixedLockupDays: 180,
-    minDiscountBps: 500,
-    maxDiscountBps: 2000,
-    minLockupDays: 7,
-    maxLockupDays: 730,
-    minDealAmount: "1000",
-    maxDealAmount: "100000",
-    isFractionalized: true,
-    isPrivate: false,
-    maxPriceVolatilityBps: 1000,
-    maxTimeToExecuteSeconds: 1800,
-  });
+  const currentAddress = activeFamily === "solana" ? solanaPublicKey : evmAddress;
+  const displayAddress = currentAddress
+    ? `${currentAddress.slice(0, 6)}...${currentAddress.slice(-4)}`
+    : null;
 
-  const updateFormData = (updates: Partial<typeof formData>) => {
+  const requiredChain = useMemo(() => getRequiredChain(formData.tokenId), [formData.tokenId]);
+
+  const isConnectedToRequiredChain = useMemo(() => {
+    if (!requiredChain) return hasWallet;
+    return requiredChain === "solana"
+      ? activeFamily === "solana" && hasWallet
+      : activeFamily === "evm" && hasWallet;
+  }, [requiredChain, activeFamily, hasWallet]);
+
+  // Reset form when chain changes (prevents stale token selection)
+  useEffect(() => {
+    if (step > 1 && selectedToken) {
+      const tokenChain = selectedToken.chain;
+      const isTokenOnCurrentChain =
+        (tokenChain === "solana" && activeFamily === "solana") ||
+        (tokenChain !== "solana" && activeFamily === "evm");
+
+      if (!isTokenOnCurrentChain) {
+        // Token is on different chain, reset to step 1
+        setStep(1);
+        setSelectedToken(null);
+        setFormData(INITIAL_FORM_DATA);
+      }
+    }
+  }, [activeFamily, step, selectedToken]);
+
+  const updateFormData = useCallback((updates: Partial<typeof formData>) => {
     setFormData((prev) => ({ ...prev, ...updates }));
-  };
+  }, []);
 
-  const handleNext = () => {
-    if (step < 5) {
-      setStep(step + 1);
-    }
-  };
+  const handleNext = useCallback(() => setStep((s) => Math.min(s + 1, 3)), []);
+  const handleBack = useCallback(() => setStep((s) => Math.max(s - 1, 1)), []);
 
-  const handleBack = () => {
-    if (step > 1) {
-      setStep(step - 1);
-    }
-  };
+  const handleConnect = useCallback(
+    (chain?: "evm" | "solana") => {
+      if (chain) setActiveFamily(chain);
+      privyAuthenticated ? connectWallet() : login();
+    },
+    [setActiveFamily, privyAuthenticated, connectWallet, login]
+  );
 
-  const getRequiredChain = (tokenId: string): "evm" | "solana" | null => {
-    if (!tokenId) return null;
-    if (tokenId.includes("solana")) return "solana";
-    if (tokenId.includes("base") || tokenId.includes("evm")) return "evm";
-    return null;
-  };
-
-  const handleConnectEvm = () => {
-    setShowEVMChainSelector(true);
-  };
-
-  const handleConnectSolana = () => {
-    if (!isPhantomInstalled) {
-      window.open("https://phantom.app/", "_blank");
-      return null;
-    }
-    setActiveFamily("solana");
-    if (!isConnected) {
-      connectSolanaWallet();
-    }
-    return null;
-  };
-
-  // Check if wallet is connected for the required chain
-  const requiredChain = getRequiredChain(formData.tokenId);
-  const isConnectedToRequiredChain = requiredChain
-    ? requiredChain === "solana"
-      ? activeFamily === "solana" && isConnected
-      : activeFamily === "evm" && isConnected
-    : isConnected;
+  const handleTokenSelect = useCallback((token: TokenWithBalance) => {
+    setSelectedToken(token);
+    // Auto-set deal amounts based on token balance
+    const humanBalance = Number(BigInt(token.balance)) / Math.pow(10, token.decimals);
+    const minDeal = Math.max(1, Math.floor(humanBalance * 0.01));
+    const maxDeal = Math.floor(humanBalance);
+    setFormData((prev) => ({
+      ...prev,
+      minDealAmount: minDeal.toString(),
+      maxDealAmount: maxDeal.toString(),
+    }));
+  }, []);
 
   return (
     <main className="flex-1 px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8">
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl sm:text-3xl font-bold mb-2">
-          List Your Tokens for OTC
-        </h1>
+        <h1 className="text-2xl sm:text-3xl font-bold mb-2">List Your Tokens for OTC</h1>
         <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400 mb-4">
-          Create a consignment to sell your tokens at a discount with a lockup
-          period
+          Sell your tokens at a discount with a lockup period
         </p>
+
+        {hasWallet && (
+          <div className="mb-6 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">
+                    {activeFamily === "solana" ? "S" : "E"}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    {displayAddress || "Not connected"}
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{networkLabel}</p>
+                </div>
+              </div>
+              {!isFarcasterContext && (
+                <button
+                  onClick={disconnect}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  Disconnect
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Progress indicator */}
         <div className="mb-6 sm:mb-8">
           <div className="flex justify-between items-center mb-2">
-            {[1, 2, 3, 4, 5].map((s) => (
+            {[1, 2, 3].map((s) => (
               <div
                 key={s}
-                className={`w-full h-1.5 sm:h-2 ${
+                className={`flex-1 h-2 ${
                   s <= step ? "bg-orange-500" : "bg-zinc-200 dark:bg-zinc-800"
-                } ${s < 5 ? "mr-1 sm:mr-2" : ""} rounded-full`}
+                } ${s < 3 ? "mr-2" : ""} rounded-full transition-colors`}
               />
             ))}
           </div>
           <div className="flex justify-between text-xs text-zinc-600 dark:text-zinc-400">
-            <span>Token</span>
-            <span>Amount</span>
-            <span>Pricing</span>
-            <span>Structure</span>
-            <span>Review</span>
+            {STEP_LABELS.map((label, idx) => (
+              <span key={label} className={step === idx + 1 ? "text-orange-500 font-medium" : ""}>
+                {label}
+              </span>
+            ))}
           </div>
         </div>
 
         {/* Form steps */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 sm:p-6">
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 sm:p-6 max-h-[calc(100vh-280px)] flex flex-col">
           {step === 1 && (
             <TokenSelectionStep
               formData={formData}
               updateFormData={updateFormData}
               onNext={handleNext}
-              onBack={handleBack}
+              onTokenSelect={handleTokenSelect}
             />
           )}
           {step === 2 && (
-            <AmountStep
+            <FormStep
               formData={formData}
               updateFormData={updateFormData}
               onNext={handleNext}
               onBack={handleBack}
+              selectedTokenBalance={selectedToken?.balance}
+              selectedTokenDecimals={selectedToken?.decimals}
+              selectedTokenSymbol={selectedToken?.symbol}
             />
           )}
           {step === 3 && (
-            <NegotiationParamsStep
-              formData={formData}
-              updateFormData={updateFormData}
-              onNext={handleNext}
-              onBack={handleBack}
-            />
-          )}
-          {step === 4 && (
-            <DealStructureStep
-              formData={formData}
-              updateFormData={updateFormData}
-              onNext={handleNext}
-              onBack={handleBack}
-            />
-          )}
-          {step === 5 && (
             <ReviewStep
               formData={formData}
-              updateFormData={updateFormData}
-              onNext={handleNext}
               onBack={handleBack}
               requiredChain={requiredChain}
               isConnectedToRequiredChain={isConnectedToRequiredChain}
-              onConnectEvm={handleConnectEvm}
-              onConnectSolana={handleConnectSolana}
+              onConnect={() => handleConnect(requiredChain || undefined)}
+              privyReady={privyReady}
+              selectedTokenSymbol={selectedToken?.symbol}
+              selectedTokenDecimals={selectedToken?.decimals}
             />
           )}
         </div>
       </div>
-
-      <EVMChainSelectorModal
-        isOpen={showEVMChainSelector}
-        onClose={() => setShowEVMChainSelector(false)}
-      />
     </main>
   );
 }

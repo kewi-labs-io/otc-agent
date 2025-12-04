@@ -26,8 +26,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (chain === "base" || chain === "ethereum") {
-      return await syncBaseToken(transactionHash, blockNumber);
+    if (chain === "base" || chain === "bsc" || chain === "ethereum") {
+      return await syncEvmToken(transactionHash, blockNumber, chain);
     } else if (chain === "solana") {
       return await syncSolanaToken(transactionHash);
     } else {
@@ -49,22 +49,40 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Sync Base token registration immediately
+ * Sync EVM token registration immediately (Base or BSC)
  */
-async function syncBaseToken(transactionHash: string, blockNumber?: string) {
+async function syncEvmToken(
+  transactionHash: string,
+  blockNumber: string | undefined,
+  chain: string,
+) {
+  // Import chains dynamically to handle both Base and BSC
+  const { base, bsc } = await import("viem/chains");
+
   const registrationHelperAddress =
-    process.env.NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS;
+    chain === "bsc"
+      ? process.env.NEXT_PUBLIC_BSC_REGISTRATION_HELPER_ADDRESS
+      : process.env.NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS;
+
   if (!registrationHelperAddress) {
     return NextResponse.json(
-      { success: false, error: "REGISTRATION_HELPER_ADDRESS not configured" },
+      {
+        success: false,
+        error: `REGISTRATION_HELPER_ADDRESS not configured for ${chain}`,
+      },
       { status: 500 },
     );
   }
 
   const rpcUrl =
-    process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+    chain === "bsc"
+      ? process.env.NEXT_PUBLIC_BSC_RPC_URL ||
+        "https://bsc-dataseed1.binance.org"
+      : process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+
+  const viemChain = chain === "bsc" ? bsc : base;
   const client = createPublicClient({
-    chain: base,
+    chain: viemChain,
     transport: http(rpcUrl),
   });
 
@@ -85,7 +103,7 @@ async function syncBaseToken(transactionHash: string, blockNumber?: string) {
     const endBlock = txBlock;
 
     console.log(
-      `[Sync Base] Fetching events from block ${startBlock} to ${endBlock}`,
+      `[Sync ${chain.toUpperCase()}] Fetching events from block ${startBlock} to ${endBlock}`,
     );
 
     // Get logs for this specific transaction
@@ -134,35 +152,38 @@ async function syncBaseToken(transactionHash: string, blockNumber?: string) {
         };
 
         console.log(
-          `[Sync Base] Processing token registration: ${tokenAddress} by ${registeredBy}`,
+          `[Sync ${chain.toUpperCase()}] Processing token registration: ${tokenAddress} by ${registeredBy}`,
         );
 
         // Fetch token metadata
+        // Use type assertion to bypass viem's strict authorizationList requirement
+        const readContract = client.readContract as (params: unknown) => Promise<unknown>;
         const [symbol, name, decimals] = await Promise.all([
-          client.readContract({
+          readContract({
             address: tokenAddress as `0x${string}`,
             abi: ERC20_ABI,
             functionName: "symbol",
           }),
-          client.readContract({
+          readContract({
             address: tokenAddress as `0x${string}`,
             abi: ERC20_ABI,
             functionName: "name",
           }),
-          client.readContract({
+          readContract({
             address: tokenAddress as `0x${string}`,
             abi: ERC20_ABI,
             functionName: "decimals",
           }),
         ]);
 
-        // Register to database
+        // Register to database - use the chain parameter (base or bsc)
         const tokenService = new TokenRegistryService();
+        const dbChain = chain === "bsc" ? "bsc" : "base";
         const token = await tokenService.registerToken({
           symbol: symbol as string,
           name: name as string,
           contractAddress: tokenAddress.toLowerCase(),
-          chain: "base",
+          chain: dbChain,
           decimals: Number(decimals),
           logoUrl: undefined,
           description: `Registered via RegistrationHelper by ${registeredBy}`,
@@ -170,9 +191,11 @@ async function syncBaseToken(transactionHash: string, blockNumber?: string) {
 
         processed++;
         processedTokens.push(token.id);
-        console.log(`[Sync Base] ✅ Registered ${symbol} (${tokenAddress})`);
+        console.log(
+          `[Sync ${chain.toUpperCase()}] ✅ Registered ${symbol} (${tokenAddress})`,
+        );
       } catch (error) {
-        console.error(`[Sync Base] Failed to process event:`, error);
+        console.error(`[Sync ${chain.toUpperCase()}] Failed to process event:`, error);
       }
     }
 
@@ -180,10 +203,10 @@ async function syncBaseToken(transactionHash: string, blockNumber?: string) {
       success: true,
       processed,
       tokens: processedTokens,
-      message: `Successfully synced ${processed} token(s)`,
+      message: `Successfully synced ${processed} token(s) on ${chain}`,
     });
   } catch (error) {
-    console.error("[Sync Base] Error:", error);
+    console.error(`[Sync ${chain.toUpperCase()}] Error:`, error);
     return NextResponse.json(
       {
         success: false,

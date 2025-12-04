@@ -18,14 +18,19 @@ const nextConfig: NextConfig = {
   experimental: {
     inlineCss: true,
   },
+  // Skip image optimization for external images - they come from too many sources
+  // Vercel Blob caching handles performance for Solana token logos
+  images: {
+    unoptimized: true,
+  },
   // Fix cross-origin chunk loading issues
   // Supports localhost development and Cloudflare tunnels out of the box
   allowedDevOrigins: process.env.NODE_ENV === 'development' 
     ? [
         // Common localhost patterns (works for all developers)
-        'localhost:5004',
-        '127.0.0.1:5004',
-        '0.0.0.0:5004',
+        'localhost:4444',
+        '127.0.0.1:4444',
+        '0.0.0.0:4444',
         
         // Cloudflare tunnel support (set TUNNEL_DOMAIN in .env.local)
         ...(process.env.TUNNEL_DOMAIN ? [process.env.TUNNEL_DOMAIN] : []),
@@ -215,10 +220,10 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https: blob:",
-              "connect-src 'self' https://*.solana.com wss://*.solana.com https://*.helius-rpc.com https://*.drpc.org https://eth.merkle.io https://api.neynar.com https://farcaster.xyz https://client.farcaster.xyz https://warpcast.com https://wrpcd.net https://*.wrpcd.net wss://relay.farcaster.xyz https://auth.privy.io https://*.rpc.privy.systems https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://*.walletconnect.com wss://*.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://*.metamask.io https://*.coinbase.com https://api.developer.coinbase.com https://mainnet.base.org https://sepolia.base.org",
+              "connect-src 'self' http://127.0.0.1:8545 http://localhost:8545 ws://127.0.0.1:8545 ws://localhost:8545 http://127.0.0.1:8899 http://localhost:8899 ws://127.0.0.1:8900 ws://localhost:8900 https://*.solana.com wss://*.solana.com https://*.helius-rpc.com https://*.drpc.org https://eth.merkle.io https://api.neynar.com https://farcaster.xyz https://client.farcaster.xyz https://warpcast.com https://wrpcd.net https://*.wrpcd.net wss://relay.farcaster.xyz https://auth.privy.io https://*.rpc.privy.systems https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://*.walletconnect.com wss://*.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://*.metamask.io https://*.coinbase.com https://api.developer.coinbase.com https://mainnet.base.org https://sepolia.base.org",
               "font-src 'self' data:",
               "object-src 'none'",
               "base-uri 'self'",

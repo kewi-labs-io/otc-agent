@@ -15,7 +15,7 @@ import type { RawOfferData } from "@/lib/otc-helpers";
 // This should be called daily via a cron job (e.g., Vercel Cron or external scheduler)
 // It checks for matured OTC and claims them on behalf of users
 
-const APPROVER_PRIVATE_KEY = process.env.APPROVER_PRIVATE_KEY as
+const EVM_PRIVATE_KEY = process.env.EVM_PRIVATE_KEY as
   | `0x${string}`
   | undefined;
 const CRON_SECRET = process.env.CRON_SECRET;
@@ -87,35 +87,30 @@ export async function GET(request: NextRequest) {
       args: [i],
     } as unknown as Parameters<typeof publicClient.readContract>[0])) as RawOfferData;
 
-    // [consignmentId, tokenId, beneficiary, tokenAmount, discountBps, createdAt, unlockTime,
-    // priceUsdPerToken, maxPriceDeviation, ethUsdPrice, currency, approved, paid, fulfilled, cancelled, payer, amountPaid]
+    // Offer struct indices (from OTC.sol):
+    // 0: consignmentId, 1: tokenId, 2: beneficiary, 3: tokenAmount, 4: discountBps,
+    // 5: createdAt, 6: unlockTime, 7: priceUsdPerToken, 8: maxPriceDeviation,
+    // 9: ethUsdPrice, 10: currency, 11: approved, 12: paid, 13: fulfilled, 14: cancelled,
+    // 15: payer, 16: amountPaid
 
     if (!Array.isArray(offerData)) continue;
 
     const [
-      ,
-      ,
-      // consignmentId
-      // tokenId
-      beneficiary, // tokenAmount
-      ,
-      ,
-      ,
-      // discountBps
-      // createdAt
-      unlockTime, // priceUsdPerToken
-      ,
-      ,
-      ,
-      ,
-      ,
-      // maxPriceDeviation
-      // ethUsdPrice
-      // currency
-      // approved
-      paid,
-      fulfilled,
-      cancelled,
+      ,              // 0: consignmentId
+      ,              // 1: tokenId
+      beneficiary,   // 2: beneficiary
+      ,              // 3: tokenAmount
+      ,              // 4: discountBps
+      ,              // 5: createdAt
+      unlockTime,    // 6: unlockTime
+      ,              // 7: priceUsdPerToken
+      ,              // 8: maxPriceDeviation
+      ,              // 9: ethUsdPrice
+      ,              // 10: currency
+      ,              // 11: approved
+      paid,          // 12: paid
+      fulfilled,     // 13: fulfilled
+      cancelled,     // 14: cancelled
     ] = offerData;
 
     // Matured = paid, not fulfilled, not cancelled, and unlockTime passed
@@ -144,11 +139,11 @@ export async function GET(request: NextRequest) {
 
   // Execute autoClaim as approver if configured and there are matured offers
   if (maturedOffers.length > 0) {
-    if (!APPROVER_PRIVATE_KEY) {
+    if (!EVM_PRIVATE_KEY) {
       return NextResponse.json(
         {
           success: false,
-          error: "Missing APPROVER_PRIVATE_KEY",
+          error: "Missing EVM_PRIVATE_KEY",
           maturedOffers: result.maturedOffers,
           message: "Found matured offers but cannot claim without approver key",
         },
@@ -156,7 +151,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const account = privateKeyToAccount(APPROVER_PRIVATE_KEY);
+    const account = privateKeyToAccount(EVM_PRIVATE_KEY);
     const walletClient = createWalletClient({
       account,
       chain,

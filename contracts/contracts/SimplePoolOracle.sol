@@ -189,21 +189,17 @@ contract SimplePoolOracle is IAggregatorV3, Ownable {
         (, int24 spotTick,,,,,) = pool.slot0();
         uint256 spotPrice = getQuoteAtTick(spotTick);
         
-        // Use the same conversion logic for spot price as TWAP?
-        // getQuoteAtTick returns basePerTarget.
-        // But we need to convert to USD (8 decimals) like we did for 'price'.
-        // Refactor conversion logic to avoid code duplication?
-        // For now, I'll just apply the conversion factor.
-        
-        uint256 spotPriceUsd;
+        // Convert spot price to USD using same logic as TWAP
+        uint256 spotPriceUsd = 0;
         if (isUSDC) {
              spotPriceUsd = (spotPrice * 1e8) / 1e6;
         } else if (isWETH) {
-            (, int256 ethUsdPrice, , , ) = ethUsdFeed.latestRoundData();
-            spotPriceUsd = (spotPrice * uint256(ethUsdPrice)) / 1e18;
+            (, int256 ethUsdPrice_, , , ) = ethUsdFeed.latestRoundData();
+            spotPriceUsd = (spotPrice * uint256(ethUsdPrice_)) / 1e18;
         }
         
-        // Check deviation
+        // Check deviation - require spot price is within bounds
+        require(spotPriceUsd > 0, "invalid spot price");
         if (spotPriceUsd > price) {
             require(((spotPriceUsd - price) * 100) / price <= MAX_PRICE_CHANGE_PERCENT, "spot price deviation high");
         } else {

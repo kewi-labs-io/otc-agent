@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 
 import { Button } from "@/components/button";
 import { useMultiWallet } from "@/components/multiwallet";
@@ -68,9 +69,142 @@ function getLockupLabel(createdAt: bigint, unlockTime: bigint): string {
   return `${months} month${months === 1 ? "" : "s"}`;
 }
 
+// --- Helper: Transform Solana deals from API to offer format ---
+function transformSolanaDeal(deal: DealFromAPI, walletAddress: string): OfferWithQuoteId {
+  const createdTs = deal.createdAt ? new Date(deal.createdAt).getTime() / 1000 : Date.now() / 1000;
+  const lockupDays = 180;
+  const tokenAmountBigInt = BigInt(deal.tokenAmount || "0") * BigInt(1e18);
+
+  return {
+    id: BigInt(deal.offerId || "0"),
+    beneficiary: deal.beneficiary || walletAddress,
+    tokenAmount: tokenAmountBigInt,
+    discountBps: BigInt(deal.discountBps || 1000),
+    createdAt: BigInt(Math.floor(createdTs)),
+    unlockTime: BigInt(Math.floor(createdTs + lockupDays * 86400)),
+    priceUsdPerToken: BigInt(100_000_000),
+    ethUsdPrice: BigInt(10_000_000_000),
+    currency: deal.paymentCurrency === "SOL" || deal.paymentCurrency === "ETH" ? 0 : 1,
+    approved: true,
+    paid: true,
+    fulfilled: false,
+    cancelled: false,
+    payer: deal.payer || walletAddress,
+    amountPaid: BigInt(deal.paymentAmount || "0"),
+    quoteId: deal.quoteId,
+  };
+}
+
+// --- Helper: Transform EVM deal from API to offer format ---
+function transformEvmDeal(deal: DealFromAPI, walletAddress: string): OfferWithQuoteId {
+  const createdTs = deal.createdAt ? new Date(deal.createdAt).getTime() / 1000 : Date.now() / 1000;
+  const lockupDays = deal.lockupMonths ? deal.lockupMonths * 30 : 150;
+  const tokenAmountBigInt = BigInt(deal.tokenAmount || "0") * BigInt(1e18);
+
+  return {
+    id: BigInt(deal.offerId || "0"),
+    beneficiary: deal.beneficiary || walletAddress,
+    tokenAmount: tokenAmountBigInt,
+    discountBps: BigInt(deal.discountBps || 1000),
+    createdAt: BigInt(Math.floor(createdTs)),
+    unlockTime: BigInt(Math.floor(createdTs + lockupDays * 86400)),
+    priceUsdPerToken: BigInt(100_000_000),
+    ethUsdPrice: BigInt(10_000_000_000),
+    currency: deal.paymentCurrency === "ETH" ? 0 : 1,
+    approved: true,
+    paid: true,
+    fulfilled: false,
+    cancelled: false,
+    payer: walletAddress,
+    amountPaid: BigInt(0),
+    quoteId: deal.quoteId,
+  };
+}
+
+// --- Helper: Merge database deals with contract offers ---
+function mergeDealsWithOffers(
+  dbDeals: DealFromAPI[],
+  contractOffers: any[],
+  walletAddress: string
+): OfferWithQuoteId[] {
+  const result: OfferWithQuoteId[] = [];
+  const processedOfferIds = new Set<string>();
+
+  // Process database deals first (they have quoteId)
+  for (const deal of dbDeals) {
+    if (deal.status !== "executed" && deal.status !== "approved") continue;
+
+    const contractOffer = deal.offerId
+      ? contractOffers.find((o) => o.id.toString() === deal.offerId)
+      : undefined;
+
+    if (contractOffer) {
+      result.push({ ...contractOffer, quoteId: deal.quoteId });
+      if (deal.offerId) processedOfferIds.add(deal.offerId);
+    } else {
+      result.push(transformEvmDeal(deal, walletAddress));
+    }
+  }
+
+  // Add contract offers not in database
+  const contractOnlyOffers = contractOffers.filter((o) => {
+    const offerId = o.id.toString();
+    if (processedOfferIds.has(offerId)) return false;
+    return o?.id != null && o?.tokenAmount > 0n && o?.paid && !o?.fulfilled && !o?.cancelled;
+  });
+
+  result.push(...contractOnlyOffers.map((o) => ({ ...o, quoteId: undefined })));
+  return result;
+}
+
 export function MyDealsContent() {
-  const { activeFamily, evmAddress, solanaPublicKey, isConnected } =
-    useMultiWallet();
+  const { 
+    activeFamily, 
+    setActiveFamily, 
+    evmAddress, 
+    solanaPublicKey, 
+    hasWallet, 
+    evmConnected, 
+    solanaConnected,
+    disconnect,
+    networkLabel,
+    connectWallet,
+    privyAuthenticated,
+  } = useMultiWallet();
+  const { login, ready: privyReady } = usePrivy();
+
+  // Switch chain: if already authenticated, use connectWallet to add wallet
+  // If not authenticated, use login to start fresh
+  const handleSwitchToEvm = useCallback(() => {
+    setActiveFamily("evm");
+    if (!evmConnected) {
+      privyAuthenticated ? connectWallet() : login();
+    }
+  }, [setActiveFamily, evmConnected, privyAuthenticated, connectWallet, login]);
+
+  const handleSwitchToSolana = useCallback(() => {
+    setActiveFamily("solana");
+    if (!solanaConnected) {
+      privyAuthenticated ? connectWallet() : login();
+    }
+  }, [setActiveFamily, solanaConnected, privyAuthenticated, connectWallet, login]);
+
+  // Use connectWallet if already authenticated, login if not
+  const handleConnect = useCallback(() => {
+    privyAuthenticated ? connectWallet() : login();
+  }, [privyAuthenticated, connectWallet, login]);
+
+  const handleDisconnect = useCallback(async () => {
+    await disconnect();
+  }, [disconnect]);
+
+  const networkName = activeFamily === "solana" ? "Solana" : "EVM";
+  
+  // Current wallet address based on active family
+  const currentAddress = activeFamily === "solana" ? solanaPublicKey : evmAddress;
+  const displayAddress = currentAddress 
+    ? `${currentAddress.slice(0, 6)}...${currentAddress.slice(-4)}`
+    : null;
   const {
     myOffers,
     claim,
@@ -84,14 +218,16 @@ export function MyDealsContent() {
   );
   const [sortAsc] = useState(true);
   const [refunding, setRefunding] = useState<bigint | null>(null);
+  const [refundStatus, setRefundStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [solanaDeals, setSolanaDeals] = useState<DealFromAPI[]>([]);
   const [evmDeals, setEvmDeals] = useState<DealFromAPI[]>([]);
   const [myListings, setMyListings] = useState<OTCConsignment[]>([]);
 
   const refreshListings = useCallback(async () => {
+    // Solana addresses are Base58 and case-sensitive, EVM addresses are case-insensitive
     const walletAddr =
       activeFamily === "solana"
-        ? solanaPublicKey?.toLowerCase()
+        ? solanaPublicKey
         : evmAddress?.toLowerCase();
 
     if (!walletAddr) {
@@ -129,189 +265,12 @@ export function MyDealsContent() {
 
   const inProgress = useMemo(() => {
     if (activeFamily === "solana") {
-      console.log(
-        "[MyDeals] Using Solana deals from database:",
-        solanaDeals.length,
-      );
-
-      if (solanaDeals.length === 0) {
-        console.log("[MyDeals] No Solana deals found");
-        return [];
-      }
-
-      const solanaWalletAddress = solanaPublicKey?.toString() || "";
-
-      return solanaDeals.map((deal: DealFromAPI) => {
-        const createdTs = deal.createdAt
-          ? new Date(deal.createdAt).getTime() / 1000
-          : Date.now() / 1000;
-        const lockupDays = 180;
-
-        console.log("[MyDeals] Transforming deal:", {
-          offerId: deal.offerId,
-          tokenAmount: deal.tokenAmount,
-          type: typeof deal.tokenAmount,
-        });
-
-        const tokenAmountRaw = deal.tokenAmount || "0";
-        const tokenAmountBigInt = BigInt(tokenAmountRaw) * BigInt(1e18);
-        console.log(
-          "[MyDeals] Token amount:",
-          tokenAmountRaw,
-          "→",
-          tokenAmountBigInt.toString(),
-        );
-
-        return {
-          id: BigInt(deal.offerId || "0"),
-          beneficiary: deal.beneficiary || solanaWalletAddress,
-          // Use 18 decimals to match formatTokenAmount function (which divides by 1e18)
-          tokenAmount: tokenAmountBigInt,
-          discountBps: Number(deal.discountBps) || 1000,
-          createdAt: BigInt(Math.floor(createdTs)),
-          unlockTime: BigInt(Math.floor(createdTs + lockupDays * 86400)),
-          priceUsdPerToken: BigInt(100_000_000), // $1.00
-          ethUsdPrice: BigInt(10_000_000_000), // $100
-          currency:
-            deal.paymentCurrency === "SOL" || deal.paymentCurrency === "ETH"
-              ? 0
-              : 1,
-          approved: true,
-          paid: true,
-          fulfilled: false,
-          cancelled: false,
-          payer: deal.payer || solanaWalletAddress,
-          amountPaid: BigInt(deal.paymentAmount || "0"),
-          quoteId: deal.quoteId, // Add quoteId for proper linking
-        };
-      });
+      const walletAddress = solanaPublicKey?.toString() || "";
+      return solanaDeals.map((deal) => transformSolanaDeal(deal, walletAddress));
     }
 
-    const offers = myOffers ?? [];
-    console.log("[MyDeals] Total offers from contract:", offers.length);
-    console.log("[MyDeals] Raw offers data:", offers);
-    console.log("[MyDeals] Database deals:", evmDeals.length, evmDeals);
-
-    // Strategy: Prioritize database deals (they have quoteId!), supplement with contract data
-    const result: any[] = [];
-    const processedOfferIds = new Set<string>();
-
-    // 1. Process database deals first (they have quoteId which is what we need!)
-    for (const deal of evmDeals) {
-      // Only show executed or approved deals (in-progress)
-      if (deal.status !== "executed" && deal.status !== "approved") {
-        console.log(
-          `[MyDeals] Skipping deal ${deal.quoteId} with status: ${deal.status}`,
-        );
-        continue;
-      }
-
-      // Find matching contract offer for full data
-      const contractOffer = deal.offerId
-        ? offers.find((o) => o.id.toString() === deal.offerId)
-        : undefined;
-
-      if (contractOffer) {
-        // We have both database and contract data - use contract structure with quoteId
-        console.log(
-          `[MyDeals] Matched DB deal ${deal.quoteId} to contract offer ${deal.offerId}`,
-        );
-
-        result.push({
-          ...contractOffer,
-          quoteId: deal.quoteId, // ✅ Add quoteId from database
-        });
-
-        if (deal.offerId) {
-          processedOfferIds.add(deal.offerId);
-        }
-      } else {
-        // Database deal without matching contract offer (possibly old data or Solana)
-        // Transform to match offer structure
-        console.log(
-          `[MyDeals] Using DB-only deal ${deal.quoteId} (no contract match)`,
-        );
-
-        const createdTs = deal.createdAt
-          ? new Date(deal.createdAt).getTime() / 1000
-          : Date.now() / 1000;
-        const lockupDays = deal.lockupMonths ? deal.lockupMonths * 30 : 150;
-        const tokenAmountRaw = deal.tokenAmount || "0";
-        // Database stores plain number (e.g. "1000"), need to convert to wei for display
-        // formatTokenAmount() divides by 1e18, so we multiply here
-        const tokenAmountBigInt = BigInt(tokenAmountRaw) * BigInt(1e18);
-
-        result.push({
-          id: BigInt(deal.offerId || "0"),
-          beneficiary: deal.beneficiary || evmAddress || "",
-          tokenAmount: tokenAmountBigInt,
-          discountBps: BigInt(deal.discountBps || 1000),
-          createdAt: BigInt(Math.floor(createdTs)),
-          unlockTime: BigInt(Math.floor(createdTs + lockupDays * 86400)),
-          priceUsdPerToken: BigInt(100_000_000), // $1.00
-          ethUsdPrice: BigInt(10_000_000_000), // $100
-          currency: deal.paymentCurrency === "ETH" ? 0 : 1,
-          approved: true,
-          paid: true,
-          fulfilled: false,
-          cancelled: false,
-          payer: evmAddress || "",
-          amountPaid: BigInt(0),
-          quoteId: deal.quoteId, // ✅ quoteId from database
-        });
-      }
-    }
-
-    // 2. Add contract offers that aren't in the database yet
-    const filteredContractOnly = offers.filter((o) => {
-      const offerId = o.id.toString();
-      if (processedOfferIds.has(offerId)) {
-        return false; // Already processed from database
-      }
-
-      // In-progress means paid, not fulfilled, not cancelled
-      const isPaid = Boolean(o?.paid);
-      const isFulfilled = Boolean(o?.fulfilled);
-      const isCancelled = Boolean(o?.cancelled);
-      const hasValidId = o?.id !== undefined && o?.id !== null;
-      const hasTokenAmount = o?.tokenAmount && o.tokenAmount > 0n;
-
-      console.log(`[MyDeals] Contract-only offer ${offerId}:`, {
-        isPaid,
-        isFulfilled,
-        isCancelled,
-        hasValidId,
-        hasTokenAmount,
-      });
-
-      return (
-        hasValidId && hasTokenAmount && isPaid && !isFulfilled && !isCancelled
-      );
-    });
-
-    // Add contract-only offers (these won't have quoteId, will use fallback)
-    result.push(
-      ...filteredContractOnly.map((o) => ({
-        ...o,
-        quoteId: undefined, // No quoteId - will use API fallback
-      })),
-    );
-
-    console.log("[MyDeals] Final combined deals:", {
-      fromDatabase: result.filter((r) => r.quoteId).length,
-      fromContractOnly: result.filter((r) => !r.quoteId).length,
-      total: result.length,
-    });
-
-    return result;
-  }, [
-    myOffers,
-    activeFamily,
-    solanaDeals,
-    evmDeals,
-    solanaPublicKey,
-    evmAddress,
-  ]);
+    return mergeDealsWithOffers(evmDeals, myOffers ?? [], evmAddress || "");
+  }, [myOffers, activeFamily, solanaDeals, evmDeals, solanaPublicKey, evmAddress]);
 
   const sorted = useMemo(() => {
     const list = [...inProgress];
@@ -327,15 +286,26 @@ export function MyDealsContent() {
     })();
   }, []);
 
-  const hasWallet = isConnected;
-
   if (!hasWallet) {
     return (
       <main className="flex-1 min-h-[70vh] flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <h1 className="text-2xl font-semibold">My Deals</h1>
+        <div className="text-center space-y-6 max-w-md mx-auto px-4">
+          <h1 className="text-2xl sm:text-3xl font-semibold">My Deals</h1>
           <p className="text-zinc-600 dark:text-zinc-400">
-            Connect your wallet to view your OTC deals.
+            {privyAuthenticated 
+              ? "Connect a wallet to view your OTC deals and token listings."
+              : "Sign in to view your OTC deals and token listings."}
+          </p>
+          <Button
+            color="orange"
+            onClick={handleConnect}
+            disabled={!privyReady}
+            className="!px-8 !py-3 !text-base"
+          >
+            {privyReady ? (privyAuthenticated ? "Connect Wallet" : "Sign In") : "Loading..."}
+          </Button>
+          <p className="text-xs text-zinc-500 dark:text-zinc-500">
+            Connect with Farcaster, MetaMask, Phantom, or other wallets
           </p>
         </div>
       </main>
@@ -375,16 +345,90 @@ export function MyDealsContent() {
 
           {activeTab === "listings" ? (
             <MyListingsTab listings={myListings} onRefresh={refreshListings} />
-          ) : isLoading ? (
-            <div className="text-zinc-600 dark:text-zinc-400">
-              Loading deals…
-            </div>
-          ) : inProgress.length === 0 ? (
-            <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-6 text-zinc-600 dark:text-zinc-400">
-              No active deals. Create one from the chat to get started.
-            </div>
           ) : (
-            <div className="space-y-4">
+            <>
+              {/* Wallet & Network Info Banner */}
+              <div className="mb-4 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
+                {/* Current Wallet Info */}
+                <div className="flex items-center justify-between gap-4 flex-wrap mb-3 pb-3 border-b border-zinc-200 dark:border-zinc-700">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">
+                        {activeFamily === "solana" ? "S" : "E"}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        {displayAddress || "Not connected"}
+                      </p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {networkLabel}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleDisconnect}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+
+                {/* Chain Switching */}
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                    Showing {networkName} purchases
+                  </p>
+                  <div className="flex gap-2">
+                    {activeFamily === "solana" && (
+                      <button
+                        onClick={handleSwitchToEvm}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors whitespace-nowrap"
+                      >
+                        View EVM Deals
+                      </button>
+                    )}
+                    {activeFamily === "evm" && (
+                      <button
+                        onClick={handleSwitchToSolana}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors whitespace-nowrap"
+                      >
+                        View Solana Deals
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Message */}
+              {refundStatus && (
+                <div className={`mb-4 p-3 rounded-lg border ${
+                  refundStatus.type === 'success' 
+                    ? 'bg-green-500/10 border-green-500/20 text-green-700 dark:text-green-400'
+                    : refundStatus.type === 'error'
+                    ? 'bg-red-500/10 border-red-500/20 text-red-700 dark:text-red-400'
+                    : 'bg-blue-500/10 border-blue-500/20 text-blue-700 dark:text-blue-400'
+                }`}>
+                  <p className="text-sm">{refundStatus.message}</p>
+                  <button 
+                    onClick={() => setRefundStatus(null)}
+                    className="text-xs underline mt-1 opacity-70 hover:opacity-100"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+
+              {isLoading ? (
+                <div className="text-zinc-600 dark:text-zinc-400">
+                  Loading deals…
+                </div>
+              ) : inProgress.length === 0 ? (
+                <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-6 text-zinc-600 dark:text-zinc-400">
+                  No active {networkName} deals. Create one from the chat to get started.
+                </div>
+              ) : (
+                <div className="space-y-4">
               {sorted.map((o, index) => {
                 const now = Math.floor(Date.now() / 1000);
                 const matured = Number(o.unlockTime) <= now;
@@ -505,26 +549,36 @@ export function MyDealsContent() {
                           color="red"
                           disabled={refunding === o.id}
                           onClick={async () => {
+                            setRefundStatus(null);
                             const createdAt = Number(o.createdAt);
                             const now = Math.floor(Date.now() / 1000);
                             const daysSinceCreation =
                               (now - createdAt) / (24 * 60 * 60);
 
                             if (daysSinceCreation < 90) {
-                              alert(
-                                `Emergency refund available in ${Math.ceil(90 - daysSinceCreation)} days`,
-                              );
+                              const daysRemaining = Math.ceil(90 - daysSinceCreation);
+                              console.log(`[MyDeals] Refund not available yet, ${daysRemaining} days remaining`);
+                              setRefundStatus({
+                                type: 'info',
+                                message: `Emergency refund available in ${daysRemaining} days`,
+                              });
                               return;
                             }
 
-                            if (
-                              confirm(
-                                "Request emergency refund? This will cancel the deal and return your payment.",
-                              )
-                            ) {
-                              setRefunding(o.id);
+                            // Proceed with refund
+                            setRefunding(o.id);
+                            try {
                               await emergencyRefund(o.id);
-                              alert("Refund successful!");
+                              console.log("[MyDeals] Refund successful");
+                              setRefundStatus({ type: 'success', message: 'Refund successful' });
+                            } catch (err) {
+                              console.error("[MyDeals] Refund failed:", err);
+                              setRefundStatus({
+                                type: 'error',
+                                message: `Refund failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+                              });
+                            } finally {
+                              setRefunding(null);
                             }
                           }}
                           title="Request emergency refund (90+ days)"
@@ -537,7 +591,9 @@ export function MyDealsContent() {
                   </div>
                 );
               })}
-            </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>

@@ -20,7 +20,8 @@ interface SubmissionModalProps {
   formData: any;
   consignerAddress: string;
   chain: string;
-  activeFamily: string;
+  activeFamily: "evm" | "solana" | null;
+  selectedTokenDecimals: number;
   onApproveToken: () => Promise<string>;
   onCreateConsignment: () => Promise<{ txHash: string; consignmentId: string }>;
   getBlockExplorerUrl: (txHash: string) => string;
@@ -33,6 +34,7 @@ export function SubmissionModal({
   consignerAddress,
   chain,
   activeFamily,
+  selectedTokenDecimals,
   onApproveToken,
   onCreateConsignment,
   getBlockExplorerUrl,
@@ -44,8 +46,14 @@ export function SubmissionModal({
   >(null);
   const [isComplete, setIsComplete] = useState(false);
   const [hasStartedProcessing, setHasStartedProcessing] = useState(false);
-  const [steps, setSteps] = useState<SubmissionStep[]>([
-    ...(activeFamily !== "solana"
+  const [isProcessing, setIsProcessing] = useState(false); // Guard against concurrent processing
+  
+  // Calculate initial steps once based on activeFamily at mount time
+  const [initialActiveFamily] = useState(activeFamily);
+  const [steps, setSteps] = useState<SubmissionStep[]>(() => [
+    // Solana: Token transfer is part of the createConsignment instruction (no separate approval)
+    // EVM: Needs separate approval step
+    ...(initialActiveFamily !== "solana"
       ? [
           {
             id: "approve",
@@ -53,14 +61,14 @@ export function SubmissionModal({
             status: "pending" as const,
             canRetry: true,
           },
-          {
-            id: "create-onchain",
-            label: "Create Consignment On-Chain",
-            status: "pending" as const,
-            canRetry: true,
-          },
         ]
       : []),
+    {
+      id: "create-onchain",
+      label: "Create Consignment On-Chain",
+      status: "pending" as const,
+      canRetry: true,
+    },
     {
       id: "save-db",
       label: "Save to Database",
@@ -70,12 +78,32 @@ export function SubmissionModal({
   ]);
 
   useEffect(() => {
-    if (isOpen && !isComplete && !hasStartedProcessing) {
-      // Start the submission process
+    // Guard against re-triggering: only start if modal just opened and we haven't started
+    if (isOpen && !isComplete && !hasStartedProcessing && !isProcessing) {
+      console.log("[SubmissionModal] Starting submission process...");
       setHasStartedProcessing(true);
+      setIsProcessing(true);
       processNextStep();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+  
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      // Don't reset immediately - wait a bit to allow for animations
+      const timer = setTimeout(() => {
+        if (!isOpen) {
+          setCurrentStepIndex(0);
+          setContractConsignmentId(null);
+          setIsComplete(false);
+          setHasStartedProcessing(false);
+          setIsProcessing(false);
+          setSteps(prev => prev.map(s => ({ ...s, status: "pending" as const, errorMessage: undefined, txHash: undefined })));
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
   }, [isOpen]);
 
   const updateStep = (id: string, updates: Partial<SubmissionStep>) => {
@@ -86,36 +114,53 @@ export function SubmissionModal({
 
   const processNextStep = async () => {
     const currentStep = steps[currentStepIndex];
-    if (!currentStep) return;
+    if (!currentStep) {
+      console.log("[SubmissionModal] No current step at index:", currentStepIndex);
+      setIsProcessing(false);
+      return;
+    }
 
+    console.log("[SubmissionModal] Processing step:", currentStep.id, "index:", currentStepIndex);
     updateStep(currentStep.id, { status: "processing" });
 
     try {
       switch (currentStep.id) {
         case "approve":
+          console.log("[SubmissionModal] Starting token approval...");
           await handleApprove();
+          console.log("[SubmissionModal] Token approval complete");
           break;
         case "create-onchain":
+          console.log("[SubmissionModal] Starting on-chain creation...");
           await handleCreateOnchain();
+          console.log("[SubmissionModal] On-chain creation complete");
           break;
         case "save-db":
+          console.log("[SubmissionModal] Saving to database...");
           await handleSaveToDb();
+          console.log("[SubmissionModal] Database save complete");
           break;
       }
 
       updateStep(currentStep.id, { status: "complete" });
 
       // Move to next step
-      if (currentStepIndex < steps.length - 1) {
-        setCurrentStepIndex(currentStepIndex + 1);
+      const nextIndex = currentStepIndex + 1;
+      if (nextIndex < steps.length) {
+        console.log("[SubmissionModal] Moving to next step:", nextIndex);
+        setCurrentStepIndex(nextIndex);
         setTimeout(() => processNextStep(), 500);
       } else {
         // All steps complete
+        console.log("[SubmissionModal] All steps complete");
+        setIsProcessing(false);
         await handleComplete();
       }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
+      console.error("[SubmissionModal] Step failed:", currentStep.id, errorMessage);
+      setIsProcessing(false);
       updateStep(currentStep.id, {
         status: "error",
         errorMessage,
@@ -154,11 +199,22 @@ export function SubmissionModal({
 
   const handleSaveToDb = async () => {
     try {
+      // Convert human-readable amounts to raw amounts with decimals
+      const toRawAmount = (humanAmount: string): string => {
+        const parsed = parseFloat(humanAmount) || 0;
+        const raw = BigInt(Math.floor(parsed * Math.pow(10, selectedTokenDecimals)));
+        return raw.toString();
+      };
+
       const response = await fetch("/api/consignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
+          // Override with raw amounts
+          amount: toRawAmount(formData.amount),
+          minDealAmount: toRawAmount(formData.minDealAmount),
+          maxDealAmount: toRawAmount(formData.maxDealAmount),
           consignerAddress,
           chain,
           contractConsignmentId,
@@ -199,8 +255,16 @@ export function SubmissionModal({
   const retryStep = async (stepId: string) => {
     const stepIndex = steps.findIndex((s) => s.id === stepId);
     if (stepIndex === -1) return;
+    
+    // Guard against retry while already processing
+    if (isProcessing) {
+      console.log("[SubmissionModal] Already processing, ignoring retry");
+      return;
+    }
 
+    console.log("[SubmissionModal] Retrying step:", stepId);
     setCurrentStepIndex(stepIndex);
+    setIsProcessing(true);
     updateStep(stepId, { status: "pending", errorMessage: undefined });
     setTimeout(() => processNextStep(), 300);
   };

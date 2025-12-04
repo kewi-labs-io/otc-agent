@@ -46,7 +46,7 @@ export class ConsignmentService {
     }
 
     if (BigInt(params.amount) < BigInt(params.minDealAmount)) {
-      throw new Error("Total amount must be at least minDealAmount");
+      throw new Error(`Total amount (${params.amount}) must be at least minDealAmount (${params.minDealAmount})`);
     }
 
     if (params.minDiscountBps > params.maxDiscountBps) {
@@ -57,9 +57,13 @@ export class ConsignmentService {
       throw new Error("minLockupDays cannot exceed maxLockupDays");
     }
 
+    // Solana addresses are Base58 and case-sensitive, EVM addresses are case-insensitive
+    const normalizeAddress = (addr: string) =>
+      params.chain === "solana" ? addr : addr.toLowerCase();
+
     const consignment = await ConsignmentDB.createConsignment({
       tokenId: params.tokenId,
-      consignerAddress: params.consignerAddress.toLowerCase(),
+      consignerAddress: normalizeAddress(params.consignerAddress),
       consignerEntityId: walletToEntityId(params.consignerAddress),
       totalAmount: params.amount,
       remainingAmount: params.amount,
@@ -74,7 +78,7 @@ export class ConsignmentService {
       maxDealAmount: params.maxDealAmount,
       isFractionalized: params.isFractionalized,
       isPrivate: params.isPrivate,
-      allowedBuyers: params.allowedBuyers?.map((a) => a.toLowerCase()),
+      allowedBuyers: params.allowedBuyers?.map((a) => normalizeAddress(a)),
       maxPriceVolatilityBps: params.maxPriceVolatilityBps,
       maxTimeToExecuteSeconds: params.maxTimeToExecuteSeconds,
       status: "active",
@@ -138,11 +142,21 @@ export class ConsignmentService {
     }
 
     if (filters?.includePrivate && filters?.requesterAddress) {
-      const requester = filters.requesterAddress.toLowerCase();
       consignments = consignments.filter((c) => {
         if (!c.isPrivate) return true;
+        // Compare addresses - Solana is case-sensitive, EVM is case-insensitive
+        const isSolana = c.chain === "solana";
+        const requester = isSolana
+          ? filters.requesterAddress!
+          : filters.requesterAddress!.toLowerCase();
+        if (isSolana) {
         if (c.consignerAddress === requester) return true;
         if (c.allowedBuyers?.includes(requester)) return true;
+        } else {
+          if (c.consignerAddress.toLowerCase() === requester) return true;
+          if (c.allowedBuyers?.some((b) => b.toLowerCase() === requester))
+            return true;
+        }
         return false;
       });
     }
@@ -159,10 +173,12 @@ export class ConsignmentService {
 
   async getConsignerConsignments(
     consignerAddress: string,
+    chain?: Chain,
   ): Promise<OTCConsignment[]> {
-    return await ConsignmentDB.getConsignmentsByConsigner(
-      consignerAddress.toLowerCase(),
-    );
+    // Normalize address based on chain - Solana is case-sensitive, EVM is case-insensitive
+    const normalizedAddress =
+      chain === "solana" ? consignerAddress : consignerAddress.toLowerCase();
+    return await ConsignmentDB.getConsignmentsByConsigner(normalizedAddress);
   }
 
   async getAllConsignments(filters?: {
@@ -247,12 +263,19 @@ export class ConsignmentService {
     discountBps: number;
     lockupDays: number;
     offerId?: string;
+    chain?: Chain;
   }): Promise<ConsignmentDeal> {
+    // Normalize address based on chain - Solana is case-sensitive, EVM is case-insensitive
+    const normalizedBuyerAddress =
+      params.chain === "solana"
+        ? params.buyerAddress
+        : params.buyerAddress.toLowerCase();
+
     return await ConsignmentDealDB.createDeal({
       consignmentId: params.consignmentId,
       quoteId: params.quoteId,
       tokenId: params.tokenId,
-      buyerAddress: params.buyerAddress.toLowerCase(),
+      buyerAddress: normalizedBuyerAddress,
       amount: params.amount,
       discountBps: params.discountBps,
       lockupDays: params.lockupDays,

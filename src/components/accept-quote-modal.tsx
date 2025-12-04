@@ -4,7 +4,7 @@ import { Button } from "@/components/button";
 import { Dialog } from "@/components/dialog";
 import { useMultiWallet } from "@/components/multiwallet";
 import { EVMLogo, SolanaLogo } from "@/components/icons/index";
-import { EVMChainSelectorModal } from "@/components/evm-chain-selector-modal";
+import { usePrivy } from "@privy-io/react-auth";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 import { useOTC } from "@/hooks/contracts/useOTC";
 import type { OTCQuote } from "@/utils/xml-parser";
@@ -18,10 +18,10 @@ import {
   SystemProgram as SolSystemProgram,
 } from "@solana/web3.js";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer } from "react";
 import type { Abi } from "viem";
 import { createPublicClient, http } from "viem";
-import { base, bsc } from "viem/chains";
+import { base, baseSepolia, bsc } from "viem/chains";
 import { useAccount, useBalance } from "wagmi";
 import { useTransactionErrorHandler } from "@/hooks/useTransactionErrorHandler";
 
@@ -43,6 +43,68 @@ type StepState =
 const ONE_MILLION = 1_000_000; // Token cap
 const MIN_TOKENS = 100; // UX minimum
 
+// --- Consolidated Modal State ---
+interface ModalState {
+  tokenAmount: number;
+  currency: "ETH" | "USDC" | "SOL";
+  step: StepState;
+  isProcessing: boolean;
+  error: string | null;
+  requireApprover: boolean;
+  contractValid: boolean;
+  solanaTokenMint: string | null;
+}
+
+type ModalAction =
+  | { type: "SET_TOKEN_AMOUNT"; payload: number }
+  | { type: "SET_CURRENCY"; payload: "ETH" | "USDC" | "SOL" }
+  | { type: "SET_STEP"; payload: StepState }
+  | { type: "SET_PROCESSING"; payload: boolean }
+  | { type: "SET_ERROR"; payload: string | null }
+  | { type: "SET_REQUIRE_APPROVER"; payload: boolean }
+  | { type: "SET_CONTRACT_VALID"; payload: boolean }
+  | { type: "SET_SOLANA_TOKEN_MINT"; payload: string | null }
+  | { type: "RESET"; payload: { tokenAmount: number; currency: "ETH" | "USDC" | "SOL" } }
+  | { type: "START_TRANSACTION" }
+  | { type: "TRANSACTION_ERROR"; payload: string };
+
+function modalReducer(state: ModalState, action: ModalAction): ModalState {
+  switch (action.type) {
+    case "SET_TOKEN_AMOUNT":
+      return { ...state, tokenAmount: action.payload };
+    case "SET_CURRENCY":
+      return { ...state, currency: action.payload };
+    case "SET_STEP":
+      return { ...state, step: action.payload };
+    case "SET_PROCESSING":
+      return { ...state, isProcessing: action.payload };
+    case "SET_ERROR":
+      return { ...state, error: action.payload };
+    case "SET_REQUIRE_APPROVER":
+      return { ...state, requireApprover: action.payload };
+    case "SET_CONTRACT_VALID":
+      return { ...state, contractValid: action.payload };
+    case "SET_SOLANA_TOKEN_MINT":
+      return { ...state, solanaTokenMint: action.payload };
+    case "RESET":
+      return {
+        ...state,
+        step: "amount",
+        isProcessing: false,
+        error: null,
+        tokenAmount: action.payload.tokenAmount,
+        currency: action.payload.currency,
+        solanaTokenMint: null,
+      };
+    case "START_TRANSACTION":
+      return { ...state, error: null, isProcessing: true, step: "creating" };
+    case "TRANSACTION_ERROR":
+      return { ...state, error: action.payload, isProcessing: false, step: "amount" };
+    default:
+      return state;
+  }
+}
+
 export function AcceptQuoteModal({
   isOpen,
   onClose,
@@ -56,8 +118,8 @@ export function AcceptQuoteModal({
     solanaWallet,
     solanaPublicKey,
     setActiveFamily,
-    connectSolanaWallet,
-    isPhantomInstalled,
+    privyAuthenticated,
+    connectWallet,
   } = useMultiWallet();
 
   // Validate chain compatibility
@@ -84,31 +146,21 @@ export function AcceptQuoteModal({
   const abi = useMemo(() => otcArtifact.abi as Abi, []);
 
   // Determine RPC URL based on network configuration
-  // Check NETWORK env var (client-side accessible via NEXT_PUBLIC_ prefix)
-  const network = (process.env.NEXT_PUBLIC_NETWORK || "localnet") as string;
+  const networkEnv = (process.env.NEXT_PUBLIC_NETWORK || "testnet") as string;
+  const isMainnet = networkEnv === "mainnet";
+  const isLocal = networkEnv === "local" || networkEnv === "localnet";
+  
   const rpcUrl = useMemo(() => {
-    // Use network-specific RPC URLs
-    if (network === "base") {
-      return process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
-    }
-    if (network === "bsc") {
-      return (
-        process.env.NEXT_PUBLIC_BSC_RPC_URL ||
-        "https://bsc-dataseed1.binance.org"
-      );
-    }
-    // Default to localhost for localnet/development
+    if (isLocal) {
     return process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
-  }, [network]);
+    }
+    // Use Base RPC for EVM (mainnet or testnet)
+    return process.env.NEXT_PUBLIC_BASE_RPC_URL || 
+      (isMainnet ? "https://mainnet.base.org" : "https://sepolia.base.org");
+  }, [isLocal, isMainnet]);
 
-  // CRITICAL: publicClient chain must match where contract is deployed, NOT wallet chain
-  // If RPC is localhost, we're reading from Anvil regardless of wallet network
-  const isLocalRpc = useMemo(
-    () => /localhost|127\.0\.0\.1/.test(rpcUrl),
-    [rpcUrl],
-  );
+  const isLocalRpc = useMemo(() => /localhost|127\.0\.0\.1/.test(rpcUrl), [rpcUrl]);
 
-  // Determine chain based on network and RPC
   const readChain = useMemo(() => {
     if (isLocalRpc) {
       return {
@@ -119,52 +171,36 @@ export function AcceptQuoteModal({
         rpcUrls: { default: { http: [rpcUrl] } },
       };
     }
-    if (network === "base") {
-      return base;
-    }
-    if (network === "bsc") {
-      return bsc;
-    }
-    // Default to base for production-like setups
-    return base;
-  }, [isLocalRpc, rpcUrl, network]);
+    // Use Base mainnet or Sepolia based on network
+    return isMainnet ? base : baseSepolia;
+  }, [isLocalRpc, rpcUrl, isMainnet]);
 
   const publicClient = useMemo(
     () => createPublicClient({ chain: readChain, transport: http(rpcUrl) }),
     [readChain, rpcUrl],
   );
 
-  // Local UI state
-  const [tokenAmount, setTokenAmount] = useState<number>(
-    Math.min(
-      ONE_MILLION,
-      Math.max(
-        MIN_TOKENS,
-        initialQuote?.tokenAmount ? Number(initialQuote.tokenAmount) : 1000,
-      ),
-    ),
-  );
-  const [currency, setCurrency] = useState<"ETH" | "USDC" | "SOL">(
-    activeFamily === "solana" ? "SOL" : "ETH",
-  );
-  const [step, setStep] = useState<StepState>("amount");
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [requireApprover, setRequireApprover] = useState(false);
+  // --- Consolidated State ---
+  const initialState: ModalState = {
+    tokenAmount: Math.min(ONE_MILLION, Math.max(MIN_TOKENS, initialQuote?.tokenAmount ? Number(initialQuote.tokenAmount) : 1000)),
+    currency: activeFamily === "solana" ? "SOL" : "ETH",
+    step: "amount",
+    isProcessing: false,
+    error: null,
+    requireApprover: false,
+    contractValid: false,
+    solanaTokenMint: null,
+  };
+
+  const [state, dispatch] = useReducer(modalReducer, initialState);
+  const { tokenAmount, currency, step, isProcessing, error, requireApprover, contractValid, solanaTokenMint } = state;
+
   const { handleTransactionError } = useTransactionErrorHandler();
-  const [contractValid, setContractValid] = useState(false);
-  const [showEVMChainSelector, setShowEVMChainSelector] = useState(false);
+  const { login, ready: privyReady } = usePrivy();
   const isSolanaActive = activeFamily === "solana";
-  const SOLANA_RPC =
-    (process.env.NEXT_PUBLIC_SOLANA_RPC as string | undefined) ||
-    "http://127.0.0.1:8899";
+  const SOLANA_RPC = (process.env.NEXT_PUBLIC_SOLANA_RPC as string | undefined) || "http://127.0.0.1:8899";
   const SOLANA_DESK = process.env.NEXT_PUBLIC_SOLANA_DESK as string | undefined;
-  const SOLANA_TOKEN_MINT = process.env.NEXT_PUBLIC_SOLANA_TOKEN_MINT as
-    | string
-    | undefined;
-  const SOLANA_USDC_MINT = process.env.NEXT_PUBLIC_SOLANA_USDC_MINT as
-    | string
-    | undefined;
+  const SOLANA_USDC_MINT = process.env.NEXT_PUBLIC_SOLANA_USDC_MINT as string | undefined;
 
   // Wallet balances for display and MAX calculation
   const ethBalance = useBalance({ address });
@@ -175,30 +211,44 @@ export function AcceptQuoteModal({
 
   useEffect(() => {
     if (!isOpen) {
-      setStep("amount");
-      setIsProcessing(false);
-      setError(null);
-      setCurrency(activeFamily === "solana" ? "SOL" : "ETH");
-      setTokenAmount(
-        Math.min(
-          ONE_MILLION,
-          Math.max(
-            MIN_TOKENS,
-            initialQuote?.tokenAmount ? Number(initialQuote.tokenAmount) : 1000,
-          ),
-        ),
-      );
+      dispatch({
+        type: "RESET",
+        payload: {
+          tokenAmount: Math.min(ONE_MILLION, Math.max(MIN_TOKENS, initialQuote?.tokenAmount ? Number(initialQuote.tokenAmount) : 1000)),
+          currency: activeFamily === "solana" ? "SOL" : "ETH",
+        },
+      });
     }
   }, [isOpen, initialQuote, activeFamily]);
 
-  // Prefer EVM when both are connected and modal opens
+  // Look up Solana token mint from database based on quote symbol
   useEffect(() => {
-    const isOpenNow = isOpen;
-    if (!isOpenNow) return;
-    // If both connected, prefer EVM
+    if (!isOpen || !isSolanaActive || !initialQuote?.tokenSymbol) return;
+    
+    (async () => {
+      try {
+        const res = await fetch(`/api/tokens?chain=solana`);
+        const data = await res.json();
+        if (data.success && data.tokens) {
+          const token = data.tokens.find(
+            (t: { symbol: string; contractAddress: string }) =>
+              t.symbol.toUpperCase() === initialQuote.tokenSymbol.toUpperCase()
+          );
+          if (token) {
+            dispatch({ type: "SET_SOLANA_TOKEN_MINT", payload: token.contractAddress });
+          }
+        }
+      } catch (err) {
+        console.error("[AcceptQuote] Failed to look up Solana token:", err);
+      }
+    })();
+  }, [isOpen, isSolanaActive, initialQuote?.tokenSymbol]);
+
+  // Keep currency coherent with active family when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
     if (activeFamily === "solana") {
-      // Keep currency coherent with active family
-      setCurrency("SOL");
+      dispatch({ type: "SET_CURRENCY", payload: "SOL" });
     }
   }, [isOpen, activeFamily]);
 
@@ -207,13 +257,13 @@ export function AcceptQuoteModal({
     (async () => {
       // Skip validation for Solana
       if (activeFamily === "solana") {
-        setContractValid(true);
-        setRequireApprover(false);
+        dispatch({ type: "SET_CONTRACT_VALID", payload: true });
+        dispatch({ type: "SET_REQUIRE_APPROVER", payload: false });
         return;
       }
 
       if (!isOpen || !otcAddress) {
-        setContractValid(false);
+        dispatch({ type: "SET_CONTRACT_VALID", payload: false });
         return;
       }
 
@@ -223,27 +273,24 @@ export function AcceptQuoteModal({
       });
 
       if (!code || code === "0x") {
-        console.error(
-          `[AcceptQuote] No contract at ${otcAddress} on ${readChain.name}. ` +
-            `Ensure Anvil node is running and contracts are deployed.`,
-        );
-        setContractValid(false);
-        setError(
-          "Contract not found. Ensure Anvil node is running and contracts are deployed.",
-        );
+        console.error(`[AcceptQuote] No contract at ${otcAddress} on ${readChain.name}.`);
+        dispatch({ type: "SET_CONTRACT_VALID", payload: false });
+        dispatch({ type: "SET_ERROR", payload: "Contract not found. Ensure Anvil node is running and contracts are deployed." });
         return;
       }
 
-      setContractValid(true);
+      dispatch({ type: "SET_CONTRACT_VALID", payload: true });
 
       // Read contract state
-      const flag = (await publicClient.readContract({
+      // Use type assertion to bypass viem's strict authorizationList requirement
+      const readContract = publicClient.readContract as (params: unknown) => Promise<unknown>;
+      const flag = (await readContract({
         address: otcAddress as `0x${string}`,
         abi: abi as Abi,
         functionName: "requireApproverToFulfill",
         args: [],
       })) as boolean;
-      setRequireApprover(Boolean(flag));
+      dispatch({ type: "SET_REQUIRE_APPROVER", payload: Boolean(flag) });
     })();
   }, [isOpen, otcAddress, publicClient, abi, activeFamily, readChain]);
 
@@ -277,8 +324,16 @@ export function AcceptQuoteModal({
     return Math.max(MIN_TOKENS, Math.min(ONE_MILLION, v));
   }, [maxTokenPerOrder]);
 
-  const clampAmount = (value: number) =>
-    Math.min(contractMaxTokens, Math.max(MIN_TOKENS, Math.floor(value)));
+  const clampAmount = useCallback((value: number) =>
+    Math.min(contractMaxTokens, Math.max(MIN_TOKENS, Math.floor(value))), [contractMaxTokens]);
+  
+  const setTokenAmount = useCallback((value: number) => {
+    dispatch({ type: "SET_TOKEN_AMOUNT", payload: clampAmount(value) });
+  }, [clampAmount]);
+
+  const setCurrency = useCallback((value: "ETH" | "USDC" | "SOL") => {
+    dispatch({ type: "SET_CURRENCY", payload: value });
+  }, []);
 
   async function fetchSolanaIdl(): Promise<Idl> {
     const res = await fetch("/api/solana/idl");
@@ -288,7 +343,9 @@ export function AcceptQuoteModal({
 
   async function readNextOfferId(): Promise<bigint> {
     if (!otcAddress) throw new Error("Missing OTC address");
-    return (await publicClient.readContract({
+    // Use type assertion to bypass viem's strict authorizationList requirement
+    const readContract = publicClient.readContract as (params: unknown) => Promise<unknown>;
+    return (await readContract({
       address: otcAddress as `0x${string}`,
       abi: abi as Abi,
       functionName: "nextOfferId",
@@ -316,7 +373,9 @@ export function AcceptQuoteModal({
 
   async function readOffer(offerId: bigint): Promise<OfferTuple> {
     if (!otcAddress) throw new Error("Missing OTC address");
-    return (await publicClient.readContract({
+    // Use type assertion to bypass viem's strict authorizationList requirement
+    const readContract = publicClient.readContract as (params: unknown) => Promise<unknown>;
+    return (await readContract({
       address: otcAddress as `0x${string}`,
       abi: abi as Abi,
       functionName: "offers",
@@ -390,32 +449,22 @@ export function AcceptQuoteModal({
     return txHash;
   }
 
-  const handleConfirm = async () => {
+  const handleConfirm = useCallback(async () => {
     if (!walletConnected) return;
 
     // CRITICAL: Quote must exist
     if (!initialQuote?.quoteId) {
-      setError(
-        "No quote ID available. Please request a quote from the chat first.",
-      );
+      dispatch({ type: "SET_ERROR", payload: "No quote ID available. Please request a quote from the chat first." });
       return;
     }
 
     // Block if contract isn't valid (EVM only)
     if (!isSolanaActive && !contractValid) {
-      setError(
-        "Contract not available. Please ensure Anvil node is running and contracts are deployed.",
-      );
-      console.error("[AcceptQuote] Blocked transaction - contract not valid:", {
-        otcAddress,
-        contractValid,
-      });
+      dispatch({ type: "SET_ERROR", payload: "Contract not available. Please ensure Anvil node is running and contracts are deployed." });
       return;
     }
 
-    setError(null);
-    setIsProcessing(true);
-    setStep("creating");
+    dispatch({ type: "START_TRANSACTION" });
 
     try {
       await executeTransaction();
@@ -424,18 +473,15 @@ export function AcceptQuoteModal({
       const txError = {
         ...error,
         message: error.message,
-        cause: error.cause as
-          | { reason?: string; code?: string | number }
-          | undefined,
+        cause: error.cause as { reason?: string; code?: string | number } | undefined,
         details: (error as { details?: string }).details,
         shortMessage: (error as { shortMessage?: string }).shortMessage,
       };
       const errorMessage = handleTransactionError(txError);
-      setError(errorMessage);
-      setIsProcessing(false);
-      setStep("amount");
+      dispatch({ type: "TRANSACTION_ERROR", payload: errorMessage });
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walletConnected, initialQuote?.quoteId, isSolanaActive, contractValid, handleTransactionError]);
 
   const executeTransaction = async () => {
     /**
@@ -469,9 +515,14 @@ export function AcceptQuoteModal({
     // Solana path
     if (isSolanaActive) {
       // Basic config checks
-      if (!SOLANA_DESK || !SOLANA_TOKEN_MINT || !SOLANA_USDC_MINT) {
+      if (!SOLANA_DESK || !SOLANA_USDC_MINT) {
         throw new Error(
           "Solana OTC configuration is incomplete. Please check your environment variables.",
+        );
+      }
+      if (!solanaTokenMint) {
+        throw new Error(
+          `Token ${initialQuote?.tokenSymbol || "unknown"} not found on Solana. Register it first.`,
         );
       }
 
@@ -502,7 +553,7 @@ export function AcceptQuoteModal({
         throw new Error("SOLANA_DESK address not configured in environment.");
       }
       const desk = new SolPubkey(SOLANA_DESK);
-      const tokenMintPk = new SolPubkey(SOLANA_TOKEN_MINT);
+      const tokenMintPk = new SolPubkey(solanaTokenMint);
       const usdcMintPk = new SolPubkey(SOLANA_USDC_MINT);
 
       console.log("Token mint PK:", tokenMintPk.toString());
@@ -554,6 +605,17 @@ export function AcceptQuoteModal({
       console.log("Lockup seconds:", lockupSeconds.toString());
       console.log("Payment currency:", paymentCurrencySol);
 
+      // Derive token registry PDA for multi-token support
+      const [tokenRegistryPda] = SolPubkey.findProgramAddressSync(
+        [
+          Buffer.from("registry"),
+          desk.toBuffer(),
+          tokenMintPk.toBuffer(),
+        ],
+        program.programId,
+      );
+      console.log("Token registry PDA:", tokenRegistryPda.toString());
+
       await program.methods
         .createOffer(
           tokenAmountWei,
@@ -563,6 +625,7 @@ export function AcceptQuoteModal({
         )
         .accountsStrict({
           desk,
+          tokenRegistry: tokenRegistryPda,
           deskTokenTreasury,
           beneficiary: new SolPubkey(solanaWallet.publicKey.toBase58()),
           offer: offerKeypair.publicKey,
@@ -573,7 +636,7 @@ export function AcceptQuoteModal({
 
       console.log("Offer created");
 
-      setStep("await_approval");
+      dispatch({ type: "SET_STEP", payload: "await_approval" });
 
       // Request backend approval (same as EVM flow)
       console.log("Requesting approval from backend...");
@@ -595,7 +658,7 @@ export function AcceptQuoteModal({
       console.log("Approval requested, backend will approve and pay...");
 
       // Wait for backend to approve AND auto-fulfill
-      setStep("paying");
+      dispatch({ type: "SET_STEP", payload: "paying" });
       const approveData = await approveRes.json();
 
       if (!approveData.autoFulfilled || !approveData.fulfillTx) {
@@ -634,16 +697,12 @@ export function AcceptQuoteModal({
 
       // Save deal completion to database
       if (!initialQuote?.quoteId) {
-        const errorMsg =
-          "No quote ID - you must get a quote from the chat before buying.";
-        console.error("[Solana]", errorMsg);
-        setError(errorMsg);
-        setIsProcessing(false);
-        setStep("amount");
+        dispatch({ type: "TRANSACTION_ERROR", payload: "No quote ID - you must get a quote from the chat before buying." });
         return;
       }
 
-      const solanaWalletAddress = solanaPublicKey?.toLowerCase() || "";
+      // Solana addresses are Base58 encoded and case-sensitive - preserve original case
+      const solanaWalletAddress = solanaPublicKey || "";
 
       // CRITICAL: Capture tokenAmount NOW before any async operations
       const finalTokenAmount = tokenAmount;
@@ -697,8 +756,8 @@ export function AcceptQuoteModal({
 
       console.log("✅ VERIFIED deal is in database as executed");
 
-      setStep("complete");
-      setIsProcessing(false);
+      dispatch({ type: "SET_STEP", payload: "complete" });
+      dispatch({ type: "SET_PROCESSING", payload: false });
       onComplete?.({ offerId: BigInt(nextOfferId.toString()) });
 
       // Redirect to deal page after showing success
@@ -775,7 +834,7 @@ export function AcceptQuoteModal({
     console.log("[AcceptQuote] ✅ Offer confirmed on-chain");
 
     // Step 2: Request backend approval (and auto-fulfillment if enabled)
-    setStep("await_approval");
+    dispatch({ type: "SET_STEP", payload: "await_approval" });
     console.log(
       `[AcceptQuote] Requesting approval and payment from backend...`,
     );
@@ -891,8 +950,8 @@ export function AcceptQuoteModal({
     console.log("[AcceptQuote] ✅ Deal completion saved:", saveData);
 
     // NOW show success (everything confirmed)
-    setStep("complete");
-    setIsProcessing(false);
+    dispatch({ type: "SET_STEP", payload: "complete" });
+    dispatch({ type: "SET_PROCESSING", payload: false });
 
     onComplete?.({ offerId: newOfferId, txHash: paymentTxHash });
 
@@ -939,19 +998,21 @@ export function AcceptQuoteModal({
     setTokenAmount(clampAmount(maxByFunds));
   };
 
-  const handleConnectEvm = () => {
-    console.log("[AcceptQuote] Opening EVM chain selector...");
-    setShowEVMChainSelector(true);
+  // Unified connection handler - uses connectWallet if already authenticated, login if not
+  const handleConnect = () => {
+    console.log("[AcceptQuote] Opening Privy login/connect modal...");
+    privyAuthenticated ? connectWallet() : login();
   };
 
-  const handleConnectSolana = () => {
-    console.log("[AcceptQuote] Connecting to Solana...");
-    if (!isPhantomInstalled) {
-      setError("Please install Phantom or Solflare wallet to use Solana.");
-      return;
-    }
+  // When quote requires specific chain, show appropriate messaging
+  const handleConnectForChain = (requiredChain: "solana" | "evm") => {
+    console.log(`[AcceptQuote] Connecting for ${requiredChain}...`);
+    if (requiredChain === "solana") {
     setActiveFamily("solana");
-    connectSolanaWallet();
+    } else {
+      setActiveFamily("evm");
+    }
+    privyAuthenticated ? connectWallet() : login();
   };
 
   // Validation: enforce token amount limits (USD check will happen on-chain)
@@ -1010,27 +1071,15 @@ export function AcceptQuoteModal({
                     . Please switch networks to continue.
                   </p>
                   <div className="flex gap-2">
-                    {quoteChain === "solana" ? (
                       <Button
-                        onClick={handleConnectSolana}
-                        className="!h-8 !px-3 !text-xs bg-gradient-to-br from-[#9945FF] to-[#14F195] hover:brightness-110"
+                      onClick={() => handleConnectForChain(quoteChain === "solana" ? "solana" : "evm")}
+                      className={`!h-8 !px-3 !text-xs ${quoteChain === "solana" ? "bg-gradient-to-br from-[#9945FF] to-[#14F195]" : "bg-gradient-to-br from-blue-600 to-blue-800"} hover:brightness-110`}
                       >
                         <div className="flex items-center gap-2">
-                          <SolanaLogo className="w-4 h-4" />
-                          Switch to Solana
+                        {quoteChain === "solana" ? <SolanaLogo className="w-4 h-4" /> : <EVMLogo className="w-4 h-4" />}
+                        Connect {quoteChain === "solana" ? "Solana" : "EVM"} Wallet
                         </div>
                       </Button>
-                    ) : (
-                      <Button
-                        onClick={handleConnectEvm}
-                        className="!h-8 !px-3 !text-xs bg-gradient-to-br from-blue-600 to-blue-800 hover:brightness-110"
-                      >
-                        <div className="flex items-center gap-2">
-                          <EVMLogo className="w-4 h-4" />
-                          Switch to EVM
-                        </div>
-                      </Button>
-                    )}
                     <Button
                       onClick={onClose}
                       className="!h-8 !px-3 !text-xs bg-zinc-800 hover:bg-zinc-700"
@@ -1195,49 +1244,32 @@ export function AcceptQuoteModal({
                     />
                     <div className="relative z-10 h-full w-full flex flex-col items-center justify-center text-center px-4 sm:px-6">
                       <h3 className="text-lg sm:text-xl font-semibold text-white tracking-tight mb-2">
-                        Choose a network
+                        Sign in to continue
                       </h3>
                       <p className="text-zinc-300 text-sm sm:text-md mb-4">
                         Let&apos;s deal, anon.
                       </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-md">
-                        <button
-                          type="button"
-                          onClick={handleConnectEvm}
-                          className="group rounded-xl p-6 sm:p-8 text-center transition-all duration-200 cursor-pointer text-white bg-[#0052ff] border-2 border-[#0047e5] hover:border-[#0052ff] hover:brightness-110 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-[#0052ff] focus:ring-offset-2 focus:ring-offset-zinc-900"
-                        >
-                          <div className="flex flex-col items-center gap-3">
-                            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-white/10 flex items-center justify-center group-hover:bg-white/20 transition-colors">
-                              <EVMLogo className="w-8 h-8 sm:w-10 sm:h-10" />
+                      {/* Single connect button - Privy handles wallet detection */}
+                      <Button
+                        onClick={handleConnect}
+                        disabled={!privyReady}
+                        color="orange"
+                        className="!px-8 !py-3 !text-lg"
+                      >
+                        {privyReady ? "Connect Wallet" : "Loading..."}
+                      </Button>
+                      <p className="text-xs text-zinc-500 mt-4">
+                        Supports Farcaster, MetaMask, Phantom, Coinbase Wallet & more
+                      </p>
                             </div>
-                            <div className="text-xl sm:text-2xl font-bold">
-                              EVM
-                            </div>
-                            <div className="text-xs text-white/70">
-                              Base, BSC
-                            </div>
-                          </div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleConnectSolana}
-                          className="group rounded-xl p-6 sm:p-8 text-center transition-all duration-200 cursor-pointer text-white bg-gradient-to-br from-[#9945FF] via-[#8752F3] to-[#14F195] border-2 border-[#9945FF]/50 hover:border-[#14F195]/50 hover:brightness-110 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-[#9945FF] focus:ring-offset-2 focus:ring-offset-zinc-900"
-                        >
-                          <div className="flex flex-col items-center gap-3">
-                            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-white/10 flex items-center justify-center group-hover:bg-white/20 transition-colors">
-                              <SolanaLogo className="w-8 h-8 sm:w-10 sm:h-10" />
-                            </div>
-                            <div className="text-xl sm:text-2xl font-bold">
-                              Solana
-                            </div>
-                          </div>
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 </div>
                 <div className="p-3 sm:p-4 text-xs text-zinc-400">
-                  Connect a wallet to continue and complete your purchase.
+                  {quoteChain ? (
+                    <>This token is on <span className="font-semibold">{quoteChain === "solana" ? "Solana" : quoteChain.toUpperCase()}</span>. Connect a compatible wallet to buy.</>
+                  ) : (
+                    <>Connect a wallet to continue and complete your purchase.</>
+                  )}
                 </div>
               </div>
               <div className="flex items-center justify-end gap-2 sm:gap-3 mt-3 sm:mt-4">
@@ -1344,11 +1376,6 @@ export function AcceptQuoteModal({
           )}
         </div>
       </Dialog>
-
-      <EVMChainSelectorModal
-        isOpen={showEVMChainSelector}
-        onClose={() => setShowEVMChainSelector(false)}
-      />
     </>
   );
 }

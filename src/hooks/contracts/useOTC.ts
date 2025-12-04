@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   useAccount,
   useReadContract,
@@ -18,6 +18,31 @@ import type {
   ConsignmentCreationResult,
 } from "@/types";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
+import { getContracts } from "@/config/contracts";
+
+// Helper to get OTC address from deployments or env
+function getOtcAddress(): Address | undefined {
+  // Try environment variables first
+  const envAddress = process.env.NEXT_PUBLIC_BASE_OTC_ADDRESS || 
+                     process.env.NEXT_PUBLIC_OTC_ADDRESS;
+  if (envAddress) {
+    console.log("[useOTC] Using OTC address from env:", envAddress);
+    return envAddress as Address;
+  }
+  
+  // Fallback to deployment config
+  const network = process.env.NEXT_PUBLIC_NETWORK as "local" | "testnet" | "mainnet" | undefined;
+  const deployments = getContracts(network || "testnet");
+  const configAddress = deployments.evm?.contracts?.otc;
+  
+  if (configAddress) {
+    console.log("[useOTC] Using OTC address from deployment config:", configAddress, "network:", network || "testnet");
+    return configAddress as Address;
+  }
+  
+  console.warn("[useOTC] No OTC address found in env or deployment config");
+  return undefined;
+}
 
 // Configuration for contract reading with dynamic ABIs
 interface ReadContractConfig {
@@ -42,8 +67,9 @@ interface TransactionLog {
 
 // Type-safe wrapper for readContract that handles wagmi client and dynamic ABIs
 // The client type is inferred, we only need to specify the return type
+// Uses type assertion to bypass viem's strict authorizationList requirement
 async function readContractFromClient<T>(
-  client: { readContract: (params: ReadContractConfig) => Promise<unknown> },
+  client: { readContract: (params: unknown) => Promise<unknown> },
   params: ReadContractConfig,
 ): Promise<T> {
   const result = await client.readContract(params);
@@ -124,27 +150,12 @@ export function useOTC(): {
 } {
   const { address: account } = useAccount();
   const chainId = useChainId();
-  const [otcAddress, setOTCAddress] = useState<Address | undefined>(
-    () => process.env.NEXT_PUBLIC_OTC_ADDRESS as Address | undefined,
-  );
+  // OTC address from env vars or deployment config
+  const otcAddress = getOtcAddress();
   const abi = otcArtifact.abi as Abi;
 
   // Use wagmi's public client which automatically handles all configured chains
   const publicClient = usePublicClient();
-
-  useEffect(() => {
-    if (!otcAddress && typeof window !== "undefined") {
-      // ensure devnet deploy
-      fetch("/api/devnet/ensure", { method: "POST" }).catch(() => {});
-      fetch("/api/devnet/address")
-        .then(async (r) => {
-          if (!r.ok) return;
-          const data = await r.json();
-          if (data?.address) setOTCAddress(data.address as Address);
-        })
-        .catch(() => {});
-    }
-  }, [otcAddress]);
 
   const enabled = Boolean(otcAddress);
 
@@ -518,6 +529,29 @@ export function useOTC(): {
 
   async function approveToken(tokenAddress: Address, amount: bigint) {
     if (!account) throw new Error("No wallet connected");
+    if (!otcAddress) throw new Error("OTC contract address not configured");
+    
+    const network = process.env.NEXT_PUBLIC_NETWORK || "testnet";
+    console.log("[useOTC] approveToken - network config:", network);
+    console.log("[useOTC] approveToken - token:", tokenAddress);
+    console.log("[useOTC] approveToken - spender (OTC):", otcAddress);
+    console.log("[useOTC] approveToken - wallet chainId:", chainId);
+    console.log("[useOTC] approveToken - amount:", amount.toString());
+    
+    // Warn if there might be a network mismatch
+    const isMainnetConfig = network === "mainnet";
+    const isMainnetWallet = chainId === 8453; // Base mainnet
+    const isTestnetWallet = chainId === 84532; // Base Sepolia
+    
+    if (isMainnetConfig && isTestnetWallet) {
+      console.error("[useOTC] NETWORK MISMATCH: App is configured for mainnet but wallet is on Base Sepolia");
+      throw new Error("Network mismatch: Please switch your wallet to Base mainnet");
+    }
+    if (!isMainnetConfig && isMainnetWallet) {
+      console.error("[useOTC] NETWORK MISMATCH: App is configured for testnet but wallet is on Base mainnet");
+      throw new Error("Network mismatch: Please switch your wallet to Base Sepolia (testnet) or set NEXT_PUBLIC_NETWORK=mainnet");
+    }
+    
     return writeContractAsync({
       address: tokenAddress,
       abi: erc20Abi,

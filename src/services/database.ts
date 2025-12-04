@@ -156,12 +156,34 @@ export class DealCompletionService {
   }
 }
 
+/**
+ * Normalizes a tokenId to ensure consistent lookups.
+ * EVM addresses are case-insensitive, so they are lowercased.
+ * Solana addresses (Base58) are case-sensitive, so they are preserved.
+ * Format: token-{chain}-{address}
+ */
+function normalizeTokenId(tokenId: string): string {
+  const match = tokenId.match(/^token-([a-z]+)-(.+)$/);
+  if (!match) return tokenId;
+  const [, chain, address] = match;
+  // Solana addresses are case-sensitive (Base58), preserve them
+  if (chain === "solana") return tokenId;
+  // EVM addresses are case-insensitive, lowercase for consistency
+  return `token-${chain}-${address.toLowerCase()}`;
+}
+
 export class TokenDB {
   static async createToken(
     data: Omit<Token, "id" | "createdAt" | "updatedAt">,
   ): Promise<Token> {
     const runtime = await agentRuntime.getRuntime();
-    const tokenId = `token-${data.chain}-${data.contractAddress.toLowerCase()}`;
+    // EVM addresses are case-insensitive, so lowercase for consistent ID
+    // Solana addresses are Base58 encoded and case-sensitive, preserve case
+    const normalizedAddress =
+      data.chain === "solana"
+        ? data.contractAddress
+        : data.contractAddress.toLowerCase();
+    const tokenId = `token-${data.chain}-${normalizedAddress}`;
 
     const existing = await runtime.getCache<Token>(`token:${tokenId}`);
     if (existing) {
@@ -185,7 +207,8 @@ export class TokenDB {
 
   static async getToken(tokenId: string): Promise<Token> {
     const runtime = await agentRuntime.getRuntime();
-    const token = await runtime.getCache<Token>(`token:${tokenId}`);
+    const normalizedId = normalizeTokenId(tokenId);
+    const token = await runtime.getCache<Token>(`token:${normalizedId}`);
     if (!token) throw new Error(`Token ${tokenId} not found`);
     return token;
   }
@@ -212,10 +235,11 @@ export class TokenDB {
     updates: Partial<Token>,
   ): Promise<Token> {
     const runtime = await agentRuntime.getRuntime();
-    const token = await runtime.getCache<Token>(`token:${tokenId}`);
+    const normalizedId = normalizeTokenId(tokenId);
+    const token = await runtime.getCache<Token>(`token:${normalizedId}`);
     if (!token) throw new Error(`Token ${tokenId} not found`);
     const updated = { ...token, ...updates, updatedAt: Date.now() };
-    await runtime.setCache(`token:${tokenId}`, updated);
+    await runtime.setCache(`token:${normalizedId}`, updated);
     return updated;
   }
 
@@ -253,13 +277,18 @@ export class TokenDB {
 export class MarketDataDB {
   static async setMarketData(data: TokenMarketData): Promise<void> {
     const runtime = await agentRuntime.getRuntime();
-    await runtime.setCache(`market_data:${data.tokenId}`, data);
+    const normalizedId = normalizeTokenId(data.tokenId);
+    await runtime.setCache(`market_data:${normalizedId}`, {
+      ...data,
+      tokenId: normalizedId,
+    });
   }
 
   static async getMarketData(tokenId: string): Promise<TokenMarketData | null> {
     const runtime = await agentRuntime.getRuntime();
+    const normalizedId = normalizeTokenId(tokenId);
     return (
-      (await runtime.getCache<TokenMarketData>(`market_data:${tokenId}`)) ??
+      (await runtime.getCache<TokenMarketData>(`market_data:${normalizedId}`)) ??
       null
     );
   }
@@ -272,8 +301,10 @@ export class ConsignmentDB {
     const runtime = await agentRuntime.getRuntime();
     const { v4: uuidv4 } = await import("uuid");
     const consignmentId = uuidv4();
+    const normalizedTokenId = normalizeTokenId(data.tokenId);
     const consignment: OTCConsignment = {
       ...data,
+      tokenId: normalizedTokenId,
       id: consignmentId,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -285,11 +316,11 @@ export class ConsignmentDB {
     await runtime.setCache("all_consignments", allConsignments);
     const tokenConsignments =
       (await runtime.getCache<string[]>(
-        `token_consignments:${data.tokenId}`,
+        `token_consignments:${normalizedTokenId}`,
       )) ?? [];
     tokenConsignments.push(consignmentId);
     await runtime.setCache(
-      `token_consignments:${data.tokenId}`,
+      `token_consignments:${normalizedTokenId}`,
       tokenConsignments,
     );
     const consignerConsignments =
@@ -331,8 +362,9 @@ export class ConsignmentDB {
     tokenId: string,
   ): Promise<OTCConsignment[]> {
     const runtime = await agentRuntime.getRuntime();
+    const normalizedId = normalizeTokenId(tokenId);
     const consignmentIds =
-      (await runtime.getCache<string[]>(`token_consignments:${tokenId}`)) ?? [];
+      (await runtime.getCache<string[]>(`token_consignments:${normalizedId}`)) ?? [];
     const consignments = await Promise.all(
       consignmentIds.map((id) =>
         runtime.getCache<OTCConsignment>(`consignment:${id}`),

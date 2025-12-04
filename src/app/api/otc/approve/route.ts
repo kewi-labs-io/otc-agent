@@ -5,10 +5,6 @@ import {
   http,
   type Abi,
   type Address,
-  type WalletClient,
-  type Account,
-  type Chain,
-  type Transport,
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import type {
@@ -25,6 +21,12 @@ import { promises as fs } from "fs";
 import path from "path";
 import type { QuoteService } from "@/lib/plugin-otc-desk/services/quoteService";
 import type { QuoteMemory } from "@/types";
+
+// Helper to safely read from contract bypassing viem's strict authorizationList requirement
+type ReadContractFn = (params: unknown) => Promise<unknown>;
+const safeReadContract = <T>(client: { readContract: ReadContractFn }, params: unknown): Promise<T> => {
+  return client.readContract(params) as Promise<T>;
+};
 
 export async function POST(request: NextRequest) {
   // Resolve OTC address (chain-specific first, then devnet file fallback for local development)
@@ -60,14 +62,14 @@ export async function POST(request: NextRequest) {
   };
 
   const OTC_ADDRESS = await resolveOtcAddress();
-  const RAW_PK = process.env.APPROVER_PRIVATE_KEY as string | undefined;
-  const APPROVER_PRIVATE_KEY =
+  const RAW_PK = process.env.EVM_PRIVATE_KEY as string | undefined;
+  const EVM_PRIVATE_KEY =
     RAW_PK && /^0x[0-9a-fA-F]{64}$/.test(RAW_PK)
       ? (RAW_PK as `0x${string}`)
       : undefined;
-  if (RAW_PK && !APPROVER_PRIVATE_KEY) {
+  if (RAW_PK && !EVM_PRIVATE_KEY) {
     console.warn(
-      "[Approve API] Ignoring invalid APPROVER_PRIVATE_KEY format. Falling back to impersonation.",
+      "[Approve API] Ignoring invalid EVM_PRIVATE_KEY format. Falling back to impersonation.",
     );
   }
 
@@ -180,74 +182,82 @@ export async function POST(request: NextRequest) {
 
     console.log("[Approve API] ✅ Solana offer approved:", approveTx);
 
-    // Fetch offer to get payment details
-    // const offerData = await program.account.offer.fetch(offer);
+    // Fetch offer to get payment details and token mint
+    // In token-agnostic architecture, each offer stores its own token_mint
+    type ProgramAccountsFetch = {
+      offer: { fetch: (address: SolanaPublicKey) => Promise<{ currency: number; id: import("@coral-xyz/anchor").BN; tokenMint: SolanaPublicKey }> };
+      desk: { fetch: (address: SolanaPublicKey) => Promise<{ usdcMint: SolanaPublicKey }> };
+    };
+    const programAccounts = program.account as unknown as ProgramAccountsFetch;
+    const offerData = await programAccounts.offer.fetch(offer);
 
     // Auto-fulfill (backend pays)
-    // console.log("[Approve API] Auto-fulfilling Solana offer...");
-    //
-    // const { getAssociatedTokenAddress } = await import("@solana/spl-token");
-    // const deskData = await program.account.desk.fetch(desk);
-    // const tokenMint = new PublicKey(deskData.tokenMint);
-    // const deskTokenTreasury = await getAssociatedTokenAddress(
-    //   tokenMint,
-    //   desk,
-    //   true,
-    // );
-    //
-    // let fulfillTx: string;
-    //
-    // if (offerData.currency === 0) {
-    //   // Pay with SOL
-    //   fulfillTx = await program.methods
-    //     .fulfillOfferSol(new (anchor as any).BN(offerId))
-    //     .accounts({
-    //       desk,
-    //       offer,
-    //       deskTokenTreasury,
-    //       payer: approverKeypair.publicKey,
-    //       systemProgram: new PublicKey("11111111111111111111111111111111"),
-    //     })
-    //     .signers([approverKeypair])
-    //     .rpc();
-    //   console.log("[Approve API] ✅ Paid with SOL:", fulfillTx);
-    // } else {
-    //   // Pay with USDC
-    //   const usdcMint = new PublicKey(deskData.usdcMint);
-    //   const deskUsdcTreasury = await getAssociatedTokenAddress(
-    //     usdcMint,
-    //     desk,
-    //     true,
-    //   );
-    //   const payerUsdcAta = await getAssociatedTokenAddress(
-    //     usdcMint,
-    //     approverKeypair.publicKey,
-    //     false,
-    //   );
-    //
-    //   fulfillTx = await program.methods
-    //     .fulfillOfferUsdc(new (anchor as any).BN(offerId))
-    //     .accounts({
-    //       desk,
-    //       offer,
-    //       deskTokenTreasury,
-    //       deskUsdcTreasury,
-    //       payerUsdcAta,
-    //       payer: approverKeypair.publicKey,
-    //       tokenProgram: new PublicKey(
-    //         "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-    //       ),
-    //       systemProgram: new PublicKey("11111111111111111111111111111111"),
-    //     })
-    //     .signers([approverKeypair])
-    //     .rpc();
-    //   console.log("[Approve API] ✅ Paid with USDC:", fulfillTx);
-    // }
+    console.log("[Approve API] Auto-fulfilling Solana offer...");
+
+    const { getAssociatedTokenAddress } = await import("@solana/spl-token");
+    const deskData = await programAccounts.desk.fetch(desk);
+    // Token mint comes from the offer itself (multi-token support)
+    const tokenMint = new PublicKey(offerData.tokenMint);
+    const deskTokenTreasury = await getAssociatedTokenAddress(
+      tokenMint,
+      desk,
+      true,
+    );
+
+    let fulfillTx: string;
+
+    if (offerData.currency === 0) {
+      // Pay with SOL
+      fulfillTx = await program.methods
+        .fulfillOfferSol(new anchor.BN(offerId))
+        .accounts({
+          desk,
+          offer,
+          deskTokenTreasury,
+          payer: approverKeypair.publicKey,
+          systemProgram: new PublicKey("11111111111111111111111111111111"),
+        })
+        .signers([approverKeypair])
+        .rpc();
+      console.log("[Approve API] ✅ Paid with SOL:", fulfillTx);
+    } else {
+      // Pay with USDC
+      const usdcMint = new PublicKey(deskData.usdcMint);
+      const deskUsdcTreasury = await getAssociatedTokenAddress(
+        usdcMint,
+        desk,
+        true,
+      );
+      const payerUsdcAta = await getAssociatedTokenAddress(
+        usdcMint,
+        approverKeypair.publicKey,
+        false,
+      );
+
+      fulfillTx = await program.methods
+        .fulfillOfferUsdc(new anchor.BN(offerId))
+        .accounts({
+          desk,
+          offer,
+          deskTokenTreasury,
+          deskUsdcTreasury,
+          payerUsdcAta,
+          payer: approverKeypair.publicKey,
+          tokenProgram: new PublicKey(
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          ),
+          systemProgram: new PublicKey("11111111111111111111111111111111"),
+        })
+        .signers([approverKeypair])
+        .rpc();
+      console.log("[Approve API] ✅ Paid with USDC:", fulfillTx);
+    }
 
     return NextResponse.json({
       success: true,
       approved: true,
-      autoFulfilled: false,
+      autoFulfilled: true,
+      fulfillTx,
       chain: "solana",
       offerAddress,
       approvalTx: approveTx,
@@ -261,11 +271,12 @@ export async function POST(request: NextRequest) {
 
   // Resolve approver account: prefer PK; else use testWalletPrivateKey from deployment; else impersonate
   let account: PrivateKeyAccount | Address;
-  let walletClient: WalletClient<Transport, Chain, Account>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let walletClient: any; // Using any to avoid viem deep type instantiation issues
   let approverAddr: Address;
 
-  if (APPROVER_PRIVATE_KEY) {
-    account = privateKeyToAccount(APPROVER_PRIVATE_KEY);
+  if (EVM_PRIVATE_KEY) {
+    account = privateKeyToAccount(EVM_PRIVATE_KEY);
     walletClient = createWalletClient({
       account,
       chain,
@@ -317,12 +328,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Ensure single approver mode (dev convenience)
-  const currentRequired = (await publicClient.readContract({
+  const currentRequired = await safeReadContract<bigint>(publicClient, {
     address: OTC_ADDRESS,
     abi,
     functionName: "requiredApprovals",
     args: [],
-  })) as bigint;
+  });
 
   console.log(
     "[Approve API] Current required approvals:",
@@ -367,12 +378,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Check if already approved
-  const offerRaw = (await publicClient.readContract({
+  const offerRaw = await safeReadContract<RawOfferData>(publicClient, {
     address: OTC_ADDRESS,
     abi,
     functionName: "offers",
     args: [BigInt(offerId)],
-  })) as RawOfferData;
+  });
 
   const offer = parseOfferStruct(offerRaw);
 
@@ -532,7 +543,7 @@ export async function POST(request: NextRequest) {
   });
 
   console.log("[Approve API] Sending approval tx...");
-  const txHash = await walletClient.writeContract(approveRequest);
+  const txHash: `0x${string}` = await walletClient.writeContract(approveRequest);
 
   console.log("[Approve API] Waiting for confirmation...", txHash);
   const approvalReceipt = await publicClient.waitForTransactionReceipt({
@@ -630,12 +641,12 @@ export async function POST(request: NextRequest) {
   }
 
   // If still not approved (multi-approver deployments), escalate approvals
-  let approvedOfferRaw = (await publicClient.readContract({
+  let approvedOfferRaw = await safeReadContract<RawOfferData>(publicClient, {
     address: OTC_ADDRESS,
     abi,
     functionName: "offers",
     args: [BigInt(offerId)],
-  })) as RawOfferData;
+  });
 
   let approvedOffer = parseOfferStruct(approvedOfferRaw);
 
@@ -678,12 +689,12 @@ export async function POST(request: NextRequest) {
       }).writeContract({ ...req2, account: addr });
 
       // Re-read state after each attempt
-      approvedOfferRaw = (await publicClient.readContract({
+      approvedOfferRaw = await safeReadContract<RawOfferData>(publicClient, {
         address: OTC_ADDRESS,
         abi,
         functionName: "offers",
         args: [BigInt(offerId)],
-      })) as RawOfferData;
+      });
       approvedOffer = parseOfferStruct(approvedOfferRaw);
       if (approvedOffer.approved) break;
     }
@@ -692,12 +703,12 @@ export async function POST(request: NextRequest) {
   // Final verification that offer was approved
   console.log("[Approve API] Verifying final approval state...");
 
-  approvedOfferRaw = (await publicClient.readContract({
+  approvedOfferRaw = await safeReadContract<RawOfferData>(publicClient, {
     address: OTC_ADDRESS,
     abi,
     functionName: "offers",
     args: [BigInt(offerId)],
-  })) as RawOfferData;
+  });
 
   approvedOffer = parseOfferStruct(approvedOfferRaw);
 
@@ -718,12 +729,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Check if approver should also fulfill
-  const requireApproverToFulfill = (await publicClient.readContract({
+  const requireApproverToFulfill = await safeReadContract<boolean>(publicClient, {
     address: OTC_ADDRESS,
     abi,
     functionName: "requireApproverToFulfill",
     args: [],
-  })) as boolean;
+  });
 
   console.log(
     "[Approve API] requireApproverToFulfill:",
@@ -747,30 +758,30 @@ export async function POST(request: NextRequest) {
 
       if (currency === 0) {
         // ETH payment required
-        const requiredEth = (await publicClient.readContract({
+        const requiredEth = await safeReadContract<bigint>(publicClient, {
           address: OTC_ADDRESS,
           abi,
           functionName: "requiredEthWei",
           args: [BigInt(offerId)],
-        })) as bigint;
+        });
 
         valueWei = requiredEth;
         console.log("[Approve API] Required ETH:", requiredEth.toString());
       } else {
         // USDC payment - need to approve first
-        const usdcAddress = (await publicClient.readContract({
+        const usdcAddress = await safeReadContract<Address>(publicClient, {
           address: OTC_ADDRESS,
           abi,
           functionName: "usdc",
           args: [],
-        })) as Address;
+        });
 
-        const requiredUsdc = (await publicClient.readContract({
+        const requiredUsdc = await safeReadContract<bigint>(publicClient, {
           address: OTC_ADDRESS,
           abi,
           functionName: "requiredUsdcAmount",
           args: [BigInt(offerId)],
-        })) as bigint;
+        });
 
         console.log("[Approve API] Required USDC:", requiredUsdc.toString());
 
@@ -823,12 +834,12 @@ export async function POST(request: NextRequest) {
       console.error("[Approve API] ❌ Auto-fulfill failed:", fulfillError);
 
       // Check if offer got paid by another transaction during our attempt
-      const recheckOffer = (await publicClient.readContract({
+      const recheckOffer = await safeReadContract<RawOfferData>(publicClient, {
         address: OTC_ADDRESS,
         abi,
         functionName: "offers",
         args: [BigInt(offerId)],
-      })) as RawOfferData;
+      });
 
       const recheckParsed = parseOfferStruct(recheckOffer);
 

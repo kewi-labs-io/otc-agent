@@ -57,7 +57,6 @@ contract FullLifecycleTest is Test {
         token.approve(address(otc), 1000e18);
         
         uint256 gasDeposit = 0.001 ether;
-        uint256 consignerEthBefore = consigner.balance;
         
         uint256 consignmentId = otc.createConsignment{value: gasDeposit}(
             tokenId,
@@ -137,8 +136,8 @@ contract FullLifecycleTest is Test {
             OTC.PaymentCurrency o_curr,
             bool o_appr,
             bool o_paid,
-            bool o_full,
-            bool o_canc,
+            ,
+            ,
             ,
             
         ) = otc.offers(offerId);
@@ -224,11 +223,10 @@ contract FullLifecycleTest is Test {
         assertFalse(c_active_final);
         
         // Check totalDeposited reduced properly
-        // original 1000. withdraw 900. 100 claimed.
-        // tokenDeposited tracks "deposited minus withdrawn".
-        // 1000 - 900 = 100.
-        // Does NOT subtract claimed tokens (as noted in review).
-        assertEq(otc.tokenDeposited(tokenId), 100e18);
+        // original 1000. 100 claimed. 900 withdrawn.
+        // tokenDeposited now tracks actual balance accurately.
+        // 1000 - 100 (claimed) - 900 (withdrawn) = 0.
+        assertEq(otc.tokenDeposited(tokenId), 0);
         
         vm.stopPrank();
     }

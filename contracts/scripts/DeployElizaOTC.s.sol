@@ -160,7 +160,7 @@ contract DeployElizaOTC is Script {
             'NEXT_PUBLIC_ELIZAOS_USD_FEED=', vm.toString(address(elizaUsdFeed)), '\n',
             'NEXT_PUBLIC_ETH_USD_FEED=', vm.toString(address(ethUsdFeed)), '\n',
             'APPROVER_ADDRESS=', vm.toString(approver), '\n',
-            'APPROVER_PRIVATE_KEY=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d\n',
+            'EVM_PRIVATE_KEY=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d\n',
             'TEST_WALLET_ADDRESS=', vm.toString(testWallet), '\n',
             'TEST_WALLET_PRIVATE_KEY=', vm.toString(testWalletKey), '\n'
         );

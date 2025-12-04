@@ -17,10 +17,11 @@ export type EvmDeployment = {
 };
 
 export type SolanaDeployment = {
+  NEXT_PUBLIC_SOLANA_RPC?: string;
+  NEXT_PUBLIC_SOLANA_PROGRAM_ID?: string;
   NEXT_PUBLIC_SOLANA_DESK?: string;
+  NEXT_PUBLIC_SOLANA_DESK_OWNER?: string;
   NEXT_PUBLIC_SOLANA_USDC_MINT?: string;
-  NEXT_PUBLIC_SOLANA_TOKEN_MINT?: string;
-  // ...
 };
 
 export const CONTRACT_DEPLOYMENTS = {

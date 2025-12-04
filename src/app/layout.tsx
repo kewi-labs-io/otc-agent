@@ -21,7 +21,7 @@ const ibmPlexMono = IBM_Plex_Mono({
   variable: "--font-ibm-plex-mono",
 });
 
-const appUrl = process.env.NEXT_PUBLIC_URL || "http://localhost:5004";
+const appUrl = process.env.NEXT_PUBLIC_URL || "http://localhost:4444";
 
 // Farcaster Mini App frame configuration
 const frame = {

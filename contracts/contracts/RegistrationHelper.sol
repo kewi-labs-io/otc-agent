@@ -5,14 +5,8 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SimplePoolOracle} from "./SimplePoolOracle.sol";
 import {IUniswapV3Pool} from "./interfaces/IUniswapV3Pool.sol";
-
-interface IOTC {
-    function registerToken(bytes32 tokenId, address tokenAddress, address priceOracle) external;
-}
-
-interface IAggregatorV3 {
-    function decimals() external view returns (uint8);
-}
+import {IOTC} from "./interfaces/IOTC.sol";
+import {IAggregatorV3} from "./interfaces/IAggregatorV3.sol";
 
 /// @title RegistrationHelper
 /// @notice Allows users to register tokens to the OTC contract by paying a fee

@@ -145,7 +145,7 @@ test.describe('Page Load Tests', () => {
     
     // Should show 404 or redirect to home
     const has404 = await page.getByText(/404|not found/i).isVisible({ timeout: 3000 }).catch(() => false);
-    const isHome = page.url().endsWith('/') || page.url().includes('localhost:5004');
+    const isHome = page.url().endsWith('/') || page.url().includes('localhost:4444');
     
     expect(has404 || isHome).toBeTruthy();
   });

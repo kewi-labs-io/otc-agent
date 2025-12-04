@@ -74,7 +74,7 @@ async function pollBaseRegistrations() {
           { type: "address", name: "tokenAddress", indexed: true },
           { type: "address", name: "pool", indexed: true },
           { type: "address", name: "oracle" },
-          { type: "address", name: "registeredBy", indexed: true },
+          { type: "address", name: "registeredBy" },
         ],
       },
       fromBlock: startBlock,
@@ -97,18 +97,20 @@ async function pollBaseRegistrations() {
       );
 
       // Fetch token metadata
+      // Use type assertion to bypass viem's strict authorizationList requirement
+      const readContract = client.readContract as (params: unknown) => Promise<unknown>;
       const [symbol, name, decimals] = await Promise.all([
-        client.readContract({
+        readContract({
           address: tokenAddress as `0x${string}`,
           abi: ERC20_ABI,
           functionName: "symbol",
         }),
-        client.readContract({
+        readContract({
           address: tokenAddress as `0x${string}`,
           abi: ERC20_ABI,
           functionName: "name",
         }),
-        client.readContract({
+        readContract({
           address: tokenAddress as `0x${string}`,
           abi: ERC20_ABI,
           functionName: "decimals",
@@ -236,9 +238,26 @@ async function pollSolanaRegistrations() {
  * Runs periodically to poll for new token registrations
  */
 export async function GET(request: NextRequest) {
-  // Verify this is a cron request (Vercel adds this header)
+  // Verify authorization
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const cronSecret = process.env.CRON_SECRET;
+
+  // Always require auth in production
+  if (process.env.NODE_ENV === "production" && !cronSecret) {
+    console.error("[Cron] No CRON_SECRET configured in production");
+    return NextResponse.json(
+      { error: "Server configuration error" },
+      { status: 500 },
+    );
+  }
+
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    console.warn("[Cron] Unauthorized access attempt", {
+      ip:
+        request.headers.get("x-forwarded-for") ||
+        request.headers.get("x-real-ip"),
+      timestamp: new Date().toISOString(),
+    });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

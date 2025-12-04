@@ -30,11 +30,11 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
-# Check that EVM chain selector exists
-if [ -f "$PROJECT_ROOT/src/components/evm-chain-selector.tsx" ]; then
-  echo "✅ EVM chain selector component exists"
+# Check that Privy provider is configured (replaces manual chain selector)
+if grep -q "PrivyProvider" "$PROJECT_ROOT/src/components/providers.tsx"; then
+  echo "✅ Privy provider is configured for wallet connection"
 else
-  echo "❌ EVM chain selector component missing"
+  echo "❌ Privy provider missing in providers.tsx"
   ERRORS=$((ERRORS + 1))
 fi
 

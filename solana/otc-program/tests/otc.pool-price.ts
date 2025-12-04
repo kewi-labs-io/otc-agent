@@ -64,7 +64,7 @@ describe("OTC Pool Price Tests", () => {
       6
     );
 
-    // Initialize Desk
+    // Initialize Desk (multi-token architecture - no tokenMint)
     await program.methods
       .initDesk(
         new anchor.BN(5 * 1e8), // min $5
@@ -74,10 +74,8 @@ describe("OTC Pool Price Tests", () => {
         payer: owner.publicKey,
         owner: owner.publicKey,
         agent: owner.publicKey,
-        tokenMint: tokenMint, // Desk base token (unused for multi-token but required)
         usdcMint: quoteMint,
         desk: desk.publicKey,
-        // systemProgram: SystemProgram.programId,
       })
       .signers([owner, desk])
       .rpc();
@@ -148,7 +146,7 @@ describe("OTC Pool Price Tests", () => {
     const priceFeedId = Buffer.alloc(32).fill(1); // Dummy feed ID
 
     await program.methods
-      .registerToken([...priceFeedId], poolAddress)
+      .registerToken([...priceFeedId], poolAddress, 1)
       .accounts({
         desk: desk.publicKey,
         payer: payer.publicKey,

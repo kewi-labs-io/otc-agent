@@ -1,315 +1,386 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useReducer, useMemo, useRef } from "react";
 import Image from "next/image";
 import { useMultiWallet } from "../multiwallet";
-import type { Token, TokenMarketData } from "@/services/database";
+import type { Token } from "@/services/database";
 import { Button } from "../button";
-import { useAccount, useChainId, usePublicClient } from "wagmi";
-import { localhost, base, baseSepolia, bsc, bscTestnet } from "wagmi/chains";
-import type { Abi, Address } from "viem";
-import { useConnection } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
-import { RegisterTokenModal } from "../register-token-modal";
-import { Plus } from "lucide-react";
+import { useChainId } from "wagmi";
+import { base, baseSepolia, bsc, bscTestnet } from "wagmi/chains";
+import { scanWalletTokens, type ScannedToken } from "@/utils/wallet-token-scanner";
+import type { Chain } from "@/config/chains";
+import { usePrivy } from "@privy-io/react-auth";
+import { Search, X, RefreshCw, ExternalLink, Loader2 } from "lucide-react";
 
-interface StepProps {
-  formData: any;
-  updateFormData: (updates: any) => void;
-  onNext: () => void;
-  onBack?: () => void;
-  requiredChain?: "evm" | "solana" | null;
-  isConnectedToRequiredChain?: boolean;
-  onConnectEvm?: () => void;
-  onConnectSolana?: () => void;
+// Address detection helpers
+function isSolanaAddress(address: string): boolean {
+  const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+  return base58Regex.test(address);
 }
 
-interface TokenWithBalance extends Token {
+function isEvmAddress(address: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/i.test(address);
+}
+
+function isContractAddress(query: string): boolean {
+  return isSolanaAddress(query) || isEvmAddress(query);
+}
+
+// Minimum thresholds to filter obvious dust
+const MIN_TOKEN_BALANCE = 1; // At least 1 token (human-readable)
+const MIN_VALUE_USD = 0.001; // $0.001 minimum if we have a price
+
+// Client-side token cache (5 minute TTL)
+const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000;
+interface CachedTokens {
+  tokens: TokenWithBalance[];
+  walletAddress: string;
+  chain: string;
+  cachedAt: number;
+}
+
+function getTokenCache(walletAddress: string, chain: string): TokenWithBalance[] | null {
+  try {
+    const cacheKey = `token-cache:${chain}:${walletAddress}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (!cached) return null;
+    
+    const data: CachedTokens = JSON.parse(cached);
+    // Check if cache is still valid (5 minutes)
+    if (Date.now() - data.cachedAt >= TOKEN_CACHE_TTL_MS) {
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+    console.log(`[TokenSelection] Using cached tokens for ${chain}`);
+    return data.tokens;
+  } catch {
+    return null;
+  }
+}
+
+function setTokenCache(walletAddress: string, chain: string, tokens: TokenWithBalance[]): void {
+  try {
+    const cacheKey = `token-cache:${chain}:${walletAddress}`;
+    const data: CachedTokens = {
+      tokens,
+      walletAddress,
+      chain,
+      cachedAt: Date.now(),
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(data));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function clearTokenCache(walletAddress?: string, chain?: string): void {
+  try {
+    if (walletAddress && chain) {
+      localStorage.removeItem(`token-cache:${chain}:${walletAddress}`);
+    } else {
+      // Clear all token caches
+      const keys = Object.keys(localStorage).filter(k => k.startsWith("token-cache:"));
+      keys.forEach(k => localStorage.removeItem(k));
+    }
+  } catch {
+    // Ignore
+  }
+}
+
+export interface TokenWithBalance extends Token {
   balance: string;
   balanceUsd: number;
   priceUsd: number;
 }
 
-const erc20Abi = [
-  {
-    type: "function",
-    name: "balanceOf",
-    stateMutability: "view",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "decimals",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint8" }],
-  },
-] as unknown as Abi;
+interface TokenSelectionProps {
+  formData: { tokenId: string };
+  updateFormData: (updates: { tokenId: string }) => void;
+  onNext: () => void;
+  onTokenSelect?: (token: TokenWithBalance) => void;
+}
+
+function formatBalance(balance: string, decimals: number): string {
+  const num = Number(balance) / Math.pow(10, decimals);
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
+  return num.toFixed(2);
+}
+
+function formatUsd(usd: number): string {
+  if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(2)}M`;
+  if (usd >= 1_000) return `$${(usd / 1_000).toFixed(2)}K`;
+  return `$${usd.toFixed(2)}`;
+}
+
+interface LoadingState {
+  isLoading: boolean;
+  hasLoadedOnce: boolean;
+}
+
+type LoadingAction = { type: "START_LOADING" } | { type: "FINISH_LOADING" };
+
+function loadingReducer(state: LoadingState, action: LoadingAction): LoadingState {
+  switch (action.type) {
+    case "START_LOADING":
+      return { isLoading: true, hasLoadedOnce: false };
+    case "FINISH_LOADING":
+      return { isLoading: false, hasLoadedOnce: true };
+    default:
+      return state;
+  }
+}
 
 export function TokenSelectionStep({
   formData,
   updateFormData,
   onNext,
-  requiredChain,
-  isConnectedToRequiredChain,
-  onConnectEvm,
-  onConnectSolana,
-}: StepProps) {
-  const { activeFamily, evmAddress, solanaPublicKey, isConnected } =
+  onTokenSelect,
+}: TokenSelectionProps) {
+  const { activeFamily, evmAddress, solanaPublicKey, hasWallet, privyAuthenticated, connectWallet } =
     useMultiWallet();
-  const { address } = useAccount();
+  const { login, ready: privyReady } = usePrivy();
   const chainId = useChainId();
-  const publicClient = usePublicClient();
-  const { connection } = useConnection();
   const [tokens, setTokens] = useState<TokenWithBalance[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loadingState, dispatchLoading] = useReducer(loadingReducer, {
+    isLoading: true,
+    hasLoadedOnce: false,
+  });
+  
+  // State for address lookup
+  const [searchedToken, setSearchedToken] = useState<TokenWithBalance | null>(null);
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  const [addressSearchError, setAddressSearchError] = useState<string | null>(null);
+  const addressSearchRef = useRef<string | null>(null);
 
-  const fetchSolanaBalance = useCallback(
-    async (mintAddress: string, userPublicKey: string): Promise<string> => {
-      try {
-        const { getAssociatedTokenAddress, getAccount } = await import(
-          "@solana/spl-token"
-        );
+  const { isLoading: loading, hasLoadedOnce } = loadingState;
 
-        // Normalize addresses to handle case sensitivity
-        const normalizedMint = mintAddress.toLowerCase();
-        const mintPubkey = new PublicKey(normalizedMint);
-        const ownerPubkey = new PublicKey(userPublicKey);
-        const ata = await getAssociatedTokenAddress(mintPubkey, ownerPubkey);
+  // Filter tokens by search query (symbol or name)
+  const filteredTokens = useMemo(() => {
+    if (!searchQuery.trim()) return tokens;
+    const query = searchQuery.toLowerCase().trim();
+    return tokens.filter(t => 
+      t.symbol.toLowerCase().includes(query) ||
+      t.name.toLowerCase().includes(query) ||
+      t.contractAddress.toLowerCase().includes(query)
+    );
+  }, [tokens, searchQuery]);
+  
+  // Detect if we should search by address
+  const searchIsAddress = useMemo(() => {
+    const trimmed = searchQuery.trim();
+    return trimmed.length > 0 && isContractAddress(trimmed);
+  }, [searchQuery]);
+  
+  // Check if the searched address is already in wallet
+  const addressFoundInWallet = useMemo(() => {
+    if (!searchIsAddress) return false;
+    const query = searchQuery.trim().toLowerCase();
+    return tokens.some(t => t.contractAddress.toLowerCase() === query);
+  }, [searchIsAddress, searchQuery, tokens]);
 
-        const accountInfo = await getAccount(connection, ata).catch((error) => {
-          console.error(
-            `[TokenSelection] Failed to fetch balance for ${mintAddress}:`,
-            error,
-          );
-          return null;
-        });
+  const handleConnect = useCallback(() => {
+    privyAuthenticated ? connectWallet() : login();
+  }, [privyAuthenticated, connectWallet, login]);
 
-        if (!accountInfo) {
-          console.log(
-            `[TokenSelection] No token account found for ${mintAddress}`,
-          );
-          return "0";
-        }
-
-        return accountInfo.amount.toString();
-      } catch (error) {
-        console.error(
-          `[TokenSelection] Error fetching Solana balance for ${mintAddress}:`,
-          error,
-        );
-        return "0";
-      }
-    },
-    [connection],
-  );
-
-  const handleRegistrationSuccess = useCallback(() => {
-    // Reload tokens after successful registration
-    setLoading(true);
-    setHasLoadedOnce(false);
-  }, []);
-
-  const fetchEvmBalance = useCallback(
-    async (tokenAddress: string, userAddress: string): Promise<string> => {
-      try {
-        // Use the publicClient from wagmi if available (uses correct chain)
-        if (publicClient) {
-          const balance = await publicClient.readContract({
-            address: tokenAddress as Address,
-            abi: erc20Abi,
-            functionName: "balanceOf",
-            args: [userAddress as Address],
-          });
-          return (balance as bigint).toString();
-        }
-
-        // Fallback: Create client based on current chainId
-        const { createPublicClient, http } = await import("viem");
-        let chain;
-        let rpcUrl;
-
-        // Map chainId to chain and RPC URL
-        if (chainId === base.id) {
-          chain = base;
-          rpcUrl =
-            process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
-        } else if (chainId === baseSepolia.id) {
-          chain = baseSepolia;
-          rpcUrl =
-            process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://sepolia.base.org";
-        } else if (chainId === bsc.id) {
-          chain = bsc;
-          rpcUrl =
-            process.env.NEXT_PUBLIC_BSC_RPC_URL ||
-            "https://bsc-dataseed1.binance.org";
-        } else if (chainId === bscTestnet.id) {
-          chain = bscTestnet;
-          rpcUrl =
-            process.env.NEXT_PUBLIC_BSC_RPC_URL ||
-            "https://data-seed-prebsc-1-s1.binance.org:8545";
-        } else {
-          // Default to localhost for unknown chains
-          chain = localhost;
-          rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
-        }
-
-        const client = createPublicClient({
-          chain,
-          transport: http(rpcUrl),
-        });
-
-        const balance = await client.readContract({
-          address: tokenAddress as Address,
-          abi: erc20Abi,
-          functionName: "balanceOf",
-          args: [userAddress as Address],
-        });
-
-        return (balance as bigint).toString();
-      } catch (error) {
-        console.error(
-          `[TokenSelection] Error fetching EVM balance for ${tokenAddress}:`,
-          error,
-        );
-        return "0";
-      }
-    },
-    [publicClient, chainId],
-  );
-
+  const getEvmChainName = useCallback((): Chain => {
+    if (chainId === base.id || chainId === baseSepolia.id) return "base";
+    if (chainId === bsc.id || chainId === bscTestnet.id) return "bsc";
+    return "base";
+  }, [chainId]);
+  
+  // Look up token by contract address when not found in wallet
   useEffect(() => {
-    setLoading(true);
-    setHasLoadedOnce(false);
-
-    async function loadUserTokens() {
-      if (!isConnected) {
-        setLoading(false);
-        setHasLoadedOnce(true);
-        return;
-      }
-
-      const chain = activeFamily === "solana" ? "solana" : "ethereum";
-      const userAddress =
-        activeFamily === "solana" ? solanaPublicKey : evmAddress;
-
-      if (!userAddress) {
-        setLoading(false);
-        setHasLoadedOnce(true);
-        return;
-      }
-
-      const response = await fetch(`/api/tokens?chain=${chain}&isActive=true`);
-      const data = await response.json();
-
-      if (!data.success || !data.tokens) {
-        setLoading(false);
-        setHasLoadedOnce(true);
-        return;
-      }
-
-      const allTokens = data.tokens as Token[];
-      const tokensWithBalances: TokenWithBalance[] = [];
-
-      for (const token of allTokens) {
-        let balance = "0";
-        let balanceNum = 0;
-
-        try {
-          if (activeFamily === "solana" && solanaPublicKey) {
-            // Normalize token address for comparison
-            const normalizedTokenAddress = token.contractAddress.toLowerCase();
-            balance = await fetchSolanaBalance(
-              normalizedTokenAddress,
-              solanaPublicKey,
-            );
-            balanceNum = Number(balance) / Math.pow(10, token.decimals);
-          } else if (evmAddress && chainId) {
-            // Only fetch balance if we have a valid chainId
-            balance = await fetchEvmBalance(token.contractAddress, evmAddress);
-            balanceNum = Number(balance) / Math.pow(10, token.decimals);
-          }
-        } catch (error) {
-          console.error(
-            `[TokenSelection] Error checking balance for token ${token.id}:`,
-            error,
-          );
-          // Continue to next token instead of failing completely
-          continue;
+    const trimmed = searchQuery.trim();
+    
+    // Clear if not a valid address or found in wallet
+    if (!searchIsAddress || addressFoundInWallet) {
+      setSearchedToken(null);
+      setAddressSearchError(null);
+      addressSearchRef.current = null;
+      return;
+    }
+    
+    // Don't re-search same address
+    if (addressSearchRef.current === trimmed) return;
+    
+    // Detect chain from address format
+    const chain: Chain = isSolanaAddress(trimmed) 
+      ? "solana" 
+      : activeFamily === "solana" ? "base" : getEvmChainName();
+    
+    // Debounce the lookup
+    const timeoutId = setTimeout(async () => {
+      addressSearchRef.current = trimmed;
+      setIsSearchingAddress(true);
+      setAddressSearchError(null);
+      
+      try {
+        const response = await fetch(`/api/token-lookup?address=${encodeURIComponent(trimmed)}&chain=${chain}`);
+        const data = await response.json();
+        
+        if (data.success && data.token) {
+          const token = data.token;
+          setSearchedToken({
+            id: `token-${token.chain}-${token.address}`,
+            symbol: token.symbol,
+            name: token.name,
+            contractAddress: token.address,
+            chain: token.chain as Chain,
+            decimals: token.decimals,
+            logoUrl: token.logoUrl || "",
+            description: "",
+            isActive: true,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            balance: "0", // User doesn't have this token
+            balanceUsd: 0,
+            priceUsd: token.priceUsd || 0,
+          });
+          setAddressSearchError(null);
+        } else {
+          setSearchedToken(null);
+          setAddressSearchError(data.error || "Token not found");
         }
-
-        if (balanceNum > 0) {
-          try {
-            const marketDataRes = await fetch(`/api/market-data/${token.id}`);
-            const marketDataJson = await marketDataRes.json();
-            const marketData =
-              marketDataJson.marketData as TokenMarketData | null;
-            const priceUsd = marketData?.priceUsd || 0;
-            const balanceUsd = balanceNum * priceUsd;
-
-            tokensWithBalances.push({
-              ...token,
-              balance,
-              balanceUsd,
-              priceUsd,
-            });
-          } catch (error) {
-            console.error(
-              `[TokenSelection] Error fetching market data for token ${token.id}:`,
-              error,
-            );
-            // Still add token even if market data fails
-            tokensWithBalances.push({
-              ...token,
-              balance,
-              balanceUsd: 0,
-              priceUsd: 0,
-            });
-          }
-        }
+      } catch (error) {
+        console.error("[TokenSelection] Address lookup error:", error);
+        setSearchedToken(null);
+        setAddressSearchError("Failed to look up token");
+      } finally {
+        setIsSearchingAddress(false);
       }
+    }, 500); // 500ms debounce
+    
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, searchIsAddress, addressFoundInWallet, activeFamily, getEvmChainName]);
 
-      tokensWithBalances.sort((a, b) => b.balanceUsd - a.balanceUsd);
-      setTokens(tokensWithBalances);
-      setLoading(false);
-      setHasLoadedOnce(true);
+  // Track previous wallet to detect disconnects
+  const prevWalletRef = useRef<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Function to load tokens (can be called with forceRefresh)
+  const loadUserTokens = useCallback(async (forceRefresh = false) => {
+    const chain: Chain = activeFamily === "solana" ? "solana" : getEvmChainName();
+    const userAddress = activeFamily === "solana" ? solanaPublicKey : evmAddress;
+    
+    if (!hasWallet || !userAddress) {
+      setTokens([]);
+      dispatchLoading({ type: "FINISH_LOADING" });
+      return;
     }
 
+    // Check client-side cache first (5 minute TTL) unless force refresh
+    if (!forceRefresh) {
+      const cachedTokens = getTokenCache(userAddress, chain);
+      if (cachedTokens) {
+        setTokens(cachedTokens);
+        dispatchLoading({ type: "FINISH_LOADING" });
+        return;
+      }
+    } else {
+      // Clear client-side cache when force refreshing
+      clearTokenCache(userAddress, chain);
+    }
+
+    dispatchLoading({ type: "START_LOADING" });
+    if (forceRefresh) setIsRefreshing(true);
+
+    try {
+      // Fetch from backend APIs
+      const scannedTokens: ScannedToken[] = await scanWalletTokens(userAddress, chain, forceRefresh);
+
+        // Build token list - prices already included from backend
+        const tokensWithBalances: TokenWithBalance[] = scannedTokens
+          .filter((t) => BigInt(t.balance) > 0n)
+          .map((t) => ({
+            id: `token-${t.chain}-${t.address}`,
+            symbol: t.symbol,
+            name: t.name,
+            contractAddress: t.address,
+            chain: t.chain,
+            decimals: t.decimals,
+            logoUrl: t.logoUrl || "",
+            description: "",
+            isActive: true,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            balance: t.balance,
+            balanceUsd: t.balanceUsd || 0,
+            priceUsd: t.priceUsd || 0,
+          }));
+
+        // Apply minimal dust filter - show tokens without prices
+        const filteredTokens = tokensWithBalances.filter(t => {
+          const humanBalance = Number(BigInt(t.balance)) / Math.pow(10, t.decimals);
+          const hasPrice = t.priceUsd > 0;
+          if (hasPrice && t.balanceUsd < MIN_VALUE_USD) {
+            return false;
+          }
+          return humanBalance >= MIN_TOKEN_BALANCE;
+        });
+
+        // Sort: priced tokens first, then by balance
+        filteredTokens.sort((a, b) => {
+          const aHasPrice = a.priceUsd > 0;
+          const bHasPrice = b.priceUsd > 0;
+          if (aHasPrice && !bHasPrice) return -1;
+          if (!aHasPrice && bHasPrice) return 1;
+          if (aHasPrice && bHasPrice) return b.balanceUsd - a.balanceUsd;
+          const aBalance = Number(BigInt(a.balance)) / Math.pow(10, a.decimals);
+          const bBalance = Number(BigInt(b.balance)) / Math.pow(10, b.decimals);
+          return bBalance - aBalance;
+        });
+        
+        // Save to client-side cache (5 minute TTL)
+        if (userAddress) {
+          setTokenCache(userAddress, chain, filteredTokens);
+        }
+        setTokens(filteredTokens);
+      } catch (error) {
+        console.error("[TokenSelection] Scan error:", error);
+      } finally {
+        dispatchLoading({ type: "FINISH_LOADING" });
+        setIsRefreshing(false);
+      }
+  }, [activeFamily, evmAddress, solanaPublicKey, hasWallet, getEvmChainName]);
+
+  // Auto-load on mount and when wallet changes
+  useEffect(() => {
+    const userAddress = activeFamily === "solana" ? solanaPublicKey : evmAddress;
+    
+    // Detect wallet change (disconnect/reconnect) - clear cache
+    if (prevWalletRef.current && prevWalletRef.current !== userAddress) {
+      console.log("[TokenSelection] Wallet changed, clearing cache");
+      clearTokenCache();
+    }
+    prevWalletRef.current = userAddress || null;
+
     loadUserTokens();
-  }, [
-    activeFamily,
-    evmAddress,
-    solanaPublicKey,
-    isConnected,
-    address,
-    connection,
-    fetchSolanaBalance,
-    fetchEvmBalance,
-    chainId,
-    publicClient,
-  ]);
+  }, [loadUserTokens]);
+  
+  // Refresh handler
+  const handleRefresh = useCallback(() => {
+    loadUserTokens(true);
+  }, [loadUserTokens]);
 
-  const formatBalance = (balance: string, decimals: number) => {
-    const num = Number(balance) / Math.pow(10, decimals);
-    if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(2)}K`;
-    return num.toFixed(2);
+  const handleTokenClick = (token: TokenWithBalance) => {
+    updateFormData({ tokenId: token.id });
+    onTokenSelect?.(token);
+    onNext();
   };
 
-  const formatUsd = (usd: number) => {
-    if (usd >= 1000000) return `$${(usd / 1000000).toFixed(2)}M`;
-    if (usd >= 1000) return `$${(usd / 1000).toFixed(2)}K`;
-    return `$${usd.toFixed(2)}`;
-  };
-
-  if (!isConnected) {
+  if (!hasWallet) {
     return (
-      <div className="text-center py-8">
-        <p className="text-zinc-600 dark:text-zinc-400 mb-4">
-          Please connect your wallet to list tokens
+      <div className="text-center py-8 space-y-4">
+        <p className="text-zinc-600 dark:text-zinc-400">
+          {privyAuthenticated ? "Connect a wallet to list your tokens" : "Sign in to list your tokens"}
+        </p>
+        <Button color="orange" onClick={handleConnect} disabled={!privyReady} className="!px-8 !py-3">
+          {privyReady ? (privyAuthenticated ? "Connect Wallet" : "Sign In") : "Loading..."}
+        </Button>
+        <p className="text-xs text-zinc-500 dark:text-zinc-500">
+          Connect with Farcaster, MetaMask, Phantom, or other wallets
         </p>
       </div>
     );
@@ -318,113 +389,210 @@ export function TokenSelectionStep({
   if (loading) {
     return (
       <div className="text-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4"></div>
-        <p className="text-zinc-600 dark:text-zinc-400">
-          Loading your tokens...
-        </p>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4" />
+        <p className="text-zinc-600 dark:text-zinc-400">Loading your tokens...</p>
       </div>
     );
   }
 
   if (tokens.length === 0 && hasLoadedOnce) {
     return (
-      <div className="text-center py-8">
+      <div className="text-center py-8 space-y-4">
         <p className="text-zinc-600 dark:text-zinc-400">
-          You don&apos;t have any {activeFamily === "solana" ? "Solana" : "EVM"}{" "}
-          tokens to list.
+          No {activeFamily === "solana" ? "Solana" : "EVM"} tokens found in your wallet.
         </p>
-        <p className="text-sm text-zinc-500 dark:text-zinc-500 mt-2">
-          Switch networks or add tokens to your wallet.
+        <p className="text-sm text-zinc-500 dark:text-zinc-500">
+          {activeFamily === "solana" 
+            ? "Make sure you have tokens on Solana mainnet."
+            : "Make sure you have tokens on Base/BSC and ALCHEMY_API_KEY is configured."
+          }
+        </p>
+        <p className="text-xs text-zinc-400 dark:text-zinc-500">
+          Or use the network selector above to switch chains.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      {/* Register New Token Button */}
-      <Button
-        onClick={() => setShowRegisterModal(true)}
-        outline
-        className="w-full border-dashed"
-      >
-        <Plus className="mr-2 h-4 w-4" />
-        Register Token from Wallet
-      </Button>
-
-      {tokens.map((token) => (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          Select a token to list for OTC trading ({tokens.length} tokens)
+        </p>
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing || loading}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
+          title="Refresh token list"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+          {isRefreshing ? "Refreshing..." : "Refresh"}
+        </button>
+      </div>
+      
+      {/* Search input */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+        <input
+          type="text"
+          placeholder="Search by name, symbol, or address..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-10 pr-10 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+      
+      {/* Show searched token from address lookup */}
+      {searchIsAddress && !addressFoundInWallet && (
+        <div className="mb-3">
+          {isSearchingAddress ? (
+            <div className="flex items-center justify-center gap-2 py-4 text-zinc-500">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Looking up token...</span>
+            </div>
+          ) : searchedToken ? (
+            <div className="space-y-2">
+              <p className="text-xs text-zinc-500 flex items-center gap-1">
+                <ExternalLink className="w-3 h-3" />
+                Token found by address (not in your wallet)
+              </p>
+              <div
+                onClick={() => handleTokenClick(searchedToken)}
+                className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] hover:shadow-md border-orange-300 dark:border-orange-700 bg-orange-500/5 ${
+                  formData.tokenId === searchedToken.id
+                    ? "ring-2 ring-orange-500/20"
+                    : ""
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  {searchedToken.logoUrl ? (
+                    <Image
+                      src={searchedToken.logoUrl}
+                      alt={searchedToken.symbol}
+                      width={44}
+                      height={44}
+                      className="w-11 h-11 rounded-full ring-2 ring-orange-200 dark:ring-orange-800"
+                    />
+                  ) : (
+                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center">
+                      <span className="text-white font-bold text-lg">{searchedToken.symbol.charAt(0)}</span>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold text-zinc-900 dark:text-zinc-100">{searchedToken.symbol}</div>
+                      <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 px-2 py-0.5 rounded-full">
+                        {searchedToken.chain}
+                      </span>
+                    </div>
+                    <div className="text-sm text-zinc-600 dark:text-zinc-400 truncate pr-2">
+                      {searchedToken.name}
+                    </div>
+                    <div className="text-xs text-zinc-400 dark:text-zinc-500 font-mono mt-1">
+                      {searchedToken.contractAddress.slice(0, 8)}...{searchedToken.contractAddress.slice(-6)}
+                    </div>
+                  </div>
+                  <div className="ml-2 text-orange-500">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : addressSearchError ? (
+            <p className="text-sm text-amber-600 dark:text-amber-400 text-center py-4">
+              {addressSearchError === "Token not found" 
+                ? `No token found at ${searchQuery.slice(0, 8)}...${searchQuery.slice(-4)}`
+                : addressSearchError}
+            </p>
+          ) : null}
+        </div>
+      )}
+      
+      {filteredTokens.length === 0 && searchQuery && !searchIsAddress && (
+        <p className="text-sm text-zinc-500 text-center py-4">
+          No tokens found matching &quot;{searchQuery}&quot;
+        </p>
+      )}
+      
+      {filteredTokens.length === 0 && searchQuery && searchIsAddress && addressFoundInWallet && (
+        <p className="text-sm text-zinc-500 text-center py-4">
+          Token found in your wallet
+        </p>
+      )}
+      
+      {/* Divider when showing both searched token and wallet tokens */}
+      {searchedToken && !addressFoundInWallet && filteredTokens.length > 0 && (
+        <div className="flex items-center gap-3 py-1">
+          <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-700" />
+          <span className="text-xs text-zinc-400">Your wallet tokens</span>
+          <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-700" />
+        </div>
+      )}
+      
+      <div className="max-h-[55vh] overflow-y-auto space-y-3 pr-1 -mr-1">
+      {filteredTokens.map((token) => (
         <div
           key={token.id}
-          onClick={() => updateFormData({ tokenId: token.id })}
-          className={`p-4 rounded-lg border cursor-pointer transition-colors ${
+          onClick={() => handleTokenClick(token)}
+          className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] hover:shadow-md ${
             formData.tokenId === token.id
-              ? "border-orange-600 bg-orange-600/5"
-              : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
+              ? "border-orange-500 bg-orange-500/5 ring-2 ring-orange-500/20"
+              : "border-zinc-200 dark:border-zinc-700 hover:border-orange-300 dark:hover:border-orange-700"
           }`}
         >
           <div className="flex items-center gap-3">
-            {token.logoUrl && (
+            {token.logoUrl ? (
               <Image
                 src={token.logoUrl}
                 alt={token.symbol}
-                width={40}
-                height={40}
-                className="w-10 h-10 rounded-full"
+                width={44}
+                height={44}
+                className="w-11 h-11 rounded-full ring-2 ring-zinc-100 dark:ring-zinc-800"
               />
+            ) : (
+              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center">
+                <span className="text-white font-bold text-lg">{token.symbol.charAt(0)}</span>
+              </div>
             )}
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
-                <div className="font-semibold">{token.symbol}</div>
-                <div className="text-sm font-medium">
+                <div className="font-semibold text-zinc-900 dark:text-zinc-100">{token.symbol}</div>
+                <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                   {formatUsd(token.balanceUsd)}
                 </div>
               </div>
               <div className="flex items-center justify-between">
-                <div className="text-sm text-zinc-600 dark:text-zinc-400">
+                <div className="text-sm text-zinc-600 dark:text-zinc-400 truncate pr-2">
                   {token.name}
                 </div>
-                <div className="text-xs text-zinc-500 dark:text-zinc-500">
+                <div className="text-xs text-zinc-500 dark:text-zinc-500 whitespace-nowrap">
                   {formatBalance(token.balance, token.decimals)} {token.symbol}
                 </div>
               </div>
-              <div className="text-xs text-zinc-500 dark:text-zinc-500 font-mono mt-1">
-                {token.contractAddress.slice(0, 6)}...
-                {token.contractAddress.slice(-4)}
+              <div className="text-xs text-zinc-400 dark:text-zinc-500 font-mono mt-1">
+                {token.contractAddress.slice(0, 6)}...{token.contractAddress.slice(-4)}
               </div>
+            </div>
+            <div className="ml-2 text-orange-500">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </div>
           </div>
         </div>
       ))}
-
-      {/* Show Connect button if token is selected but wrong chain is connected */}
-      {formData.tokenId && requiredChain && !isConnectedToRequiredChain ? (
-        <Button
-          onClick={requiredChain === "solana" ? onConnectSolana : onConnectEvm}
-          className={`w-full mt-6 text-white rounded-lg ${
-            requiredChain === "solana"
-              ? "bg-gradient-to-br from-[#9945FF] to-[#14F195] hover:opacity-90"
-              : "bg-gradient-to-br from-blue-600 to-blue-800 hover:opacity-90"
-          }`}
-        >
-          Connect to {requiredChain === "solana" ? "Solana" : "EVM"}
-        </Button>
-      ) : (
-        <Button
-          onClick={onNext}
-          disabled={!formData.tokenId}
-          className="w-full mt-6 bg-orange-500 hover:bg-orange-600 text-white rounded-lg"
-        >
-          Next
-        </Button>
-      )}
-
-      {/* Register Token Modal */}
-      <RegisterTokenModal
-        open={showRegisterModal}
-        onOpenChange={setShowRegisterModal}
-        onSuccess={handleRegistrationSuccess}
-        defaultChain={activeFamily === "solana" ? "solana" : "base"}
-      />
+      </div>
     </div>
   );
 }

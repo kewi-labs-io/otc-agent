@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/button";
 import { createDealShareImage } from "@/utils/share-card";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 // Extended Navigator type for Web Share API with files support
 interface ShareData {
@@ -39,77 +39,65 @@ interface DealCompletionProps {
 
 export function DealCompletion({ quote }: DealCompletionProps) {
   const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
-  const [posted, setPosted] = useState(false);
+  const hasPostedRef = useRef(false);
 
-  // Calculate discount-derived metrics
-  const discountPercent = quote.discountBps / 100;
+  // Memoized derived values
+  const { discountPercent, roi, maturityDate } = useMemo(() => {
+    const dp = quote.discountBps / 100;
+    const r = quote.discountedUsd > 0 ? (quote.discountUsd / quote.discountedUsd) * 100 : 0;
+    const md = new Date();
+    md.setMonth(md.getMonth() + quote.lockupMonths);
+    return { discountPercent: dp, roi: r, maturityDate: md };
+  }, [quote.discountBps, quote.discountedUsd, quote.discountUsd, quote.lockupMonths]);
+
   const projectedYield = 0; // No yield; discount-only instrument
-  const roi =
-    quote.discountedUsd > 0
-      ? (quote.discountUsd / quote.discountedUsd) * 100
-      : 0;
 
-  const maturityDate = new Date();
-  maturityDate.setMonth(maturityDate.getMonth() + quote.lockupMonths);
-
+  // Initialize: record completion and generate image (once per mount)
   useEffect(() => {
-    // Record deal completion in database, only once per mount
-    if (!posted) {
-      setPosted(true);
-      recordDealCompletion();
-    }
-    // Generate shareable image
-    generateShareImage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [posted]);
+    const init = async () => {
+      // Record deal completion - only once, using ref guard
+      if (!hasPostedRef.current) {
+        hasPostedRef.current = true;
 
-  const recordDealCompletion = async () => {
-    // Skip POST if quote is already executed or has no data
-    // This prevents errors when viewing old deals with zero values
-    if (
-      quote.status === "executed" ||
-      !quote.tokenAmount ||
-      quote.tokenAmount === "0"
-    ) {
-      console.log(
-        "[DealCompletion] Skipping POST - quote already executed or has no data",
-      );
-      return;
-    }
+        // Skip POST if quote is already executed or has no data
+        if (quote.status !== "executed" && quote.tokenAmount && quote.tokenAmount !== "0") {
+          try {
+            await fetch("/api/deal-completion", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "complete",
+                quoteId: quote.quoteId,
+                tokenAmount: quote.tokenAmount,
+                paymentCurrency: quote.paymentCurrency,
+                transactionHash: quote.transactionHash || "pending",
+                blockNumber: undefined,
+                offerId: quote.offerId || undefined,
+                chain: quote.chain || undefined,
+              }),
+            });
+          } catch (err) {
+            console.error("[DealCompletion] Failed to record:", err);
+          }
+        }
+      }
 
-    const response = await fetch("/api/deal-completion", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "complete",
-        quoteId: quote.quoteId,
-        tokenAmount: quote.tokenAmount,
-        paymentCurrency: quote.paymentCurrency,
-        transactionHash: quote.transactionHash || "pending",
-        blockNumber: undefined,
-        offerId: quote.offerId || undefined,
-        chain: quote.chain || undefined,
-      }),
-    });
+      // Generate shareable image
+      try {
+        const { dataUrl } = await createDealShareImage({
+          tokenAmount: parseFloat(quote.tokenAmount),
+          discountBps: quote.discountBps,
+          lockupMonths: quote.lockupMonths,
+          paymentCurrency: quote.paymentCurrency as "ETH" | "USDC",
+        });
+        setShareImageUrl(dataUrl);
+      } catch (err) {
+        console.error("[DealCompletion] Failed to generate share image:", err);
+      }
+    };
 
-    if (!response.ok) {
-      console.error(
-        "[DealCompletion] Failed to record:",
-        await response.text(),
-      );
-      // Don't throw - this is not critical, just logging
-    }
-  };
-
-  const generateShareImage = async () => {
-    const { dataUrl } = await createDealShareImage({
-      tokenAmount: parseFloat(quote.tokenAmount),
-      discountBps: quote.discountBps,
-      lockupMonths: quote.lockupMonths,
-      paymentCurrency: quote.paymentCurrency as "ETH" | "USDC",
-    });
-    setShareImageUrl(dataUrl);
-  };
+    init();
+  }, [quote]);
 
   const shareToTwitter = async () => {
     // Generate fresh share image

@@ -1,9 +1,8 @@
 {
   "network": "base-sepolia",
-  "timestamp": "1763938452",
   "contracts": {
-    "otc": "0xCF51E793Bc863bCa33EbcAB082Ea543Bcc3C6171",
-    "registrationHelper": "0xA5F0D0054e7C7eAF2ed00294290C706Bc621775a",
+    "otc": "0x08cAa161780d195E0799b73b318da5D175b85313",
+    "registrationHelper": "0xD28752E9bBC29DDc14DA83dD673a36A5A19e91B1",
     "usdc": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
     "ethUsdFeed": "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1"
   }

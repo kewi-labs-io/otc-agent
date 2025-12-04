@@ -2,7 +2,7 @@ import { createConfig, http } from "wagmi";
 import type { Config } from "wagmi";
 import { localhost, base, baseSepolia, bsc, bscTestnet } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
-import { farcasterFrame } from "@farcaster/frame-wagmi-connector";
+import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector";
 
 // Custom RPC URLs
 const baseRpcUrl = process.env.NEXT_PUBLIC_BASE_RPC_URL;
@@ -11,11 +11,12 @@ const anvilRpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
 
 // Determine available chains based on configuration
 function getAvailableChains() {
-  const isDevelopment = process.env.NODE_ENV === "development";
+  const network = process.env.NEXT_PUBLIC_NETWORK;
+  const isLocalNetwork = network === "local" || network === "localnet";
   const chains = [];
 
-  // Add localnet chains first in dev mode (default)
-  if (isDevelopment) {
+  // Only add localhost when explicitly using local network
+  if (isLocalNetwork) {
     chains.push(localhost);
   }
 
@@ -34,9 +35,11 @@ const chains = getAvailableChains();
 function getTransports() {
   const transports: Record<number, ReturnType<typeof http>> = {};
 
-  const isDevelopment = process.env.NODE_ENV === "development";
+  const network = process.env.NEXT_PUBLIC_NETWORK;
+  const isLocalNetwork = network === "local" || network === "localnet";
 
-  if (isDevelopment) {
+  // Only add localhost transport when explicitly using local network
+  if (isLocalNetwork) {
     transports[localhost.id] = http(anvilRpcUrl);
   }
 
@@ -67,11 +70,11 @@ function getTransports() {
 
 // Create connectors only on client side to avoid indexedDB SSR errors
 // Note: WalletConnect is handled by Privy, so we only use injected connector here
-// farcasterFrame connector is prioritized when in Farcaster context
+// farcasterMiniApp connector is prioritized when in Farcaster context
 function getConnectors() {
   if (typeof window === "undefined") return [];
   return [
-    farcasterFrame(), // Prioritize Farcaster wallet when in Farcaster Mini App context
+    farcasterMiniApp(), // Prioritize Farcaster wallet when in Farcaster Mini App context
     injected({ shimDisconnect: true }), // Fallback for browser wallets
   ];
 }

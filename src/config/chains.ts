@@ -32,9 +32,19 @@ export interface ChainConfig {
 }
 
 // Helper to get current network environment
+// Priority: NEXT_PUBLIC_NETWORK > NEXT_PUBLIC_USE_MAINNET > NODE_ENV inference
 function getNetworkEnvironment(): "local" | "testnet" | "mainnet" {
-  if (process.env.NODE_ENV === "development") return "local";
+  // Explicit network override (highest priority)
+  const explicitNetwork = process.env.NEXT_PUBLIC_NETWORK;
+  if (explicitNetwork === "mainnet") return "mainnet";
+  if (explicitNetwork === "testnet") return "testnet";
+  if (explicitNetwork === "local" || explicitNetwork === "localnet") return "local";
+  
+  // Legacy flag support
   if (process.env.NEXT_PUBLIC_USE_MAINNET === "true") return "mainnet";
+  
+  // Default: testnet for both development and production
+  // Use NEXT_PUBLIC_NETWORK=local explicitly if you want local validators
   return "testnet";
 }
 

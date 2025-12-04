@@ -20,7 +20,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function main() {
-  console.log("🚀 Quick Solana OTC Desk Setup\n");
+  console.log("🚀 Quick Solana OTC Desk Setup (LOCAL TESTING ONLY)\n");
+  console.log("⚠️  This script uses setManualTokenPrice which requires the 'testing' feature.");
+  console.log("⚠️  Build with: anchor build -- --features testing");
+  console.log("⚠️  Production uses Pyth oracle or on-chain pool pricing instead.\n");
+  console.log("Note: All tokens are equal - registered via TokenRegistry.\n");
 
   const provider = AnchorProvider.env();
   setProvider(provider);
@@ -57,8 +61,8 @@ async function main() {
   const desk = Keypair.generate();
   console.log("🏦 Desk (keypair):", desk.publicKey.toString());
 
-  // Create token mints
-  console.log("\n🪙 Creating token mints...");
+  // Create token mints for testing
+  console.log("\n🪙 Creating test token mints...");
   console.log("⚠️  NOTE: Using 9 decimals for native Solana token (standard)");
   
   const tokenMint = await createMint(
@@ -66,7 +70,7 @@ async function main() {
     owner,
     owner.publicKey,
     null,
-    9  // ⚠️ CRITICAL: This determines decimals on BOTH chains when bridging via CCIP
+    9  // Standard Solana token decimals
   );
   console.log("✅ Token Mint:", tokenMint.toString());
 
@@ -110,7 +114,7 @@ async function main() {
   );
   console.log("✅ Desk USDC ATA:", deskUsdcAta.toString());
 
-  // Initialize desk using PDA
+  // Initialize desk (no token_mint required - all tokens are equal)
   console.log("\n⚙️  Initializing desk...");
   const tx = await program.methods
     .initDesk(
@@ -121,28 +125,63 @@ async function main() {
       payer: owner.publicKey,
       owner: owner.publicKey,
       agent: agent.publicKey,
-      tokenMint: tokenMint,
       usdcMint: usdcMint,
       desk: desk.publicKey,
     })
-    .signers([owner, desk]) // Both owner and desk sign
+    .signers([owner, desk])
     .rpc();
 
-  console.log("✅ Desk initialized! Tx:", tx);
+  console.log("✅ Desk initialized. Tx:", tx);
 
-  // Set prices
-  console.log("\n💲 Setting prices...");
+  // Register test token via TokenRegistry
+  console.log("\n📝 Registering test token via TokenRegistry...");
+  const [tokenRegistryPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("registry"), desk.publicKey.toBuffer(), tokenMint.toBuffer()],
+    program.programId
+  );
+
+  await program.methods
+    .registerToken(
+      Array(32).fill(0), // No Pyth feed for test token
+      PublicKey.default, // No pool for test token
+      0                  // PoolType::None (0=None, 1=Raydium, 2=Orca, 3=PumpSwap)
+    )
+    .accountsPartial({
+      desk: desk.publicKey,
+      payer: owner.publicKey,
+      tokenMint: tokenMint,
+      tokenRegistry: tokenRegistryPda,
+    })
+    .signers([owner])
+    .rpc();
+  console.log("✅ Token registered in TokenRegistry:", tokenRegistryPda.toString());
+
+  // Set manual price on token registry (for testing)
+  console.log("\n💲 Setting manual price on token registry...");
+  await program.methods
+    .setManualTokenPrice(new BN(1_000_000_000)) // $10 per token (8 decimals)
+    .accountsPartial({
+      tokenRegistry: tokenRegistryPda,
+      desk: desk.publicKey,
+      owner: owner.publicKey,
+    })
+    .signers([owner])
+    .rpc();
+  console.log("✅ Token price set");
+
+  // Set SOL price on desk
+  console.log("\n💲 Setting SOL price...");
   await program.methods
     .setPrices(
-      new BN(1_000_000_000),
-      new BN(100_000_000_00),
-      new BN(0),
-      new BN(3600)
+      new BN(1_000_000_000),      // token price (deprecated, kept for compatibility)
+      new BN(100_000_000_00),     // SOL price: $100 (8 decimals)
+      new BN(0),                   // updated_at (ignored, uses clock)
+      new BN(3600)                 // max age
     )
     .accountsPartial({ desk: desk.publicKey, owner: owner.publicKey })
     .signers([owner])
     .rpc();
-  console.log("✅ Prices set");
+  console.log("✅ SOL price set");
 
   // Add owner as approver
   console.log("\n👤 Adding owner as approver...");
@@ -172,12 +211,13 @@ async function main() {
   );
   console.log("✅ Minted 1,000,000 tokens to owner");
 
-  // Deposit to desk
+  // Deposit to desk (now requires token_registry)
   console.log("\n📥 Depositing tokens to desk...");
   await program.methods
     .depositTokens(new BN("500000000000000"))
     .accountsPartial({
       desk: desk.publicKey,
+      tokenRegistry: tokenRegistryPda,
       owner: owner.publicKey,
       ownerTokenAta: ownerTokenAta.address,
       deskTokenTreasury: deskTokenAta,
@@ -191,19 +231,20 @@ async function main() {
   fs.writeFileSync(deskKeypairPath, JSON.stringify(Array.from(desk.secretKey)));
   console.log("\n💾 Saved desk keypair to:", deskKeypairPath);
 
-  // Output for .env
+  // Output for .env (no TOKEN_MINT - all tokens are equal)
   console.log("\n" + "=".repeat(80));
-  console.log("🎉 SUCCESS! Update your .env.local with these values:");
+  console.log("🎉 SUCCESS. Update your .env.local with these values:");
   console.log("=".repeat(80));
   console.log(`NEXT_PUBLIC_SOLANA_RPC=http://127.0.0.1:8899`);
   console.log(`NEXT_PUBLIC_SOLANA_PROGRAM_ID=${program.programId.toString()}`);
   console.log(`NEXT_PUBLIC_SOLANA_DESK=${desk.publicKey.toString()}`);
   console.log(`NEXT_PUBLIC_SOLANA_DESK_OWNER=${owner.publicKey.toString()}`);
-  console.log(`NEXT_PUBLIC_SOLANA_TOKEN_MINT=${tokenMint.toString()}`);
   console.log(`NEXT_PUBLIC_SOLANA_USDC_MINT=${usdcMint.toString()}`);
   console.log("=".repeat(80));
+  console.log("\nNote: Test token mint for local testing:", tokenMint.toString());
+  console.log("=".repeat(80));
 
-  // Write to src config
+  // Write to src config (no TOKEN_MINT)
   const deploymentPath = path.join(__dirname, "../../../src/config/deployments/local-solana.json");
   const deploymentDir = path.dirname(deploymentPath);
   if (!fs.existsSync(deploymentDir)) {
@@ -215,7 +256,6 @@ async function main() {
     NEXT_PUBLIC_SOLANA_PROGRAM_ID: program.programId.toString(),
     NEXT_PUBLIC_SOLANA_DESK: desk.publicKey.toString(),
     NEXT_PUBLIC_SOLANA_DESK_OWNER: owner.publicKey.toString(),
-    NEXT_PUBLIC_SOLANA_TOKEN_MINT: tokenMint.toString(),
     NEXT_PUBLIC_SOLANA_USDC_MINT: usdcMint.toString(),
   };
   
@@ -228,29 +268,39 @@ async function main() {
   // Update .env.local
   const envLocalPath = path.join(__dirname, "../../../.env.local");
   let envContent = "";
-  try {
+  if (fs.existsSync(envLocalPath)) {
     envContent = fs.readFileSync(envLocalPath, "utf8");
-  } catch (e) {
-    // File might not exist
   }
 
-  let newEnvContent = envContent;
-  for (const [key, value] of Object.entries(envData)) {
-    const regex = new RegExp(`^${key}=.*`, "m");
-    if (regex.test(newEnvContent)) {
-      newEnvContent = newEnvContent.replace(regex, `${key}=${value}`);
+  // Update or add each env var (no TOKEN_MINT)
+  const envVars = {
+    NEXT_PUBLIC_SOLANA_RPC: "http://127.0.0.1:8899",
+    NEXT_PUBLIC_SOLANA_PROGRAM_ID: program.programId.toString(),
+    NEXT_PUBLIC_SOLANA_DESK: desk.publicKey.toString(),
+    NEXT_PUBLIC_SOLANA_DESK_OWNER: owner.publicKey.toString(),
+    NEXT_PUBLIC_SOLANA_USDC_MINT: usdcMint.toString(),
+  };
+
+  for (const [key, value] of Object.entries(envVars)) {
+    const regex = new RegExp(`^${key}=.*$`, "m");
+    if (regex.test(envContent)) {
+      envContent = envContent.replace(regex, `${key}=${value}`);
     } else {
-      newEnvContent += `\n${key}=${value}`;
+      envContent += `\n${key}=${value}`;
     }
   }
 
-  fs.writeFileSync(envLocalPath, newEnvContent);
-  console.log(`✅ Updated .env.local`);
+  // Remove old TOKEN_MINT if present
+  envContent = envContent.replace(/^NEXT_PUBLIC_SOLANA_TOKEN_MINT=.*$/m, "");
+  envContent = envContent.replace(/\n\n+/g, "\n\n"); // Clean up extra newlines
+
+  fs.writeFileSync(envLocalPath, envContent.trim() + "\n");
+  console.log(`✅ Updated ${envLocalPath}`);
 }
 
 main()
   .then(() => {
-    console.log("\n✨ All done!");
+    console.log("\n✨ All done.");
     process.exit(0);
   })
   .catch((err) => {

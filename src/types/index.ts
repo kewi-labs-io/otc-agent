@@ -3,9 +3,9 @@
  * Single source of truth for all shared types across the OTC Agent
  */
 
-import { PaymentCurrency } from "@/services/database";
 import type { Address } from "viem";
 import type { Chain } from "@/config/chains";
+import type { PaymentCurrency } from "@/lib/plugin-otc-desk/types";
 
 // Re-export from specific type files
 export type { ChatMessage } from "./chat-message";

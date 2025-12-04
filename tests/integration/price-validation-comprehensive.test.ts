@@ -11,13 +11,13 @@
  * - Solana: SOL, BONK, WIF, JUP
  */
 
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, expect, it } from "vitest";
+import { findBestPool } from "../../src/utils/pool-finder-base";
+import { findBestSolanaPool } from "../../src/utils/pool-finder-solana";
+import { checkPriceDivergence } from "../../src/utils/price-validator";
 
 // Skip integration tests if running in CI without RPC access
 const skipIntegration = process.env.CI === "true" || process.env.SKIP_INTEGRATION === "true";
-import { findBestPool, type PoolInfo } from "../../src/utils/pool-finder-base";
-import { findBestSolanaPool, type SolanaPoolInfo } from "../../src/utils/pool-finder-solana";
-import { checkPriceDivergence } from "../../src/utils/price-validator";
 
 // Test timeout for RPC calls
 const TEST_TIMEOUT = 60000; // 60 seconds for RPC-heavy tests

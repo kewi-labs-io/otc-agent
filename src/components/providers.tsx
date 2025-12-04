@@ -10,6 +10,7 @@ import { ThemeProvider } from "next-themes";
 import { useEffect, useState } from "react";
 import { WagmiProvider } from "wagmi";
 import { PrivyProvider } from "@privy-io/react-auth";
+import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,6 +60,37 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <MiniappProvider>
         <PrivyProvider
           appId={privyAppId}
+          onSuccess={({ user, isNewUser, wasAlreadyAuthenticated, loginMethod, loginAccount }) => {
+            // Detect login method and set chain preference
+            console.log("[Providers] Privy login success:", { loginMethod, loginAccount, isNewUser, wasAlreadyAuthenticated });
+            
+            // Check the loginAccount to determine chain type
+            if (loginAccount) {
+              const accountType = (loginAccount as { chainType?: string })?.chainType;
+              console.log("[Providers] Login account chain type:", accountType);
+              
+              if (accountType === 'solana') {
+                console.log("[Providers] User logged in with Solana wallet - setting preference");
+                localStorage.setItem("otc-preferred-chain", "solana");
+                window.dispatchEvent(new Event("otc-chain-preference-changed"));
+              } else if (accountType === 'ethereum') {
+                console.log("[Providers] User logged in with EVM wallet - setting preference");
+                localStorage.setItem("otc-preferred-chain", "evm");
+                window.dispatchEvent(new Event("otc-chain-preference-changed"));
+              }
+            }
+            
+            // Also check loginMethod string for siws (Sign In With Solana)
+            if (loginMethod === 'siws') {
+              console.log("[Providers] User logged in with SIWS - setting preference to Solana");
+              localStorage.setItem("otc-preferred-chain", "solana");
+              window.dispatchEvent(new Event("otc-chain-preference-changed"));
+            } else if (loginMethod === 'siwe') {
+              console.log("[Providers] User logged in with SIWE - setting preference to EVM");
+              localStorage.setItem("otc-preferred-chain", "evm");
+              window.dispatchEvent(new Event("otc-chain-preference-changed"));
+            }
+          }}
           config={{
             // Farcaster + available wallets (auto-detect what's installed)
             loginMethods: ["farcaster", "wallet"],
@@ -85,6 +117,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
             },
             defaultChain: chains[0],
             supportedChains: chains,
+            externalWallets: {
+              solana: {
+                connectors: toSolanaWalletConnectors(),
+              },
+            },
           }}
         >
           <WagmiProvider config={config}>

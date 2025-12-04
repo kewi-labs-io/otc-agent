@@ -17,7 +17,7 @@ contract DeployOTCSepolia is Script {
     
     function run() external {
         // Get deployer private key from environment
-        uint256 deployerPrivateKey = vm.envOr("DEPLOYER_PRIVATE_KEY", vm.envUint("APPROVER_PRIVATE_KEY"));
+        uint256 deployerPrivateKey = vm.envOr("EVM_PRIVATE_KEY", vm.envUint("EVM_PRIVATE_KEY"));
         address deployer = vm.addr(deployerPrivateKey);
         
         console.log("Deploying from:", deployer);

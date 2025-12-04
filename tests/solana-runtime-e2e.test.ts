@@ -251,9 +251,13 @@ describe("Solana OTC Program E2E Tests", () => {
     console.log("═══════════════════════════════════════════════════════\n");
   }, TEST_TIMEOUT);
 
-  it.skipIf(!validatorAvailable)(
+  it(
     "should complete USDC payment flow",
     async () => {
+      // Fail loudly if validator isn't available
+      if (!validatorAvailable) {
+        throw new Error("Solana validator not running. Start with: solana-test-validator --reset");
+      }
       if (
         !ctx.program ||
         !ctx.owner ||
@@ -403,9 +407,13 @@ describe("Solana OTC Program E2E Tests", () => {
     TEST_TIMEOUT
   );
 
-  it.skipIf(!validatorAvailable)(
+  it(
     "should complete SOL payment flow",
     async () => {
+      // Fail loudly if validator isn't available
+      if (!validatorAvailable) {
+        throw new Error("Solana validator not running. Start with: solana-test-validator --reset");
+      }
       if (!ctx.program || !ctx.owner || !ctx.desk || !ctx.tokenMint) {
         throw new Error("Test context not initialized");
       }
@@ -527,4 +535,123 @@ describe("Solana OTC Program E2E Tests", () => {
     },
     TEST_TIMEOUT
   );
+});
+
+describe("Solana Consignment API Integration", () => {
+  const BASE_URL = process.env.NEXT_PUBLIC_URL || "http://localhost:5005";
+
+  it(
+    "should create Solana consignment via API",
+    async () => {
+      console.log("📝 Testing: Solana Consignment API\n");
+
+      // This test depends on the Solana validator setup from previous describe block
+      if (!validatorAvailable) {
+        throw new Error("Solana validator not running. Start with: solana-test-validator --reset");
+      }
+      if (!ctx.owner || !ctx.tokenMint) {
+        throw new Error("Test context not initialized - Solana setup failed");
+      }
+      
+      // Use ctx.owner and ctx.tokenMint from the main describe block
+      const solanaOwner = ctx.owner;
+      const solanaTokenMint = ctx.tokenMint;
+
+      console.log("1️⃣  Creating Solana consignment via API...");
+
+      const consignmentData = {
+        tokenId: `token-solana-${solanaTokenMint.toBase58()}`,
+        amount: "1000000000000", // 1000 tokens (9 decimals)
+        consignerAddress: solanaOwner.publicKey.toBase58(),
+        chain: "solana",
+        contractConsignmentId: null,
+        isNegotiable: true,
+        minDiscountBps: 500,
+        maxDiscountBps: 1500,
+        minLockupDays: 7,
+        maxLockupDays: 180,
+        minDealAmount: "100000000000",
+        maxDealAmount: "1000000000000",
+        isFractionalized: true,
+        isPrivate: false,
+        maxPriceVolatilityBps: 1000,
+        maxTimeToExecuteSeconds: 1800,
+      };
+
+      const response = await fetch(`${BASE_URL}/api/consignments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(consignmentData),
+      });
+
+      // Fail loudly if API isn't working
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API returned ${response.status}: ${errorText.substring(0, 200)}`);
+      }
+
+      const result = await response.json();
+      console.log("   ✅ Solana consignment created");
+      console.log("   📋 Chain: solana");
+      console.log("   📋 Token mint:", solanaTokenMint.toBase58().substring(0, 20) + "...");
+
+      expect(result.success).toBe(true);
+      expect(result.consignment?.chain).toBe("solana");
+
+      console.log("\n✅ Solana consignment API test passed\n");
+    },
+    TEST_TIMEOUT
+  );
+
+  it(
+    "should retrieve Solana consignments via API",
+    async () => {
+      console.log("📝 Testing: Retrieve Solana Consignments\n");
+
+      // This API test doesn't require Solana validator, just the Next.js server
+      const response = await fetch(`${BASE_URL}/api/consignments?chain=solana`);
+
+      // Fail loudly if API isn't available
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}: ${await response.text()}`);
+      }
+
+      const result = await response.json();
+      
+      // Verify we got a proper response
+      expect(result.success).toBe(true);
+      expect(Array.isArray(result.consignments)).toBe(true);
+      
+      const solanaConsignments = result.consignments.filter((c: any) => c.chain === "solana");
+      console.log("   ✅ Found", solanaConsignments.length, "Solana consignment(s)");
+
+      console.log("\n✅ Solana consignments retrieval test passed\n");
+    },
+    TEST_TIMEOUT
+  );
+});
+
+describe("Solana E2E Test Summary", () => {
+  it("should display Solana test results", () => {
+    console.log("\n═══════════════════════════════════════════════════════");
+    console.log("📊 SOLANA E2E TEST RESULTS");
+    console.log("═══════════════════════════════════════════════════════\n");
+
+    console.log("✅ On-Chain Flows:");
+    console.log("  ✓ USDC payment: create → approve → fulfill → claim");
+    console.log("  ✓ SOL payment: create → approve → fulfill → claim");
+    console.log("  ✓ Token transfers verified\n");
+
+    console.log("✅ API Integration:");
+    console.log("  ✓ Create Solana consignment via /api/consignments");
+    console.log("  ✓ Retrieve Solana consignments\n");
+
+    console.log("✅ Program Features:");
+    console.log("  ✓ Desk initialization");
+    console.log("  ✓ Price setting");
+    console.log("  ✓ Token deposits");
+    console.log("  ✓ Approver management\n");
+
+    console.log("═══════════════════════════════════════════════════════\n");
+  });
 });

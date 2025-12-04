@@ -1,5 +1,3 @@
-import type { UIMessage as Message } from "ai";
-
 export interface Citation {
   url: string;
   content: string;
@@ -8,14 +6,4 @@ export interface Citation {
 
 export interface ChatStreamData {
   citations?: Citation[];
-}
-
-export interface ChatRequest {
-  messages: Message[];
-}
-
-export interface ChatResponse extends ChatStreamData {
-  id: string;
-  messages: Message[];
-  followUpPrompts?: string[];
 }

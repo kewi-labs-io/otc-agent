@@ -31,14 +31,18 @@ export function useChainReset() {
 
   const hasShownToast = useRef(false);
 
-  // Enable checks only after mounting and in development
+  // Enable checks only for local network (not mainnet/testnet)
   useEffect(() => {
-    if (
-      mounted &&
-      typeof window !== "undefined" &&
-      process.env.NODE_ENV === "development"
-    ) {
+    if (mounted && typeof window !== "undefined") {
+      // Only enable chain reset detection for local development with local validators
+      const network = process.env.NEXT_PUBLIC_NETWORK;
+      const isLocalNetwork = network === "local" || network === "localnet";
+      const isDevWithoutNetwork = !network && process.env.NODE_ENV === "development";
+      
+      // Don't run chain reset checks when connected to real networks
+      if (isLocalNetwork || isDevWithoutNetwork) {
       setState((prev) => ({ ...prev, checksEnabled: true }));
+      }
     }
   }, [mounted]);
 

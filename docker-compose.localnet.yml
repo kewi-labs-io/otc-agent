@@ -31,7 +31,7 @@ services:
     environment:
       - POSTGRES_URL=postgres://eliza:password@postgres:5432/eliza
       - WORKER_AUTH_TOKEN=${WORKER_AUTH_TOKEN:-dev-worker-secret}
-      - APPROVER_PRIVATE_KEY=${APPROVER_PRIVATE_KEY}
+      - EVM_PRIVATE_KEY=${EVM_PRIVATE_KEY}
       - NEXT_PUBLIC_RPC_URL=http://host.docker.internal:8545
       - GROQ_API_KEY=${GROQ_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}

@@ -2,8 +2,7 @@
 
 import { useMultiWallet } from "@/components/multiwallet";
 import { EVMLogo } from "@/components/icons/index";
-import { EVMChainSelectorModal } from "@/components/evm-chain-selector-modal";
-import { useState, useRef, useEffect } from "react";
+import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
 
@@ -21,113 +20,64 @@ export function WalletMenu() {
     solanaConnected,
     networkLabel,
     connectWallet,
-    connectSolanaWallet,
     disconnect,
   } = useMultiWallet();
 
   const [isOpen, setIsOpen] = useState(false);
-  const [showEVMChainSelector, setShowEVMChainSelector] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const currentAddress =
-    activeFamily === "solana" ? solanaPublicKey : evmAddress;
-  const displayAddress = currentAddress
-    ? `${currentAddress.slice(0, 6)}...${currentAddress.slice(-4)}`
-    : "Loading...";
-  const fullAddress = currentAddress || "";
-
-  // Debug logging
-  useEffect(() => {
-    console.log("[WalletMenu] Rendering with:", {
-      activeFamily,
-      evmAddress,
-      solanaPublicKey,
-      evmConnected,
-      solanaConnected,
-      currentAddress,
-      displayAddress,
-      networkLabel,
-    });
-  }, [
-    activeFamily,
-    evmAddress,
-    solanaPublicKey,
-    evmConnected,
-    solanaConnected,
-    currentAddress,
-    displayAddress,
-    networkLabel,
-  ]);
+  // Memoized derived values
+  const { currentAddress, displayAddress, fullAddress } = useMemo(() => {
+    const addr = activeFamily === "solana" ? solanaPublicKey : evmAddress;
+    return {
+      currentAddress: addr,
+      displayAddress: addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : "Loading...",
+      fullAddress: addr || "",
+    };
+  }, [activeFamily, solanaPublicKey, evmAddress]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
+    if (!isOpen) return;
+
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     };
 
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
-    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  const handleCopyAddress = async () => {
+  // Memoized callbacks
+  const handleCopyAddress = useCallback(async () => {
     await navigator.clipboard.writeText(fullAddress);
     toast.success("Address copied to clipboard");
     setIsOpen(false);
-  };
+  }, [fullAddress]);
 
-  const handleSwitchNetwork = async () => {
+  const handleSwitchNetwork = useCallback(() => {
     setIsOpen(false);
     const targetFamily = activeFamily === "solana" ? "evm" : "solana";
 
-    console.log(
-      `[WalletMenu] Switching from ${activeFamily} to ${targetFamily}`,
-    );
-
-    // Then open appropriate connection modal for target network
-    if (targetFamily === "evm") {
-      // If not connected to EVM, we could trigger connect, but let's assume we want to select chain first if we have one
-      // Or if we are just toggling view.
-      // If evmConnected is false, we should probably connect.
-      if (!evmConnected) {
-        connectWallet();
-      }
-      // If connected or not, we show chain selector if we want to change chain,
-      // but "Switch to EVM" usually implies just switching the active view if already connected.
-      // If not connected, connectWallet() will handle it.
-      // But existing logic showed chain selector. Let's stick to "Switch view" primarily.
+    if ((targetFamily === "evm" && evmConnected) || (targetFamily === "solana" && solanaConnected)) {
       setActiveFamily(targetFamily);
-    } else if (targetFamily === "solana") {
+    } else {
+      connectWallet();
       setActiveFamily(targetFamily);
-      if (!solanaConnected) {
-        connectSolanaWallet();
-      }
     }
-  };
+  }, [activeFamily, evmConnected, solanaConnected, setActiveFamily, connectWallet]);
 
-  const handleSwitchWallet = () => {
+  const handleSwitchWallet = useCallback(() => {
     setIsOpen(false);
-    // Unified connect/switch wallet via Privy
     connectWallet();
-  };
+  }, [connectWallet]);
 
-  const handleDisconnect = async () => {
-    console.log("[WalletMenu] Disconnect clicked");
+  const handleDisconnect = useCallback(async () => {
     setIsOpen(false);
-
-    console.log("[WalletMenu] Calling disconnect...");
     await disconnect();
-    console.log("[WalletMenu] Disconnect complete");
-
-    // No need to reload - React state updates will handle the UI transition smoothly
-  };
+  }, [disconnect]);
 
   const networkBadgeClass =
     activeFamily === "solana"
@@ -144,10 +94,7 @@ export function WalletMenu() {
     );
 
   // If we don't have an address, don't render (happens during disconnect/switch)
-  if (!currentAddress) {
-    console.warn("[WalletMenu] No current address available");
-    return null;
-  }
+  if (!currentAddress) return null;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -287,10 +234,6 @@ export function WalletMenu() {
         </div>
       )}
 
-      <EVMChainSelectorModal
-        isOpen={showEVMChainSelector}
-        onClose={() => setShowEVMChainSelector(false)}
-      />
     </div>
   );
 }

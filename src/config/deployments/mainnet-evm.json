@@ -1,10 +1,9 @@
 {
   "network": "base-mainnet",
   "contracts": {
-    "otc": "",
-    "registrationHelper": "",
+    "otc": "0x12FA61c9d77AEd9BeDA0FF4bF2E900F31bdBdc45",
+    "registrationHelper": "0xae1cE3dd1Dd1fAB4D4aDe443Aa38A13164413246",
     "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     "ethUsdFeed": "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70"
-  },
-  "_comment": "Deploy with: bun run deploy:mainnet:evm"
+  }
 }

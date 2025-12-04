@@ -1,9 +1,7 @@
 {
   "NEXT_PUBLIC_SOLANA_RPC": "https://api.mainnet-beta.solana.com",
-  "NEXT_PUBLIC_SOLANA_PROGRAM_ID": "",
-  "NEXT_PUBLIC_SOLANA_DESK": "",
-  "NEXT_PUBLIC_SOLANA_DESK_OWNER": "",
-  "NEXT_PUBLIC_SOLANA_TOKEN_MINT": "",
-  "NEXT_PUBLIC_SOLANA_USDC_MINT": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-  "_comment": "Deploy with: bun run deploy:mainnet:solana"
+  "NEXT_PUBLIC_SOLANA_PROGRAM_ID": "6qn8ELVXd957oRjLaomCpKpcVZshUjNvSzw1nc7QVyXc",
+  "NEXT_PUBLIC_SOLANA_DESK": "E8mNuU2eXZKfpiBvpNix43pXZxbpZBEohZsvZf5Yhs2y",
+  "NEXT_PUBLIC_SOLANA_DESK_OWNER": "ATwDftA6zTxod9A7ys2QSa1cEWg9usuLtCQj5MXPNc89",
+  "NEXT_PUBLIC_SOLANA_USDC_MINT": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 }

@@ -131,8 +131,6 @@ contract OTCTest is Test {
         );
         vm.stopPrank();
         
-        uint256 initialRemaining = 1000e18;
-        
         // Create offer
         vm.prank(buyer);
         uint256 offerId = otc.createOfferFromConsignment(

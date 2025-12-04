@@ -1,214 +1,168 @@
 #!/usr/bin/env bun
 import fs from "fs";
 
+/**
+ * Token Seeding Script - LOCAL DEVELOPMENT ONLY
+ * 
+ * This script seeds test tokens for local Anvil development.
+ * It will NEVER seed to production databases.
+ * 
+ * Safety checks:
+ * 1. Must be explicitly on "localnet" network
+ * 2. Must be targeting localhost API
+ * 3. Skips if any production indicators are detected
+ */
+
 async function seedTokens() {
-  // Check if using production networks - skip seed if so
   const dotenv = await import("dotenv");
   
   // Load .env.local if it exists
   if (fs.existsSync(".env.local")) {
     dotenv.config({ path: ".env.local" });
   }
+
+  // === SAFETY CHECK 1: Skip if SKIP_SEED is set ===
+  if (process.env.SKIP_SEED === "true") {
+    console.log("\n⏭️  SKIP_SEED=true - skipping token seeding\n");
+    process.exit(0);
+  }
   
+  // === SAFETY CHECK 2: Only allow localnet ===
   const network = process.env.NETWORK || process.env.NEXT_PUBLIC_NETWORK || "localnet";
-  const isProductionNetwork = ["base", "bsc", "mainnet"].includes(network);
-  
-  if (isProductionNetwork) {
-    console.log(`\n✅ Using production network: ${network}`);
-    console.log("   Skipping seed (production contracts already exist)\n");
+  if (network !== "localnet") {
+    console.log(`\n🛑 BLOCKED: Network is "${network}", not "localnet"`);
+    console.log("   Token seeding is ONLY allowed for local development.");
+    console.log("   Production tokens must be registered by their actual owners via the UI.\n");
     process.exit(0);
   }
   
-  console.log("\n🌱 Seeding multi-token OTC marketplace...\n");
+  // === SAFETY CHECK 3: Verify localhost API ===
+  const apiUrl = process.env.NEXT_PUBLIC_URL || "http://localhost:4444";
+  const isLocalhost = apiUrl.includes("localhost") || apiUrl.includes("127.0.0.1");
   
-  // Check for deployment file existence
-  const deploymentPath = "./contracts/deployments/eliza-otc-deployment.json";
-  
-  if (!fs.existsSync(deploymentPath)) {
-    console.log("⚠️  Contracts not deployed yet, skipping seed");
-    console.log("   Run 'npm run dev' to deploy contracts first");
+  if (!isLocalhost) {
+    console.log(`\n🛑 BLOCKED: API URL is "${apiUrl}", not localhost`);
+    console.log("   Token seeding is ONLY allowed when targeting localhost.");
+    console.log("   This prevents accidental seeding to production databases.\n");
     process.exit(0);
   }
 
-  const deployment = JSON.parse(fs.readFileSync(deploymentPath, "utf8"));
-  const elizaAddress = deployment.contracts.elizaToken;
+  // === SAFETY CHECK 4: Block if DATABASE_URL looks like production ===
+  const dbUrl = process.env.DATABASE_URL || "";
+  const looksLikeProduction = 
+    dbUrl.includes("neon.tech") || 
+    dbUrl.includes("supabase") || 
+    dbUrl.includes("planetscale") ||
+    dbUrl.includes("railway") ||
+    dbUrl.includes("render.com") ||
+    dbUrl.includes("aws") ||
+    dbUrl.includes("azure") ||
+    dbUrl.includes("gcp");
+    
+  if (looksLikeProduction) {
+    console.log("\n🛑 BLOCKED: DATABASE_URL appears to be a production database");
+    console.log("   Token seeding is ONLY allowed for local development.\n");
+    process.exit(0);
+  }
 
-  console.log(`✅ Using elizaOS token from deployment: ${elizaAddress}`);
+  console.log("\n🌱 Seeding LOCAL development marketplace...\n");
+  console.log("   Network: localnet");
+  console.log("   API: localhost");
+  console.log("");
+  
+  // Check for local EVM deployment
+  const evmDeploymentPath = "./contracts/deployments/eliza-otc-deployment.json";
+  
+  if (!fs.existsSync(evmDeploymentPath)) {
+    console.log("⚠️  Local contracts not deployed yet, skipping seed");
+    console.log("   Run 'npm run dev' to deploy contracts first\n");
+    process.exit(0);
+  }
 
-  // Wait for frontend
+  // Wait for local frontend
   let retries = 5;
   while (retries > 0) {
-    const healthCheck = await fetch("http://localhost:5004/api/devnet/address").catch(() => null);
+    const healthCheck = await fetch("http://localhost:4444/api/tokens").catch(() => null);
     if (healthCheck && healthCheck.ok) {
-      console.log("✅ Frontend is ready");
+      console.log("✅ Local frontend is ready");
       break;
     }
-    console.log(`⏳ Waiting for frontend... (${retries} retries left)`);
+    console.log(`⏳ Waiting for local frontend... (${retries} retries left)`);
     await new Promise(r => setTimeout(r, 2000));
     retries--;
   }
 
   if (retries === 0) {
-    console.log("⚠️  Frontend not ready, skipping seed");
+    console.log("⚠️  Local frontend not ready, skipping seed\n");
     process.exit(0);
   }
 
-  // --- EVM Seeding ---
-  const evmDeploymentPath = "./src/config/deployments/local-evm.json";
-  if (fs.existsSync(evmDeploymentPath)) {
-    const evmDeployment = JSON.parse(fs.readFileSync(evmDeploymentPath, "utf8"));
-    // Check if deployment is empty (placeholder)
-    if (!evmDeployment.contracts || !evmDeployment.contracts.elizaToken) {
-        console.log("⚠️  EVM Deployment empty or invalid, skipping EVM seed");
+  // --- EVM Local Seeding (Anvil only) ---
+  const localEvmPath = "./src/config/deployments/local-evm.json";
+  if (fs.existsSync(localEvmPath)) {
+    const evmDeployment = JSON.parse(fs.readFileSync(localEvmPath, "utf8"));
+    
+    if (!evmDeployment.contracts?.elizaToken) {
+      console.log("⚠️  No local EVM token deployed, skipping EVM seed");
     } else {
-        const evmElizaAddress = evmDeployment.contracts.elizaToken;
-        const ownerAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Anvil default #0
+      const testTokenAddress = evmDeployment.contracts.elizaToken;
+      const anvilAccount = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
-    console.log(`\n[EVM] Using elizaOS token: ${evmElizaAddress}`);
-    
-    // Register Token
-    await fetch("http://localhost:5004/api/tokens", {
+      console.log(`\n[Local EVM] Test token: ${testTokenAddress}`);
+      
+      // Register local test token
+      await fetch("http://localhost:4444/api/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-        symbol: "elizaOS",
-        name: "elizaOS (EVM)",
-        contractAddress: evmElizaAddress,
-        chain: "base",
-        decimals: 18,
-        logoUrl: "/tokens/eliza.svg",
-        description: "The native token of the elizaOS AI agent platform (EVM).",
-        website: "https://elizaos.ai",
-        twitter: "https://twitter.com/elizaos",
+          symbol: "TEST",
+          name: "Local Test Token",
+          contractAddress: testTokenAddress,
+          chain: "base",
+          decimals: 18,
+          logoUrl: "/tokens/eliza.svg",
+          description: "LOCAL DEV ONLY - Not a real token",
         }),
-    }).catch(() => console.log("[EVM] Token may already exist"));
+      }).catch(() => console.log("   Token may already exist"));
 
-    console.log("✅ [EVM] elizaOS token registered");
+      console.log("✅ [Local EVM] Test token registered");
 
-    // Create Consignments
-    const tokenId = `token-base-${evmElizaAddress.toLowerCase()}`;
-    
-    // Negotiable Deal
-    await fetch("http://localhost:5004/api/consignments", {
+      // Create test consignment
+      const tokenId = `token-base-${testTokenAddress.toLowerCase()}`;
+      
+      await fetch("http://localhost:4444/api/consignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-        tokenId,
-        consignerAddress: ownerAddress,
-        amount: "10000000000000000000000000",
-        isNegotiable: true,
-        minDiscountBps: 1000,
-        maxDiscountBps: 2500,
-        minLockupDays: 30,
-        maxLockupDays: 365,
-        minDealAmount: "1000000000000000000000",
-        maxDealAmount: "1000000000000000000000000",
-        isFractionalized: true,
-        isPrivate: false,
-        maxPriceVolatilityBps: 1000,
-        maxTimeToExecuteSeconds: 1800,
-        chain: "base",
+          tokenId,
+          consignerAddress: anvilAccount,
+          amount: "10000000000000000000000000",
+          isNegotiable: true,
+          minDiscountBps: 1000,
+          maxDiscountBps: 2500,
+          minLockupDays: 30,
+          maxLockupDays: 365,
+          minDealAmount: "1000000000000000000000",
+          maxDealAmount: "1000000000000000000000000",
+          isFractionalized: true,
+          isPrivate: false,
+          maxPriceVolatilityBps: 1000,
+          maxTimeToExecuteSeconds: 1800,
+          chain: "base",
         }),
-    }).catch(() => console.log("[EVM] Consignment may already exist"));
+      }).catch(() => console.log("   Consignment may already exist"));
 
-    console.log("✅ [EVM] Created negotiable elizaOS consignment");
-
-    // Fixed Deal
-    await fetch("http://localhost:5004/api/consignments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-        tokenId,
-        consignerAddress: ownerAddress,
-        amount: "5000000000000000000000000",
-        isNegotiable: false,
-        fixedDiscountBps: 1500,
-        fixedLockupDays: 180,
-        minDiscountBps: 0,
-        maxDiscountBps: 0,
-        minLockupDays: 0,
-        maxLockupDays: 0,
-        minDealAmount: "10000000000000000000000",
-        maxDealAmount: "5000000000000000000000000",
-        isFractionalized: true,
-        isPrivate: false,
-        maxPriceVolatilityBps: 500,
-        maxTimeToExecuteSeconds: 1800,
-        chain: "base",
-        }),
-    }).catch(() => console.log("[EVM] Consignment may already exist"));
-
-    console.log("✅ [EVM] Created fixed-price elizaOS consignment");
+      console.log("✅ [Local EVM] Test consignment created");
     }
   } else {
-    console.log("⚠️  EVM Contracts not deployed, skipping EVM seed");
+    console.log("⚠️  No local EVM deployment found, skipping EVM seed");
   }
 
-  // --- Solana Seeding ---
-  const solDeploymentPath = "./src/config/deployments/local-solana.json";
-  if (fs.existsSync(solDeploymentPath)) {
-    const solDeployment = JSON.parse(fs.readFileSync(solDeploymentPath, "utf8"));
-    const tokenMint = solDeployment.NEXT_PUBLIC_SOLANA_TOKEN_MINT;
-    
-    if (!tokenMint) {
-        console.log("⚠️  Solana Deployment empty, skipping Solana seed");
-    } else {
-        const ownerKey = solDeployment.NEXT_PUBLIC_SOLANA_DESK_OWNER;
+  // Solana: Never seed fake tokens
+  console.log("\n[Solana] No seeding - tokens registered by owners via TokenRegistry");
 
-        console.log(`\n[Solana] Using Token Mint: ${tokenMint}`);
-
-        // Register Token
-        await fetch("http://localhost:5004/api/tokens", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-            symbol: "SOL-TOK",
-            name: "Solana Test Token",
-            contractAddress: tokenMint,
-            chain: "solana",
-            decimals: 9,
-            logoUrl: "/tokens/solana.svg",
-            description: "Test token on Solana Localnet.",
-            website: "https://solana.com",
-            twitter: "https://twitter.com/solana",
-            }),
-        }).catch(() => console.log("[Solana] Token may already exist"));
-
-        console.log("✅ [Solana] Token registered");
-
-        const tokenId = `token-solana-${tokenMint}`;
-
-        // Negotiable Deal
-        await fetch("http://localhost:5004/api/consignments", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-            tokenId,
-            consignerAddress: ownerKey,
-            amount: "500000000000", // 500 tokens (9 decimals)
-            isNegotiable: true,
-            minDiscountBps: 500,
-            maxDiscountBps: 2000,
-            minLockupDays: 7,
-            maxLockupDays: 90,
-            minDealAmount: "1000000000", // 1 token
-            maxDealAmount: "500000000000", // 500 tokens
-            isFractionalized: true,
-            isPrivate: false,
-            maxPriceVolatilityBps: 1000,
-            maxTimeToExecuteSeconds: 3600,
-            chain: "solana",
-            }),
-        }).catch((e) => console.log("[Solana] Consignment creation failed (might exist)", e));
-
-        console.log("✅ [Solana] Created negotiable consignment");
-    }
-  } else {
-    console.log("⚠️  Solana Program not deployed, skipping Solana seed");
-  }
-
-  console.log("\n🎉 Multi-token OTC marketplace seeded successfully!");
-  console.log("   Visit http://localhost:5004 to see available deals\n");
+  console.log("\n✅ Local development seeding complete");
+  console.log("   Visit http://localhost:4444 to test\n");
 }
 
 seedTokens().catch((err) => {

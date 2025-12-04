@@ -8,7 +8,6 @@ import { usePathname } from "next/navigation";
 
 import { Dialog } from "@/components/dialog";
 import { Logo } from "@/components/logo";
-import { WalletConnector } from "./wallet-connector";
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -136,9 +135,12 @@ export function Header() {
             <NavLinks />
           </div>
           <div className="flex items-center justify-end whitespace-nowrap shrink-0 gap-1.5 sm:gap-2">
-            <div className="hidden lg:block">
-              <WalletConnector onConnectionChange={() => {}} />
-            </div>
+            <Link
+              href="/consign"
+              className="hidden lg:block px-4 py-2 bg-orange-600 text-white text-sm font-semibold rounded-lg hover:bg-orange-700 transition-colors"
+            >
+              Create Listing
+            </Link>
             <button
               type="button"
               className="lg:hidden -m-2 inline-flex items-center justify-center rounded-md p-2 text-zinc-700 dark:text-zinc-400"
@@ -150,41 +152,6 @@ export function Header() {
           </div>
         </div>
       </nav>
-
-      <Dialog
-        open={mobileMenuOpen}
-        onClose={setMobileMenuOpen}
-        className="lg:hidden"
-        variant="slideout"
-      >
-        <div className="px-6 py-6 h-full flex flex-col">
-          <div className="flex items-center justify-between">
-            <Link
-              href="/"
-              className="-m-1.5 p-1.5"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <Logo width={128} height={32} />
-            </Link>
-            <button
-              type="button"
-              className="-m-2.5 rounded-md p-2.5 text-zinc-700 dark:text-zinc-400"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <span className="sr-only">Close menu</span>
-              <XMarkIcon className="h-6 w-6" aria-hidden="true" />
-            </button>
-          </div>
-          <div className="mt-6 pb-6 border-b border-zinc-200 dark:border-zinc-800">
-            <WalletConnector onConnectionChange={() => {}} />
-          </div>
-          <div className="mt-6 flow-root flex-1">
-            <div className="space-y-2 py-6">
-              <NavLinks mobile />
-            </div>
-          </div>
-        </div>
-      </Dialog>
     </header>
   );
 }

@@ -17,13 +17,13 @@ contract DeployOTCMainnet is Script {
     
     function run() external {
         // Get deployer private key from environment
-        uint256 deployerPrivateKey = vm.envOr("DEPLOYER_PRIVATE_KEY", vm.envUint("APPROVER_PRIVATE_KEY"));
+        uint256 deployerPrivateKey = vm.envOr("EVM_PRIVATE_KEY", vm.envUint("EVM_PRIVATE_KEY"));
         address deployer = vm.addr(deployerPrivateKey);
         
         console.log("Deploying from:", deployer);
         console.log("Balance:", deployer.balance);
         
-        require(deployer.balance > 0.01 ether, "Insufficient balance for deployment");
+        require(deployer.balance > 0.002 ether, "Insufficient balance for deployment");
         
         // Get deployment parameters
         address owner = vm.envOr("OWNER_ADDRESS", deployer);

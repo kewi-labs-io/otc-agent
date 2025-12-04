@@ -21,8 +21,9 @@ interface ReadContractParams {
   args?: readonly unknown[];
 }
 
+// Use type assertion to bypass viem's strict authorizationList requirement
 async function readContractSafe<T>(
-  client: { readContract: (params: ReadContractParams) => Promise<unknown> },
+  client: { readContract: (params: unknown) => Promise<unknown> },
   params: ReadContractParams,
 ): Promise<T> {
   const result = await client.readContract(params);

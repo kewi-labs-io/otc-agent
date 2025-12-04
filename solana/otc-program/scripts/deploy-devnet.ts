@@ -15,6 +15,7 @@ const __dirname = path.dirname(__filename);
 
 async function main() {
   console.log("🚀 Deploying Solana OTC Desk to Devnet\n");
+  console.log("Note: All tokens are equal - no primary token required.\n");
 
   // Configure provider from env (ANCHOR_PROVIDER_URL, ANCHOR_WALLET)
   const provider = AnchorProvider.env();
@@ -38,23 +39,9 @@ async function main() {
     console.log("🏦 Created new Desk:", desk.publicKey.toString());
   }
 
-  // 2. Create Mints
-  console.log("\n🪙 Creating Devnet Mints...");
-  // Wallet.payer is optional (only available in Node.js), fallback to loading from file
+  // 2. Create USDC Mock Mint for Devnet testing
+  console.log("\n🪙 Creating Devnet USDC Mock...");
   const payer = (provider.wallet as Wallet).payer || Keypair.fromSecretKey(Buffer.from(JSON.parse(fs.readFileSync(process.env.ANCHOR_WALLET || "./id.json", "utf8"))));
-
-  // In Devnet, we can't just assume we can create tokens freely if the account is low on SOL
-  // But we can try to load existing mints if we saved them
-  
-  // For this test deployment, we'll create new ones. In prod, these are fixed constants.
-  const tokenMint = await createMint(
-    provider.connection,
-    payer, 
-    provider.wallet.publicKey,
-    null,
-    9
-  );
-  console.log("✅ Token Mint:", tokenMint.toString());
 
   const usdcMint = await createMint(
     provider.connection,
@@ -63,13 +50,11 @@ async function main() {
     null,
     6
   );
-  console.log("✅ USDC Mint:", usdcMint.toString());
+  console.log("✅ USDC Mock Mint:", usdcMint.toString());
 
-  // 3. Initialize Desk
+  // 3. Initialize Desk (no token_mint required - all tokens are equal)
   try {
     console.log("\n⚙️  Initializing desk...");
-    // The program is already deployed (verified in chat history)
-    // Now we just need to initialize the data account
     
     const tx = await program.methods
       .initDesk(new BN(500_000_000), new BN(1800))
@@ -77,14 +62,10 @@ async function main() {
         payer: provider.wallet.publicKey,
         owner: provider.wallet.publicKey,
         agent: provider.wallet.publicKey, 
-        tokenMint: tokenMint,
         usdcMint: usdcMint,
         desk: desk.publicKey,
       })
-      .signers([desk]) // Desk must sign to prove ownership of PDA? No, init needs system account signers usually for new accounts
-      // Wait, if desk is a Keypair account being initialized:
-      // #[account(init, payer = payer, space = 8 + Desk::SIZE)] pub desk: Account<'info, Desk>,
-      // Then yes, desk keypair must sign.
+      .signers([desk])
       .rpc();
       
     console.log("✅ Desk initialized. Tx:", tx);
@@ -94,13 +75,12 @@ async function main() {
     if (error.logs) console.log("Logs:", error.logs);
   }
 
-  // 4. Config Output
+  // 4. Config Output (no TOKEN_MINT - all tokens are equal)
   const envData = {
     NEXT_PUBLIC_SOLANA_RPC: "https://api.devnet.solana.com",
     NEXT_PUBLIC_SOLANA_PROGRAM_ID: program.programId.toString(),
     NEXT_PUBLIC_SOLANA_DESK: desk.publicKey.toString(),
     NEXT_PUBLIC_SOLANA_DESK_OWNER: provider.wallet.publicKey.toString(),
-    NEXT_PUBLIC_SOLANA_TOKEN_MINT: tokenMint.toString(),
     NEXT_PUBLIC_SOLANA_USDC_MINT: usdcMint.toString(),
   };
 

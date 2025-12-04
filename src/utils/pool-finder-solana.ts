@@ -34,6 +34,9 @@ export interface SolanaPoolInfo {
   tvlUsd: number;
   priceUsd?: number;
   baseToken: "SOL" | "USDC";
+  // PumpSwap-specific vault addresses (for on-chain price updates)
+  solVault?: string;   // SOL vault account (lamports)
+  tokenVault?: string; // Token vault account (SPL tokens)
 }
 
 const RAYDIUM_AMM_PROGRAM_MAINNET = new PublicKey(
@@ -307,6 +310,18 @@ async function findPumpSwapPools(
                 : 0;
           }
 
+          // Determine which vault is SOL and which is token
+          // If baseMint is SOL/USDC, then poolBaseTokenAccount holds SOL/USDC
+          const isSolBase = baseMint.equals(SOL_MINT);
+          const isUsdcBase = baseMint.equals(USDC_MINT);
+          
+          // For price updates, we need the SOL vault and token vault
+          // SOL vault: holds the SOL (lamports) - for SOL pairs
+          // Token vault: holds the SPL tokens
+          const solVault = isSolBase ? poolBaseTokenAccount.toBase58() : 
+                          (quoteMint.equals(SOL_MINT) ? poolQuoteTokenAccount.toBase58() : undefined);
+          const tokenVault = isSolBase || isUsdcBase ? poolQuoteTokenAccount.toBase58() : poolBaseTokenAccount.toBase58();
+          
           pools.push({
             protocol: "PumpSwap",
             address: account.pubkey.toBase58(),
@@ -316,6 +331,9 @@ async function findPumpSwapPools(
             tvlUsd,
             priceUsd,
             baseToken,
+            // PumpSwap-specific vault addresses for on-chain price updates
+            solVault,
+            tokenVault,
           });
         }
       } catch {

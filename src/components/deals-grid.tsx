@@ -1,13 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TokenDealsSection } from "./token-deals-section";
 import { useTokenCache } from "@/hooks/useTokenCache";
-import type {
-  OTCConsignment,
-  Token,
-  TokenMarketData,
-} from "@/services/database";
+import type { OTCConsignment, Token, TokenMarketData } from "@/services/database";
 
 interface DealsGridProps {
   filters: {
@@ -27,91 +23,66 @@ interface TokenGroup {
   consignments: OTCConsignment[];
 }
 
+// --- Helper: Group consignments by tokenId ---
+function groupConsignmentsByToken(consignments: OTCConsignment[]): TokenGroup[] {
+  // Deduplicate by ID
+  const uniqueMap = new Map(consignments.map((c) => [c.id, c]));
+  const unique = Array.from(uniqueMap.values());
+
+  // Group by tokenId
+  const grouped = new Map<string, TokenGroup>();
+  for (const consignment of unique) {
+    let group = grouped.get(consignment.tokenId);
+    if (!group) {
+      group = { tokenId: consignment.tokenId, token: null, marketData: null, consignments: [] };
+      grouped.set(consignment.tokenId, group);
+    }
+    group.consignments.push(consignment);
+  }
+
+  return Array.from(grouped.values());
+}
+
 function TokenGroupLoader({ tokenGroup }: { tokenGroup: TokenGroup }) {
-  const { token, marketData: cachedMarketData } = useTokenCache(
-    tokenGroup.tokenId,
-  );
-
+  const { token, marketData: cachedMarketData } = useTokenCache(tokenGroup.tokenId);
   if (!token) return null;
-
-  return (
-    <TokenDealsSection
-      token={token}
-      marketData={cachedMarketData}
-      consignments={tokenGroup.consignments}
-    />
-  );
+  return <TokenDealsSection token={token} marketData={cachedMarketData} consignments={tokenGroup.consignments} />;
 }
 
 export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
-  const [tokenGroups, setTokenGroups] = useState<Map<string, TokenGroup>>(
-    new Map(),
-  );
+  const [tokenGroups, setTokenGroups] = useState<TokenGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadConsignments() {
       setIsLoading(true);
-      const params = new URLSearchParams();
+      try {
+        const params = new URLSearchParams();
+        filters.chains.forEach((chain) => params.append("chains", chain));
+        filters.negotiableTypes.forEach((type) => params.append("negotiableTypes", type));
+        if (filters.isFractionalized) params.append("isFractionalized", "true");
 
-      // Add chains
-      filters.chains.forEach((chain) => params.append("chains", chain));
+        const response = await fetch(`/api/consignments?${params.toString()}`);
+        const data = await response.json();
 
-      // Add negotiable types
-      filters.negotiableTypes.forEach((type) =>
-        params.append("negotiableTypes", type),
-      );
-
-      // Add fractionalized filter
-      if (filters.isFractionalized) {
-        params.append("isFractionalized", "true");
-      }
-
-      const response = await fetch(`/api/consignments?${params.toString()}`);
-      const data = await response.json();
-
-      if (data.success) {
-        const consignmentsList = (data.consignments || []) as OTCConsignment[];
-
-        // Deduplicate consignments by ID
-        const uniqueConsignments: OTCConsignment[] = Array.from(
-          new Map(consignmentsList.map((c) => [c.id, c])).values(),
-        );
-
-        // Group consignments by tokenId
-        const grouped = new Map<string, TokenGroup>();
-        for (const consignment of uniqueConsignments) {
-          if (!grouped.has(consignment.tokenId)) {
-            grouped.set(consignment.tokenId, {
-              tokenId: consignment.tokenId,
-              token: null,
-              marketData: null,
-              consignments: [],
-            });
-          }
-          grouped.get(consignment.tokenId)!.consignments.push(consignment);
+        if (data.success) {
+          const consignmentsList = (data.consignments || []) as OTCConsignment[];
+          setTokenGroups(groupConsignmentsByToken(consignmentsList));
         }
-
-        console.log("[DealsGrid] Loaded consignments:", {
-          total: consignmentsList.length,
-          unique: uniqueConsignments.length,
-          uniqueTokens: grouped.size,
-        });
-
-        setTokenGroups(grouped);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     }
 
     loadConsignments();
   }, [filters]);
 
-  // Filter token groups by search query
-  const filteredGroups = Array.from(tokenGroups.values()).filter((group) => {
-    if (!searchQuery) return true;
+  // Filter token groups by search query (memoized)
+  const filteredGroups = useMemo(() => {
+    if (!searchQuery) return tokenGroups;
     const query = searchQuery.toLowerCase();
-    return group.tokenId.toLowerCase().includes(query);
-  });
+    return tokenGroups.filter((group) => group.tokenId.toLowerCase().includes(query));
+  }, [tokenGroups, searchQuery]);
 
   if (isLoading) {
     return (

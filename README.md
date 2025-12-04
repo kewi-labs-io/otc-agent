@@ -73,7 +73,7 @@ Simply run:
 bun run dev
 ```
 
-The app will be available at **http://localhost:5004**
+The app will be available at **http://localhost:4444**
 
 The startup script automatically:
 - ✅ Checks if PostgreSQL container exists
@@ -232,7 +232,7 @@ bun run db:push
 # Generate Solana keypair (first run only)
 cd solana/otc-program && solana-keygen new -o id.json && cd ../..
 
-# Start everything (Anvil + Solana + Next.js on :5004)
+# Start everything (Anvil + Solana + Next.js on :4444)
 bun run dev
 ```
 
@@ -289,7 +289,7 @@ Create a `.env.local` file with the following configuration:
 # EVM (Anvil Localnet)
 NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8545
 NEXT_PUBLIC_OTC_ADDRESS=<set by deploy>
-APPROVER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+EVM_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 # Solana
 NEXT_PUBLIC_SOLANA_RPC=http://127.0.0.1:8899
@@ -297,7 +297,7 @@ NEXT_PUBLIC_SOLANA_PROGRAM_ID=<program id from deploy>
 
 # Privy (REQUIRED - Single auth provider for all wallets & social login)
 NEXT_PUBLIC_PRIVY_APP_ID=<your-privy-app-id>  # Get from dashboard.privy.io
-NEXT_PUBLIC_URL=http://localhost:5004  # or your production URL
+NEXT_PUBLIC_URL=http://localhost:4444  # or your production URL
 
 # Agent
 GROQ_API_KEY=<your key>
@@ -324,7 +324,7 @@ X_CONSUMER_SECRET=<secret>
 TUNNEL_DOMAIN=
 
 # Development: Additional allowed origins (optional, comma-separated)
-# Example: ALLOWED_DEV_ORIGINS=192.168.1.100:5004,custom-domain.local:5004
+# Example: ALLOWED_DEV_ORIGINS=192.168.1.100:4444,custom-domain.local:4444
 ALLOWED_DEV_ORIGINS=
 ```
 
@@ -351,7 +351,7 @@ NEXT_PUBLIC_BASE_RPC_URL=https://mainnet.base.org
 
 # Security
 CRON_SECRET=<your-secure-random-string>
-APPROVER_PRIVATE_KEY=<your-approver-private-key>
+EVM_PRIVATE_KEY=<your-approver-private-key>
 ```
 
 
@@ -425,11 +425,11 @@ Your OTC desk supports multiple networks and authentication methods:
 1. Create account at [dashboard.privy.io](https://dashboard.privy.io/)
 2. Create new app, copy App ID
 3. Enable: Farcaster, Email, Google (User Management > Authentication)
-4. Add domains: `http://localhost:5004`, `https://farcaster.xyz`, your production URL
+4. Add domains: `http://localhost:4444`, `https://farcaster.xyz`, your production URL
 5. Set in `.env.local`:
    ```env
    NEXT_PUBLIC_PRIVY_APP_ID=your-app-id
-   NEXT_PUBLIC_URL=http://localhost:5004
+   NEXT_PUBLIC_URL=http://localhost:4444
    ```
 
 **Behavior:**
@@ -614,7 +614,7 @@ bun run test:complete-flow:only
 # Prerequisites (if running manually)
 # 1. Anvil on port 8545
 # 2. Solana validator on port 8899
-# 3. Next.js server on port 5004
+# 3. Next.js server on port 4444
 # 4. Contracts deployed on both chains
 ```
 
@@ -863,7 +863,7 @@ anchor deploy
 ### Production
 ```bash
 bun run build
-bun start  # Port 5004
+bun start  # Port 4444
 ```
 
 Deploy to Vercel/Netlify/etc with production env vars.
@@ -909,5 +909,5 @@ Output:
 ## Quick Start
 
 ```bash
-bun run dev  # Starts everything: Anvil, Solana, Next.js on http://localhost:5004
+bun run dev  # Starts everything: Anvil, Solana, Next.js on http://localhost:4444
 ```

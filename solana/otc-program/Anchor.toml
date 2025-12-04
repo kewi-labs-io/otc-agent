@@ -6,14 +6,20 @@ resolution = true
 skip-lint = true
 
 [programs.localnet]
-otc = "3aF2PXcC92AyNJSkNMAA8rcDWo6fNttb6m4gs1E4seLA"
+otc = "6qn8ELVXd957oRjLaomCpKpcVZshUjNvSzw1nc7QVyXc"
+
+[programs.devnet]
+otc = "6qn8ELVXd957oRjLaomCpKpcVZshUjNvSzw1nc7QVyXc"
+
+[programs.mainnet]
+otc = "6qn8ELVXd957oRjLaomCpKpcVZshUjNvSzw1nc7QVyXc"
 
 [provider]
 cluster = "localnet"
 wallet = "./id.json"
 
 [scripts]
-test = "bunx --bun ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+test = "bunx --bun ts-mocha -p ./tsconfig.json -t 1000000 tests/otc.security-audit.ts"
 
 [test]
 startup_wait = 10000

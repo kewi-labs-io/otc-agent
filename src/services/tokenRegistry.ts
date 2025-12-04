@@ -18,10 +18,17 @@ export class TokenRegistryService {
     website?: string;
     twitter?: string;
   }): Promise<Token> {
+    // EVM addresses can be lowercased (case-insensitive)
+    // Solana addresses are Base58 encoded and MUST preserve case
+    const normalizedAddress =
+      params.chain === "solana"
+        ? params.contractAddress
+        : params.contractAddress.toLowerCase();
+
     const token = await TokenDB.createToken({
       symbol: params.symbol.toUpperCase(),
       name: params.name,
-      contractAddress: params.contractAddress.toLowerCase(),
+      contractAddress: normalizedAddress,
       chain: params.chain,
       decimals: params.decimals,
       logoUrl: params.logoUrl || "",

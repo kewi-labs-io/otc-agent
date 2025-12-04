@@ -10,19 +10,18 @@ import {
 /**
  * Get the appropriate chain based on environment and configuration
  * Supports: Base, BSC, Anvil/localhost
+ * 
+ * Priority: NEXT_PUBLIC_NETWORK > NETWORK > NODE_ENV inference
  */
 export function getChain(): Chain {
-  const env = process.env.NODE_ENV;
-  const network = process.env.NETWORK || "base";
+  const network = process.env.NEXT_PUBLIC_NETWORK || process.env.NETWORK || "testnet";
 
-  // Production: Use mainnet chains
-  if (env === "production") {
-    if (network === "base") return base;
-    if (network === "bsc") return bsc;
-    return base; // Default to Base in production
-  }
+  // Handle unified network names
+  if (network === "mainnet") return base;
+  if (network === "testnet") return baseSepolia;
+  if (network === "local" || network === "localnet") return localhost;
 
-  // Development/staging: Support multiple networks
+  // Handle chain-specific network names
   switch (network) {
     case "base":
       return base;
@@ -36,7 +35,7 @@ export function getChain(): Chain {
     case "anvil":
       return localhost;
     default:
-      // Default to Base Sepolia in development
+      // Default to Base Sepolia (testnet)
       return baseSepolia;
   }
 }
@@ -45,8 +44,20 @@ export function getChain(): Chain {
  * Get RPC URL for the current chain
  */
 export function getRpcUrl(): string {
-  const network = process.env.NETWORK || "base";
+  const network = process.env.NEXT_PUBLIC_NETWORK || process.env.NETWORK || "testnet";
 
+  // Handle unified network names
+  if (network === "mainnet") {
+    return process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+  }
+  if (network === "testnet") {
+    return process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://sepolia.base.org";
+  }
+  if (network === "local" || network === "localnet") {
+    return process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
+  }
+
+  // Handle chain-specific network names
   switch (network) {
     case "base":
       return process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
@@ -68,4 +79,12 @@ export function getRpcUrl(): string {
     default:
       return process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://sepolia.base.org";
   }
+}
+
+/**
+ * Check if current network is local (Anvil/localhost)
+ */
+export function isLocalNetwork(): boolean {
+  const network = process.env.NEXT_PUBLIC_NETWORK || process.env.NETWORK || "testnet";
+  return network === "local" || network === "localnet" || network === "localhost" || network === "anvil";
 }

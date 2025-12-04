@@ -1,11 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = process.env.TEST_PORT ? parseInt(process.env.TEST_PORT) : 5004;
+const PORT = process.env.TEST_PORT ? parseInt(process.env.TEST_PORT) : 4444;
 const BASE_URL = `http://localhost:${PORT}`;
 
 /**
  * Playwright configuration for E2E tests
- * App runs on port 5004 (OTC Desk)
+ * App runs on port 4444 (OTC Desk)
  *
  * For local: Start the dev server manually with `bun run dev`
  * For CI: The workflow starts the server before running tests

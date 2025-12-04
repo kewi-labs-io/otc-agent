@@ -3,8 +3,6 @@ const anchor: any = pkg as any;
 const { BN } = anchor;
 import { PublicKey, SystemProgram, Keypair } from "@solana/web3.js";
 import {
-  TOKEN_PROGRAM_ID,
-  createMint,
   getOrCreateAssociatedTokenAccount,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
@@ -25,6 +23,8 @@ if (fs.existsSync(envPath)) {
 
 async function main() {
   console.log("🚀 Initializing Solana OTC Desk on Mainnet\n");
+  console.log("Note: All tokens are equal - no primary token required.");
+  console.log("Tokens are registered via TokenRegistry after desk init.\n");
 
   // Set environment for Anchor
   process.env.ANCHOR_PROVIDER_URL = "https://api.mainnet-beta.solana.com";
@@ -60,23 +60,6 @@ async function main() {
   const usdcMint = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
   console.log("💵 USDC Mint:", usdcMint.toString());
 
-  // Use ElizaOS token mint from .env
-  const tokenMintStr = process.env.NEXT_PUBLIC_SOLANA_TOKEN_MINT;
-  
-  if (!tokenMintStr) {
-    throw new Error("NEXT_PUBLIC_SOLANA_TOKEN_MINT not set in .env");
-  }
-
-  const tokenMint = new PublicKey(tokenMintStr);
-  
-  // Verify token mint exists
-  const tokenAccountInfo = await provider.connection.getAccountInfo(tokenMint);
-  if (!tokenAccountInfo) {
-    throw new Error(`Token mint ${tokenMintStr} not found on mainnet`);
-  }
-  
-  console.log("🪙 Using ElizaOS Token Mint:", tokenMint.toString());
-
   // Generate agent keypair (can be same as owner for now)
   const agent = owner; // Using owner as agent for simplicity
   console.log("🤖 Agent:", agent.publicKey.toString());
@@ -85,27 +68,13 @@ async function main() {
   const desk = Keypair.generate();
   console.log("🏦 Desk:", desk.publicKey.toString());
 
-  // Create token accounts for desk
-  console.log("\n📦 Creating desk token accounts...");
-  const deskTokenAta = getAssociatedTokenAddressSync(
-    tokenMint,
-    desk.publicKey,
-    true
-  );
+  // Create USDC account for desk (token accounts created per-token via TokenRegistry)
+  console.log("\n📦 Creating desk USDC account...");
   const deskUsdcAta = getAssociatedTokenAddressSync(
     usdcMint,
     desk.publicKey,
     true
   );
-
-  await getOrCreateAssociatedTokenAccount(
-    provider.connection,
-    owner,
-    tokenMint,
-    desk.publicKey,
-    true
-  );
-  console.log("✅ Desk token ATA:", deskTokenAta.toString());
 
   await getOrCreateAssociatedTokenAccount(
     provider.connection,
@@ -116,10 +85,9 @@ async function main() {
   );
   console.log("✅ Desk USDC ATA:", deskUsdcAta.toString());
 
-  // Initialize desk
+  // Initialize desk (no token_mint required - all tokens are equal)
   console.log("\n⚙️  Initializing desk...");
   
-  // Build transaction manually to ensure both signers are included
   const tx = await program.methods
     .initDesk(
       new BN(500_000_000), // $5 minimum
@@ -129,7 +97,6 @@ async function main() {
       payer: owner.publicKey,
       owner: owner.publicKey,
       agent: agent.publicKey,
-      tokenMint: tokenMint,
       usdcMint: usdcMint,
       desk: desk.publicKey,
       systemProgram: SystemProgram.programId,
@@ -137,12 +104,30 @@ async function main() {
     .signers([owner, desk])
     .rpc({ skipPreflight: false });
 
-  console.log("✅ Desk initialized! Tx:", tx);
+  console.log("✅ Desk initialized. Tx:", tx);
   console.log(`   View on Solscan: https://solscan.io/tx/${tx}`);
+
+  // Save desk keypair
+  const deskKeypairPath = path.join(__dirname, "../desk-mainnet-keypair.json");
+  fs.writeFileSync(deskKeypairPath, JSON.stringify(Array.from(desk.secretKey)));
+  console.log(`\n✅ Desk keypair saved to ${deskKeypairPath}`);
+
+  // Save config
+  const configData = {
+    NEXT_PUBLIC_SOLANA_RPC: "https://api.mainnet-beta.solana.com",
+    NEXT_PUBLIC_SOLANA_PROGRAM_ID: program.programId.toString(),
+    NEXT_PUBLIC_SOLANA_DESK: desk.publicKey.toString(),
+    NEXT_PUBLIC_SOLANA_DESK_OWNER: owner.publicKey.toString(),
+    NEXT_PUBLIC_SOLANA_USDC_MINT: usdcMint.toString(),
+  };
+
+  const deploymentPath = path.join(__dirname, "../../../src/config/deployments/mainnet-solana.json");
+  fs.writeFileSync(deploymentPath, JSON.stringify(configData, null, 2));
+  console.log(`✅ Config saved to ${deploymentPath}`);
 
   // Output for .env
   console.log("\n" + "=".repeat(80));
-  console.log("🎉 SUCCESS! Update your .env with:");
+  console.log("🎉 SUCCESS. Update your .env with:");
   console.log("=".repeat(80));
   console.log(`NEXT_PUBLIC_SOLANA_DESK=${desk.publicKey.toString()}`);
   console.log("=".repeat(80));
@@ -150,11 +135,10 @@ async function main() {
 
 main()
   .then(() => {
-    console.log("\n✨ All done!");
+    console.log("\n✨ All done.");
     process.exit(0);
   })
   .catch((err) => {
     console.error("\n❌ Error:", err);
     process.exit(1);
   });
-

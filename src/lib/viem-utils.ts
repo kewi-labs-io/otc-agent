@@ -41,9 +41,8 @@ export async function safeReadContract<T>(
   // The cast is necessary because viem's readContract has strict generics
   // that require compile-time ABI type inference. With dynamic ABIs,
   // we must bypass this and rely on runtime behavior.
-  const result = await client.readContract(
-    params as Parameters<typeof client.readContract>[0],
-  );
+  // Uses unknown cast to bypass viem's strict authorizationList requirement
+  const result = await (client.readContract as (params: unknown) => Promise<unknown>)(params);
   return result as T;
 }
 

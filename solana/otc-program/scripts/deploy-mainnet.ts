@@ -35,24 +35,14 @@ async function main() {
     desk = Keypair.generate();
     fs.writeFileSync(deskKeypairPath, JSON.stringify(Array.from(desk.secretKey)));
     console.log("⚠️  Created NEW Desk keypair:", desk.publicKey.toString());
-    console.log("⚠️  BACKUP THIS KEYPAIR IMMEDIATELY!");
+    console.log("⚠️  BACKUP THIS KEYPAIR IMMEDIATELY.");
   }
 
-  // 2. Define Mints
-  // USDC on Mainnet: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+  // 2. Define Mints - USDC only, no primary token (all tokens are equal)
   const usdcMint = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
-  
-  // Primary Token Mint (Must be provided)
-  const tokenMintAddr = process.env.TOKEN_MINT;
-  if (!tokenMintAddr) {
-    throw new Error("TOKEN_MINT environment variable required for mainnet deployment");
-  }
-  const tokenMint = new PublicKey(tokenMintAddr);
-
-  console.log("✅ Token Mint:", tokenMint.toString());
   console.log("✅ USDC Mint:", usdcMint.toString());
 
-  // 3. Initialize Desk
+  // 3. Initialize Desk (no token_mint required - all tokens registered via TokenRegistry)
   try {
     console.log("\n⚙️  Initializing desk...");
     await program.methods
@@ -61,7 +51,6 @@ async function main() {
         payer: provider.wallet.publicKey,
         owner: provider.wallet.publicKey,
         agent: provider.wallet.publicKey, 
-        tokenMint: tokenMint,
         usdcMint: usdcMint,
         desk: desk.publicKey,
       })
@@ -73,13 +62,12 @@ async function main() {
     console.log("⚠️  Desk init error (might be already initialized):", error.message);
   }
 
-  // 4. Config Output
+  // 4. Config Output (no TOKEN_MINT - all tokens are equal)
   const envData = {
     NEXT_PUBLIC_SOLANA_RPC: "https://api.mainnet-beta.solana.com",
     NEXT_PUBLIC_SOLANA_PROGRAM_ID: program.programId.toString(),
     NEXT_PUBLIC_SOLANA_DESK: desk.publicKey.toString(),
     NEXT_PUBLIC_SOLANA_DESK_OWNER: provider.wallet.publicKey.toString(),
-    NEXT_PUBLIC_SOLANA_TOKEN_MINT: tokenMint.toString(),
     NEXT_PUBLIC_SOLANA_USDC_MINT: usdcMint.toString(),
   };
 
@@ -95,5 +83,3 @@ async function main() {
 }
 
 main().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });
-
-

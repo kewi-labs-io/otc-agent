@@ -9,11 +9,12 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IAggregatorV3 as AggregatorV3Interface} from "./interfaces/IAggregatorV3.sol";
+import {IOTC} from "./interfaces/IOTC.sol";
 
 /// @title OTC-like Token Sale Desk - Multi-Token Support
 /// @notice Permissionless consignment creation, approver-gated approvals, price snapshot on creation using Chainlink.
 ///         Multi-token support with per-token consignments. Supports ETH or USDC payments.
-contract OTC is Ownable, Pausable, ReentrancyGuard {
+contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
   using SafeERC20 for IERC20;
   using Math for uint256;
   enum PaymentCurrency { ETH, USDC }
@@ -86,7 +87,7 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
   uint256 public defaultUnlockDelaySeconds = 0; // can be set by admin
   uint256 public maxFeedAgeSeconds = 1 hours; // max allowed staleness for price feeds
   uint256 public maxLockupSeconds = 365 days; // max 1 year lockup
-  uint256 public maxOpenOffersToReturn = 100; // limit for getOpenOfferIds()
+  uint256 public constant MAX_OPEN_OFFERS_TO_RETURN = 100; // limit for getOpenOfferIds()
 
   // Optional restriction: if true, only beneficiary/agent/approver may fulfill
   bool public restrictFulfillToBeneficiaryOrApprover = false;
@@ -157,6 +158,7 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
     address agent_
   ) Ownable(owner_) {
     require(address(usdc_) != address(0), "bad usdc");
+    require(agent_ != address(0), "bad agent");
     usdc = usdc_;
     ethUsdFeed = ethUsdFeed_;
     agent = agent_;
@@ -275,9 +277,9 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
       createdAt: block.timestamp
     });
 
-    // Store gas deposit for future distribution costs
-    consignmentGasDeposit[consignmentId] = msg.value;
-    emit GasDepositMade(consignmentId, msg.value);
+    // Store ONLY the required gas deposit (not excess)
+    consignmentGasDeposit[consignmentId] = requiredGasDepositPerConsignment;
+    emit GasDepositMade(consignmentId, requiredGasDepositPerConsignment);
 
     // Refund excess ETH if any
     if (msg.value > requiredGasDepositPerConsignment) {
@@ -297,22 +299,25 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
     uint256 withdrawAmount = c.remainingAmount;
     require(withdrawAmount > 0, "nothing to withdraw");
 
-    // Update state before external call
+    // CEI: Cache all values first
+    bytes32 tokenId_ = c.tokenId;
+    uint256 gasDeposit = consignmentGasDeposit[consignmentId];
+    
+    RegisteredToken memory tkn = tokens[tokenId_];
+    require(tkn.tokenAddress != address(0), "invalid token");
+    require(tokenDeposited[tokenId_] >= withdrawAmount, "insufficient deposited balance");
+
+    // CEI: Update ALL state before ANY external calls
     c.isActive = false;
     c.remainingAmount = 0;
+    tokenDeposited[tokenId_] -= withdrawAmount;
+    consignmentGasDeposit[consignmentId] = 0; // Zero out before external calls
     
-    // Ensure tokenDeposited doesn't underflow
-    require(tokenDeposited[c.tokenId] >= withdrawAmount, "insufficient deposited balance");
-    tokenDeposited[c.tokenId] -= withdrawAmount;
-
-    RegisteredToken memory tkn = tokens[c.tokenId];
-    require(tkn.tokenAddress != address(0), "invalid token");
+    // External call 1: Token transfer
     IERC20(tkn.tokenAddress).safeTransfer(msg.sender, withdrawAmount);
 
-    // Refund gas deposit to consigner
-    uint256 gasDeposit = consignmentGasDeposit[consignmentId];
+    // External call 2: ETH refund (if any)
     if (gasDeposit > 0) {
-      consignmentGasDeposit[consignmentId] = 0;
       (bool success, ) = payable(msg.sender).call{value: gasDeposit}("");
       require(success, "gas refund failed");
       emit GasDepositRefunded(consignmentId, msg.sender, gasDeposit);
@@ -413,6 +418,7 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
     });
 
     _beneficiaryOfferIds[msg.sender].push(offerId);
+    openOfferIds.push(offerId);
     emit OfferCreated(offerId, msg.sender, tokenAmount, discountBps, currency);
     return offerId;
   }
@@ -501,33 +507,40 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
     require(deviationBps <= o.maxPriceDeviation, "price volatility exceeded");
 
     uint256 usd = totalUsdForOffer(offerId);
+    uint256 refundAmount = 0;
+    
     if (o.currency == PaymentCurrency.ETH) {
       uint256 ethUsd = o.ethUsdPrice > 0 ? o.ethUsdPrice : _readEthUsdPrice();
       uint256 weiAmount = _mulDivRoundingUp(usd, 1e18, ethUsd);
       require(msg.value >= weiAmount, "insufficient eth");
+      
+      // CEI: Update state BEFORE external calls
       o.amountPaid = weiAmount;
       o.payer = msg.sender;
       o.paid = true;
+      refundAmount = msg.value - weiAmount;
     } else {
       uint256 usdcAmount = _mulDivRoundingUp(usd, 1e6, 1e8);
-      usdc.safeTransferFrom(msg.sender, address(this), usdcAmount);
+      
+      // CEI: Update state BEFORE external calls
       o.amountPaid = usdcAmount;
       o.payer = msg.sender;
       o.paid = true;
+      
+      // External call after state update
+      usdc.safeTransferFrom(msg.sender, address(this), usdcAmount);
     }
     
-    // tokenReserved[o.tokenId] += o.tokenAmount; // Removed: already reserved at offer creation
+    // Emit event before potential ETH refund
+    emit OfferPaid(offerId, msg.sender, o.amountPaid);
     
-    if (o.currency == PaymentCurrency.ETH) {
-      uint256 refundAmount = msg.value - o.amountPaid;
-      if (refundAmount > 0) {
-        (bool refunded, ) = payable(msg.sender).call{ value: refundAmount }("");
-        if (!refunded) {
-          emit RefundFailed(msg.sender, refundAmount);
-        }
+    // ETH refund at the very end
+    if (refundAmount > 0) {
+      (bool refunded, ) = payable(msg.sender).call{ value: refundAmount }("");
+      if (!refunded) {
+        emit RefundFailed(msg.sender, refundAmount);
       }
     }
-    emit OfferPaid(offerId, msg.sender, o.amountPaid);
   }
 
   function claim(uint256 offerId) external nonReentrant whenNotPaused {
@@ -537,15 +550,20 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
     require(block.timestamp >= o.unlockTime, "locked");
     require(msg.sender == o.beneficiary, "not beneficiary");
     
+    // CEI: Cache values and update state before external call
+    address beneficiary = o.beneficiary;
+    uint256 tokenAmount = o.tokenAmount;
+    bytes32 tokenId_ = o.tokenId;
+    
     o.fulfilled = true;
+    tokenReserved[tokenId_] -= tokenAmount;
+    tokenDeposited[tokenId_] -= tokenAmount; // Fix: decrement deposited on claim
     
-    tokenReserved[o.tokenId] -= o.tokenAmount;
-    
-    RegisteredToken memory tkn = tokens[o.tokenId];
+    RegisteredToken memory tkn = tokens[tokenId_];
     require(tkn.tokenAddress != address(0), "token not registered");
-    IERC20(tkn.tokenAddress).safeTransfer(o.beneficiary, o.tokenAmount);
+    IERC20(tkn.tokenAddress).safeTransfer(beneficiary, tokenAmount);
     
-    emit TokensClaimed(offerId, o.beneficiary, o.tokenAmount);
+    emit TokensClaimed(offerId, beneficiary, tokenAmount);
   }
 
   function autoClaim(uint256[] calldata offerIds) external onlyApproverRole nonReentrant whenNotPaused {
@@ -560,22 +578,30 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
       RegisteredToken memory tkn = tokens[o.tokenId];
       if (tkn.tokenAddress == address(0)) continue; // Skip if token not registered
       
-      o.fulfilled = true;
-      tokenReserved[o.tokenId] -= o.tokenAmount;
-      IERC20(tkn.tokenAddress).safeTransfer(o.beneficiary, o.tokenAmount);
+      // CEI: Update state BEFORE external call
+      address beneficiary = o.beneficiary;
+      uint256 tokenAmount = o.tokenAmount;
+      bytes32 tknId = o.tokenId;
       
-      emit TokensClaimed(id, o.beneficiary, o.tokenAmount);
+      o.fulfilled = true;
+      tokenReserved[tknId] -= tokenAmount;
+      tokenDeposited[tknId] -= tokenAmount; // Fix: decrement deposited on claim
+      
+      // External call after state updates
+      IERC20(tkn.tokenAddress).safeTransfer(beneficiary, tokenAmount);
+      
+      emit TokensClaimed(id, beneficiary, tokenAmount);
     }
   }
 
   function getOpenOfferIds() external view returns (uint256[] memory) {
     uint256 total = openOfferIds.length;
     // Start from the end for more recent offers
-    uint256 startIdx = total > maxOpenOffersToReturn ? total - maxOpenOffersToReturn : 0;
+    uint256 startIdx = total > MAX_OPEN_OFFERS_TO_RETURN ? total - MAX_OPEN_OFFERS_TO_RETURN : 0;
     uint256 count = 0;
     
     // First pass: count valid offers
-    for (uint256 i = startIdx; i < total && count < maxOpenOffersToReturn; i++) {
+    for (uint256 i = startIdx; i < total && count < MAX_OPEN_OFFERS_TO_RETURN; i++) {
       Offer storage o = offers[openOfferIds[i]];
       if (!o.cancelled && !o.paid && block.timestamp <= o.createdAt + quoteExpirySeconds) { count++; }
     }
@@ -663,21 +689,38 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
       "too early for emergency refund"
     );
     
+    // CEI: Cache values before state changes
+    uint256 consignmentId = o.consignmentId;
+    bytes32 tokenId_ = o.tokenId;
+    uint256 tokenAmount = o.tokenAmount;
+    address payer = o.payer;
+    uint256 amountPaid = o.amountPaid;
+    PaymentCurrency currency = o.currency;
+    
     // Mark as cancelled to prevent double refund
     o.cancelled = true;
     
     // Release reserved tokens
-    tokenReserved[o.tokenId] -= o.tokenAmount;
+    tokenReserved[tokenId_] -= tokenAmount;
     
-    // Refund payment
-    if (o.currency == PaymentCurrency.ETH) {
-      (bool success, ) = payable(o.payer).call{value: o.amountPaid}("");
-      require(success, "ETH refund failed");
-    } else {
-      usdc.safeTransfer(o.payer, o.amountPaid);
+    // Return tokens to consignment (if it exists)
+    if (consignmentId > 0) {
+      Consignment storage c = consignments[consignmentId];
+      c.remainingAmount += tokenAmount;
+      if (!c.isActive) {
+        c.isActive = true;
+      }
     }
     
-    emit EmergencyRefund(offerId, o.payer, o.amountPaid, o.currency);
+    // Refund payment (external calls at the end)
+    if (currency == PaymentCurrency.ETH) {
+      (bool success, ) = payable(payer).call{value: amountPaid}("");
+      require(success, "ETH refund failed");
+    } else {
+      usdc.safeTransfer(payer, amountPaid);
+    }
+    
+    emit EmergencyRefund(offerId, payer, amountPaid, currency);
   }
   
   function adminEmergencyWithdraw(uint256 offerId) external onlyOwner nonReentrant {
@@ -687,17 +730,22 @@ contract OTC is Ownable, Pausable, ReentrancyGuard {
     require(o.paid && !o.fulfilled && !o.cancelled, "invalid state");
     require(block.timestamp >= o.unlockTime + 180 days, "must wait 180 days after unlock");
     
+    // CEI: Cache values before state changes
+    address recipient = o.beneficiary;
+    if (recipient == address(0)) recipient = owner(); // Fallback to owner
+    uint256 tokenAmount = o.tokenAmount;
+    bytes32 tokenId_ = o.tokenId;
+    
     // Mark as fulfilled to prevent double withdrawal
     o.fulfilled = true;
     
-    // Release reserved tokens and transfer
-    tokenReserved[o.tokenId] -= o.tokenAmount;
-    RegisteredToken memory tkn = tokens[o.tokenId];
-    // Send tokens to beneficiary (or owner if beneficiary is compromised)
-    address recipient = o.beneficiary;
-    if (recipient == address(0)) recipient = owner(); // Fallback to owner
-    IERC20(tkn.tokenAddress).safeTransfer(recipient, o.tokenAmount);
-    emit TokensClaimed(offerId, recipient, o.tokenAmount);
+    // Release reserved tokens and update accounting
+    tokenReserved[tokenId_] -= tokenAmount;
+    tokenDeposited[tokenId_] -= tokenAmount;
+    
+    RegisteredToken memory tkn = tokens[tokenId_];
+    IERC20(tkn.tokenAddress).safeTransfer(recipient, tokenAmount);
+    emit TokensClaimed(offerId, recipient, tokenAmount);
   }
   
   function _cleanupOldOffers() private {

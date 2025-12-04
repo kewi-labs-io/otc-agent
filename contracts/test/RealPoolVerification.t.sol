@@ -29,8 +29,8 @@ contract RealPoolTest is Test {
         // Skip if not on fork
         if (block.number < 1000000) return; 
 
-        address otcAddr = address(0x123); // Mock OTC for helper
-        RegistrationHelper helper = new RegistrationHelper(otcAddr, ETH_USD_FEED);
+        // RegistrationHelper would be used in production for token registration
+        // Skipping helper creation as we're just testing oracle directly
         
         // Find pool for TARGET/USDC or TARGET/WETH
         // We need to find a pool that actually exists.
@@ -50,9 +50,8 @@ contract RealPoolTest is Test {
         // But the user wants to verify THIS token.
         // So I will try to find the pool address using console logs if possible or use a known one.
         
-        // Let's try to verify coherence of SimplePoolOracle with a known pair like WETH/USDC first
+        // Verify coherence of SimplePoolOracle with known WETH/USDC pair
         address weth = 0x4200000000000000000000000000000000000006;
-        address usdc = USDC;
         
         // Base WETH/USDC 0.05% pool
         address wethUsdcPool = 0xD4AAE53973A28CB484149d001f6269a566cd4E64; 

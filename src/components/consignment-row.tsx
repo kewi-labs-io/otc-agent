@@ -103,9 +103,12 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
       console.log("[ConsignmentRow] Withdrawal tx submitted:", txHash);
 
       // Update database status after successful on-chain withdrawal
-      const response = await fetch(`/api/consignments/${consignment.id}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        `/api/consignments/${consignment.id}?callerAddress=${encodeURIComponent(address)}`,
+        {
+          method: "DELETE",
+        },
+      );
 
       if (!response.ok) {
         console.warn(
