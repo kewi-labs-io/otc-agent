@@ -265,6 +265,7 @@ export function MyDealsContent() {
   const [evmDeals, setEvmDeals] = useState<DealFromAPI[]>([]);
   const [myListings, setMyListings] = useState<OTCConsignment[]>([]);
   const [isLoadingDeals, setIsLoadingDeals] = useState(true);
+  const [showWithdrawnListings, setShowWithdrawnListings] = useState(false);
 
   const refreshDeals = useCallback(async () => {
     setIsLoadingDeals(true);
@@ -294,11 +295,7 @@ export function MyDealsContent() {
       }
 
       if (consignmentsRes.success) {
-        // Filter out withdrawn consignments (belt and suspenders with API filter)
-        const activeConsignments = (consignmentsRes.consignments || []).filter(
-          (c: OTCConsignment) => c.status !== "withdrawn"
-        );
-        setMyListings(activeConsignments);
+        setMyListings(consignmentsRes.consignments || []);
       }
     } catch (error) {
       console.error("[MyDeals] Error fetching deals:", error);
@@ -328,6 +325,16 @@ export function MyDealsContent() {
     return list;
   }, [purchases]);
 
+  const filteredListings = useMemo(() => {
+    if (showWithdrawnListings) return myListings;
+    return myListings.filter((c) => c.status !== "withdrawn");
+  }, [myListings, showWithdrawnListings]);
+
+  const withdrawnCount = useMemo(
+    () => myListings.filter((c) => c.status === "withdrawn").length,
+    [myListings],
+  );
+
   // Resume pending share if coming back from OAuth 1.0a
   const hasResumedAuth = useRef(false);
   useEffect(() => {
@@ -341,16 +348,11 @@ export function MyDealsContent() {
 
   if (!hasWallet) {
     return (
-      <main className="flex-1 min-h-[70vh] flex items-center justify-center">
+      <main className="flex-1 min-h-[60dvh] flex items-center justify-center">
         <div className="text-center space-y-6 max-w-md mx-auto px-4">
-          <h1 className="text-2xl sm:text-3xl font-semibold">My Deals</h1>
-          <p className="text-zinc-600 dark:text-zinc-400">
-            {privyAuthenticated
-              ? "Connect a wallet to view your OTC deals and token listings."
-              : "Sign in to view your OTC deals and token listings."}
-          </p>
+          <h1 className="text-2xl sm:text-3xl font-semibold">Sign In to View Your Deals</h1>
           <Button
-            color="orange"
+            color="brand"
             onClick={handleConnect}
             disabled={!privyReady}
             className="!px-8 !py-3 !text-base"
@@ -361,33 +363,25 @@ export function MyDealsContent() {
                 : "Sign In"
               : "Loading..."}
           </Button>
-          <p className="text-xs text-zinc-500 dark:text-zinc-500">
-            Connect with Farcaster, MetaMask, Phantom, or other wallets
-          </p>
         </div>
       </main>
     );
   }
 
-  const hasAnyDeals = myListings.length > 0 || sortedPurchases.length > 0;
+  const hasAnyDeals = filteredListings.length > 0 || sortedPurchases.length > 0 || withdrawnCount > 0;
 
   return (
     <main className="flex-1 px-3 sm:px-4 md:px-6 py-4 sm:py-6">
       <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-xl sm:text-2xl font-semibold">My Deals</h1>
-          <Link href="/consign">
-            <Button className="bg-orange-500 hover:bg-orange-600 !px-4 !py-2 text-white rounded-lg">
-              Create Listing
-            </Button>
-          </Link>
         </div>
 
         {/* Wallet & Network Info Banner */}
         <div className="p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-brand-400 flex items-center justify-center">
                 <span className="text-white text-xs font-bold">
                   {activeFamily === "solana" ? "S" : "E"}
                 </span>
@@ -439,33 +433,36 @@ export function MyDealsContent() {
           <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-8 text-center">
             <h3 className="text-lg font-semibold mb-2">No Deals Yet</h3>
             <p className="text-zinc-600 dark:text-zinc-400 mb-6">
-              Create a listing to sell tokens, or use the chat to buy tokens at a discount.
+              Use the chat to buy tokens at a discount, or create a listing from the header.
             </p>
-            <div className="flex gap-3 justify-center">
-              <Link href="/consign">
-                <Button className="bg-orange-500 hover:bg-orange-600 !px-4 !py-2 text-white rounded-lg">
-                  Create Listing
-                </Button>
-              </Link>
-              <Link href="/">
-                <Button className="bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 !px-4 !py-2 text-zinc-900 dark:text-zinc-100 rounded-lg">
-                  Start Chat
-                </Button>
-              </Link>
-            </div>
+            <Link href="/">
+              <Button color="brand" className="!px-4 !py-2">
+                Start Chat
+              </Button>
+            </Link>
           </div>
         ) : (
           <div className="space-y-6">
             {/* My Listings Section */}
-            {myListings.length > 0 && (
+            {(filteredListings.length > 0 || withdrawnCount > 0) && (
               <div>
-                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                  My Listings
-                  <span className="text-sm font-normal text-zinc-500">({myListings.length})</span>
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-brand-500"></span>
+                    My Listings
+                    <span className="text-sm font-normal text-zinc-500">({filteredListings.length})</span>
+                  </h2>
+                  {withdrawnCount > 0 && (
+                    <button
+                      onClick={() => setShowWithdrawnListings(!showWithdrawnListings)}
+                      className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    >
+                      {showWithdrawnListings ? "Hide" : "Show"} withdrawn ({withdrawnCount})
+                    </button>
+                  )}
+                </div>
                 <div className="space-y-3">
-                  {myListings.map((consignment) => (
+                  {filteredListings.map((consignment) => (
                     <ConsignmentRow
                       key={consignment.id}
                       consignment={consignment}
@@ -495,35 +492,35 @@ export function MyDealsContent() {
                     return (
                       <div
                         key={uniqueKey}
-                        className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 space-y-3"
+                        className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 space-y-3 overflow-hidden"
                       >
                         {/* Token Header */}
-                        <div className="flex items-center gap-3 mb-3 pb-3 border-b border-zinc-200 dark:border-zinc-800">
+                        <div className="flex items-center gap-3 mb-3 pb-3 border-b border-zinc-200 dark:border-zinc-800 min-w-0">
                           {o.tokenLogoUrl ? (
                             <img
                               src={o.tokenLogoUrl}
                               alt={o.tokenSymbol || "Token"}
-                              className="w-8 h-8 rounded-full"
+                              className="w-8 h-8 rounded-full flex-shrink-0"
                               onError={(e) => {
                                 e.currentTarget.style.display = "none";
                               }}
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-xs font-bold">
+                            <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
                               {o.tokenSymbol?.slice(0, 2) || "TK"}
                             </div>
                           )}
-                          <div>
-                            <div className="font-semibold text-sm">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-sm truncate">
                               ${o.tokenSymbol || "TOKEN"}
                             </div>
-                            <div className="text-xs text-zinc-500">
+                            <div className="text-xs text-zinc-500 truncate">
                               {o.tokenName || "Token"} • {o.chain === "solana" ? "Solana" : "Base"}
                             </div>
                           </div>
                         </div>
                         
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                           <div>
                             <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
                               Amount
@@ -546,7 +543,7 @@ export function MyDealsContent() {
                             <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
                               Discount
                             </div>
-                            <span className="inline-flex items-center rounded-full bg-orange-600/15 text-orange-700 dark:text-orange-400 px-2 py-0.5 text-xs font-medium">
+                            <span className="inline-flex items-center rounded-full bg-brand-500/15 text-brand-600 dark:text-brand-400 px-2 py-0.5 text-xs font-medium">
                               {discountPct.toFixed(0)}%
                             </span>
                           </div>
@@ -560,7 +557,7 @@ export function MyDealsContent() {
                                 Ready
                               </span>
                             ) : (
-                              <span className="inline-flex items-center rounded-full bg-amber-600/15 text-amber-700 dark:text-amber-400 px-2 py-0.5 text-xs font-medium">
+                              <span className="inline-flex items-center rounded-full bg-brand-400/15 text-brand-600 dark:text-brand-400 px-2 py-0.5 text-xs font-medium">
                                 Locked ({lockup})
                               </span>
                             )}
@@ -589,7 +586,7 @@ export function MyDealsContent() {
                           </Button>
                           {matured && (
                             <Button
-                              color="orange"
+                              color="brand"
                               disabled={isClaiming}
                               onClick={async () => {
                                 await claim(o.id);

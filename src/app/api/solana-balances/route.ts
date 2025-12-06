@@ -398,7 +398,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Check wallet cache first (30 second TTL) unless force refresh
+  // Check wallet cache first (15 minute TTL) unless force refresh
   if (!forceRefresh) {
     const cachedTokens = await getCachedWalletResponse(walletAddress);
     if (cachedTokens) {
@@ -573,8 +573,13 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Update bulk metadata cache (fire-and-forget)
-      setSolanaMetadataCache(metadata).catch(() => {});
+      // Update bulk metadata cache (merge with existing to handle concurrent requests)
+      getSolanaMetadataCache().then(existing => {
+        const merged = { ...existing, ...metadata };
+        setSolanaMetadataCache(merged).catch((err) =>
+          console.debug("[Solana Balances] Metadata cache write failed:", err)
+        );
+      }).catch(() => {});
     }
 
     console.log(
@@ -623,8 +628,13 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Update bulk price cache (fire-and-forget)
-      setSolanaPriceCache(prices).catch(() => {});
+      // Update bulk price cache (merge with existing to handle concurrent requests)
+      getSolanaPriceCache().then(existing => {
+        const merged = { ...existing, ...prices };
+        setSolanaPriceCache(merged).catch((err) =>
+          console.debug("[Solana Balances] Price cache write failed:", err)
+        );
+      }).catch(() => {});
     }
     console.log(
       `[Solana Balances] Have prices for ${Object.keys(prices).length} tokens`,

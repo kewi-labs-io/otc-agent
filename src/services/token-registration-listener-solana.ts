@@ -181,29 +181,3 @@ export async function backfillSolanaEvents(signatures?: string[]) {
   console.log("[Solana Backfill] ✅ Backfill complete");
 }
 
-/**
- * Helper: Fetch SPL token metadata
- */
-// async function fetchSPLTokenMetadata(mintAddress: string) {
-//   if (!connection) {
-//     throw new Error("Connection not initialized");
-//   }
-//
-//   try {
-//     const mint = new PublicKey(mintAddress);
-//     const mintInfo = await connection.getParsedAccountInfo(mint);
-//
-//     if (mintInfo.value && "parsed" in mintInfo.value.data) {
-//       const parsed = mintInfo.value.data.parsed;
-//       return {
-//         decimals: parsed.info.decimals,
-//         supply: parsed.info.supply,
-//       };
-//     }
-//
-//     return null;
-//   } catch (error) {
-//     console.error("Failed to fetch SPL token metadata:", error);
-//     return null;
-//   }
-// }

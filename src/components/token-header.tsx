@@ -11,7 +11,7 @@ interface TokenHeaderProps {
 export function TokenHeader({ token, marketData }: TokenHeaderProps) {
   const priceChange = marketData?.priceChange24h || 0;
   const priceChangeColor =
-    priceChange >= 0 ? "text-orange-600" : "text-red-600";
+    priceChange >= 0 ? "text-brand-500" : "text-red-600";
 
   const formatMarketCap = (mc: number) => {
     if (mc >= 1e9) return `$${(mc / 1e9).toFixed(2)}B`;

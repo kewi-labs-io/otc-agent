@@ -443,6 +443,16 @@ export async function POST(request: NextRequest) {
   // Validate that the offer price hasn't diverged too much from market price
   // This prevents abuse from stale quotes or manipulated pool prices
   const MAX_PRICE_DIVERGENCE_BPS = 1000; // 10% maximum divergence
+  
+  // Skip price validation for local development (Anvil has mock prices)
+  const isLocalNetwork = process.env.NEXT_PUBLIC_NETWORK === "localhost" || 
+                         process.env.NEXT_PUBLIC_NETWORK === "anvil" ||
+                         process.env.NETWORK === "localhost" ||
+                         process.env.NETWORK === "anvil";
+  
+  if (isLocalNetwork) {
+    console.log("[Approve API] Skipping price validation on local network");
+  }
 
   try {
     const { checkPriceDivergence } = await import("@/utils/price-validator");
@@ -527,8 +537,8 @@ export async function POST(request: NextRequest) {
           warning: priceCheck.warning,
         });
 
-        // Reject if divergence exceeds threshold
-        if (priceCheck.divergencePercent > MAX_PRICE_DIVERGENCE_BPS / 100) {
+        // Reject if divergence exceeds threshold (skip on local network)
+        if (priceCheck.divergencePercent > MAX_PRICE_DIVERGENCE_BPS / 100 && !isLocalNetwork) {
           return NextResponse.json(
             {
               success: false,
@@ -543,6 +553,8 @@ export async function POST(request: NextRequest) {
             },
             { status: 400 },
           );
+        } else if (isLocalNetwork && priceCheck.divergencePercent > MAX_PRICE_DIVERGENCE_BPS / 100) {
+          console.log("[Approve API] Skipping price rejection on local network (divergence:", priceCheck.divergencePercent, "%)");
         }
       } else {
         console.log("[Approve API] Price validation passed:", {

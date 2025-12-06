@@ -3,7 +3,6 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   LinkIcon,
-  UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import clsx from "clsx";
 import Image from "next/image";
@@ -22,6 +21,8 @@ interface ChatMessageProps {
   citations?: Citation[];
   followUpPrompts?: string[];
   onFollowUpClick?: (prompt: string) => void;
+  assistantAvatarUrl?: string;
+  assistantName?: string;
 }
 
 export const ChatMessage = memo(function ChatMessage({
@@ -30,6 +31,8 @@ export const ChatMessage = memo(function ChatMessage({
   citations,
   followUpPrompts,
   onFollowUpClick,
+  assistantAvatarUrl,
+  assistantName = "Eliza",
 }: ChatMessageProps) {
   const [isSourcesExpanded, setIsSourcesExpanded] = useState(false);
 
@@ -97,8 +100,8 @@ export const ChatMessage = memo(function ChatMessage({
                 "inline-flex items-center justify-center",
                 "align-super text-[0.6em] font-normal",
                 "no-underline rounded-sm",
-                "text-[#ff8c00]",
-                "hover:text-[#cc7000]",
+                "text-brand-500",
+                "hover:text-brand-700",
                 "py-0.5",
                 "leading-none",
               ])}
@@ -173,13 +176,13 @@ export const ChatMessage = memo(function ChatMessage({
         )}
       >
         {!isUser && (
-          <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center overflow-hidden">
+          <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center overflow-hidden rounded-full">
             <Image
-              src="/tokens/eliza.svg"
-              alt="Eliza"
+              src={assistantAvatarUrl || "/tokens/eliza.svg"}
+              alt={assistantName}
               width={48}
               height={48}
-              className="object-contain"
+              className="object-cover w-full h-full rounded-full"
               unoptimized
             />
           </div>
@@ -267,8 +270,15 @@ export const ChatMessage = memo(function ChatMessage({
         </div>
 
         {isUser && (
-          <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center">
-            <UserCircleIcon className="w-12 h-12 text-white" />
+          <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center overflow-hidden rounded-full">
+            <Image
+              src="/user.png"
+              alt="You"
+              width={48}
+              height={48}
+              className="object-cover w-full h-full rounded-full"
+              unoptimized
+            />
           </div>
         )}
       </div>

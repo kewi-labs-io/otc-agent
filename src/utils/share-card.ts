@@ -1,3 +1,11 @@
+// Theme colors for canvas drawing
+const COLORS = {
+  BACKGROUND: "#1a1a1a",
+  WHITE: "#ffffff",
+  BRAND_PRIMARY: "#F75B1E",
+  BLUE_ACCENT: "#60a5fa",
+} as const;
+
 // Load and cache the business image
 let businessImageCache: HTMLImageElement | null = null;
 
@@ -34,7 +42,7 @@ export async function createDealShareImage(args: {
   if (!ctx) throw new Error("Canvas not supported");
 
   // Background
-  ctx.fillStyle = "#333333";
+  ctx.fillStyle = COLORS.BACKGROUND;
   ctx.fillRect(0, 0, width, height);
 
   // Accent gradient
@@ -54,28 +62,28 @@ export async function createDealShareImage(args: {
   ctx.drawImage(businessImg, width - imgWidth * 0.8, 0, imgWidth, imgHeight);
 
   // Title
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = COLORS.WHITE;
   ctx.font = "bold 64px Inter, Arial, sans-serif";
   ctx.fillText("OTC DEAL", 60, 120);
 
   // Main numbers - split amount and ticker for different colors
   ctx.font = "bold 92px Inter, Arial, sans-serif";
   const amountNumber = `${tokenAmount.toLocaleString()} `;
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = COLORS.WHITE;
   ctx.fillText(amountNumber, 60, 260);
 
   // Measure the number text to position the ticker next to it
   const numberWidth = ctx.measureText(amountNumber).width;
-  ctx.fillStyle = "#60a5fa"; // Nice blue for the token ticker
+  ctx.fillStyle = COLORS.BLUE_ACCENT;
   ctx.fillText("tokens", 60 + numberWidth + 20, 260);
 
-  // Discount in orange
+  // Discount in brand orange
   ctx.font = "bold 60px Inter, Arial, sans-serif";
   const discount = (discountBps / 100).toFixed(0);
-  ctx.fillStyle = "#fb923c"; // Orange color
+  ctx.fillStyle = COLORS.BRAND_PRIMARY;
   ctx.fillText(`${discount}% discount`, 60, 350);
 
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = COLORS.WHITE;
   ctx.font = "48px Inter, Arial, sans-serif";
   ctx.fillText(
     `Lockup: ${Math.max(1, Math.round(lockupMonths))} months`,

@@ -438,7 +438,7 @@ export function TokenSelectionStep({
             : "Sign in to list your tokens"}
         </p>
         <Button
-          color="orange"
+          color="brand"
           onClick={handleConnect}
           disabled={!privyReady}
           className="!px-8 !py-3"
@@ -449,9 +449,6 @@ export function TokenSelectionStep({
               : "Sign In"
             : "Loading..."}
         </Button>
-        <p className="text-xs text-zinc-500 dark:text-zinc-500">
-          Connect with Farcaster, MetaMask, Phantom, or other wallets
-        </p>
       </div>
     );
   }
@@ -459,7 +456,7 @@ export function TokenSelectionStep({
   if (loading) {
     return (
       <div className="text-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500 mx-auto mb-4" />
         <p className="text-zinc-600 dark:text-zinc-400">
           Loading your tokens...
         </p>
@@ -487,7 +484,7 @@ export function TokenSelectionStep({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col h-full min-h-0 space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
           Select a token to list for OTC trading ({tokens.length} tokens)
@@ -513,7 +510,7 @@ export function TokenSelectionStep({
           placeholder="Search by name, symbol, or address..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-10 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
+          className="w-full pl-10 pr-10 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
         />
         {searchQuery && (
           <button
@@ -541,9 +538,9 @@ export function TokenSelectionStep({
               </p>
               <div
                 onClick={() => handleTokenClick(searchedToken)}
-                className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] hover:shadow-md border-orange-300 dark:border-orange-700 bg-orange-500/5 ${
+                className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] hover:shadow-md border-brand-300 dark:border-brand-700 bg-brand-500/5 ${
                   formData.tokenId === searchedToken.id
-                    ? "ring-2 ring-orange-500/20"
+                    ? "ring-2 ring-brand-500/20"
                     : ""
                 }`}
               >
@@ -554,10 +551,10 @@ export function TokenSelectionStep({
                       alt={searchedToken.symbol}
                       width={44}
                       height={44}
-                      className="w-11 h-11 rounded-full ring-2 ring-orange-200 dark:ring-orange-800"
+                      className="w-11 h-11 rounded-full ring-2 ring-brand-200 dark:ring-brand-800"
                     />
                   ) : (
-                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center">
+                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-brand-400 to-brand-500 flex items-center justify-center">
                       <span className="text-white font-bold text-lg">
                         {searchedToken.symbol.charAt(0)}
                       </span>
@@ -568,7 +565,7 @@ export function TokenSelectionStep({
                       <div className="font-semibold text-zinc-900 dark:text-zinc-100">
                         {searchedToken.symbol}
                       </div>
-                      <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 px-2 py-0.5 rounded-full">
+                      <span className="text-xs bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 px-2 py-0.5 rounded-full">
                         {searchedToken.chain}
                       </span>
                     </div>
@@ -580,7 +577,7 @@ export function TokenSelectionStep({
                       {searchedToken.contractAddress.slice(-6)}
                     </div>
                   </div>
-                  <div className="ml-2 text-orange-500">
+                  <div className="ml-2 text-brand-500">
                     <svg
                       className="w-5 h-5"
                       fill="none"
@@ -599,7 +596,7 @@ export function TokenSelectionStep({
               </div>
             </div>
           ) : addressSearchError ? (
-            <p className="text-sm text-amber-600 dark:text-amber-400 text-center py-4">
+            <p className="text-sm text-brand-600 dark:text-brand-400 text-center py-4">
               {addressSearchError === "Token not found"
                 ? `No token found at ${searchQuery.slice(0, 8)}...${searchQuery.slice(-4)}`
                 : addressSearchError}
@@ -632,15 +629,15 @@ export function TokenSelectionStep({
         </div>
       )}
 
-      <div className="max-h-[55vh] overflow-y-auto space-y-3 pr-1 -mr-1">
+      <div className="flex-1 min-h-0 max-h-[45dvh] sm:max-h-[55dvh] overflow-y-auto space-y-3 pr-1 -mr-1">
         {filteredTokens.map((token) => (
           <div
             key={token.id}
             onClick={() => handleTokenClick(token)}
             className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] hover:shadow-md ${
               formData.tokenId === token.id
-                ? "border-orange-500 bg-orange-500/5 ring-2 ring-orange-500/20"
-                : "border-zinc-200 dark:border-zinc-700 hover:border-orange-300 dark:hover:border-orange-700"
+                ? "border-brand-500 bg-brand-500/5 ring-2 ring-brand-500/20"
+                : "border-zinc-200 dark:border-zinc-700 hover:border-brand-300 dark:hover:border-brand-700"
             }`}
           >
             <div className="flex items-center gap-3">
@@ -653,7 +650,7 @@ export function TokenSelectionStep({
                   className="w-11 h-11 rounded-full ring-2 ring-zinc-100 dark:ring-zinc-800"
                 />
               ) : (
-                <div className="w-11 h-11 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center">
+                <div className="w-11 h-11 rounded-full bg-gradient-to-br from-brand-400 to-brand-500 flex items-center justify-center">
                   <span className="text-white font-bold text-lg">
                     {token.symbol.charAt(0)}
                   </span>
@@ -682,7 +679,7 @@ export function TokenSelectionStep({
                   {token.contractAddress.slice(-4)}
                 </div>
               </div>
-              <div className="ml-2 text-orange-500">
+              <div className="ml-2 text-brand-500">
                 <svg
                   className="w-5 h-5"
                   fill="none"

@@ -2,8 +2,6 @@ import * as Headless from "@headlessui/react";
 import clsx from "clsx";
 import type React from "react";
 
-import { Text } from "@/components/text";
-
 const sizes = {
   xs: "sm:max-w-xs",
   sm: "sm:max-w-sm",
@@ -38,11 +36,11 @@ export function Dialog({
       )}
 
       {variant === "modal" ? (
-        <div className="fixed inset-0 z-50 isolate w-screen overflow-y-auto pt-6 sm:pt-0">
-          <div className="flex min-h-full items-center justify-center sm:p-4">
+        <div className="fixed inset-0 z-50 isolate w-screen overflow-y-auto pt-2 pb-2 sm:pt-0 sm:pb-0">
+          <div className="flex min-h-full items-center justify-center p-2 sm:p-4">
             <Headless.DialogPanel
               transition
-              className={clsx(className, sizes[size], "w-full")}
+              className={clsx(className, sizes[size], "w-full max-h-[calc(100dvh-16px)] sm:max-h-[calc(100dvh-32px)] overflow-y-auto")}
             >
               {children}
             </Headless.DialogPanel>
@@ -53,7 +51,7 @@ export function Dialog({
           transition
           className={clsx(
             className,
-            "fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-white dark:bg-black transition duration-300 ease-in-out data-[closed]:translate-x-full",
+            "fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-white dark:bg-surface transition duration-300 ease-in-out data-[closed]:translate-x-full",
             "sm:max-w-sm",
           )}
         >
@@ -61,61 +59,5 @@ export function Dialog({
         </Headless.DialogPanel>
       )}
     </Headless.Dialog>
-  );
-}
-
-export function DialogTitle({
-  className,
-  ...props
-}: { className?: string } & Omit<
-  Headless.DialogTitleProps,
-  "as" | "className"
->) {
-  return (
-    <Headless.DialogTitle
-      {...props}
-      className={clsx(
-        className,
-        "text-balance text-lg/6 font-semibold text-zinc-950 sm:text-base/6 dark:text-white",
-      )}
-    />
-  );
-}
-
-export function DialogDescription({
-  className,
-  ...props
-}: { className?: string } & Omit<
-  Headless.DescriptionProps<typeof Text>,
-  "as" | "className"
->) {
-  return (
-    <Headless.Description
-      as={Text}
-      {...props}
-      className={clsx(className, "mt-2 text-pretty")}
-    />
-  );
-}
-
-export function DialogBody({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
-  return <div {...props} className={clsx(className, "mt-6")} />;
-}
-
-export function DialogActions({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
-  return (
-    <div
-      {...props}
-      className={clsx(
-        className,
-        "mt-8 flex flex-col-reverse items-center justify-end gap-3 *:w-full sm:flex-row sm:*:w-auto",
-      )}
-    />
   );
 }

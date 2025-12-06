@@ -97,7 +97,7 @@ export function ReviewStep({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto space-y-6">
       {/* Header */}
       <div className="text-center pb-4 border-b border-zinc-200 dark:border-zinc-700">
         <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
@@ -107,8 +107,8 @@ export function ReviewStep({
       </div>
 
       {/* Token Info */}
-      <div className="flex items-center gap-3 p-4 rounded-xl bg-gradient-to-br from-orange-500/10 to-amber-500/10 border border-orange-500/20">
-        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center">
+      <div className="flex items-center gap-3 p-4 rounded-xl bg-gradient-to-br from-brand-500/10 to-brand-400/10 border border-brand-500/20">
+        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-400 to-brand-500 flex items-center justify-center">
           <span className="text-white font-bold text-lg">
             {selectedTokenSymbol.charAt(0)}
           </span>
@@ -180,20 +180,11 @@ export function ReviewStep({
           </>
         )}
 
-        {formData.isFractionalized && (
-          <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-            <span className="text-zinc-600 dark:text-zinc-400">Deal Size</span>
-            <span className="font-medium text-zinc-900 dark:text-zinc-100">
-              {formatAmount(formData.minDealAmount)} – {formatAmount(formData.maxDealAmount)}{" "}
-              {selectedTokenSymbol}
-            </span>
-          </div>
-        )}
-
         <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-          <span className="text-zinc-600 dark:text-zinc-400">Fractionalized</span>
+          <span className="text-zinc-600 dark:text-zinc-400">Deal Size Range</span>
           <span className="font-medium text-zinc-900 dark:text-zinc-100">
-            {formData.isFractionalized ? "Yes" : "No"}
+            {formatAmount(formData.minDealAmount)} – {formatAmount(formData.maxDealAmount)}{" "}
+            {selectedTokenSymbol}
           </span>
         </div>
 
@@ -217,7 +208,8 @@ export function ReviewStep({
       <div className="flex gap-3 pt-4">
         <Button
           onClick={onBack}
-          className="flex items-center gap-2 px-6 py-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl transition-colors"
+          color="dark"
+          className="flex items-center gap-2 px-6 py-3"
         >
           <ArrowLeft className="w-4 h-4" />
           Back
@@ -226,11 +218,8 @@ export function ReviewStep({
           <Button
             onClick={onConnect}
             disabled={!privyReady}
-            className={`flex-1 py-3 text-white font-medium rounded-xl ${
-              requiredChain === "solana"
-                ? "bg-gradient-to-br from-[#9945FF] to-[#14F195] hover:opacity-90"
-                : "bg-gradient-to-br from-blue-600 to-blue-800 hover:opacity-90"
-            }`}
+            color={requiredChain === "solana" ? "purple" as const : "blue" as const}
+            className="flex-1 py-3"
           >
             {privyReady
               ? `Connect ${requiredChain === "solana" ? "Solana" : "EVM"} Wallet`
@@ -239,7 +228,8 @@ export function ReviewStep({
         ) : (
           <Button
             onClick={handleProceed}
-            className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-xl transition-colors"
+            color="brand"
+            className="flex-1 py-3"
           >
             Create Listing
           </Button>

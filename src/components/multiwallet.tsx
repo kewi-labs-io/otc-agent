@@ -181,6 +181,9 @@ export function MultiWalletProvider({
 
   // === User preference state ===
   // Persisted to localStorage to remember user's chain choice across sessions
+  // Use ref to track if we've initialized to avoid re-running initialization logic
+  const preferenceInitializedRef = useRef(false);
+  
   const [preferredFamily, setPreferredFamily] = useState<ChainFamily | null>(
     () => {
       if (typeof window === "undefined") return null;
@@ -192,80 +195,69 @@ export function MultiWalletProvider({
   const [selectedEVMChain, setSelectedEVMChainState] =
     useState<EVMChain>("base");
 
-  // Persist preference to localStorage
+  // Combined effect for localStorage persistence and listening
+  // Consolidated to prevent cascading state updates
+  // Track preferredFamily in a ref to avoid stale closures in event handlers
+  const preferredFamilyRef = useRef(preferredFamily);
+  preferredFamilyRef.current = preferredFamily;
+
+  // Persist preference to localStorage - separate effect to avoid loop
   useEffect(() => {
-    if (preferredFamily) {
+    if (preferredFamily && typeof window !== "undefined") {
       localStorage.setItem("otc-preferred-chain", preferredFamily);
     }
   }, [preferredFamily]);
 
-  // Listen for localStorage changes (from PrivyProvider onSuccess callback)
+  // Set up event listeners - only once on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const handleStorageChange = () => {
-      const saved = localStorage.getItem("otc-preferred-chain");
+    // Only set up listeners - don't check localStorage here as initial state handles that
+    const handleStorageChange = (e: StorageEvent) => {
+      // Only respond to actual storage events from other tabs/windows
+      if (e.key !== "otc-preferred-chain") return;
+      const saved = e.newValue;
       if (saved === "evm" || saved === "solana") {
-        if (saved !== preferredFamily) {
-          console.log(
-            "[MultiWallet] Preference changed via localStorage:",
-            saved,
-          );
-          setPreferredFamily(saved);
-        }
+        setPreferredFamily(saved);
       }
     };
 
-    // Check on mount in case it was set before this component mounted
-    handleStorageChange();
+    const handleCustomEvent = () => {
+      const saved = localStorage.getItem("otc-preferred-chain");
+      // Use ref to compare to avoid triggering unnecessarily
+      if ((saved === "evm" || saved === "solana") && saved !== preferredFamilyRef.current) {
+        setPreferredFamily(saved);
+      }
+    };
 
-    // Listen for storage events (from other tabs or from parent components)
     window.addEventListener("storage", handleStorageChange);
-
-    // Also listen for custom event from same window
-    const handleCustomEvent = () => handleStorageChange();
     window.addEventListener("otc-chain-preference-changed", handleCustomEvent);
 
     return () => {
       window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener(
-        "otc-chain-preference-changed",
-        handleCustomEvent,
-      );
+      window.removeEventListener("otc-chain-preference-changed", handleCustomEvent);
     };
-  }, [preferredFamily]);
+  }, []); // Empty deps - listeners set up once
 
   // Auto-set preference when user connects a wallet for the first time after login
-  // This ensures that connecting with EVM sets EVM as preferred, and vice versa
+  // Using a ref to ensure this only runs once per session
   useEffect(() => {
-    // Only run if authenticated but no preference set yet
-    if (!privyAuthenticated || preferredFamily) return;
+    // Skip if preference already set or not authenticated
+    if (preferredFamily || !privyAuthenticated) return;
+    // Skip if we've already tried to initialize this session
+    if (preferenceInitializedRef.current) return;
 
-    // Check what's actually in the PRIVY wallets array (not linked accounts or wagmi)
-    // This reflects what the user just connected with
+    // Mark as initialized to prevent re-running
+    preferenceInitializedRef.current = true;
+
+    // Determine preference based on connected wallets
     // Check Solana FIRST since it's explicit (user chose Solana wallet)
     if (privySolanaWallet) {
-      console.log(
-        "[MultiWallet] Setting preference to Solana (privy solana wallet detected)",
-      );
       setPreferredFamily("solana");
-    } else if (privyEvmWallet) {
-      console.log(
-        "[MultiWallet] Setting preference to EVM (privy evm wallet detected)",
-      );
-      setPreferredFamily("evm");
-    } else if (isWagmiConnected) {
-      // Wagmi connection without privy wallet means external wallet
-      console.log("[MultiWallet] Setting preference to EVM (wagmi connected)");
+    } else if (privyEvmWallet || isWagmiConnected) {
       setPreferredFamily("evm");
     }
-  }, [
-    privyAuthenticated,
-    preferredFamily,
-    isWagmiConnected,
-    privyEvmWallet,
-    privySolanaWallet,
-  ]);
+  }, [privyAuthenticated, preferredFamily, isWagmiConnected, privyEvmWallet, privySolanaWallet]);
 
   // === Derived active family ===
   // Single source of truth: derived from connection state + preference
@@ -308,16 +300,22 @@ export function MultiWalletProvider({
   ]);
 
   // === Environment detection ===
+  // Use refs to ensure these only run once
+  const envDetectionRef = useRef(false);
+  const farcasterAutoConnectRef = useRef(false);
+  
   const [isFarcasterContext, setIsFarcasterContext] = useState(false);
   const [isPhantomInstalled, setIsPhantomInstalled] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || envDetectionRef.current) return;
+    envDetectionRef.current = true;
 
-    // Detect Phantom
+    // Detect Phantom - check immediately and once after delay
     const checkPhantom = () => {
       const phantomWindow = window as PhantomWindow;
-      setIsPhantomInstalled(!!phantomWindow.phantom?.solana?.isPhantom);
+      const hasPhantom = !!phantomWindow.phantom?.solana?.isPhantom;
+      setIsPhantomInstalled((prev) => prev !== hasPhantom ? hasPhantom : prev);
     };
     checkPhantom();
     const timer = setTimeout(checkPhantom, 1000);
@@ -332,31 +330,41 @@ export function MultiWalletProvider({
               miniappSdk.actions.ready();
             }
           })
-          .catch(() => setIsFarcasterContext(false));
+          .catch(() => {/* Not in Farcaster context */});
       })
-      .catch(() => setIsFarcasterContext(false));
+      .catch(() => {/* SDK not available */});
 
     return () => clearTimeout(timer);
   }, []);
 
   // === Farcaster auto-connect ===
   useEffect(() => {
+    // Guard against multiple executions
+    if (farcasterAutoConnectRef.current) return;
     if (!isFarcasterContext || isWagmiConnected || !connectors?.length) return;
 
     const farcasterConnector = connectors.find(
       (c) => c.id === "farcasterMiniApp" || c.id === "farcasterFrame",
     );
     if (farcasterConnector) {
+      farcasterAutoConnectRef.current = true;
       connectWagmi({ connector: farcasterConnector });
     }
   }, [isFarcasterContext, isWagmiConnected, connectors, connectWagmi]);
 
   // === Solana wallet adapter ===
+  // Track current wallet address to avoid recreating adapter unnecessarily
+  const solanaWalletAddressRef = useRef<string | null>(null);
   const [solanaWalletAdapter, setSolanaWalletAdapter] =
     useState<SolanaWalletAdapter | null>(null);
 
   useEffect(() => {
     let mounted = true;
+    const currentAddress = privySolanaWallet?.address ?? null;
+    
+    // Skip if wallet address hasn't changed
+    if (solanaWalletAddressRef.current === currentAddress) return;
+    solanaWalletAddressRef.current = currentAddress;
 
     async function createAdapter() {
       if (!solanaWalletRaw) {
@@ -386,7 +394,7 @@ export function MultiWalletProvider({
     return () => {
       mounted = false;
     };
-  }, [solanaWalletRaw]);
+  }, [solanaWalletRaw, privySolanaWallet?.address]);
 
   // === Action handlers ===
   const setActiveFamily = useCallback((family: ChainFamily) => {

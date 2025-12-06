@@ -7,6 +7,13 @@ import {
   type Chain,
 } from "viem/chains";
 
+// Anvil chain with correct chain ID (31337)
+const anvil: Chain = {
+  ...localhost,
+  id: 31337,
+  name: "Anvil",
+};
+
 /**
  * Get the appropriate chain based on environment and configuration
  * Supports: Base, BSC, Anvil/localhost
@@ -20,7 +27,7 @@ export function getChain(): Chain {
   // Handle unified network names
   if (network === "mainnet") return base;
   if (network === "testnet") return baseSepolia;
-  if (network === "local" || network === "localnet") return localhost;
+  if (network === "local" || network === "localnet") return anvil;
 
   // Handle chain-specific network names
   switch (network) {
@@ -34,7 +41,7 @@ export function getChain(): Chain {
       return bscTestnet;
     case "localhost":
     case "anvil":
-      return localhost;
+      return anvil;
     default:
       // Default to Base Sepolia (testnet)
       return baseSepolia;
@@ -83,16 +90,3 @@ export function getRpcUrl(): string {
   }
 }
 
-/**
- * Check if current network is local (Anvil/localhost)
- */
-export function isLocalNetwork(): boolean {
-  const network =
-    process.env.NEXT_PUBLIC_NETWORK || process.env.NETWORK || "testnet";
-  return (
-    network === "local" ||
-    network === "localnet" ||
-    network === "localhost" ||
-    network === "anvil"
-  );
-}

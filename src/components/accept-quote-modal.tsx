@@ -85,8 +85,28 @@ function loadCachedTokenMetadata(chain: string, symbol: string): TokenMetadata |
   return null;
 }
 
-// Contract bytecode cache - keyed by address, stores whether contract exists
-const contractExistsCache = new Map<string, boolean>();
+// Contract bytecode cache - keyed by address, stores whether contract exists with TTL
+// TTL of 5 minutes allows for contract deployment during development
+const CONTRACT_CACHE_TTL_MS = 5 * 60 * 1000;
+interface ContractCacheEntry {
+  exists: boolean;
+  cachedAt: number;
+}
+const contractExistsCache = new Map<string, ContractCacheEntry>();
+
+function getContractExists(key: string): boolean | null {
+  const entry = contractExistsCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.cachedAt >= CONTRACT_CACHE_TTL_MS) {
+    contractExistsCache.delete(key);
+    return null;
+  }
+  return entry.exists;
+}
+
+function setContractExists(key: string, exists: boolean): void {
+  contractExistsCache.set(key, { exists, cachedAt: Date.now() });
+}
 
 // --- Consolidated Modal State ---
 interface ModalState {
@@ -408,41 +428,40 @@ export function AcceptQuoteModal({
 
       const cacheKey = `${otcAddress}:${readChain.id}`;
       
-      // Check cache first
-      if (contractExistsCache.has(cacheKey)) {
-        const exists = contractExistsCache.get(cacheKey)!;
-        dispatch({ type: "SET_CONTRACT_VALID", payload: exists });
-        if (!exists) {
+      // Check cache first (with TTL)
+      const cachedExists = getContractExists(cacheKey);
+      if (cachedExists !== null) {
+        dispatch({ type: "SET_CONTRACT_VALID", payload: cachedExists });
+        if (!cachedExists) {
           dispatch({
             type: "SET_ERROR",
             payload: "Contract not found. Ensure Anvil node is running and contracts are deployed.",
           });
-          return;
         }
-      } else {
-        // Check if contract has code at this address
-        const code = await publicClient.getBytecode({
-          address: otcAddress as `0x${string}`,
-        });
-
-        const exists = Boolean(code && code !== "0x");
-        contractExistsCache.set(cacheKey, exists);
-
-        if (!exists) {
-          console.error(
-            `[AcceptQuote] No contract at ${otcAddress} on ${readChain.name}.`,
-          );
-          dispatch({ type: "SET_CONTRACT_VALID", payload: false });
-          dispatch({
-            type: "SET_ERROR",
-            payload:
-              "Contract not found. Ensure Anvil node is running and contracts are deployed.",
-          });
-          return;
-        }
-
-        dispatch({ type: "SET_CONTRACT_VALID", payload: true });
+        return;
       }
+
+      // Check if contract has code at this address
+      const code = await publicClient.getBytecode({
+        address: otcAddress as `0x${string}`,
+      });
+
+      const exists = Boolean(code && code !== "0x");
+      setContractExists(cacheKey, exists);
+
+      if (!exists) {
+        console.error(
+          `[AcceptQuote] No contract at ${otcAddress} on ${readChain.name}.`,
+        );
+        dispatch({ type: "SET_CONTRACT_VALID", payload: false });
+        dispatch({
+          type: "SET_ERROR",
+          payload: "Contract not found. Ensure Anvil node is running and contracts are deployed.",
+        });
+        return;
+      }
+
+      dispatch({ type: "SET_CONTRACT_VALID", payload: true });
 
       // Read contract state (this changes rarely, but should still be fresh)
       // Use type assertion to bypass viem's strict authorizationList requirement
@@ -1356,7 +1375,7 @@ export function AcceptQuoteModal({
         size="3xl"
         data-testid="accept-quote-modal"
       >
-        <div className="w-full max-w-[720px] mx-auto p-0 overflow-hidden rounded-2xl bg-zinc-950 text-white ring-1 ring-white/10">
+        <div className="w-full max-w-[720px] mx-auto p-0 rounded-2xl bg-zinc-950 text-white ring-1 ring-white/10 max-h-[95dvh] overflow-y-auto">
           {/* Chain Mismatch Warning */}
           {isChainMismatch && (
             <div className="bg-yellow-500/10 border-b border-yellow-500/20 p-4">
@@ -1386,7 +1405,7 @@ export function AcceptQuoteModal({
                           quoteChain === "solana" ? "solana" : "evm",
                         )
                       }
-                      className={`!h-8 !px-3 !text-xs ${quoteChain === "solana" ? "bg-gradient-to-br from-[#9945FF] to-[#14F195]" : "bg-gradient-to-br from-blue-600 to-blue-800"} hover:brightness-110`}
+                      className={`!h-8 !px-3 !text-xs ${quoteChain === "solana" ? "bg-gradient-to-br from-solana-purple to-solana-green" : "bg-gradient-to-br from-blue-600 to-blue-800"} hover:brightness-110`}
                     >
                       <div className="flex items-center gap-2">
                         {quoteChain === "solana" ? (
@@ -1400,7 +1419,8 @@ export function AcceptQuoteModal({
                     </Button>
                     <Button
                       onClick={onClose}
-                      className="!h-8 !px-3 !text-xs bg-zinc-800 hover:bg-zinc-700"
+                      color="dark"
+                      className="!h-8 !px-3 !text-xs"
                     >
                       Cancel
                     </Button>
@@ -1449,7 +1469,7 @@ export function AcceptQuoteModal({
                 </span>
                 <button
                   type="button"
-                  className="text-orange-400 hover:text-orange-300 font-medium"
+                  className="text-brand-400 hover:text-brand-300 font-medium"
                   onClick={handleMaxClick}
                 >
                   MAX
@@ -1480,11 +1500,11 @@ export function AcceptQuoteModal({
                         onError={(e) => {
                           // Fallback to symbol if image fails
                           e.currentTarget.style.display = 'none';
-                          e.currentTarget.parentElement!.innerHTML = `<span class="text-orange-400 text-sm font-bold">${tokenMetadata?.symbol?.slice(0, 2) || '₣'}</span>`;
+                          e.currentTarget.parentElement!.innerHTML = `<span class="text-brand-400 text-sm font-bold">${tokenMetadata?.symbol?.slice(0, 2) || '₣'}</span>`;
                         }}
                       />
                     ) : (
-                      <span className="text-orange-400 text-sm font-bold">
+                      <span className="text-brand-400 text-sm font-bold">
                         {initialQuote?.tokenSymbol?.slice(0, 2) || "₣"}
                       </span>
                     )}
@@ -1510,7 +1530,7 @@ export function AcceptQuoteModal({
                   onChange={(e) =>
                     setTokenAmount(clampAmount(Number(e.target.value)))
                   }
-                  className="w-full accent-orange-500"
+                  className="w-full accent-brand-500"
                 />
               </div>
             </div>
@@ -1580,7 +1600,7 @@ export function AcceptQuoteModal({
             <div className="px-3 sm:px-5 pb-4 sm:pb-5">
               <div className="rounded-xl overflow-hidden ring-1 ring-white/10 bg-zinc-900">
                 <div className="relative">
-                  <div className="relative aspect-[16/9] w-full bg-gradient-to-br from-zinc-900 to-zinc-800">
+                  <div className="relative min-h-[200px] sm:min-h-[280px] w-full bg-gradient-to-br from-zinc-900 to-zinc-800 py-6 sm:py-8">
                     <div
                       aria-hidden
                       className="absolute inset-0 opacity-30 bg-no-repeat bg-right-bottom"
@@ -1600,12 +1620,12 @@ export function AcceptQuoteModal({
                       <Button
                         onClick={handleConnect}
                         disabled={!privyReady}
-                        color="orange"
-                        className="!px-8 !py-3 !text-lg"
+                        color="brand"
+                        className="!px-6 sm:!px-8 !py-2 sm:!py-3 !text-base sm:!text-lg"
                       >
                         {privyReady ? "Connect Wallet" : "Loading..."}
                       </Button>
-                      <p className="text-xs text-zinc-500 mt-4">
+                      <p className="text-xs text-zinc-500 mt-3 sm:mt-4">
                         Supports Farcaster, MetaMask, Phantom, Coinbase Wallet &
                         more
                       </p>
@@ -1634,7 +1654,6 @@ export function AcceptQuoteModal({
                 <Button
                   onClick={onClose}
                   color="dark"
-                  className="bg-zinc-800 text-white border-zinc-700"
                 >
                   <div className="px-3 sm:px-4 py-2">Cancel</div>
                 </Button>
@@ -1645,15 +1664,15 @@ export function AcceptQuoteModal({
               <Button
                 onClick={onClose}
                 color="dark"
-                className="bg-zinc-800 text-white border-zinc-700 w-full sm:w-auto"
+                className="w-full sm:w-auto"
               >
                 <div className="px-4 py-2">Cancel</div>
               </Button>
               <Button
                 data-testid="confirm-amount-button"
                 onClick={handleConfirm}
-                color="orange"
-                className="bg-orange-600 border-orange-700 hover:brightness-110 w-full sm:w-auto"
+                color="brand"
+                className="w-full sm:w-auto"
                 disabled={
                   Boolean(validationError) ||
                   insufficientFunds ||
@@ -1666,9 +1685,7 @@ export function AcceptQuoteModal({
                     : undefined
                 }
               >
-                <div className="px-4 py-2">
-                  {isSolanaActive ? "Buy Now" : "Buy Now"}
-                </div>
+                <div className="px-4 py-2">Buy Now</div>
               </Button>
             </div>
           ) : null}
@@ -1677,7 +1694,7 @@ export function AcceptQuoteModal({
           {step === "creating" && (
             <div className="px-5 pb-6">
               <div className="text-center py-6">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-500 mx-auto mb-4"></div>
                 <h3 className="font-semibold mb-2">Creating Offer</h3>
                 <p className="text-sm text-zinc-400">
                   Confirm the transaction in your wallet to create your offer
@@ -1743,7 +1760,7 @@ export function AcceptQuoteModal({
                     href={`https://basescan.org/tx/${completedTxHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-orange-400 hover:text-orange-300 mt-3"
+                    className="inline-flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300 mt-3"
                   >
                     View transaction ↗
                   </a>

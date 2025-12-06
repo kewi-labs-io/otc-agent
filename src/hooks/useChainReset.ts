@@ -146,9 +146,6 @@ export function useChainReset() {
     handleChainReset,
   ]);
 
-  return {
-    resetDetected: state.resetDetected,
-    resetWalletState,
-    checksEnabled: state.checksEnabled,
-  };
+  // Return nothing - this hook just monitors for chain resets
+  // and shows a toast with reset action when detected
 }

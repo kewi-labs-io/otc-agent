@@ -45,17 +45,6 @@ export function setCache<T>(
   });
 }
 
-/**
- * Clear expired entries from cache (call periodically if needed)
- */
-export function clearExpiredCache(): void {
-  const now = Date.now();
-  for (const [key, entry] of cache.entries()) {
-    if (now > entry.expiresAt) {
-      cache.delete(key);
-    }
-  }
-}
 
 /**
  * Calculate delay with exponential backoff and jitter

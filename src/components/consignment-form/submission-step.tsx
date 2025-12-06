@@ -297,7 +297,7 @@ export function SubmissionStepComponent({
   const isProcessing = isProcessingRef.current && !isComplete && !hasError;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto space-y-6">
       {/* Header */}
       <div className="text-center pb-4 border-b border-zinc-200 dark:border-zinc-700">
         <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
@@ -326,7 +326,7 @@ export function SubmissionStepComponent({
                   </div>
                 ) : step.status === "processing" ? (
                   <div className="w-6 h-6 flex items-center justify-center">
-                    <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />
+                    <Loader2 className="w-5 h-5 text-brand-500 animate-spin" />
                   </div>
                 ) : step.status === "error" ? (
                   <div className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
@@ -346,8 +346,8 @@ export function SubmissionStepComponent({
                   {step.status === "error" && step.canRetry && (
                     <Button
                       onClick={() => retryStep(step.id)}
-                      color="blue"
-                      className="!py-1 !px-3 !text-xs bg-orange-500 hover:bg-orange-600"
+                      color="brand"
+                      className="!py-1 !px-3 !text-xs"
                     >
                       Retry
                     </Button>
@@ -415,7 +415,8 @@ export function SubmissionStepComponent({
         {isComplete && (
           <Button
             onClick={handleGoToDeals}
-            className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-xl transition-colors"
+            color="brand"
+            className="flex-1 py-3"
           >
             View My Listings
           </Button>

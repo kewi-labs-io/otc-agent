@@ -11,12 +11,16 @@ import { LoadingSpinner } from "@/components/spinner";
 import { TextareaWithActions } from "@/components/textarea-with-actions";
 import { AcceptQuoteModal } from "@/components/accept-quote-modal";
 import { Button } from "@/components/button";
+import { TokenHeader } from "@/components/token-header";
 import { CHAT_SOURCE, USER_NAME } from "@/constants";
 import type { ChatMessage } from "@/types/chat-message";
+import type { Token, TokenMarketData } from "@/types";
 import { parseMessageXML, type OTCQuote } from "@/utils/xml-parser";
 
 interface ChatProps {
   roomId?: string;
+  token?: Token;
+  marketData?: TokenMarketData | null;
 }
 
 // --- Consolidated Chat State ---
@@ -112,18 +116,29 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
   }
 }
 
+// Raw message format from API
+interface RawRoomMessage {
+  id?: string;
+  entityId?: string;
+  agentId?: string;
+  createdAt?: number | string;
+  content?: string | { text?: string };
+  text?: string;
+}
+
 // --- Helper: Parse room message into ChatMessage format ---
-function parseRoomMessage(msg: any, roomId: string): ChatMessage | null {
+function parseRoomMessage(msg: RawRoomMessage, roomId: string): ChatMessage | null {
   // Parse message text from various possible formats
   let messageText = "";
-  if (msg.content?.text) {
-    messageText = msg.content.text;
+  const content = msg.content;
+  if (typeof content === "object" && content?.text) {
+    messageText = content.text;
   } else if (msg.text) {
     messageText = msg.text;
-  } else if (msg.content && typeof msg.content === "string") {
-    messageText = msg.content;
-  } else if (msg.content) {
-    messageText = JSON.stringify(msg.content);
+  } else if (typeof content === "string") {
+    messageText = content;
+  } else if (content) {
+    messageText = JSON.stringify(content);
   }
 
   // Filter out system messages
@@ -162,7 +177,7 @@ const initialChatState: ChatState = {
   showClearChatModal: false,
 };
 
-export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
+export const Chat = ({ roomId: initialRoomId, token, marketData }: ChatProps = {}) => {
   // --- Consolidated State ---
   const [state, dispatch] = useReducer(chatReducer, {
     ...initialChatState,
@@ -265,8 +280,8 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         const rawMessages = data.messages || [];
 
         // Format messages using helper function
-        const formattedMessages = rawMessages
-          .map((msg: any) => parseRoomMessage(msg, roomId))
+        const formattedMessages = (rawMessages as RawRoomMessage[])
+          .map((msg) => parseRoomMessage(msg, roomId))
           .filter(
             (msg: ChatMessage | null): msg is ChatMessage => msg !== null,
           );
@@ -319,8 +334,8 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         const newMessages = data.messages || [];
 
         if (newMessages.length > 0) {
-          const formattedMessages = newMessages
-            .map((msg: any) => parseRoomMessage(msg, roomId))
+          const formattedMessages = (newMessages as RawRoomMessage[])
+            .map((msg) => parseRoomMessage(msg, roomId))
             .filter(
               (msg: ChatMessage | null): msg is ChatMessage => msg !== null,
             );
@@ -351,8 +366,8 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
           lastMessageTimestampRef.current = lastNewMessage.createdAt;
 
           // Check if we received an agent message
-          const hasAgentMessage = newMessages.some(
-            (msg: any) => msg.entityId === msg.agentId,
+          const hasAgentMessage = (newMessages as RawRoomMessage[]).some(
+            (msg) => msg.entityId === msg.agentId,
           );
           if (hasAgentMessage) {
             setTimeout(() => {
@@ -685,6 +700,8 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         privyReady={privyReady}
         activeFamily={activeFamily}
         onSwitchChain={handleSwitchChain}
+        token={token}
+        marketData={marketData}
       />
       <AcceptQuoteModal
         isOpen={showAcceptModal}
@@ -701,7 +718,7 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
         }
       >
         <div className="bg-white dark:bg-zinc-900 max-w-md rounded-lg overflow-hidden">
-          <h3 className="text-xl font-semibold bg-red-500 dark:bg-red-500 mb-4 px-4 py-2 rounded-t-lg">
+          <h3 className="text-xl font-semibold bg-red-600 text-white mb-4 px-4 py-2 rounded-t-lg">
             Clear Chat History?
           </h3>
           <div className="p-4">
@@ -715,14 +732,12 @@ export const Chat = ({ roomId: initialRoomId }: ChatProps = {}) => {
                 onClick={() =>
                   dispatch({ type: "SET_CLEAR_CHAT_MODAL", payload: false })
                 }
-                className="bg-zinc-200 dark:bg-zinc-800 rounded-lg"
+                color="dark"
               >
                 <div className="px-4 py-2">Cancel</div>
               </Button>
               <Button onClick={handleClearChat} color="red">
-                <div className="px-4 py-2 bg-red-500 dark:bg-red-500 rounded-lg">
-                  Reset
-                </div>
+                <div className="px-4 py-2">Reset</div>
               </Button>
             </div>
           </div>
@@ -799,9 +814,9 @@ function ChatHeader({
                 className={`!h-8 !px-3 !text-xs transition-all duration-300 ${
                   needsChainSwitch
                     ? "!bg-blue-500 hover:!bg-blue-600 !text-white !border-blue-600"
-                    : `!bg-orange-500 hover:!bg-orange-600 !text-white !border-orange-600 ${
+                    : `!bg-brand-500 hover:!bg-brand-600 !text-white !border-brand-600 ${
                         isOfferGlowing
-                          ? "shadow-lg shadow-orange-500/50 ring-2 ring-orange-400 animate-pulse"
+                          ? "shadow-lg shadow-brand-500/50 ring-2 ring-brand-400 animate-pulse"
                           : ""
                       }`
                 }`}
@@ -835,9 +850,9 @@ function ChatHeader({
                   className={`flex-1 !h-9 !px-3 !text-sm transition-all duration-300 ${
                     needsChainSwitch
                       ? "!bg-blue-500 hover:!bg-blue-600 !text-white !border-blue-600"
-                      : `!bg-orange-500 hover:!bg-orange-600 !text-white !border-orange-600 ${
+                      : `!bg-brand-500 hover:!bg-brand-600 !text-white !border-brand-600 ${
                           isOfferGlowing
-                            ? "shadow-lg shadow-orange-500/50 ring-2 ring-orange-400 animate-pulse"
+                            ? "shadow-lg shadow-brand-500/50 ring-2 ring-brand-400 animate-pulse"
                             : ""
                         }`
                   }`}
@@ -857,7 +872,8 @@ function ChatHeader({
                 {!isLoadingHistory && (
                   <Button
                     onClick={onClearChat}
-                    className="!h-9 !px-3 !text-sm bg-red-500 dark:bg-red-500 rounded-lg"
+                    color="red"
+                    className="!h-9 !px-3 !text-sm"
                   >
                     Reset
                   </Button>
@@ -869,7 +885,8 @@ function ChatHeader({
           !isLoadingHistory && (
             <Button
               onClick={onClearChat}
-              className="!h-9 !px-3 !text-sm bg-red-500 dark:bg-red-500 rounded-lg sm:hidden"
+              color="red"
+              className="!h-9 !px-3 !text-sm sm:hidden"
             >
               Reset
             </Button>
@@ -878,7 +895,8 @@ function ChatHeader({
         {!isLoadingHistory && (
           <Button
             onClick={onClearChat}
-            className="!h-8 !px-3 !text-xs bg-red-500 dark:bg-red-500 rounded-lg hidden sm:block"
+            color="red"
+            className="!h-8 !px-3 !text-xs hidden sm:block"
           >
             Reset
           </Button>
@@ -909,6 +927,8 @@ function ChatBody({
   privyReady,
   activeFamily,
   onSwitchChain,
+  token,
+  marketData,
 }: {
   messages: ChatMessage[];
   isLoadingHistory: boolean;
@@ -922,7 +942,7 @@ function ChatBody({
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   showConnectOverlay: boolean;
   setShowConnectOverlay: (v: boolean) => void;
-  currentQuote: any;
+  currentQuote: OTCQuote | null;
   onAcceptOffer: () => void;
   isOfferGlowing: boolean;
   onClearChat: () => void;
@@ -930,6 +950,8 @@ function ChatBody({
   privyReady: boolean;
   activeFamily: "evm" | "solana" | null;
   onSwitchChain: (chain: "evm" | "solana") => void;
+  token?: Token;
+  marketData?: TokenMarketData | null;
 }) {
   return (
     <div className="flex flex-col w-full">
@@ -942,9 +964,9 @@ function ChatBody({
           setShowConnectOverlay(false);
         }}
       >
-        <div className="w-full rounded-2xl overflow-hidden bg-zinc-50 dark:bg-zinc-900 ring-1 ring-zinc-200 dark:ring-zinc-800 shadow-2xl mx-auto">
+        <div className="w-full rounded-2xl overflow-hidden bg-zinc-50 dark:bg-zinc-900 ring-1 ring-zinc-200 dark:ring-zinc-800 shadow-2xl mx-auto max-h-[90dvh] overflow-y-auto">
           <div className="relative w-full">
-            <div className="relative aspect-[16/9] w-full bg-gradient-to-br from-zinc-900 to-zinc-800">
+            <div className="relative min-h-[200px] sm:min-h-[280px] w-full bg-gradient-to-br from-zinc-900 to-zinc-800 py-6 sm:py-8">
               <div
                 aria-hidden
                 className="absolute inset-0 opacity-30 bg-no-repeat bg-right-bottom"
@@ -953,24 +975,18 @@ function ChatBody({
                   backgroundSize: "contain",
                 }}
               />
-              <div className="relative z-10 h-full w-full flex flex-col items-center justify-center text-center px-6">
-                <h2 className="text-2xl font-semibold text-white tracking-tight mb-2">
+              <div className="relative z-10 h-full w-full flex flex-col items-center justify-center text-center px-4 sm:px-6">
+                <h2 className="text-xl sm:text-2xl font-semibold text-white tracking-tight mb-2">
                   Sign in to continue
                 </h2>
-                <p className="text-zinc-300 text-sm mb-6">
-                  Get discounted tokens OTC. Let&apos;s deal, anon.
-                </p>
                 <Button
                   onClick={onConnect}
                   disabled={!privyReady}
-                  color="orange"
-                  className="!px-8 !py-3 !text-lg"
+                  color="brand"
+                  className="!px-6 sm:!px-8 !py-2 sm:!py-3 !text-base sm:!text-lg"
                 >
                   {privyReady ? "Connect Wallet" : "Loading..."}
                 </Button>
-                <p className="text-xs text-zinc-500 mt-4">
-                  Supports Farcaster, MetaMask, Phantom, Coinbase Wallet & more
-                </p>
               </div>
               <button
                 type="button"
@@ -999,17 +1015,19 @@ function ChatBody({
               </button>
             </div>
           </div>
-          <div className="p-4 text-xs text-zinc-600 dark:text-zinc-400">
-            You must connect a wallet to chat. Conversations are tied to your
-            address.
-          </div>
         </div>
       </Dialog>
 
       {/* Main container - full width */}
-      <div className="relative z-10 flex flex-col border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
+      <div className="relative z-10 flex flex-col border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden h-full max-h-[calc(100dvh-120px)]">
         {/* Chat section - Full width */}
-        <div className="flex flex-col p-2 sm:p-3">
+        <div className="flex flex-col p-2 sm:p-3 h-full min-h-0">
+          {/* Token header inside chat when token is provided */}
+          {token && (
+            <div className="mb-3">
+              <TokenHeader token={token} marketData={marketData ?? null} />
+            </div>
+          )}
           <ChatHeader
             messages={messages}
             apiQuote={currentQuote}
@@ -1024,13 +1042,13 @@ function ChatBody({
           {/* Chat Messages - only scrollable area */}
           <div
             ref={messagesContainerRef}
-            className="overflow-y-auto px-2 mb-2 h-[60vh] min-h-[400px]"
+            className="overflow-y-auto px-2 mb-2 flex-1 min-h-[200px] max-h-[60dvh] sm:max-h-[65dvh]"
           >
             {isLoadingHistory ? (
               <div className="flex items-center justify-center min-h-full">
                 <div className="flex items-center gap-2">
                   <LoadingSpinner />
-                  <span className="text-gray-600">Loading conversation...</span>
+                  <span className="text-zinc-600 dark:text-zinc-400">Loading conversation...</span>
                 </div>
               </div>
             ) : messages.length === 0 ? (
@@ -1055,9 +1073,11 @@ function ChatBody({
                   onFollowUpClick={(prompt) => {
                     setInput(prompt);
                   }}
+                  assistantAvatarUrl={token?.logoUrl}
+                  assistantName={token?.name}
                 />
                 {isAgentThinking && (
-                  <div className="flex items-center gap-2 py-4 text-gray-600">
+                  <div className="flex items-center gap-2 py-4 text-zinc-600 dark:text-zinc-400">
                     <LoadingSpinner />
                     <span>Eliza is thinking...</span>
                   </div>

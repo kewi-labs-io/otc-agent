@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState, memo } from "react";
+import { useEffect, useMemo, useState, memo, useCallback } from "react";
 import { TokenDealsSection } from "./token-deals-section";
 import { useTokenCache } from "@/hooks/useTokenCache";
 import { useRenderTracker } from "@/utils/render-tracker";
+import { Button } from "./button";
 import type {
   OTCConsignment,
   Token,
   TokenMarketData,
 } from "@/services/database";
+
+const PAGE_SIZE = 10;
 
 interface DealsGridProps {
   filters: {
@@ -16,7 +19,6 @@ interface DealsGridProps {
     minMarketCap: number;
     maxMarketCap: number;
     negotiableTypes: string[];
-    isFractionalized: boolean;
   };
   searchQuery?: string;
 }
@@ -28,12 +30,27 @@ interface TokenGroup {
   consignments: OTCConsignment[];
 }
 
+// --- Helper: Filter valid consignments (active with remaining amount) ---
+function filterValidConsignments(consignments: OTCConsignment[]): OTCConsignment[] {
+  return consignments.filter((c) => {
+    // Must be active status
+    if (c.status !== "active") return false;
+    // Must have remaining amount > 0
+    const remaining = BigInt(c.remainingAmount);
+    if (remaining <= 0n) return false;
+    return true;
+  });
+}
+
 // --- Helper: Group consignments by tokenId ---
 function groupConsignmentsByToken(
   consignments: OTCConsignment[],
 ): TokenGroup[] {
+  // Filter out invalid consignments first
+  const validConsignments = filterValidConsignments(consignments);
+  
   // Deduplicate by ID
-  const uniqueMap = new Map(consignments.map((c) => [c.id, c]));
+  const uniqueMap = new Map(validConsignments.map((c) => [c.id, c]));
   const unique = Array.from(uniqueMap.values());
 
   // Group by tokenId
@@ -52,7 +69,8 @@ function groupConsignmentsByToken(
     group.consignments.push(consignment);
   }
 
-  return Array.from(grouped.values());
+  // Only return groups that have at least one valid consignment
+  return Array.from(grouped.values()).filter((g) => g.consignments.length > 0);
 }
 
 const TokenGroupLoader = memo(function TokenGroupLoader({ tokenGroup }: { tokenGroup: TokenGroup }) {
@@ -77,31 +95,10 @@ const TokenGroupLoader = memo(function TokenGroupLoader({ tokenGroup }: { tokenG
     );
   }
   
-  // If token failed to load, show minimal fallback with tokenId
+  // If token failed to load, hide the group
+  // This filters out invalid/test entries with fake token addresses
   if (!token) {
-    const parts = tokenGroup.tokenId.split("-");
-    const chain = parts[1] || "unknown";
-    const address = parts[2] || tokenGroup.tokenId;
-    const shortAddress = address.length > 10 ? `${address.slice(0, 6)}...${address.slice(-4)}` : address;
-    
-    return (
-      <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
-        <div className="bg-zinc-50 dark:bg-zinc-900/50 p-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-lg font-bold">
-              ?
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold">{shortAddress}</h3>
-              <span className="text-sm text-zinc-500">{chain.toUpperCase()} Token</span>
-            </div>
-          </div>
-        </div>
-        <div className="p-4 text-sm text-zinc-500">
-          {tokenGroup.consignments.length} listing(s) available
-        </div>
-      </div>
-    );
+    return null;
   }
   
   return (
@@ -117,6 +114,7 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
   useRenderTracker("DealsGrid", { searchQuery, chainsCount: filters.chains.length });
   const [tokenGroups, setTokenGroups] = useState<TokenGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     async function loadConsignments() {
@@ -127,7 +125,6 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
         filters.negotiableTypes.forEach((type) =>
           params.append("negotiableTypes", type),
         );
-        if (filters.isFractionalized) params.append("isFractionalized", "true");
 
         const response = await fetch(`/api/consignments?${params.toString()}`);
         const data = await response.json();
@@ -145,6 +142,11 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
     loadConsignments();
   }, [filters]);
 
+  // Reset to page 1 when filters or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, searchQuery]);
+
   // Filter token groups by search query (memoized)
   const filteredGroups = useMemo(() => {
     if (!searchQuery) return tokenGroups;
@@ -153,6 +155,19 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
       group.tokenId.toLowerCase().includes(query),
     );
   }, [tokenGroups, searchQuery]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredGroups.length / PAGE_SIZE);
+  const paginatedGroups = useMemo(() => {
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    return filteredGroups.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredGroups, currentPage]);
+
+  const goToPage = useCallback((page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+    // Scroll to top of deals section
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [totalPages]);
 
   if (isLoading) {
     return (
@@ -219,9 +234,99 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
 
   return (
     <div className="space-y-6 pb-6">
-      {filteredGroups.map((group) => (
+      {/* Token groups */}
+      {paginatedGroups.map((group) => (
         <TokenGroupLoader key={group.tokenId} tokenGroup={group} />
       ))}
+
+      {/* Pagination controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-4">
+          <Button
+            onClick={() => goToPage(currentPage - 1)}
+            disabled={currentPage === 1}
+            className="!px-3 !py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </Button>
+          
+          <div className="flex items-center gap-1">
+            {/* First page */}
+            {currentPage > 2 && (
+              <>
+                <button
+                  onClick={() => goToPage(1)}
+                  className="w-8 h-8 rounded-lg text-sm font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  1
+                </button>
+                {currentPage > 3 && (
+                  <span className="px-1 text-zinc-400">...</span>
+                )}
+              </>
+            )}
+            
+            {/* Page numbers around current */}
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum: number;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              
+              if (pageNum < 1 || pageNum > totalPages) return null;
+              if (pageNum === 1 && currentPage > 2) return null;
+              if (pageNum === totalPages && currentPage < totalPages - 1) return null;
+              
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => goToPage(pageNum)}
+                  className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                    currentPage === pageNum
+                      ? "bg-brand-500 text-white"
+                      : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+            
+            {/* Last page */}
+            {currentPage < totalPages - 1 && (
+              <>
+                {currentPage < totalPages - 2 && (
+                  <span className="px-1 text-zinc-400">...</span>
+                )}
+                <button
+                  onClick={() => goToPage(totalPages)}
+                  className="w-8 h-8 rounded-lg text-sm font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  {totalPages}
+                </button>
+              </>
+            )}
+          </div>
+          
+          <Button
+            onClick={() => goToPage(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className="!px-3 !py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

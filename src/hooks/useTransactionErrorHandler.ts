@@ -131,8 +131,5 @@ export function useTransactionErrorHandler() {
 
   return {
     handleTransactionError,
-    isNonceError,
-    isUserRejection,
-    resetWalletConnection,
   };
 }

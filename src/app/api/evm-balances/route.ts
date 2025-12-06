@@ -352,8 +352,13 @@ async function fetchAlchemyBalances(
         cachedMetadata[contractAddress] = metadata;
       }
 
-      // Update bulk cache with new metadata (fire-and-forget)
-      setBulkMetadataCache(chain, cachedMetadata).catch(() => {});
+      // Update bulk cache with new metadata (merge with existing to handle concurrent requests)
+      getBulkMetadataCache(chain).then(existing => {
+        const merged = { ...existing, ...cachedMetadata };
+        setBulkMetadataCache(chain, merged).catch((err) => 
+          console.debug("[EVM Balances] Cache write failed:", err)
+        );
+      }).catch(() => {});
     }
 
     // Step 4: Build token list
@@ -510,11 +515,12 @@ async function fetchPrices(
 }
 
 /**
- * GET /api/evm-balances?address=0x...&chain=base
+ * GET /api/evm-balances?address=0x...&chain=base&refresh=true
  */
 export async function GET(request: NextRequest) {
   const address = request.nextUrl.searchParams.get("address");
   const chain = request.nextUrl.searchParams.get("chain") || "base";
+  const forceRefresh = request.nextUrl.searchParams.get("refresh") === "true";
 
   if (!address) {
     return NextResponse.json({ error: "Address required" }, { status: 400 });
@@ -525,10 +531,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Check wallet cache first (30 second TTL)
-    const cachedTokens = await getCachedWalletBalances(chain, address);
-    if (cachedTokens) {
-      return NextResponse.json({ tokens: cachedTokens });
+    // Check wallet cache first (15 minute TTL) unless force refresh
+    if (!forceRefresh) {
+      const cachedTokens = await getCachedWalletBalances(chain, address);
+      if (cachedTokens) {
+        return NextResponse.json({ tokens: cachedTokens });
+      }
+    } else {
+      console.log("[EVM Balances] Force refresh requested");
     }
 
     const alchemyKey =
@@ -585,7 +595,13 @@ export async function GET(request: NextRequest) {
           allPrices[addr.toLowerCase()] = price;
         }
       }
-      setBulkPriceCache(chain, allPrices).catch(() => {});
+      // Merge with existing to handle concurrent requests
+      getBulkPriceCache(chain).then(existing => {
+        const merged = { ...existing, ...allPrices };
+        setBulkPriceCache(chain, merged).catch((err) =>
+          console.debug("[EVM Balances] Price cache write failed:", err)
+        );
+      }).catch(() => {});
     }
 
     // Calculate USD values

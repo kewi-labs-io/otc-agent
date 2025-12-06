@@ -32,18 +32,33 @@ export const ChainSelector = memo(function ChainSelector({ selected, onChange }:
       <label className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
         Chain:
       </label>
-      <select
-        value={currentValue}
-        onChange={handleChange}
-        className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
-      >
-        <option value="all">All Chains</option>
-        {allChains.map((chain) => (
-          <option key={chain} value={chain}>
-            {chain.charAt(0).toUpperCase() + chain.slice(1)}
-          </option>
-        ))}
-      </select>
+      <div className="relative">
+        <select
+          value={currentValue}
+          onChange={handleChange}
+          className="appearance-none rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 pl-3 pr-9 py-2 text-sm cursor-pointer"
+        >
+          <option value="all">All Chains</option>
+          {allChains.map((chain) => (
+            <option key={chain} value={chain}>
+              {chain.charAt(0).toUpperCase() + chain.slice(1)}
+            </option>
+          ))}
+        </select>
+        <svg
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M19 9l-7 7-7-7"
+          />
+        </svg>
+      </div>
     </div>
   );
 });

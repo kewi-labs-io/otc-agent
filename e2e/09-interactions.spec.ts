@@ -17,35 +17,23 @@ async function waitForPageReady(page: Page) {
 
 test.describe('Navigation Interactions', () => {
   test('can navigate between all pages', async ({ page }) => {
-    // Start on home
-    await page.goto('/');
-    await waitForPageReady(page);
-    await expect(page).toHaveURL(/\/$/);
+    // Helper to navigate with robust waiting
+    const navigateTo = async (url: string, pattern: RegExp) => {
+      const response = await page.goto(url, { timeout: 45000, waitUntil: 'domcontentloaded' });
+      if (!response || response.status() >= 400) {
+        throw new Error(`Navigation to ${url} failed with status ${response?.status()}`);
+      }
+      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+      await expect(page).toHaveURL(pattern, { timeout: 5000 });
+    };
     
-    // Go to how it works
-    await page.goto('/how-it-works');
-    await waitForPageReady(page);
-    await expect(page).toHaveURL(/how-it-works/);
-    
-    // Go to my deals
-    await page.goto('/my-deals');
-    await waitForPageReady(page);
-    await expect(page).toHaveURL(/my-deals/);
-    
-    // Go to consign
-    await page.goto('/consign');
-    await waitForPageReady(page);
-    await expect(page).toHaveURL(/consign/);
-    
-    // Go to terms
-    await page.goto('/terms');
-    await waitForPageReady(page);
-    await expect(page).toHaveURL(/terms/);
-    
-    // Go to privacy
-    await page.goto('/privacy');
-    await waitForPageReady(page);
-    await expect(page).toHaveURL(/privacy/);
+    // Navigate through all pages
+    await navigateTo('/', /\/$/);
+    await navigateTo('/how-it-works', /how-it-works/);
+    await navigateTo('/my-deals', /my-deals/);
+    await navigateTo('/consign', /consign/);
+    await navigateTo('/terms', /terms/);
+    await navigateTo('/privacy', /privacy/);
   });
 
   test('navigation links work from header', async ({ page }) => {

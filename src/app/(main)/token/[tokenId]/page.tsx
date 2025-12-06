@@ -2,7 +2,6 @@
 
 import { useParams } from "next/navigation";
 import dynamicImport from "next/dynamic";
-import { TokenHeader } from "@/components/token-header";
 import { useTokenCache, useMarketDataRefresh } from "@/hooks/useTokenCache";
 import { Footer } from "@/components/footer";
 
@@ -48,19 +47,13 @@ export default function TokenPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen">
-      <main className="flex-1 flex flex-col min-h-0">
-        <div className="px-3 sm:px-4 md:px-6 pt-3 sm:pt-4">
-          <div className="max-w-7xl mx-auto">
-            <TokenHeader token={token} marketData={marketData} />
-          </div>
-        </div>
-
-        <div className="flex-1 flex flex-col min-h-0 px-3 sm:px-4 md:px-6 pb-3 sm:pb-4">
-          <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0 gap-4">
-            {/* Chat section - always visible for negotiation or questions */}
+    <div className="flex flex-col h-full overflow-hidden">
+      <main className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+        <div className="flex-1 flex flex-col min-h-0 px-3 sm:px-4 md:px-6 py-3 sm:py-4">
+          <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0">
+            {/* Chat section with token header inside */}
             <div className="flex-1 min-h-0">
-              <Chat />
+              <Chat token={token} marketData={marketData} />
             </div>
           </div>
         </div>

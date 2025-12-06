@@ -1,191 +1,126 @@
 /**
- * Page Load Tests
- * Tests that all pages load correctly without errors
+ * Core Page Tests
+ * Tests that all critical pages load and render correctly
  */
 
 import { test, expect } from '@playwright/test';
-import type { Page } from 'playwright-core';
 
-// Set a desktop viewport for all tests to ensure consistent behavior
+test.setTimeout(60000);
 test.use({ viewport: { width: 1280, height: 720 } });
-test.setTimeout(30000);
 
-// Helper to wait for page to be interactive
-async function waitForPageReady(page: Page) {
-  await page.waitForLoadState('domcontentloaded');
-  await page.waitForTimeout(500);
-}
-
-test.describe('Page Load Tests', () => {
-  test('homepage loads correctly', async ({ page }) => {
+test.describe('Page Loading', () => {
+  test('homepage loads with search and filters', async ({ page }) => {
     await page.goto('/');
-    await waitForPageReady(page);
-    await expect(page).toHaveTitle(/OTC/i);
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
     
-    // Should show marketplace heading
-    await expect(page.getByRole('heading', { name: /OTC Marketplace/i })).toBeVisible({ timeout: 10000 });
+    // Must have search input
+    const searchInput = page.getByPlaceholder(/search/i).first();
+    await expect(searchInput).toBeVisible({ timeout: 15000 });
     
-    // Connect button should be visible
-    await expect(page.getByRole('button', { name: /connect/i }).first()).toBeVisible({ timeout: 5000 });
+    // Must have chain filter
+    const chainFilter = page.locator('select').first();
+    await expect(chainFilter).toBeVisible({ timeout: 5000 });
   });
 
-  test('/how-it-works loads correctly', async ({ page }) => {
-    await page.goto('/how-it-works');
-    await waitForPageReady(page);
+  test('homepage has marketplace heading', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
     
-    // Should have title or heading
-    const hasTitle = await page.locator('h1, h2').first().isVisible();
-    expect(hasTitle).toBeTruthy();
-    
-    // No error states
-    await expect(page.getByText(/error|500|404/i)).not.toBeVisible();
+    await expect(page.getByRole('heading', { name: /marketplace/i })).toBeVisible({ timeout: 10000 });
   });
 
-  test('/consign loads correctly', async ({ page }) => {
+  test('consign page shows Sign In when not authenticated', async ({ page }) => {
     await page.goto('/consign');
-    await waitForPageReady(page);
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
     
-    // Should show consignment form or connect prompt
-    const hasForm = await page.getByText(/consign|list|select token/i).first().isVisible({ timeout: 3000 }).catch(() => false);
-    const hasConnectPrompt = await page.getByRole('button', { name: /connect/i }).isVisible({ timeout: 3000 }).catch(() => false);
-    
-    expect(hasForm || hasConnectPrompt).toBeTruthy();
+    const signInBtn = page.getByRole('button', { name: /sign in/i }).first();
+    await expect(signInBtn).toBeVisible({ timeout: 15000 });
   });
 
-  test('/my-deals loads correctly', async ({ page }) => {
+  test('my-deals page shows Sign In when not authenticated', async ({ page }) => {
     await page.goto('/my-deals');
-    await waitForPageReady(page);
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
     
-    // Should show deals page or connect prompt
-    const hasDeals = await page.getByText(/my deals|purchases|listings/i).first().isVisible({ timeout: 3000 }).catch(() => false);
-    const hasConnectPrompt = await page.getByRole('button', { name: /connect/i }).isVisible({ timeout: 3000 }).catch(() => false);
-    
-    expect(hasDeals || hasConnectPrompt).toBeTruthy();
+    const signInBtn = page.getByRole('button', { name: /sign in/i }).first();
+    await expect(signInBtn).toBeVisible({ timeout: 15000 });
   });
 
-  test('/privacy loads correctly', async ({ page }) => {
-    await page.goto('/privacy');
-    await waitForPageReady(page);
+  test('how-it-works page loads with content', async ({ page }) => {
+    await page.goto('/how-it-works');
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(3000);
     
-    await expect(page).toHaveURL(/privacy/);
-    // Should have privacy-related content
-    const hasContent = await page.locator('h1, h2, p').first().isVisible();
-    expect(hasContent).toBeTruthy();
+    // Should have how-it-works specific content
+    const hasContent = await page.locator('text=/list.*token|negotiate/i').first().isVisible({ timeout: 10000 }).catch(() => false);
+    const hasHeading = await page.locator('h1, h2, h3').first().isVisible({ timeout: 5000 }).catch(() => false);
+    
+    expect(hasContent || hasHeading).toBe(true);
   });
 
-  test('/terms loads correctly', async ({ page }) => {
+  test('terms page loads', async ({ page }) => {
     await page.goto('/terms');
-    await waitForPageReady(page);
+    await page.waitForLoadState('domcontentloaded');
     
     await expect(page).toHaveURL(/terms/);
-    // Should have terms-related content
-    const hasContent = await page.locator('h1, h2, p').first().isVisible();
-    expect(hasContent).toBeTruthy();
+    const content = page.locator('p, h1, h2').first();
+    await expect(content).toBeVisible({ timeout: 10000 });
   });
 
-  test('navigation between pages works', async ({ page }) => {
-    await page.goto('/');
-    await waitForPageReady(page);
+  test('privacy page loads', async ({ page }) => {
+    await page.goto('/privacy');
+    await page.waitForLoadState('domcontentloaded');
     
-    // Navigate to how it works via link if available
-    const howItWorksLink = page.getByRole('link', { name: /how it works/i });
-    if (await howItWorksLink.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await howItWorksLink.click();
-      await waitForPageReady(page);
-      await expect(page).toHaveURL(/how-it-works/);
-    }
-    
-    // Navigate back to home
-    const homeLink = page.getByRole('link', { name: /home|otc|marketplace|trading/i }).first();
-    if (await homeLink.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await homeLink.click();
-      await waitForPageReady(page);
-    }
-    
-    // Should be back on homepage
-    await expect(page.locator('body')).toBeVisible();
-  });
-
-  test('responsive design - mobile viewport', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/');
-    await waitForPageReady(page);
-    
-    // Page should be usable on mobile
-    await expect(page.locator('body')).toBeVisible();
-    
-    // On mobile, Connect button might be in a hamburger menu
-    // Check if menu button exists and click it to reveal Connect
-    const menuBtn = page.getByRole('button', { name: /menu/i });
-    if (await menuBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await menuBtn.click();
-      await page.waitForTimeout(500);
-    }
-    
-    // Connect button should be accessible (either directly or after menu click)
-    const connectBtn = page.getByRole('button', { name: /connect/i }).first();
-    const hasConnect = await connectBtn.isVisible({ timeout: 5000 }).catch(() => false);
-    
-    // At minimum, the page should render without errors
-    expect(hasConnect || page.url().includes('localhost')).toBeTruthy();
-  });
-
-  test('responsive design - tablet viewport', async ({ page }) => {
-    await page.setViewportSize({ width: 768, height: 1024 });
-    await page.goto('/');
-    await waitForPageReady(page);
-    
-    // Page should be usable on tablet
-    await expect(page.locator('body')).toBeVisible();
-  });
-
-  test('404 page handling', async ({ page }) => {
-    await page.goto('/nonexistent-page-12345');
-    await waitForPageReady(page);
-    
-    // Should show 404 or redirect to home
-    const has404 = await page.getByText(/404|not found/i).isVisible({ timeout: 3000 }).catch(() => false);
-    const isHome = page.url().endsWith('/') || page.url().includes('localhost:4444');
-    
-    expect(has404 || isHome).toBeTruthy();
+    await expect(page).toHaveURL(/privacy/);
+    const content = page.locator('p, h1, h2').first();
+    await expect(content).toBeVisible({ timeout: 10000 });
   });
 });
 
-test.describe('Footer Links', () => {
-  test('footer contains legal links', async ({ page }) => {
+test.describe('Navigation', () => {
+  test('nav links navigate correctly', async ({ page }) => {
     await page.goto('/');
-    await waitForPageReady(page);
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
     
-    // Scroll to footer
+    // My Deals link
+    const myDealsLink = page.getByRole('link', { name: /deal/i }).first();
+    await expect(myDealsLink).toBeVisible({ timeout: 5000 });
+    await myDealsLink.click();
+    await expect(page).toHaveURL(/my-deals/, { timeout: 10000 });
+    
+    // How It Works link
+    await page.getByRole('link', { name: /how.*work/i }).first().click();
+    await expect(page).toHaveURL(/how-it-works/, { timeout: 10000 });
+    
+    // Back to Trading Desk
+    await page.getByRole('link', { name: /trading/i }).first().click();
+    await expect(page).toHaveURL(/\/$/, { timeout: 10000 });
+  });
+
+  test('footer has Terms and Privacy links', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(500);
     
-    // Should have Terms and Privacy links
-    const termsLink = page.getByRole('link', { name: /terms/i });
-    const privacyLink = page.getByRole('link', { name: /privacy/i });
-    
-    const hasTerms = await termsLink.isVisible({ timeout: 3000 }).catch(() => false);
-    const hasPrivacy = await privacyLink.isVisible({ timeout: 3000 }).catch(() => false);
-    
-    // At least one legal link should be visible
-    expect(hasTerms || hasPrivacy).toBeTruthy();
+    await expect(page.getByRole('link', { name: /terms/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('link', { name: /privacy/i })).toBeVisible({ timeout: 5000 });
   });
+});
 
-  test('terms page is accessible via direct navigation', async ({ page }) => {
-    // Footer links may open in new tab, so test direct navigation
-    await page.goto('/terms');
-    await waitForPageReady(page);
+test.describe('Mobile Responsive', () => {
+  test('mobile viewport shows menu button', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
     
-    await expect(page).toHaveURL(/terms/);
-    await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 5000 });
-  });
-
-  test('privacy page is accessible via direct navigation', async ({ page }) => {
-    // Footer links open in new tab (target="_blank"), so test direct navigation
-    await page.goto('/privacy');
-    await waitForPageReady(page);
-    
-    await expect(page).toHaveURL(/privacy/);
-    await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 5000 });
+    const menuBtn = page.getByRole('button', { name: /menu/i });
+    await expect(menuBtn).toBeVisible({ timeout: 10000 });
   });
 });

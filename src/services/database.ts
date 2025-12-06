@@ -132,25 +132,6 @@ export class QuoteDB {
   }
 }
 export class DealCompletionService {
-  static async recordDealCompletion(data: {
-    entityId: string;
-    walletAddress: string;
-    quoteId: string;
-    transactionHash: string;
-    offerId: string;
-    blockNumber: number;
-    volumeUsd: number;
-    savedUsd: number;
-  }): Promise<void> {
-    await QuoteDB.updateQuoteStatus(data.quoteId, "executed", {
-      offerId: data.offerId,
-      transactionHash: data.transactionHash,
-      blockNumber: data.blockNumber,
-      rejectionReason: "",
-      approvalNote: "",
-    });
-  }
-
   static async generateShareData(quoteId: string) {
     const quote = await QuoteDB.getQuoteByQuoteId(quoteId);
     return {

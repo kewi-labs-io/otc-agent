@@ -26,20 +26,3 @@ export function walletToEntityId(address: string): string {
   return stringToUuid(normalized) as string;
 }
 
-/**
- * Normalize wallet address for consistent lookups
- * EVM: lowercase, Solana: preserve case
- */
-export function normalizeWalletAddress(address: string): string {
-  const trimmed = address.trim();
-  return isSolanaAddress(trimmed) ? trimmed : trimmed.toLowerCase();
-}
-
-/**
- * Validate entity ID format
- */
-export function isValidEntityId(entityId: string): boolean {
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(entityId);
-}

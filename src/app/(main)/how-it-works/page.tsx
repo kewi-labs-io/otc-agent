@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 const HowItWorksContent = dynamic(() => import("./HowItWorksContent"), {
   ssr: false,
   loading: () => (
-    <div className="h-screen flex items-center justify-center">Loading...</div>
+    <div className="flex-1 flex items-center justify-center">Loading...</div>
   ),
 });
 

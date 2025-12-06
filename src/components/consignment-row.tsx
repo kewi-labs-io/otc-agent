@@ -15,6 +15,7 @@ interface ConsignmentRowProps {
 
 export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
   const [token, setToken] = useState<Token | null>(null);
+  const [isLoadingToken, setIsLoadingToken] = useState(true);
   const [dealCount, setDealCount] = useState<number>(0);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [withdrawTxHash, setWithdrawTxHash] = useState<string | null>(null);
@@ -26,58 +27,62 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
   const publicClient = usePublicClient();
 
   useEffect(() => {
-    if (isWithdrawn) return;
     if (fetchedTokenId.current === consignment.tokenId) return;
 
     async function loadData() {
       fetchedTokenId.current = consignment.tokenId;
+      setIsLoadingToken(true);
 
-      const tokenRes = await fetch(`/api/tokens/${consignment.tokenId}`);
-      const tokenData = await tokenRes.json();
+      try {
+        const tokenRes = await fetch(`/api/tokens/${consignment.tokenId}`);
+        const tokenData = await tokenRes.json();
 
-      if (tokenData.success) {
-        setToken(tokenData.token);
-      } else if (publicClient) {
-        const tokenIdParts = consignment.tokenId?.split("-") || [];
-        const tokenAddress = tokenIdParts[2] as `0x${string}`;
+        if (tokenData.success) {
+          setToken(tokenData.token);
+        } else if (publicClient) {
+          const tokenIdParts = consignment.tokenId?.split("-") || [];
+          const tokenAddress = tokenIdParts[2] as `0x${string}`;
 
-        if (tokenAddress?.startsWith("0x")) {
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const readContract = publicClient.readContract.bind(publicClient) as any;
-            const [symbol, name, decimals] = await Promise.all([
-              readContract({ address: tokenAddress, abi: erc20Abi, functionName: "symbol" }),
-              readContract({ address: tokenAddress, abi: erc20Abi, functionName: "name" }),
-              readContract({ address: tokenAddress, abi: erc20Abi, functionName: "decimals" }),
-            ]);
+          if (tokenAddress?.startsWith("0x")) {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const readContract = publicClient.readContract.bind(publicClient) as any;
+              const [symbol, name, decimals] = await Promise.all([
+                readContract({ address: tokenAddress, abi: erc20Abi, functionName: "symbol" }),
+                readContract({ address: tokenAddress, abi: erc20Abi, functionName: "name" }),
+                readContract({ address: tokenAddress, abi: erc20Abi, functionName: "decimals" }),
+              ]);
 
-            setToken({
-              id: consignment.tokenId,
-              symbol: symbol as string,
-              name: name as string,
-              decimals: decimals as number,
-              chain: consignment.chain,
-              contractAddress: tokenAddress,
-              logoUrl: "",
-              description: "",
-              isActive: true,
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-            });
-          } catch (err) {
-            console.error("[ConsignmentRow] Failed to fetch token from chain:", err);
+              setToken({
+                id: consignment.tokenId,
+                symbol: symbol as string,
+                name: name as string,
+                decimals: decimals as number,
+                chain: consignment.chain,
+                contractAddress: tokenAddress,
+                logoUrl: "",
+                description: "",
+                isActive: true,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+              });
+            } catch (err) {
+              console.error("[ConsignmentRow] Failed to fetch token from chain:", err);
+            }
           }
         }
-      }
 
-      const totalAmount = BigInt(consignment.totalAmount);
-      const remainingAmount = BigInt(consignment.remainingAmount);
-      const soldAmount = totalAmount - remainingAmount;
-      if (soldAmount > 0n && consignment.isFractionalized) {
-        const avgDealSize =
-          BigInt(consignment.minDealAmount) + BigInt(consignment.maxDealAmount);
-        const estimatedDeals = Number(soldAmount / (avgDealSize / 2n));
-        setDealCount(Math.max(1, estimatedDeals));
+        const totalAmount = BigInt(consignment.totalAmount);
+        const remainingAmount = BigInt(consignment.remainingAmount);
+        const soldAmount = totalAmount - remainingAmount;
+        if (soldAmount > 0n && consignment.isFractionalized) {
+          const avgDealSize =
+            BigInt(consignment.minDealAmount) + BigInt(consignment.maxDealAmount);
+          const estimatedDeals = Number(soldAmount / (avgDealSize / 2n));
+          setDealCount(Math.max(1, estimatedDeals));
+        }
+      } finally {
+        setIsLoadingToken(false);
       }
     }
     loadData();
@@ -90,13 +95,9 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
     consignment.maxDealAmount,
     consignment.chain,
     publicClient,
-    isWithdrawn,
   ]);
 
-  // Don't render if already withdrawn (optimistic hide) - AFTER hooks per React rules
-  if (isWithdrawn) {
-    return null;
-  }
+  const isWithdrawnStatus = isWithdrawn || consignment.status === "withdrawn";
 
   // Extract token info from tokenId as fallback (format: token-{chain}-{address})
   // Don't show the contract address as symbol - that's confusing
@@ -189,67 +190,96 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
     }
   };
 
+  // Show skeleton while loading token data
+  if (isLoadingToken) {
+    return (
+      <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 sm:p-6 animate-pulse">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-10 h-10 rounded-full bg-zinc-200 dark:bg-zinc-700 flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="h-5 bg-zinc-200 dark:bg-zinc-700 rounded w-24 mb-2" />
+              <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-32" />
+            </div>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <div className="h-6 bg-zinc-200 dark:bg-zinc-700 rounded-full w-20" />
+            <div className="h-6 bg-zinc-200 dark:bg-zinc-700 rounded-full w-16" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i}>
+              <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-16 mb-1" />
+              <div className="h-5 bg-zinc-200 dark:bg-zinc-700 rounded w-20" />
+            </div>
+          ))}
+        </div>
+        <div className="bg-zinc-200 dark:bg-zinc-700 rounded-full h-2" />
+      </div>
+    );
+  }
+
   return (
-    <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-6">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
+    <div className={`rounded-lg border p-4 sm:p-6 ${isWithdrawnStatus ? "border-zinc-300 dark:border-zinc-700 opacity-60" : "border-zinc-200 dark:border-zinc-800"}`}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           {token?.logoUrl ? (
             <Image
               src={token.logoUrl}
               alt={tokenSymbol}
               width={40}
               height={40}
-              className="w-10 h-10 rounded-full"
+              className="w-10 h-10 rounded-full flex-shrink-0"
             />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-sm font-bold">
+            <div className="w-10 h-10 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-sm font-bold flex-shrink-0">
               {tokenSymbol.slice(0, 2)}
             </div>
           )}
-          <div>
-            <h3 className="font-semibold">{tokenSymbol}</h3>
-            <p className="text-sm text-zinc-500">{token?.name || "Token"}</p>
+          <div className="min-w-0">
+            <h3 className="font-semibold truncate">{tokenSymbol}</h3>
+            <p className="text-sm text-zinc-500 truncate">{token?.name || "Token"}</p>
           </div>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex flex-wrap gap-2 items-center flex-shrink-0 sm:ml-auto">
           {consignment.isNegotiable ? (
-            <span className="inline-flex items-center rounded-full bg-blue-600/15 text-blue-700 dark:text-blue-400 px-3 py-1 text-xs font-medium">
+            <span className="inline-flex items-center rounded-full bg-blue-600/15 text-blue-700 dark:text-blue-400 px-2 sm:px-3 py-1 text-xs font-medium">
               Negotiable
             </span>
           ) : (
-            <span className="inline-flex items-center rounded-full bg-zinc-500/10 text-zinc-700 dark:text-zinc-300 px-3 py-1 text-xs font-medium">
+            <span className="inline-flex items-center rounded-full bg-zinc-500/10 text-zinc-700 dark:text-zinc-300 px-2 sm:px-3 py-1 text-xs font-medium">
               Fixed
             </span>
           )}
           <span
-            className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
-              consignment.status === "active"
-                ? "bg-orange-600/15 text-orange-700 dark:text-orange-400"
-                : "bg-zinc-500/10 text-zinc-700 dark:text-zinc-300"
+            className={`inline-flex items-center rounded-full px-2 sm:px-3 py-1 text-xs font-medium ${
+              isWithdrawnStatus
+                ? "bg-zinc-500/10 text-zinc-500"
+                : consignment.status === "active"
+                  ? "bg-brand-500/15 text-brand-600 dark:text-brand-400"
+                  : "bg-zinc-500/10 text-zinc-700 dark:text-zinc-300"
             }`}
           >
-            {consignment.status}
+            {isWithdrawnStatus ? "Withdrawn" : consignment.status}
           </span>
-          <Button
-            color="red"
-            onClick={handleWithdraw}
-            disabled={
-              consignment.status === "withdrawn" ||
-              isWithdrawing ||
-              !address ||
-              !consignment.contractConsignmentId
-            }
-            className="!py-2 !px-4 !text-xs bg-zinc-900 text-white"
-            title={
-              !consignment.contractConsignmentId
-                ? "Consignment not deployed on-chain"
-                : isWithdrawing
-                  ? "Withdrawing..."
-                  : "Withdraw remaining tokens"
-            }
-          >
-            {isWithdrawing ? "Withdrawing..." : "Withdraw"}
-          </Button>
+          {!isWithdrawnStatus && (
+            <Button
+              color="red"
+              onClick={handleWithdraw}
+              disabled={isWithdrawing || !address || !consignment.contractConsignmentId}
+              className="!py-2 !px-3 sm:!px-4 !text-xs"
+              title={
+                !consignment.contractConsignmentId
+                  ? "Consignment not deployed on-chain"
+                  : isWithdrawing
+                    ? "Withdrawing..."
+                    : "Withdraw remaining tokens"
+              }
+            >
+              {isWithdrawing ? "Withdrawing..." : "Withdraw"}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -335,7 +365,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
 
       <div className="bg-zinc-100 dark:bg-zinc-900 rounded-full h-2">
         <div
-          className="bg-orange-600 rounded-full h-2"
+          className="bg-brand-500 rounded-full h-2"
           style={{ width: `${100 - percentRemaining}%` }}
         />
       </div>

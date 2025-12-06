@@ -12,6 +12,8 @@ interface ChatMessagesProps {
   citationsMap: Record<number, Citation[]>;
   followUpPromptsMap: Record<number, string[]>;
   onFollowUpClick: (prompt: string) => void;
+  assistantAvatarUrl?: string;
+  assistantName?: string;
 }
 
 export function ChatMessages({
@@ -19,6 +21,8 @@ export function ChatMessages({
   citationsMap,
   followUpPromptsMap,
   onFollowUpClick,
+  assistantAvatarUrl,
+  assistantName,
 }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageRef = useRef<string>("");
@@ -86,6 +90,8 @@ export function ChatMessages({
                   : undefined
               }
               onFollowUpClick={onFollowUpClick}
+              assistantAvatarUrl={assistantAvatarUrl}
+              assistantName={assistantName}
             />
           </div>
         );

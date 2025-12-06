@@ -9,7 +9,6 @@ import {
   Clock,
   Eye,
   EyeOff,
-  Layers,
   ArrowLeft,
   ChevronDown,
   ChevronUp,
@@ -64,7 +63,7 @@ function DualRangeSlider({
   accentColor?: "orange" | "purple" | "blue";
 }) {
   const colorClasses = {
-    orange: "bg-orange-500",
+    orange: "bg-brand-500",
     purple: "bg-purple-500",
     blue: "bg-blue-500",
   };
@@ -94,7 +93,7 @@ function DualRangeSlider({
           const val = Number(e.target.value);
           if (val <= maxValue) onChange(val, maxValue);
         }}
-        className="absolute top-2 w-full h-2 appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-zinc-400 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:border-orange-500 [&::-webkit-slider-thumb]:transition-colors"
+        className="absolute top-2 w-full h-2 appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-zinc-400 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:border-brand-500 [&::-webkit-slider-thumb]:transition-colors"
       />
 
       <input
@@ -107,7 +106,7 @@ function DualRangeSlider({
           const val = Number(e.target.value);
           if (val >= minValue) onChange(minValue, val);
         }}
-        className="absolute top-2 w-full h-2 appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-zinc-400 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:border-orange-500 [&::-webkit-slider-thumb]:transition-colors"
+        className="absolute top-2 w-full h-2 appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-zinc-400 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:border-brand-500 [&::-webkit-slider-thumb]:transition-colors"
       />
 
       <div className="absolute -bottom-1 left-0 right-0 flex justify-between text-xs text-zinc-500">
@@ -149,7 +148,7 @@ function SingleSlider({
     <div className="relative pt-2 pb-6">
       <div className="relative h-2 bg-zinc-200 dark:bg-zinc-700 rounded-full">
         <div
-          className="absolute h-full bg-orange-500 rounded-full"
+          className="absolute h-full bg-brand-500 rounded-full"
           style={{ width: `${percent}%` }}
         />
       </div>
@@ -160,7 +159,7 @@ function SingleSlider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="absolute top-2 w-full h-2 appearance-none bg-transparent cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-orange-500 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:scale-110 [&::-webkit-slider-thumb]:transition-transform"
+        className="absolute top-2 w-full h-2 appearance-none bg-transparent cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-brand-500 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:scale-110 [&::-webkit-slider-thumb]:transition-transform"
       />
       <div className="absolute -bottom-1 left-0 right-0">
         <span
@@ -237,11 +236,11 @@ export function FormStep({
   );
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 space-y-6 overflow-y-auto pr-2 -mr-2 pb-4">
+    <div className="flex flex-col h-full min-h-0">
+      <div className="flex-1 space-y-6 overflow-y-auto pr-2 -mr-2 pb-4 min-h-0">
         {/* Selected Token Header */}
         <div className="flex items-center gap-3 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-400 to-brand-500 flex items-center justify-center">
             <span className="text-white font-bold">
               {selectedTokenSymbol.charAt(0)}
             </span>
@@ -256,17 +255,17 @@ export function FormStep({
           </div>
           <button
             onClick={onBack}
-            className="text-xs text-orange-500 hover:text-orange-600 font-medium"
+            className="text-xs text-brand-500 hover:text-brand-600 font-medium"
           >
             Change
           </button>
         </div>
 
         {/* Amount Section */}
-        <div className="bg-gradient-to-br from-orange-500/5 to-amber-500/5 rounded-xl p-4 border border-orange-500/20">
+        <div className="bg-gradient-to-br from-brand-500/5 to-brand-400/5 rounded-xl p-4 border border-brand-500/20">
           <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
-              <Coins className="w-4 h-4 text-orange-500" />
+            <div className="w-8 h-8 rounded-lg bg-brand-500/20 flex items-center justify-center">
+              <Coins className="w-4 h-4 text-brand-500" />
             </div>
             <div>
               <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
@@ -292,7 +291,7 @@ export function FormStep({
                 className={`w-full px-4 py-3 text-2xl font-bold rounded-xl border bg-white dark:bg-zinc-800/50 focus:ring-2 transition-all ${
                   currentAmount > maxBalance
                     ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                    : "border-zinc-200 dark:border-zinc-700 focus:border-orange-500 focus:ring-orange-500/20"
+                    : "border-zinc-200 dark:border-zinc-700 focus:border-brand-500 focus:ring-brand-500/20"
                 }`}
               />
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 font-medium">
@@ -334,7 +333,7 @@ export function FormStep({
                   onClick={() => setAmountPercentage(pct)}
                   className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     currentAmount === Math.floor(maxBalance * pct)
-                      ? "bg-orange-500 text-white"
+                      ? "bg-brand-500 text-white"
                       : "bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
                   }`}
                 >
@@ -517,40 +516,6 @@ export function FormStep({
 
         {showAdvanced && (
           <div className="space-y-4 pl-2 border-l-2 border-zinc-200 dark:border-zinc-700">
-            {/* Fractionalized Toggle */}
-            <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
-              <div className="flex items-center gap-3">
-                <Layers className="w-5 h-5 text-zinc-500" />
-                <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                    Fractionalized Deals
-                  </p>
-                  <p className="text-xs text-zinc-500">Allow multiple buyers</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() =>
-                  updateFormData({
-                    isFractionalized: !formData.isFractionalized,
-                  })
-                }
-                className={`relative w-11 h-6 rounded-full transition-colors ${
-                  formData.isFractionalized
-                    ? "bg-orange-500"
-                    : "bg-zinc-300 dark:bg-zinc-600"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                    formData.isFractionalized
-                      ? "translate-x-5"
-                      : "translate-x-0"
-                  }`}
-                />
-              </button>
-            </div>
-
             {/* Private Listing Toggle */}
             <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
               <div className="flex items-center gap-3">
@@ -573,7 +538,7 @@ export function FormStep({
                 }
                 className={`relative w-11 h-6 rounded-full transition-colors ${
                   formData.isPrivate
-                    ? "bg-orange-500"
+                    ? "bg-brand-500"
                     : "bg-zinc-300 dark:bg-zinc-600"
                 }`}
               >
@@ -668,7 +633,8 @@ export function FormStep({
         <Button
           onClick={onNext}
           disabled={!isValid}
-          className="flex-1 px-6 py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-300 dark:disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-medium rounded-xl transition-colors"
+          color="brand"
+          className="flex-1 px-6 py-3"
         >
           Review Listing
         </Button>

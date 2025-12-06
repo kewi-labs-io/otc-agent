@@ -411,7 +411,7 @@ export default function ConsignPageClient() {
     <main className="flex-1 px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8">
       <div className="max-w-3xl mx-auto">
         <h1 className="text-2xl sm:text-3xl font-bold mb-2">
-          List Your Tokens for OTC
+          List Your Tokens
         </h1>
         <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400 mb-4">
           Sell your tokens at a discount with a lockup period
@@ -421,7 +421,7 @@ export default function ConsignPageClient() {
           <div className="mb-6 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-brand-400 flex items-center justify-center">
                   <span className="text-white text-xs font-bold">
                     {activeFamily === "solana" ? "S" : "E"}
                   </span>
@@ -454,7 +454,7 @@ export default function ConsignPageClient() {
               <div
                 key={s}
                 className={`flex-1 h-2 ${
-                  s <= step ? "bg-orange-500" : "bg-zinc-200 dark:bg-zinc-800"
+                  s <= step ? "bg-brand-500" : "bg-zinc-200 dark:bg-zinc-800"
                 } ${s < 4 ? "mr-2" : ""} rounded-full transition-colors`}
               />
             ))}
@@ -463,7 +463,7 @@ export default function ConsignPageClient() {
             {STEP_LABELS.map((label, idx) => (
               <span
                 key={label}
-                className={step === idx + 1 ? "text-orange-500 font-medium" : ""}
+                className={step === idx + 1 ? "text-brand-500 font-medium" : ""}
               >
                 {label}
               </span>
@@ -472,7 +472,7 @@ export default function ConsignPageClient() {
         </div>
 
         {/* Form steps */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 sm:p-6 max-h-[calc(100vh-280px)] flex flex-col">
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 sm:p-6 max-h-[calc(100dvh-220px)] sm:max-h-[calc(100dvh-280px)] flex flex-col overflow-hidden">
           {step === 1 && (
             <TokenSelectionStep
               formData={formData}

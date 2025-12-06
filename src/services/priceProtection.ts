@@ -1,4 +1,4 @@
-import { MarketDataDB, ConsignmentDB } from "./database";
+import { MarketDataDB } from "./database";
 import type { Chain } from "@/config/chains";
 import { MarketDataService } from "./marketDataService";
 
@@ -56,40 +56,4 @@ export class PriceProtectionService {
     };
   }
 
-  async shouldRejectDeal(
-    consignmentId: string,
-    tokenAddress: string,
-    chain: Chain,
-    priceAtQuote: number,
-  ): Promise<{
-    shouldReject: boolean;
-    reason?: string;
-    validationResult?: ValidationResult;
-  }> {
-    const consignment = await ConsignmentDB.getConsignment(consignmentId);
-
-    const validationResult = await this.validateQuotePrice(
-      consignment.tokenId,
-      tokenAddress,
-      chain,
-      priceAtQuote,
-      consignment.maxPriceVolatilityBps,
-    );
-
-    return {
-      shouldReject: !validationResult.isValid,
-      reason: validationResult.reason,
-      validationResult,
-    };
-  }
-
-  async recordPriceAtQuote(
-    quoteId: string,
-    tokenId: string,
-    price: number,
-  ): Promise<void> {
-    console.log(
-      `[PriceProtection] Recording price ${price} for quote ${quoteId}`,
-    );
-  }
 }

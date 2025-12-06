@@ -94,8 +94,6 @@ const CONFIG: Record<
   },
 };
 
-export { CONFIG };
-
 // Uniswap: 100 (0.01%), 500 (0.05%), 3000 (0.3%), 10000 (1%)
 // PancakeSwap: 100 (0.01%), 500 (0.05%), 2500 (0.25%), 10000 (1%)
 // Aerodrome CL: Uses tickSpacing instead of fee. Common: 1, 50, 100, 200, 2000

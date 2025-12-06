@@ -11,15 +11,15 @@ export const styles = {
     // Disabled
     "disabled:opacity-50 disabled:pointer-events-none",
     // Icon
-    "*[data-slot=icon]:-mx-0.5 *[data-slot=icon]:my-0.5 *[data-slot=icon]:size-5 *[data-slot=icon]:shrink-0 *[data-slot=icon]:text-(--btn-icon) sm:*[data-slot=icon]:my-1 sm:*[data-slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:hover:[--btn-icon:ButtonText]",
+    "[&_[data-slot=icon]]:-mx-0.5 [&_[data-slot=icon]]:my-0.5 [&_[data-slot=icon]]:size-5 [&_[data-slot=icon]]:shrink-0 [&_[data-slot=icon]]:text-[var(--btn-icon)] sm:[&_[data-slot=icon]]:my-1 sm:[&_[data-slot=icon]]:size-4 [&_[data-slot=icon]]:forced-colors:[--btn-icon:ButtonText] hover:[&_[data-slot=icon]]:forced-colors:[--btn-icon:ButtonText]",
   ],
   solid: [
     // Optical border, implemented as the button background to avoid corner artifacts
-    "border-transparent bg-(--btn-border)",
+    "border-transparent bg-[var(--btn-border)]",
     // Dark mode: border is rendered on `after` so background is set to button background
-    "dark:bg-(--btn-bg)",
+    "dark:bg-[var(--btn-bg)]",
     // Button background, implemented as foreground layer to stack on top of pseudo-border layer
-    "before:absolute before:inset-0 before:-z-10 before:rounded-[calc(var(--radius-lg)-1px)] before:bg-(--btn-bg)",
+    "before:absolute before:inset-0 before:-z-10 before:rounded-lg before:bg-[var(--btn-bg)]",
     // Drop shadow, applied to the inset `before` layer so it blends with the border
     "before:shadow-sm",
     // Background color is moved to control and shadow is removed in dark mode so hide `before` pseudo
@@ -27,11 +27,11 @@ export const styles = {
     // Dark mode: Subtle white outline is applied using a border
     "dark:border-white/5",
     // Shim/overlay, inset to match button foreground and used for hover state + highlight shadow
-    "after:absolute after:inset-0 after:-z-10 after:rounded-[calc(var(--radius-lg)-1px)]",
+    "after:absolute after:inset-0 after:-z-10 after:rounded-lg",
     // Inner highlight shadow
-    "after:shadow-[inset_0_1px_theme(colors.white/15%)]",
+    "after:shadow-[inset_0_1px_rgba(255,255,255,0.15)]",
     // White overlay on hover
-    "enabled:hover:after:bg-(--btn-hover-overlay) enabled:active:after:bg-(--btn-hover-overlay)",
+    "enabled:hover:after:bg-[var(--btn-hover-overlay)] enabled:active:after:bg-[var(--btn-hover-overlay)]",
     // Dark mode: `after` layer expands to cover entire button
     "dark:after:-inset-px dark:after:rounded-lg",
     // Disabled
@@ -55,9 +55,9 @@ export const styles = {
   ],
   colors: {
     "dark/zinc": [
-      "text-white [--btn-bg:var(--color-zinc-900)] [--btn-border:var(--color-zinc-950)]/90 [--btn-hover-overlay:var(--color-white)]/10",
-      "dark:text-white dark:[--btn-bg:var(--color-zinc-600)] dark:[--btn-hover-overlay:var(--color-white)]/5",
-      "[--btn-icon:var(--color-zinc-400)] data-active:[--btn-icon:var(--color-zinc-300)] data-hover:[--btn-icon:var(--color-zinc-300)]",
+      "text-white [--btn-bg:#18181b] [--btn-border:rgba(9,9,11,0.9)] [--btn-hover-overlay:rgba(255,255,255,0.1)]",
+      "dark:text-white dark:[--btn-bg:#52525b] dark:[--btn-hover-overlay:rgba(255,255,255,0.05)]",
+      "[--btn-icon:#a1a1aa]",
     ],
     light: [
       "text-zinc-950 [--btn-bg:white] [--btn-border:var(--color-zinc-950)]/10 [--btn-hover-overlay:var(--color-zinc-950)]/[2.5%] data-active:[--btn-border:var(--color-zinc-950)]/15 data-hover:[--btn-border:var(--color-zinc-950)]/15",
@@ -113,8 +113,12 @@ export const styles = {
       "[--btn-icon:var(--color-white)]/60 data-active:[--btn-icon:var(--color-white)]/80 data-hover:[--btn-icon:var(--color-white)]/80",
     ],
     orange: [
-      "text-white [--btn-hover-overlay:var(--color-white)]/10 [--btn-bg:var(--color-orange-600)] [--btn-border:var(--color-orange-700)]/90",
-      "[--btn-icon:var(--color-white)]/60 data-active:[--btn-icon:var(--color-white)]/80 data-hover:[--btn-icon:var(--color-white)]/80",
+      "text-white [--btn-hover-overlay:rgba(255,255,255,0.1)] [--btn-bg:#F75B1E] [--btn-border:rgba(234,88,12,0.9)]",
+      "[--btn-icon:rgba(255,255,255,0.6)]",
+    ],
+    brand: [
+      "text-white [--btn-hover-overlay:rgba(255,255,255,0.1)] [--btn-bg:#F75B1E] [--btn-border:rgba(234,88,12,0.9)]",
+      "[--btn-icon:rgba(255,255,255,0.6)]",
     ],
     teal: [
       "text-white [--btn-hover-overlay:var(--color-white)]/10 [--btn-bg:var(--color-teal-600)] [--btn-border:var(--color-teal-700)]/90",
@@ -205,7 +209,7 @@ export function TouchTarget({ children }: { children: React.ReactNode }) {
   return (
     <>
       <span
-        className="absolute left-1/2 top-1/2 size-[max(100%,2.75rem)] -tranzinc-x-1/2 -tranzinc-y-1/2 [@media(pointer:fine)]:hidden"
+        className="absolute left-1/2 top-1/2 size-[max(100%,2.75rem)] -translate-x-1/2 -translate-y-1/2 [@media(pointer:fine)]:hidden"
         aria-hidden="true"
       />
       {children}

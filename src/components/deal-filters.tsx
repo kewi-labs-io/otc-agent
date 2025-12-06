@@ -10,7 +10,6 @@ interface FiltersState {
   minMarketCap: number;
   maxMarketCap: number;
   negotiableTypes: ("negotiable" | "fixed")[];
-  isFractionalized: boolean;
   searchQuery: string;
 }
 
@@ -19,64 +18,34 @@ interface DealFiltersProps {
   onFiltersChange: (filters: FiltersState) => void;
 }
 
+type DealType = "all" | "negotiable" | "fixed";
+
 export const DealFilters = memo(function DealFilters({ filters, onFiltersChange }: DealFiltersProps) {
   useRenderTracker("DealFilters");
-  const toggleNegotiableType = useCallback((type: "negotiable" | "fixed") => {
-    if (filters.negotiableTypes.includes(type)) {
-      // If this is the only selected type, invert: turn it off and turn the other on
-      if (filters.negotiableTypes.length === 1) {
-        const other = type === "negotiable" ? "fixed" : "negotiable";
-        onFiltersChange({ ...filters, negotiableTypes: [other] });
-      } else {
-        // Remove this type
-        const newTypes = filters.negotiableTypes.filter((t) => t !== type);
-        onFiltersChange({ ...filters, negotiableTypes: newTypes });
-      }
+
+  const handleTypeChange = useCallback((type: DealType) => {
+    if (type === "all") {
+      onFiltersChange({ ...filters, negotiableTypes: ["negotiable", "fixed"] });
     } else {
-      // Add type
-      onFiltersChange({
-        ...filters,
-        negotiableTypes: [...filters.negotiableTypes, type],
-      });
+      onFiltersChange({ ...filters, negotiableTypes: [type] });
     }
   }, [filters, onFiltersChange]);
 
   const handleTypeSelectChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-    if (value === "all") {
-      onFiltersChange({ ...filters, negotiableTypes: ["negotiable", "fixed"] });
-    } else {
-      onFiltersChange({
-        ...filters,
-        negotiableTypes: [value as "negotiable" | "fixed"],
-      });
-    }
-  }, [filters, onFiltersChange]);
+    handleTypeChange(e.target.value as DealType);
+  }, [handleTypeChange]);
 
-  const handleFracSelectChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-    onFiltersChange({ ...filters, isFractionalized: value === "true" });
-  }, [filters, onFiltersChange]);
-
-  const typeOptions = [
-    {
-      value: "negotiable" as const,
-      icon: "🤝",
-      label: "Offer",
-      title: "Negotiable",
-    },
-    {
-      value: "fixed" as const,
-      icon: "🔒",
-      label: "Fixed",
-      title: "Fixed Price",
-    },
-  ];
-
-  const typeSelectValue =
+  // Determine current type selection
+  const currentType: DealType =
     filters.negotiableTypes.length === 2
       ? "all"
-      : filters.negotiableTypes[0] || "negotiable";
+      : filters.negotiableTypes[0] || "all";
+
+  const typeOptions: { value: DealType; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "negotiable", label: "Negotiable" },
+    { value: "fixed", label: "Fixed" },
+  ];
 
   return (
     <>
@@ -91,7 +60,7 @@ export const DealFilters = memo(function DealFilters({ filters, onFiltersChange 
             onChange={(e) =>
               onFiltersChange({ ...filters, searchQuery: e.target.value })
             }
-            className="w-full px-3 py-2 pl-9 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+            className="w-full px-3 py-2 pl-9 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           <svg
             className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400"
@@ -117,29 +86,30 @@ export const DealFilters = memo(function DealFilters({ filters, onFiltersChange 
           <label className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
             Type:
           </label>
+          <div className="relative">
           <select
-            value={typeSelectValue}
+            value={currentType}
             onChange={handleTypeSelectChange}
-            className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
+              className="appearance-none rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 pl-3 pr-9 py-2 text-sm cursor-pointer"
           >
-            <option value="all">All</option>
+            <option value="all">All Types</option>
             <option value="negotiable">Negotiable</option>
             <option value="fixed">Fixed Price</option>
           </select>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
-            Deal Size:
-          </label>
-          <select
-            value={filters.isFractionalized ? "true" : "false"}
-            onChange={handleFracSelectChange}
-            className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
-          >
-            <option value="false">All</option>
-            <option value="true">Fractionalized</option>
-          </select>
+            <svg
+              className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          </div>
         </div>
       </div>
 
@@ -154,7 +124,7 @@ export const DealFilters = memo(function DealFilters({ filters, onFiltersChange 
             onChange={(e) =>
               onFiltersChange({ ...filters, searchQuery: e.target.value })
             }
-            className="w-full px-3 py-2 pl-9 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+            className="w-full px-3 py-2 pl-9 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           <svg
             className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400"
@@ -171,65 +141,35 @@ export const DealFilters = memo(function DealFilters({ filters, onFiltersChange 
           </svg>
         </div>
 
-        {/* Mobile Filters */}
-        <div className="flex items-stretch gap-1.5 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
+        {/* Mobile Filters: Chain + Type */}
+        <div className="flex items-center gap-2">
           <ChainSelector
             selected={filters.chains}
             onChange={(chains) => onFiltersChange({ ...filters, chains })}
           />
 
-          <div className="w-px bg-zinc-200 dark:bg-zinc-800 flex-shrink-0 mx-0.5" />
-
-          <div className="flex items-center gap-1 flex-1">
-            {typeOptions.map(({ value, icon, label, title }) => {
-              const isSelected = filters.negotiableTypes.includes(value);
+          {/* Type toggle - 3 options */}
+          <div className="flex-1 flex rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+            {typeOptions.map(({ value, label }) => {
+              const isSelected = currentType === value;
               return (
                 <button
                   key={value}
-                  onClick={() => toggleNegotiableType(value)}
+                  onClick={() => handleTypeChange(value)}
                   className={`
-                    flex-1 flex flex-col items-center justify-center gap-0.5
-                    px-2 py-1.5 rounded-lg text-xs font-medium
-                    transition-all duration-200 min-w-0
+                    flex-1 px-3 py-2.5 text-xs font-medium transition-colors
                     ${
                       isSelected
-                        ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                        : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
+                        ? "bg-brand-500 text-white"
+                        : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                     }
                   `}
-                  title={title}
                 >
-                  <span className="text-base leading-none">{icon}</span>
-                  <span className="leading-none truncate">{label}</span>
+                  {label}
                 </button>
               );
             })}
           </div>
-
-          <div className="w-px bg-zinc-200 dark:bg-zinc-800 flex-shrink-0 mx-0.5" />
-
-          <button
-            onClick={() =>
-              onFiltersChange({
-                ...filters,
-                isFractionalized: !filters.isFractionalized,
-              })
-            }
-            className={`
-              flex-1 flex flex-col items-center justify-center gap-0.5
-              px-2 py-1.5 rounded-lg text-xs font-medium
-              transition-all duration-200 min-w-0
-              ${
-                filters.isFractionalized
-                  ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                  : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
-              }
-            `}
-            title="Fractionalized only"
-          >
-            <span className="text-base leading-none">🧩</span>
-            <span className="leading-none truncate">Frac</span>
-          </button>
         </div>
       </div>
     </>

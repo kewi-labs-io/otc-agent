@@ -25,7 +25,6 @@ const INITIAL_FILTERS = {
   minMarketCap: 0,
   maxMarketCap: 0,
   negotiableTypes: ["negotiable", "fixed"] as ("negotiable" | "fixed")[],
-  isFractionalized: false,
   searchQuery: "",
 };
 

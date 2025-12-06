@@ -9,9 +9,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { useEffect, useMemo, useState } from "react";
 import { WagmiProvider } from "wagmi";
-import { PrivyProvider } from "@privy-io/react-auth";
+import { PrivyProvider, type WalletListEntry } from "@privy-io/react-auth";
 import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
 import { useRenderTracker } from "@/utils/render-tracker";
+
+// Theme colors for external library configs (Privy)
+const COINBASE_BLUE = "#0052ff" as `#${string}`;
 
 // Create query client once, outside component to prevent re-creation on renders
 const queryClient = new QueryClient({
@@ -48,18 +51,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const privyConfig = useMemo(
     () => ({
       // Farcaster + available wallets (auto-detect what's installed)
-      loginMethods: ["farcaster", "wallet"] as const,
+      loginMethods: ["farcaster", "wallet"] as ("farcaster" | "wallet")[],
       // Support EVM and Solana wallets via Privy
       appearance: {
         theme: "light" as const,
-        accentColor: "#0052ff",
+        accentColor: COINBASE_BLUE,
         walletChainType: "ethereum-and-solana" as const,
         walletList: [
           "detected_ethereum_wallets",
           "detected_solana_wallets",
           "wallet_connect",
           "phantom",
-        ] as const,
+        ] as WalletListEntry[],
       },
       // Embedded wallets for users without external wallets
       embeddedWallets: {
