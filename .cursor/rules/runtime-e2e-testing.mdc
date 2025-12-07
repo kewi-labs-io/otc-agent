@@ -19,3 +19,9 @@ All tests are runtime end-to-end. No unit tests, no mocks.
 - No mocking frameworks, spies, or fake timers
 - No isolated unit tests
 - No trivial assertions testing language/framework behavior
+
+USE SYNPRESS
+
+Synpress is a version of Playwright with Metamask
+
+ALWAYS MAKE SURE TO SOLVE LOGIN FIRST. Otherwise you won't test anything.
