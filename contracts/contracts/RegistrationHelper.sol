@@ -175,6 +175,9 @@ contract RegistrationHelper is Ownable {
         // Register token to OTC
         otc.registerToken(tokenId, tokenAddress, oracle);
         
+        // Emit event before external ETH transfers (CEI pattern)
+        emit TokenRegistered(tokenId, tokenAddress, poolAddress, oracle, msg.sender);
+        
         // Forward fee to recipient
         if (feeRecipient != address(0)) {
             (bool success, ) = payable(feeRecipient).call{value: registrationFee}("");
@@ -187,8 +190,6 @@ contract RegistrationHelper is Ownable {
             (bool refundSuccess, ) = payable(msg.sender).call{value: refund}("");
             require(refundSuccess, "refund failed");
         }
-        
-        emit TokenRegistered(tokenId, tokenAddress, poolAddress, oracle, msg.sender);
     }
     
     /// @notice Update registration fee (owner only)

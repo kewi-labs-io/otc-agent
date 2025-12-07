@@ -66,10 +66,7 @@ contract FullLifecycleTest is Test {
             0, 1000, // discount range (0-10%)
             0, 30,   // lockup range
             100e18, 1000e18, // deal size limits
-            true,    // fractionalized
-            false,   // private
-            500,     // max volatility
-            3600     // max time
+            500      // max volatility
         );
         
         // Verify Consignment State
@@ -78,9 +75,6 @@ contract FullLifecycleTest is Test {
             address c_consigner,
             uint256 c_total,
             uint256 c_remaining,
-            ,
-            ,
-            ,
             ,
             ,
             ,
@@ -152,7 +146,7 @@ contract FullLifecycleTest is Test {
         assertFalse(o_paid);
         
         // Verify Counters Updated
-        (,,, uint256 c_remaining_after,,,,,,,,,,,,,,,) = otc.consignments(consignmentId);
+        (,,, uint256 c_remaining_after,,,,,,,,,,,,) = otc.consignments(consignmentId);
         assertEq(c_remaining_after, 1000e18 - offerAmount);
         assertEq(otc.tokenReserved(tokenId), offerAmount); // Reserved explicitly
         
@@ -218,7 +212,7 @@ contract FullLifecycleTest is Test {
         // but verify internal accounting is cleared
         assertEq(otc.consignmentGasDeposit(consignmentId), 0);
         
-        (,,, uint256 c_rem_final,,,,,,,,,,,,,,bool c_active_final,) = otc.consignments(consignmentId);
+        (,,, uint256 c_rem_final,,,,,,,,,,,bool c_active_final,) = otc.consignments(consignmentId);
         assertEq(c_rem_final, 0);
         assertFalse(c_active_final);
         
@@ -236,7 +230,7 @@ contract FullLifecycleTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 100e18);
         uint256 cid = otc.createConsignment{value: 0.001 ether}(
-            tokenId, 100e18, false, 0, 0, 0, 0, 0, 0, 100e18, 100e18, false, false, 500, 3600
+            tokenId, 100e18, false, 0, 0, 0, 0, 0, 0, 100e18, 100e18, 500
         );
         vm.stopPrank();
         
@@ -246,7 +240,7 @@ contract FullLifecycleTest is Test {
         vm.stopPrank();
         
         // Verify consignment inactive (depleted)
-        (,,, uint256 rem,,,,,,,,,,,,,,bool active,) = otc.consignments(cid);
+        (,,, uint256 rem,,,,,,,,,,,bool active,) = otc.consignments(cid);
         assertEq(rem, 0);
         assertFalse(active);
         assertEq(otc.tokenReserved(tokenId), 100e18);
@@ -256,7 +250,7 @@ contract FullLifecycleTest is Test {
         otc.cancelOffer(oid);
         
         // Verify Inventory Restored
-        (,,, rem,,,,,,,,,,,,,, active,) = otc.consignments(cid);
+        (,,, rem,,,,,,,,,,, active,) = otc.consignments(cid);
         assertEq(rem, 100e18);
         assertTrue(active);
         assertEq(otc.tokenReserved(tokenId), 0);
@@ -268,11 +262,11 @@ contract FullLifecycleTest is Test {
         token.approve(address(otc), 200e18);
         // C1
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 100e18, false, 0, 0, 0, 0, 0, 0, 100e18, 100e18, false, false, 500, 3600
+            tokenId, 100e18, false, 0, 0, 0, 0, 0, 0, 100e18, 100e18, 500
         );
         // C2
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 100e18, false, 0, 0, 0, 0, 0, 0, 100e18, 100e18, false, false, 500, 3600
+            tokenId, 100e18, false, 0, 0, 0, 0, 0, 0, 100e18, 100e18, 500
         );
         vm.stopPrank();
         

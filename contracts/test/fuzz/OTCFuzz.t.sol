@@ -68,10 +68,10 @@ contract OTCFuzzTest is Test {
             0, 1000,
             0, 30,
             100e18, amount,
-            true, false, 500, 3600
+            500
         );
         
-        (,, uint256 total, uint256 remaining,,,,,,,,,,,,,,,) = otc.consignments(consignmentId);
+        (,, uint256 total, uint256 remaining,,,,,,,,,,,,) = otc.consignments(consignmentId);
         assertEq(total, amount);
         assertEq(remaining, amount);
         vm.stopPrank();
@@ -88,7 +88,7 @@ contract OTCFuzzTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 10000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 10000e18, true, 0, 0, 0, 1000, 0, 30, 100e18, 10000e18, true, false, 500, 3600
+            tokenId, 10000e18, true, 0, 0, 0, 1000, 0, 30, 100e18, 10000e18, 500
         );
         vm.stopPrank();
         
@@ -116,7 +116,7 @@ contract OTCFuzzTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 10000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 10000e18, true, 0, 0, 0, 1000, 0, 30, 100e18, 10000e18, true, false, 500, 3600
+            tokenId, 10000e18, true, 0, 0, 0, 1000, 0, 30, 100e18, 10000e18, 500
         );
         vm.stopPrank();
         
@@ -142,7 +142,7 @@ contract OTCFuzzTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 10000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 10000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 10000e18, true, false, 500, 3600
+            tokenId, 10000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 10000e18, 500
         );
         vm.stopPrank();
         
@@ -186,7 +186,7 @@ contract OTCFuzzTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 100000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 100000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 100000e18, true, false, 500, 3600
+            tokenId, 100000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 100000e18, 500
         );
         vm.stopPrank();
         
@@ -226,7 +226,7 @@ contract OTCFuzzTest is Test {
         
         for (uint256 i = 0; i < numConsignments; i++) {
             otc.createConsignment{value: 0.001 ether}(
-                tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+                tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
             );
         }
         
@@ -247,7 +247,7 @@ contract OTCFuzzTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -285,7 +285,7 @@ contract OTCFuzzTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, true, 0, 0, 0, 1000, 0, 30, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, true, 0, 0, 0, 1000, 0, 30, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         

@@ -51,7 +51,7 @@ contract RugPullTest is Test {
         otc.createConsignment{value: 0.001 ether}(
             tokenId, 1000e18, false, // fixed
             0, 365, // 0% discount, 365 days lockup
-            0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         

@@ -71,10 +71,7 @@ contract PaymentFlowTest is Test {
             0, 0,  // no ranges
             0, 0,  // no ranges
             100e18, 1000e18,
-            true,  // fractionalized
-            false, // not private
-            500,
-            3600
+            500    // max volatility
         );
         vm.stopPrank();
 
@@ -144,7 +141,7 @@ contract PaymentFlowTest is Test {
         otc.createConsignment{value: 0.001 ether}(
             tokenId,
             1000e18,
-            false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
 
@@ -201,7 +198,7 @@ contract PaymentFlowTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
 
@@ -240,7 +237,7 @@ contract PaymentFlowTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
 
@@ -282,7 +279,7 @@ contract PaymentFlowTest is Test {
             tokenId, 1000e18, false, 
             1000, // 10% discount
             0,    // no lockup
-            0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
 

@@ -53,11 +53,11 @@ contract OTCFeeTokenTest is Test {
         otc.createConsignment{value: 0.001 ether}(
             tokenId,
             amount,
-            true, 0, 0, 0, 1000, 0, 30, 100e18, 1000e18, true, false, 500, 3600
+            true, 0, 0, 0, 1000, 0, 30, 100e18, 1000e18, 500
         );
         
         // Check consignment details
-        (,, uint256 total, uint256 remaining,,,,,,,,,,,,,,,) = otc.consignments(1);
+        (,, uint256 total, uint256 remaining,,,,,,,,,,,,) = otc.consignments(1);
         
         // If bug exists, total == 1000, but actual balance == 990
         console.log("Consignment Total:", total);

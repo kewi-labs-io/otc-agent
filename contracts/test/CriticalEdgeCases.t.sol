@@ -72,7 +72,7 @@ contract CriticalEdgeCasesTest is Test {
             0, 0,  // fixed params unused
             10000, 10000, // 100% discount allowed
             0, 30,
-            100e18, 1000e18, true, false, 500, 3600
+            100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -93,7 +93,7 @@ contract CriticalEdgeCasesTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -125,7 +125,7 @@ contract CriticalEdgeCasesTest is Test {
         assertEq(buyer.balance, buyerBalBefore, "Buyer got ETH refund");
         
         // Verify consignment restored
-        (,,, uint256 remaining,,,,,,,,,,,,,,bool active,) = otc.consignments(1);
+        (,,, uint256 remaining,,,,,,,,,,,bool active,) = otc.consignments(1);
         assertEq(remaining, 1000e18, "Tokens restored");
         assertTrue(active, "Consignment active");
     }
@@ -142,7 +142,7 @@ contract CriticalEdgeCasesTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -161,7 +161,7 @@ contract CriticalEdgeCasesTest is Test {
         token.approve(address(otc), 1000e18);
         vm.expectRevert();
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -193,7 +193,7 @@ contract CriticalEdgeCasesTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -242,7 +242,7 @@ contract CriticalEdgeCasesTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         uint256 cid = otc.createConsignment{value: 0}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -264,7 +264,7 @@ contract CriticalEdgeCasesTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -299,7 +299,7 @@ contract CriticalEdgeCasesTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -322,7 +322,7 @@ contract CriticalEdgeCasesTest is Test {
         assertEq(reservedAfter, 0, "Tokens released");
         
         // Consignment restored
-        (,,, uint256 remaining,,,,,,,,,,,,,,bool active,) = otc.consignments(1);
+        (,,, uint256 remaining,,,,,,,,,,,bool active,) = otc.consignments(1);
         assertEq(remaining, 1000e18, "Tokens restored to consignment");
         assertTrue(active, "Consignment still active");
     }
@@ -342,7 +342,7 @@ contract CriticalEdgeCasesTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1_000_000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1_000_000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1_000_000e18, true, false, 500, 3600
+            tokenId, 1_000_000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1_000_000e18, 500
         );
         vm.stopPrank();
         
@@ -385,7 +385,7 @@ contract CriticalEdgeCasesTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         otc.withdrawConsignment(1);
         vm.stopPrank();
@@ -397,33 +397,7 @@ contract CriticalEdgeCasesTest is Test {
     }
 
     // ============================================================
-    // EDGE CASE #11: Private Consignment (placeholder for future)
-    // ============================================================
-    
-    /**
-     * @notice Test private consignment flag (currently not enforced)
-     * @dev Note: isPrivate flag exists but isn't enforced - potential future feature
-     */
-    function test_EDGE_PrivateConsignment() public {
-        vm.startPrank(consigner);
-        token.approve(address(otc), 1000e18);
-        // Create private consignment
-        otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, 
-            true, // isPrivate = true
-            500, 3600
-        );
-        vm.stopPrank();
-        
-        // Currently anyone can still create offers (flag not enforced)
-        // This is noted as potential future feature
-        vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
-        assertGt(offerId, 0, "Offer created (isPrivate not enforced)");
-    }
-
-    // ============================================================
-    // EDGE CASE #12: Claim Before Unlock Fails
+    // EDGE CASE #11: Claim Before Unlock Fails
     // ============================================================
     
     /**
@@ -438,7 +412,7 @@ contract CriticalEdgeCasesTest is Test {
             0, 0,
             0, 1000,
             0, 365, // 0-365 days lockup range
-            100e18, 1000e18, true, false, 500, 3600
+            100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -481,7 +455,7 @@ contract CriticalEdgeCasesTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -512,7 +486,7 @@ contract CriticalEdgeCasesTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -602,12 +576,12 @@ contract FeeOnTransferEdgeCases is Test {
         vm.startPrank(consigner);
         feeToken.approve(address(otc), depositAmount);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, depositAmount, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, depositAmount, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
         // Verify actual amount received is tracked
-        (,,uint256 total, uint256 remaining,,,,,,,,,,,,,,,) = otc.consignments(1);
+        (,,uint256 total, uint256 remaining,,,,,,,,,,,,) = otc.consignments(1);
         
         // Due to 1% fee, only 990 tokens should be tracked
         assertEq(total, expectedActual, "Total should reflect fee deduction");
@@ -629,7 +603,7 @@ contract FeeOnTransferEdgeCases is Test {
         vm.startPrank(consigner);
         feeToken.approve(address(otc), depositAmount);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, depositAmount, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, depositAmount, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -705,7 +679,7 @@ contract AdminEmergencyWithdrawTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -740,7 +714,7 @@ contract AdminEmergencyWithdrawTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -782,7 +756,7 @@ contract AdminEmergencyWithdrawTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         

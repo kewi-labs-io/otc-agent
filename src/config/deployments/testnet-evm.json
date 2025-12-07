@@ -1,5 +1,7 @@
 {
   "network": "base-sepolia",
+  "chainId": 84532,
+  "deployer": "0x5dB1268e424da5C26451e4a8B9C221e6DE3C3064",
   "contracts": {
     "otc": "0x08cAa161780d195E0799b73b318da5D175b85313",
     "registrationHelper": "0xD28752E9bBC29DDc14DA83dD673a36A5A19e91B1",

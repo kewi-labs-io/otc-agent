@@ -20,6 +20,20 @@ import type {
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 import { getContracts } from "@/config/contracts";
 
+// Mainnet OTC addresses from deployment config (hardcoded fallback)
+const MAINNET_OTC_ADDRESS = "0x12FA61c9d77AEd9BeDA0FF4bF2E900F31bdBdc45";
+const TESTNET_OTC_ADDRESS = "0x08cAa161780d195E0799b73b318da5D175b85313";
+
+// Helper to get network environment
+function getNetworkEnvironment(): "local" | "testnet" | "mainnet" {
+  const explicitNetwork = process.env.NEXT_PUBLIC_NETWORK;
+  if (explicitNetwork === "mainnet") return "mainnet";
+  if (explicitNetwork === "testnet") return "testnet";
+  if (explicitNetwork === "local" || explicitNetwork === "localnet") return "local";
+  if (process.env.NEXT_PUBLIC_USE_MAINNET === "true") return "mainnet";
+  return "testnet";
+}
+
 // Helper to get OTC address from deployments or env - cached at module level
 let cachedOtcAddress: Address | undefined = undefined;
 let addressLogged = false;
@@ -29,7 +43,26 @@ function getOtcAddress(): Address | undefined {
     return cachedOtcAddress;
   }
 
-  // Try environment variables first
+  const network = getNetworkEnvironment();
+  const deployments = getContracts(network);
+
+  // First: try deployment config (highest priority)
+  const configAddress = deployments.evm?.contracts?.otc;
+  if (configAddress) {
+    if (process.env.NODE_ENV === "development" && !addressLogged) {
+      console.log(
+        "[useOTC] Using OTC address from deployment config:",
+        configAddress,
+        "network:",
+        network,
+      );
+      addressLogged = true;
+    }
+    cachedOtcAddress = configAddress as Address;
+    return cachedOtcAddress;
+  }
+
+  // Second: try environment variables
   const envAddress =
     process.env.NEXT_PUBLIC_BASE_OTC_ADDRESS ||
     process.env.NEXT_PUBLIC_OTC_ADDRESS;
@@ -42,31 +75,24 @@ function getOtcAddress(): Address | undefined {
     return cachedOtcAddress;
   }
 
-  // Fallback to deployment config
-  const network = process.env.NEXT_PUBLIC_NETWORK as
-    | "local"
-    | "testnet"
-    | "mainnet"
-    | undefined;
-  const deployments = getContracts(network || "testnet");
-  const configAddress = deployments.evm?.contracts?.otc;
+  // Third: use hardcoded fallbacks based on network
+  const fallbackAddress = network === "mainnet" 
+    ? MAINNET_OTC_ADDRESS 
+    : network === "testnet" 
+      ? TESTNET_OTC_ADDRESS 
+      : undefined;
 
-  if (configAddress) {
+  if (fallbackAddress) {
     if (process.env.NODE_ENV === "development" && !addressLogged) {
-      console.log(
-        "[useOTC] Using OTC address from deployment config:",
-        configAddress,
-        "network:",
-        network || "testnet",
-      );
+      console.log("[useOTC] Using hardcoded fallback OTC address:", fallbackAddress, "network:", network);
       addressLogged = true;
     }
-    cachedOtcAddress = configAddress as Address;
+    cachedOtcAddress = fallbackAddress as Address;
     return cachedOtcAddress;
   }
 
   if (!addressLogged) {
-    console.warn("[useOTC] No OTC address found in env or deployment config");
+    console.warn("[useOTC] No OTC address found in config, env, or fallbacks");
     addressLogged = true;
   }
   return undefined;

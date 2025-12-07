@@ -1,5 +1,6 @@
 /**
  * OTC Marketplace E2E Tests
+ * Consolidated test suite for UI, navigation, API, and auth flows
  */
 
 import { test, expect } from '@playwright/test';
@@ -10,14 +11,14 @@ test.use({ viewport: { width: 1280, height: 720 } });
 const BASE_URL = process.env.BASE_URL || 'http://localhost:4444';
 
 // =============================================================================
-// PAGE LOADING
+// PAGES
 // =============================================================================
 
 test.describe('Pages', () => {
-  test('homepage has search and chain filter', async ({ page }) => {
+  test('homepage loads with search and chain filter', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByPlaceholder(/search/i).first()).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('select').first()).toBeVisible();
+    await expect(page.locator('select').first()).toBeVisible({ timeout: 5000 });
   });
 
   test('consign page shows Sign In', async ({ page }) => {
@@ -69,6 +70,14 @@ test.describe('Navigation', () => {
     await expect(page).toHaveURL(/consign/, { timeout: 10000 });
   });
 
+  test('footer has terms and privacy links', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.waitForTimeout(500);
+    await expect(page.getByRole('link', { name: /terms/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('link', { name: /privacy/i })).toBeVisible({ timeout: 5000 });
+  });
+
   test('404 for invalid routes', async ({ page }) => {
     await page.goto('/nonexistent-page-xyz');
     const has404 = await page.locator('text=/404|not found/i').isVisible({ timeout: 5000 }).catch(() => false);
@@ -78,11 +87,11 @@ test.describe('Navigation', () => {
 });
 
 // =============================================================================
-// AUTHENTICATION
+// AUTH
 // =============================================================================
 
 test.describe('Auth', () => {
-  test('Sign In opens Privy modal', async ({ page }) => {
+  test('Sign In opens auth modal', async ({ page }) => {
     await page.goto('/consign');
     const btn = page.getByRole('button', { name: /sign in/i }).first();
     await expect(btn).toBeVisible({ timeout: 15000 });
@@ -91,8 +100,9 @@ test.describe('Auth', () => {
     await page.waitForTimeout(2000);
     
     const hasPrivy = await page.locator('[class*="privy"]').first().isVisible({ timeout: 5000 }).catch(() => false);
-    const hasAuth = await page.locator('text=/farcaster|wallet|continue/i').first().isVisible({ timeout: 3000 }).catch(() => false);
-    expect(hasPrivy || hasAuth).toBe(true);
+    const hasAuth = await page.locator('text=/farcaster|wallet|continue|evm|solana/i').first().isVisible({ timeout: 3000 }).catch(() => false);
+    const hasDialog = await page.locator('[role="dialog"]').first().isVisible({ timeout: 3000 }).catch(() => false);
+    expect(hasPrivy || hasAuth || hasDialog).toBe(true);
   });
 
   test('Escape closes modal', async ({ page }) => {
@@ -134,7 +144,7 @@ test.describe('Chain Filter', () => {
 });
 
 // =============================================================================
-// TOKEN LISTINGS & TOKEN PAGE
+// TOKEN LISTINGS
 // =============================================================================
 
 test.describe('Token Page', () => {
@@ -154,7 +164,7 @@ test.describe('Token Page', () => {
     await expect(page).toHaveURL(/\/token\//, { timeout: 10000 });
   });
 
-  test('token page has chat interface requiring wallet', async ({ page }) => {
+  test('token page has chat interface', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('text=/Listings:/i').first()).toBeVisible({ timeout: 20000 });
     
@@ -225,19 +235,41 @@ test.describe('API', () => {
 });
 
 // =============================================================================
-// MOBILE
+// RESPONSIVE
 // =============================================================================
 
-test.describe('Mobile', () => {
-  test('menu button on mobile', async ({ page }) => {
+test.describe('Responsive', () => {
+  test('mobile viewport has menu button', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('/');
     await expect(page.getByRole('button', { name: /menu/i })).toBeVisible({ timeout: 10000 });
+  });
+
+  test('tablet viewport renders', async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.goto('/');
+    await expect(page.locator('body')).toBeVisible();
   });
 
   test('consign works on mobile', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('/consign');
     await expect(page.getByRole('button', { name: /sign in/i }).first()).toBeVisible({ timeout: 15000 });
+  });
+});
+
+// =============================================================================
+// ERROR HANDLING
+// =============================================================================
+
+test.describe('Error Handling', () => {
+  test('invalid token page handled', async ({ page }) => {
+    await page.goto('/token/invalid123');
+    await expect(page.locator('body')).toBeVisible({ timeout: 10000 });
+  });
+
+  test('invalid deal page handled', async ({ page }) => {
+    await page.goto('/deal/invalid123');
+    await expect(page.locator('body')).toBeVisible({ timeout: 10000 });
   });
 });

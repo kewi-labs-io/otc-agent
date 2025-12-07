@@ -73,10 +73,16 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
   base: (() => {
     const isMainnet = env === "mainnet";
     const chain = isMainnet ? base : baseSepolia;
-    // Use deployments if available, else env vars, else defaults
+    
+    // Hardcoded mainnet/testnet OTC addresses from deployment configs
+    const MAINNET_OTC = "0x12FA61c9d77AEd9BeDA0FF4bF2E900F31bdBdc45";
+    const TESTNET_OTC = "0x08cAa161780d195E0799b73b318da5D175b85313";
+    
+    // Use deployments if available, else env vars, else hardcoded defaults
     const otc =
       deployments.evm?.contracts?.otc ||
-      process.env.NEXT_PUBLIC_BASE_OTC_ADDRESS;
+      process.env.NEXT_PUBLIC_BASE_OTC_ADDRESS ||
+      (isMainnet ? MAINNET_OTC : TESTNET_OTC);
 
     // For mainnet, use proxy route to keep Alchemy key server-side
     // For testnet, use public Sepolia RPC

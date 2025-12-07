@@ -61,13 +61,10 @@ contract OTCTest is Test {
             0, 1000, // 0-10% discount
             0, 30, // 0-30 days lockup
             100e18, 1000e18, // limits
-            true,
-            false,
-            500,
-            3600
+            500      // max volatility
         );
         
-        (,, uint256 total, uint256 remaining,,,,,,,,,,,,,,,) = otc.consignments(1);
+        (,, uint256 total, uint256 remaining,,,,,,,,,,,,) = otc.consignments(1);
         assertEq(total, 1000e18);
         assertEq(remaining, 1000e18);
         assertEq(otc.tokenDeposited(tokenId), 1000e18);
@@ -79,7 +76,7 @@ contract OTCTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, true, 0, 0, 0, 1000, 0, 30, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, true, 0, 0, 0, 1000, 0, 30, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -127,7 +124,7 @@ contract OTCTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, true, 0, 0, 0, 1000, 0, 30, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, true, 0, 0, 0, 1000, 0, 30, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -138,7 +135,7 @@ contract OTCTest is Test {
         );
         
         // Check remaining reduced
-        (,,, uint256 remaining,,,,,,,,,,,,,,,) = otc.consignments(1);
+        (,,, uint256 remaining,,,,,,,,,,,,) = otc.consignments(1);
         assertEq(remaining, 900e18);
         assertEq(otc.tokenReserved(tokenId), 100e18);
         
@@ -150,7 +147,7 @@ contract OTCTest is Test {
         otc.cancelOffer(offerId);
         
         // Check restored
-        (,,, remaining,,,,,,,,,,,,,,,) = otc.consignments(1);
+        (,,, remaining,,,,,,,,,,,,) = otc.consignments(1);
         assertEq(remaining, 1000e18, "Inventory not restored on cancel");
         assertEq(otc.tokenReserved(tokenId), 0, "Reservation not cleared on cancel");
     }

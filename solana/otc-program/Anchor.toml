@@ -19,7 +19,7 @@ cluster = "localnet"
 wallet = "./id.json"
 
 [scripts]
-test = "bunx --bun ts-mocha -p ./tsconfig.json -t 1000000 tests/otc.security-audit.ts"
+test = "bunx --bun ts-mocha -p ./tsconfig.json -t 1000000 tests/otc.pool-oracle-security.ts tests/otc.pool-security-rigorous.ts tests/otc.localnet.ts"
 
 [test]
 startup_wait = 10000

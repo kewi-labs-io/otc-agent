@@ -9,179 +9,8 @@ import {IAggregatorV3} from "../contracts/interfaces/IAggregatorV3.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
- * @title UnenforcedFeaturesTest
- * @notice Documents and tests unenforced consignment flags
- * @dev These flags exist in the struct but aren't enforced in business logic
- *      May be placeholders for future features or bugs to be fixed
- */
-contract UnenforcedFeaturesTest is Test {
-    OTC public otc;
-    MockERC20 public token;
-    MockERC20 public usdc;
-    MockAggregatorV3 public ethFeed;
-    MockAggregatorV3 public tokenFeed;
-    
-    address public owner = address(1);
-    address public agent = address(2);
-    address public approver = address(3);
-    address public consigner = address(4);
-    address public buyer = address(5);
-    address public randomUser = address(6);
-    
-    bytes32 public tokenId;
-
-    function setUp() public {
-        vm.startPrank(owner);
-        
-        token = new MockERC20("Test", "TST", 18, 100_000_000e18);
-        usdc = new MockERC20("USDC", "USDC", 6, 100_000_000e6);
-        ethFeed = new MockAggregatorV3(8, 3000e8);
-        tokenFeed = new MockAggregatorV3(8, 1e8);
-        
-        otc = new OTC(owner, IERC20(address(usdc)), IAggregatorV3(address(ethFeed)), agent);
-        otc.setApprover(approver, true);
-        
-        tokenId = keccak256("TST");
-        otc.registerToken(tokenId, address(token), address(tokenFeed));
-        
-        token.transfer(consigner, 10_000_000e18);
-        usdc.transfer(buyer, 10_000_000e6);
-        usdc.transfer(randomUser, 10_000_000e6);
-        vm.deal(consigner, 100 ether);
-        vm.deal(buyer, 100 ether);
-        
-        vm.stopPrank();
-    }
-
-    // ============================================================
-    // UNENFORCED #1: isPrivate Flag
-    // ============================================================
-    
-    /**
-     * @notice DOCUMENTATION: isPrivate flag is stored but NOT enforced
-     * @dev Anyone can create offers on "private" consignments
-     *      This may be intentional (placeholder) or a bug
-     */
-    function test_UNENFORCED_PrivateNotEnforced() public {
-        // Create "private" consignment
-        vm.startPrank(consigner);
-        token.approve(address(otc), 1000e18);
-        otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 
-            true, // isFractionalized
-            true, // isPrivate = TRUE
-            500, 3600
-        );
-        vm.stopPrank();
-        
-        // Verify isPrivate is stored
-        (,,,,,,,,,,,,,, bool isPrivate,,,,) = otc.consignments(1);
-        assertTrue(isPrivate, "isPrivate should be true");
-        
-        // Random user can still create offers (NOT ENFORCED)
-        vm.prank(randomUser);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
-        
-        assertGt(offerId, 0, "UNENFORCED: Random user created offer on private consignment");
-        
-        console.log("WARNING: isPrivate flag is NOT enforced in createOfferFromConsignment");
-        console.log("Anyone can create offers on private consignments");
-    }
-
-    // ============================================================
-    // UNENFORCED #2: isFractionalized Flag  
-    // ============================================================
-    
-    /**
-     * @notice DOCUMENTATION: isFractionalized flag is stored but NOT enforced
-     * @dev The flag doesn't affect offer creation logic
-     *      Fractionalization would require NFT-like sub-division logic
-     */
-    function test_UNENFORCED_FractionalizedNotUsed() public {
-        // Create non-fractionalized consignment
-        vm.startPrank(consigner);
-        token.approve(address(otc), 1000e18);
-        otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 
-            false, // isFractionalized = FALSE
-            false, 500, 3600
-        );
-        vm.stopPrank();
-        
-        // Multiple offers can still be created (fractionalization happens anyway)
-        vm.startPrank(buyer);
-        otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
-        otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
-        otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
-        vm.stopPrank();
-        
-        console.log("WARNING: isFractionalized flag has no effect on offer logic");
-        console.log("Multiple offers can always be created regardless of flag value");
-    }
-
-    // ============================================================
-    // UNENFORCED #3: maxTimeToExecute Flag
-    // ============================================================
-    
-    /**
-     * @notice DOCUMENTATION: maxTimeToExecute flag is stored but NOT fully enforced
-     * @dev The offer expiry uses quoteExpirySeconds, not maxTimeToExecute
-     *      maxTimeToExecute could be used for different per-consignment expiry
-     */
-    function test_UNENFORCED_MaxTimeToExecuteNotUsedInExpiry() public {
-        // Set a short maxTimeToExecute
-        vm.startPrank(consigner);
-        token.approve(address(otc), 1000e18);
-        otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 
-            60 // maxTimeToExecute = 60 seconds
-        );
-        vm.stopPrank();
-        
-        vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
-        
-        vm.prank(approver);
-        otc.approveOffer(offerId);
-        
-        // Warp 5 minutes (past maxTimeToExecute but within quoteExpirySeconds)
-        vm.warp(block.timestamp + 5 minutes);
-        
-        // Fulfillment still works because quoteExpirySeconds (30 min) is used, not maxTimeToExecute
-        vm.startPrank(buyer);
-        usdc.approve(address(otc), 100e6);
-        otc.fulfillOffer(offerId); // Does NOT fail even though maxTimeToExecute passed
-        vm.stopPrank();
-        
-        console.log("WARNING: maxTimeToExecute is stored but NOT used for offer expiry");
-        console.log("quoteExpirySeconds (global) is used instead");
-    }
-
-    // ============================================================
-    // RECOMMENDATION: Fix or Document These Features
-    // ============================================================
-    
-    /**
-     * @notice Summary of unenforced features
-     * @dev These should either be:
-     *      1. Implemented properly
-     *      2. Removed from the struct
-     *      3. Documented as placeholders for future use
-     *
-     * UNENFORCED FLAGS:
-     * - isPrivate: Should restrict who can create offers (e.g., whitelist)
-     * - isFractionalized: Purpose unclear, possibly for NFT-like ownership
-     * - maxTimeToExecute: Should override quoteExpirySeconds per-consignment
-     */
-    function test_Summary() public pure {
-        // This test documents the unenforced features
-        // No assertions - just documentation
-    }
-}
-
-/**
  * @title PotentialImprovementsTest
- * @notice Tests demonstrating potential improvements
+ * @notice Tests demonstrating potential improvements and design decisions
  */
 contract PotentialImprovementsTest is Test {
     OTC public otc;
@@ -229,7 +58,7 @@ contract PotentialImprovementsTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -276,7 +105,7 @@ contract PotentialImprovementsTest is Test {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, true, false, 500, 3600
+            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
         );
         vm.stopPrank();
         
@@ -315,4 +144,3 @@ contract PotentialImprovementsTest is Test {
         console.log("Even if new requirement is met, offer won't auto-approve");
     }
 }
-

@@ -71,7 +71,7 @@ contract OTCHandler is Test {
             0, 1000, // 0-10% discount
             0, 30,   // 0-30 days lockup  
             100e18, amount, // deal limits
-            true, false, 500, 3600
+            500 // maxPriceVolatilityBps
         ) returns (uint256 cid) {
             ghost_totalTokensDeposited += amount;
             ghost_totalConsignments++;

@@ -5,6 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IAggregatorV3} from "./interfaces/IAggregatorV3.sol";
 
+/// @dev Minimal IUniswapV3Pool interface with slot0 for spot price validation
 interface IUniswapV3Pool {
     function token0() external view returns (address);
     function token1() external view returns (address);

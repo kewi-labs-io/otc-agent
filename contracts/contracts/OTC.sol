@@ -40,10 +40,7 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
     uint32 maxLockupDays;
     uint256 minDealAmount;
     uint256 maxDealAmount;
-    bool isFractionalized;
-    bool isPrivate;
     uint16 maxPriceVolatilityBps;
-    uint32 maxTimeToExecute;
     bool isActive;
     uint256 createdAt;
   }
@@ -232,10 +229,7 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
     uint32 maxLockupDays,
     uint256 minDealAmount,
     uint256 maxDealAmount,
-    bool isFractionalized,
-    bool isPrivate,
-    uint16 maxPriceVolatilityBps,
-    uint32 maxTimeToExecute
+    uint16 maxPriceVolatilityBps
   ) external payable nonReentrant whenNotPaused returns (uint256) {
     RegisteredToken memory tkn = tokens[tokenId];
     require(tkn.isActive, "token not active");
@@ -269,10 +263,7 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
       maxLockupDays: maxLockupDays,
       minDealAmount: minDealAmount,
       maxDealAmount: maxDealAmount,
-      isFractionalized: isFractionalized,
-      isPrivate: isPrivate,
       maxPriceVolatilityBps: maxPriceVolatilityBps,
-      maxTimeToExecute: maxTimeToExecute,
       isActive: true,
       createdAt: block.timestamp
     });
