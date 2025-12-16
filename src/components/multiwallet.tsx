@@ -16,6 +16,7 @@ import {
   useWallets,
   type User as PrivyUser,
 } from "@privy-io/react-auth";
+import { useWallet as useSolanaWalletAdapter } from "@solana/wallet-adapter-react";
 import { SUPPORTED_CHAINS, type ChainFamily } from "@/config/chains";
 import type { EVMChain } from "@/types";
 import { useRenderTracker } from "@/utils/render-tracker";
@@ -124,6 +125,15 @@ export function MultiWalletProvider({
   const { isConnected: isWagmiConnected, address: wagmiAddress } = useAccount();
   const chainId = useChainId();
 
+  // Solana Wallet Adapter - detects Farcaster wallet via Wallet Standard (FarcasterSolanaProvider)
+  const {
+    publicKey: walletAdapterPublicKey,
+    wallet: walletAdapterWallet,
+    signTransaction: walletAdapterSignTransaction,
+    signAllTransactions: walletAdapterSignAllTransactions,
+    connected: walletAdapterConnected,
+  } = useSolanaWalletAdapter();
+
   // Track previous state to avoid logging on every render
   const prevStateRef = useRef<string | null>(null);
 
@@ -165,19 +175,25 @@ export function MultiWalletProvider({
 
   // Track if we have ACTIVE wallets (in the wallets array) vs just linked accounts
   const hasActiveEvmWallet = !!privyEvmWallet || isWagmiConnected;
-  const hasActiveSolanaWallet = !!privySolanaWallet;
+  // Solana: Check BOTH Wallet Standard (Farcaster) AND Privy wallets
+  const hasActiveSolanaWallet = walletAdapterConnected || !!privySolanaWallet;
 
   // EVM: connected if Privy has wallet OR wagmi is directly connected OR linked account
   const evmConnected = hasActiveEvmWallet || !!linkedEvmAddress;
   const evmAddress =
     privyEvmWallet?.address || wagmiAddress || linkedEvmAddress;
 
-  // Solana: through Privy wallets array OR linked accounts
+  // Solana: through Wallet Standard (Farcaster) OR Privy wallets array OR linked accounts
+  // Wallet Standard wallet (from FarcasterSolanaProvider) takes priority
   const solanaConnected = hasActiveSolanaWallet || !!linkedSolanaAddress;
-  const solanaPublicKey = privySolanaWallet?.address || linkedSolanaAddress;
+  const solanaPublicKey =
+    walletAdapterPublicKey?.toBase58() ||
+    privySolanaWallet?.address ||
+    linkedSolanaAddress;
 
-  // For Solana adapter, use the Privy wallet
+  // For Solana adapter, prefer Wallet Standard (Farcaster) over Privy wallet
   const solanaWalletRaw = privySolanaWallet;
+  const hasFarcasterSolanaWallet = walletAdapterConnected && walletAdapterPublicKey;
 
   // === User preference state ===
   // Persisted to localStorage to remember user's chain choice across sessions
@@ -371,6 +387,7 @@ export function MultiWalletProvider({
   }, [isFarcasterContext, isWagmiConnected, connectors, connectWagmi]);
 
   // === Solana wallet adapter ===
+  // Priority: Wallet Standard (Farcaster) > Privy wallet
   // Track current wallet address to avoid recreating adapter unnecessarily
   const solanaWalletAddressRef = useRef<string | null>(null);
   const [solanaWalletAdapter, setSolanaWalletAdapter] =
@@ -378,13 +395,41 @@ export function MultiWalletProvider({
 
   useEffect(() => {
     let mounted = true;
-    const currentAddress = privySolanaWallet?.address ?? null;
+
+    // Determine which wallet source to use - Farcaster wallet takes priority
+    const useFarcasterWallet = hasFarcasterSolanaWallet && walletAdapterSignTransaction;
+    const currentAddress = useFarcasterWallet
+      ? walletAdapterPublicKey?.toBase58() ?? null
+      : privySolanaWallet?.address ?? null;
 
     // Skip if wallet address hasn't changed
     if (solanaWalletAddressRef.current === currentAddress) return;
     solanaWalletAddressRef.current = currentAddress;
 
     async function createAdapter() {
+      // === FARCASTER WALLET (via Wallet Standard) ===
+      // This wallet is registered by FarcasterSolanaProvider and detected via @solana/wallet-adapter-react
+      if (useFarcasterWallet && walletAdapterPublicKey && walletAdapterSignTransaction && walletAdapterSignAllTransactions) {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[MultiWallet] Using Farcaster Solana wallet via Wallet Standard:", {
+            publicKey: walletAdapterPublicKey.toBase58(),
+            walletName: walletAdapterWallet?.adapter?.name,
+          });
+        }
+
+        if (mounted) {
+          // Type assertion needed because wallet adapter uses Transaction | VersionedTransaction
+          // while our interface uses a more generic SolanaTransaction type
+          setSolanaWalletAdapter({
+            publicKey: walletAdapterPublicKey,
+            signTransaction: walletAdapterSignTransaction as SolanaWalletAdapter["signTransaction"],
+            signAllTransactions: walletAdapterSignAllTransactions as SolanaWalletAdapter["signAllTransactions"],
+          });
+        }
+        return;
+      }
+
+      // === PRIVY WALLET (fallback for non-Farcaster context) ===
       if (!solanaWalletRaw) {
         if (mounted) setSolanaWalletAdapter(null);
         return;
@@ -394,6 +439,9 @@ export function MultiWalletProvider({
         const typedWallet = solanaWalletRaw as PrivySolanaWallet;
         const provider = await typedWallet.getProvider?.();
         if (mounted && provider) {
+          if (process.env.NODE_ENV === "development") {
+            console.log("[MultiWallet] Using Privy Solana wallet:", typedWallet.address);
+          }
           setSolanaWalletAdapter({
             publicKey: { toBase58: () => typedWallet.address },
             signTransaction: <T extends SolanaTransaction>(tx: T) =>
@@ -412,7 +460,15 @@ export function MultiWalletProvider({
     return () => {
       mounted = false;
     };
-  }, [solanaWalletRaw, privySolanaWallet?.address]);
+  }, [
+    solanaWalletRaw,
+    privySolanaWallet?.address,
+    hasFarcasterSolanaWallet,
+    walletAdapterPublicKey,
+    walletAdapterWallet?.adapter?.name,
+    walletAdapterSignTransaction,
+    walletAdapterSignAllTransactions,
+  ]);
 
   // === Action handlers ===
   const setActiveFamily = useCallback((family: ChainFamily) => {

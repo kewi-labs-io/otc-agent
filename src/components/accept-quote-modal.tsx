@@ -300,6 +300,7 @@ export function AcceptQuoteModal({
   );
 
   // --- Consolidated State ---
+  // Use quoteChain to determine initial currency - it's the token's chain, not the connected wallet
   const initialState: ModalState = {
     tokenAmount: Math.min(
       ONE_MILLION,
@@ -308,7 +309,7 @@ export function AcceptQuoteModal({
         initialQuote?.tokenAmount ? Number(initialQuote.tokenAmount) : 1000,
       ),
     ),
-    currency: activeFamily === "solana" ? "SOL" : "ETH",
+    currency: quoteChain === "solana" ? "SOL" : "ETH",
     step: "amount",
     isProcessing: false,
     error: null,
@@ -366,11 +367,11 @@ export function AcceptQuoteModal({
                 : 1000,
             ),
           ),
-          currency: activeFamily === "solana" ? "SOL" : "ETH",
+          currency: quoteChain === "solana" ? "SOL" : "ETH",
         },
       });
     }
-  }, [isOpen, initialQuote, activeFamily]);
+  }, [isOpen, initialQuote, quoteChain]);
 
   // Look up token metadata from cache first, then database
   useEffect(() => {
@@ -437,13 +438,13 @@ export function AcceptQuoteModal({
     initialQuote?.tokenChain,
   ]);
 
-  // Keep currency coherent with active family when modal opens
+  // Keep currency coherent with quote chain when modal opens
   useEffect(() => {
     if (!isOpen) return;
-    if (activeFamily === "solana") {
+    if (quoteChain === "solana") {
       dispatch({ type: "SET_CURRENCY", payload: "SOL" });
     }
-  }, [isOpen, activeFamily]);
+  }, [isOpen, quoteChain]);
 
   // Validate contract exists and read config (EVM only) - with caching
   useEffect(() => {
@@ -1519,10 +1520,10 @@ export function AcceptQuoteModal({
                 type="button"
                 className={`px-2 py-1 rounded-md ${currency !== "USDC" ? "bg-white text-black" : "text-zinc-300"}`}
                 onClick={() =>
-                  setCurrency(activeFamily === "solana" ? "SOL" : "ETH")
+                  setCurrency(quoteChain === "solana" ? "SOL" : "ETH")
                 }
               >
-                {activeFamily === "solana" ? "SOL" : "ETH"}
+                {quoteChain === "solana" ? "SOL" : "ETH"}
               </button>
             </div>
             {/* Solana now supported */}

@@ -2,14 +2,14 @@
   "network": "base-mainnet",
   "chainId": 8453,
   "rpc": "https://mainnet.base.org",
-  "deployer": "0x5dB1268e424da5C26451e4a8B9C221e6DE3C3064",
+  "deployer": "0x364c1f08413Df7AB0B6a02e2a6464b9544B923C8",
   "contracts": {
-    "otc": "0x12FA61c9d77AEd9BeDA0FF4bF2E900F31bdBdc45",
-    "registrationHelper": "0xae1cE3dd1Dd1fAB4D4aDe443Aa38A13164413246",
+    "otc": "0x4eF835C4ce6d9896C8ADCB541689392335cf0f0b",
+    "registrationHelper": "0xB40aA1E4cc673a8d596ba3309116401807a365eB",
     "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     "ethUsdFeed": "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70"
   },
   "accounts": {
-    "approver": "0x5dB1268e424da5C26451e4a8B9C221e6DE3C3064"
+    "approver": "0x364c1f08413Df7AB0B6a02e2a6464b9544B923C8"
   }
 }

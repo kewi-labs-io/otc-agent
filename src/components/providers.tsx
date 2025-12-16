@@ -3,6 +3,7 @@
 import { MultiWalletProvider } from "@/components/multiwallet";
 import { ChainResetMonitor } from "@/components/chain-reset-monitor";
 import { SolanaWalletProvider } from "@/components/solana-wallet-provider";
+import { FarcasterSolanaWrapper } from "@/components/farcaster-solana-provider";
 import { MiniappProvider } from "@/components/miniapp-provider";
 import { config, chains } from "@/lib/wagmi-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -109,12 +110,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <PrivyProvider appId={privyAppId} config={privyConfig}>
           <WagmiProvider config={config}>
             <QueryClientProvider client={queryClient}>
-              <SolanaWalletProvider>
-                <MultiWalletProvider>
-                  <ChainResetMonitor />
-                  {children}
-                </MultiWalletProvider>
-              </SolanaWalletProvider>
+              <FarcasterSolanaWrapper>
+                <SolanaWalletProvider>
+                  <MultiWalletProvider>
+                    <ChainResetMonitor />
+                    {children}
+                  </MultiWalletProvider>
+                </SolanaWalletProvider>
+              </FarcasterSolanaWrapper>
             </QueryClientProvider>
           </WagmiProvider>
         </PrivyProvider>
