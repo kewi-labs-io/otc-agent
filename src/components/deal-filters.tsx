@@ -153,34 +153,38 @@ export const DealFilters = memo(function DealFilters({
           </svg>
         </div>
 
-        {/* Mobile Filters: Chain + Type */}
+        {/* Mobile Filters: Chain + Type (both as dropdowns to avoid clipping) */}
         <div className="flex items-center gap-2">
-          <ChainSelector
-            selected={filters.chains}
-            onChange={(chains) => onFiltersChange({ ...filters, chains })}
-          />
+          <div className="flex-1">
+            <ChainSelector
+              selected={filters.chains}
+              onChange={(chains) => onFiltersChange({ ...filters, chains })}
+            />
+          </div>
 
-          {/* Type toggle - 3 options */}
-          <div className="flex-1 flex rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-            {typeOptions.map(({ value, label }) => {
-              const isSelected = currentType === value;
-              return (
-                <button
-                  key={value}
-                  onClick={() => handleTypeChange(value)}
-                  className={`
-                    flex-1 px-3 py-2.5 text-xs font-medium transition-colors
-                    ${
-                      isSelected
-                        ? "bg-brand-500 text-white"
-                        : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                    }
-                  `}
-                >
-                  {label}
-                </button>
-              );
-            })}
+          <div className="flex-1 relative">
+            <select
+              value={currentType}
+              onChange={handleTypeSelectChange}
+              className="w-full appearance-none rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 pl-3 pr-8 py-2 text-xs cursor-pointer"
+            >
+              <option value="all">All Types</option>
+              <option value="negotiable">Negotiable</option>
+              <option value="fixed">Fixed Price</option>
+            </select>
+            <svg
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
           </div>
         </div>
       </div>
