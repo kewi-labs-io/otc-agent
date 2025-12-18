@@ -3,7 +3,6 @@
  * Scans user wallets for all tokens via backend APIs
  *
  * Strategy:
- * - EVM (Base/BSC): Backend API using Alchemy
  * - Solana: Backend API using Helius
  */
 
@@ -130,25 +129,24 @@ async function scanSolanaTokens(
 
 /**
  * Get registered token addresses from database
+ * Uses lightweight addresses endpoint for efficiency
  * Returns empty set on failure to allow scanner to continue
  */
 async function getRegisteredAddresses(chain: Chain): Promise<Set<string>> {
   try {
-    const response = await fetch(`/api/tokens?chain=${chain}`);
+    // Use lightweight addresses endpoint (smaller payload)
+    const response = await fetch(`/api/tokens/addresses?chain=${chain}`);
     const data = await response.json();
 
-    // API returns { success: boolean, tokens: Array<{ contractAddress: string }> }
-    if (!data.success || !data.tokens) {
+    if (!data.success || !data.addresses) {
       return new Set();
     }
 
-    const registeredTokens: Array<{ contractAddress: string }> = data.tokens;
+    const registeredAddresses: Array<{ address: string }> = data.addresses;
     return new Set(
-      registeredTokens.map((t) =>
+      registeredAddresses.map((t) =>
         // EVM addresses are case-insensitive, Solana addresses are case-sensitive
-        chain === "solana"
-          ? t.contractAddress
-          : t.contractAddress.toLowerCase(),
+        chain === "solana" ? t.address : t.address.toLowerCase(),
       ),
     );
   } catch {
@@ -177,7 +175,7 @@ export async function scanWalletTokens(
 
   if (chain === "solana") {
     tokensPromise = scanSolanaTokens(address, forceRefresh);
-  } else if (chain === "base" || chain === "bsc") {
+  } else if (chain === "ethereum" || chain === "base" || chain === "bsc") {
     // Use backend API for EVM chains (no publicClient needed)
     tokensPromise = scanEvmTokens(address, chain, forceRefresh);
   } else {

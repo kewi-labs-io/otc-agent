@@ -61,7 +61,7 @@ contract FullLifecycleTest is Test {
         uint256 consignmentId = otc.createConsignment{value: gasDeposit}(
             tokenId,
             1000e18, // amount
-            true,    // negotiable
+            false,   // non-negotiable
             0, 0,    // fixed params
             0, 1000, // discount range (0-10%)
             0, 30,   // lockup range
@@ -102,47 +102,30 @@ contract FullLifecycleTest is Test {
         
         vm.stopPrank();
         
-        // 2. Create Offer
+        // 2. Create Offer (P2P: must use fixed discount=0, lockup=0, commission=0)
         vm.startPrank(buyer);
         uint256 offerAmount = 100e18;
-        uint256 discountBps = 500; // 5%
+        uint256 discountBps = 0; // Must match fixedDiscountBps for non-negotiable
         
         uint256 offerId = otc.createOfferFromConsignment(
             consignmentId,
             offerAmount,
             discountBps,
             OTC.PaymentCurrency.USDC,
-            0 // 0 lockup
+            0, // Must match fixedLockupDays for non-negotiable
+            0  // P2P = no commission
         );
         
-        // Verify Offer State
-        (
-            uint256 o_cid,
-            bytes32 o_tid,
-            address o_ben,
-            uint256 o_amt,
-            uint256 o_disc,
-            ,
-            ,
-            ,
-            ,
-            ,
-            OTC.PaymentCurrency o_curr,
-            bool o_appr,
-            bool o_paid,
-            ,
-            ,
-            ,
-            
-        ) = otc.offers(offerId);
+        // Verify Offer State - get key fields
+        (uint256 o_cid, bytes32 o_tid, address o_ben, uint256 o_amt, uint256 o_disc,,,,,, OTC.PaymentCurrency o_curr, bool o_appr, bool o_paid,,,,,) = otc.offers(offerId);
         
         assertEq(o_cid, consignmentId);
         assertEq(o_tid, tokenId);
         assertEq(o_ben, buyer);
         assertEq(o_amt, offerAmount);
-        assertEq(o_disc, discountBps);
+        assertEq(o_disc, 0); // Fixed discount for P2P
         assertTrue(o_curr == OTC.PaymentCurrency.USDC);
-        assertFalse(o_appr);
+        assertTrue(o_appr); // P2P offers are auto-approved
         assertFalse(o_paid);
         
         // Verify Counters Updated
@@ -152,17 +135,13 @@ contract FullLifecycleTest is Test {
         
         vm.stopPrank();
         
-        // 3. Approve Offer
-        vm.prank(approver);
-        otc.approveOffer(offerId);
-        
-        (,,,,,,,,,,, bool o_appr_after,,,,,) = otc.offers(offerId);
-        assertTrue(o_appr_after);
+        // 3. Skip approval - P2P offers are auto-approved
+        // No need to call approveOffer for non-negotiable deals
         
         // 4. Fulfill Offer (Pay)
         vm.startPrank(buyer);
-        // Calculate expected USD: $1 * 100 * 0.95 = $95
-        uint256 expectedUsdc = 95e6; 
+        // Calculate expected USD: $1 * 100 * 1.0 = $100 (no discount for P2P)
+        uint256 expectedUsdc = 100e6; 
         usdc.approve(address(otc), expectedUsdc);
         
         uint256 buyerUsdcBefore = usdc.balanceOf(buyer);
@@ -172,7 +151,7 @@ contract FullLifecycleTest is Test {
         uint256 buyerUsdcAfter = usdc.balanceOf(buyer);
         assertEq(buyerUsdcBefore - buyerUsdcAfter, expectedUsdc);
         
-        (,,,,,,,,,,,, bool o_paid_after,,,,) = otc.offers(offerId);
+        (,,,,,,,,,,,, bool o_paid_after,,,,,) = otc.offers(offerId);
         assertTrue(o_paid_after);
         
         // Verify Reserved did NOT increase (bug check)
@@ -189,7 +168,7 @@ contract FullLifecycleTest is Test {
         uint256 buyerTokenAfter = token.balanceOf(buyer);
         assertEq(buyerTokenAfter - buyerTokenBefore, offerAmount);
         
-        (,,,,,,,,,,,,, bool o_full_after,,,) = otc.offers(offerId);
+        (,,,,,,,,,,,,, bool o_full_after,,,,) = otc.offers(offerId);
         assertTrue(o_full_after);
         
         // Verify Reserved Cleared
@@ -236,7 +215,7 @@ contract FullLifecycleTest is Test {
         
         // Create Offer (Takes all inventory)
         vm.startPrank(buyer);
-        uint256 oid = otc.createOfferFromConsignment(cid, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
+        uint256 oid = otc.createOfferFromConsignment(cid, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
         vm.stopPrank();
         
         // Verify consignment inactive (depleted)
@@ -256,29 +235,29 @@ contract FullLifecycleTest is Test {
         assertEq(otc.tokenReserved(tokenId), 0);
     }
     
+    /**
+     * Note: Using non-negotiable (P2P) - no approval needed
+     */
     function test_SolvencyProtection() public {
         // Test that one consignment cannot withdraw another's tokens
         vm.startPrank(consigner);
         token.approve(address(otc), 200e18);
-        // C1
+        // C1 (non-negotiable = P2P)
         otc.createConsignment{value: 0.001 ether}(
             tokenId, 100e18, false, 0, 0, 0, 0, 0, 0, 100e18, 100e18, 500
         );
-        // C2
+        // C2 (non-negotiable = P2P)
         otc.createConsignment{value: 0.001 ether}(
             tokenId, 100e18, false, 0, 0, 0, 0, 0, 0, 100e18, 100e18, 500
         );
         vm.stopPrank();
         
-        // Buyer buys from C1
+        // Buyer buys from C1 (P2P - auto-approved)
         vm.startPrank(buyer);
-        uint256 oid = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
-        vm.stopPrank();
+        uint256 oid = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
         
-        vm.prank(approver);
-        otc.approveOffer(oid);
+        // No approval needed - non-negotiable offers are P2P (auto-approved)
         
-        vm.startPrank(buyer);
         usdc.approve(address(otc), 10000e6);
         otc.fulfillOffer(oid);
         otc.claim(oid);

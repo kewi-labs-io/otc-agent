@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 
 import { ChatMessages } from "@/components/chat-messages";
@@ -13,9 +13,18 @@ import { AcceptQuoteModal } from "@/components/accept-quote-modal";
 import { Button } from "@/components/button";
 import { TokenHeader } from "@/components/token-header";
 import { CHAT_SOURCE, USER_NAME } from "@/constants";
-import type { ChatMessage } from "@/types/chat-message";
+import { useConsignments } from "@/hooks/useConsignments";
+import type { ChatMessage, ChatMessageContent, ChatMessageQuoteData } from "@/types/chat-message";
 import type { Token, TokenMarketData } from "@/types";
 import { parseMessageXML, type OTCQuote } from "@/utils/xml-parser";
+
+// Helper to format token amounts with decimals
+function formatTokenAmount(amount: string, decimals: number): string {
+  const num = Number(amount) / Math.pow(10, decimals);
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
+  return num.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
 
 interface ChatProps {
   roomId?: string;
@@ -122,7 +131,7 @@ interface RawRoomMessage {
   entityId?: string;
   agentId?: string;
   createdAt?: number | string;
-  content?: string | { text?: string };
+  content?: string | { text?: string; xml?: string; quote?: Record<string, unknown>; type?: string };
   text?: string;
 }
 
@@ -133,21 +142,32 @@ function parseRoomMessage(
 ): ChatMessage | null {
   // Parse message text from various possible formats
   let messageText = "";
-  const content = msg.content;
-  if (typeof content === "object" && content?.text) {
-    messageText = content.text;
+  const rawContent = msg.content;
+  if (typeof rawContent === "object" && rawContent?.text) {
+    messageText = rawContent.text;
   } else if (msg.text) {
     messageText = msg.text;
-  } else if (typeof content === "string") {
-    messageText = content;
-  } else if (content) {
-    messageText = JSON.stringify(content);
+  } else if (typeof rawContent === "string") {
+    messageText = rawContent;
+  } else if (rawContent) {
+    messageText = JSON.stringify(rawContent);
   }
 
   // Filter out system messages
   if (messageText.startsWith("Executed action:")) {
     return null;
   }
+
+  // Preserve structured content for quote extraction
+  const parsedContent: ChatMessageContent | undefined =
+    typeof rawContent === "object" && rawContent
+      ? {
+          text: rawContent.text,
+          xml: rawContent.xml,
+          quote: rawContent.quote as ChatMessageQuoteData | undefined,
+          type: rawContent.type,
+        }
+      : undefined;
 
   return {
     id: msg.id || `msg-${msg.createdAt}`,
@@ -162,6 +182,7 @@ function parseRoomMessage(
     source: CHAT_SOURCE,
     isLoading: false,
     serverMessageId: msg.id,
+    content: parsedContent,
   };
 }
 
@@ -217,6 +238,76 @@ export const Chat = ({
     connectWallet,
   } = useMultiWallet();
   const { login, ready: privyReady } = usePrivy();
+
+  // Fetch consignments for this token to get available amounts and terms
+  const { data: consignments } = useConsignments({
+    filters: { tokenId: token?.id },
+    enabled: !!token?.id,
+  });
+
+  // Helper to safely parse BigInt
+  const safeBigInt = (value: string | undefined | null): bigint => {
+    if (!value) return 0n;
+    try {
+      return BigInt(value);
+    } catch {
+      return 0n;
+    }
+  };
+
+  // Calculate aggregated consignment data for the token
+  const consignmentData = useMemo(() => {
+    if (!consignments?.length) return null;
+    
+    // Filter to active consignments with remaining balance
+    const activeConsignments = consignments.filter((c) => {
+      if (c.status !== "active") return false;
+      const remaining = safeBigInt(c.remainingAmount);
+      return remaining > 0n;
+    });
+    
+    if (!activeConsignments.length) return null;
+
+    // Sum up total available
+    const totalAvailable = activeConsignments.reduce(
+      (sum, c) => sum + safeBigInt(c.remainingAmount),
+      0n
+    );
+
+    // Get best terms across all consignments (highest discount, shortest lockup)
+    const bestDiscount = Math.max(...activeConsignments.map(c => 
+      c.isNegotiable ? (c.maxDiscountBps ?? 0) : (c.fixedDiscountBps ?? c.minDiscountBps ?? 0)
+    ));
+    
+    // Get worst terms (starting default - lowest discount, longest lockup)
+    const worstDiscount = Math.min(...activeConsignments.map(c => 
+      c.isNegotiable ? (c.minDiscountBps ?? 0) : (c.fixedDiscountBps ?? c.minDiscountBps ?? 0)
+    ));
+    const worstLockupDays = Math.max(...activeConsignments.map(c => 
+      c.isNegotiable ? (c.maxLockupDays ?? 365) : (c.fixedLockupDays ?? c.maxLockupDays ?? 365)
+    ));
+
+    // Get deal amount limits
+    const firstMinAmount = safeBigInt(activeConsignments[0]?.minDealAmount);
+    const minDealAmount = activeConsignments.reduce(
+      (min, c) => {
+        const amount = safeBigInt(c.minDealAmount);
+        return amount > 0n && amount < min ? amount : min;
+      },
+      firstMinAmount > 0n ? firstMinAmount : totalAvailable
+    );
+    const maxDealAmount = totalAvailable; // Can buy up to total available
+
+    return {
+      totalAvailable: totalAvailable.toString(),
+      bestDiscountBps: bestDiscount,
+      worstDiscountBps: worstDiscount || 100, // Default to 1% if no discount found
+      worstLockupDays: worstLockupDays || 365, // Default to 1 year if no lockup found
+      minDealAmount: minDealAmount.toString(),
+      maxDealAmount: maxDealAmount.toString(),
+      hasNegotiable: activeConsignments.some(c => c.isNegotiable),
+    };
+  }, [consignments]);
 
   // --- Refs ---
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
@@ -523,6 +614,49 @@ export const Chat = ({
     container.scrollTop = container.scrollHeight;
   }, [messages]);
 
+  // Helper: Extract text content from a message for XML parsing
+  const getMessageTextForParsing = (msg: ChatMessage): string => {
+    // Primary: use text field if it's a string
+    if (typeof msg.text === "string" && msg.text) {
+      return msg.text;
+    }
+    // Fallback 1: check content.text
+    if (msg.content?.text) {
+      return msg.content.text;
+    }
+    // Fallback 2: check content.xml (agent sends quotes here too)
+    if (msg.content?.xml) {
+      return msg.content.xml;
+    }
+    return "";
+  };
+
+  // Helper: Try to extract quote directly from structured content
+  const getQuoteFromContent = (msg: ChatMessage): OTCQuote | null => {
+    if (msg.content?.type === "otc_quote" && msg.content?.quote) {
+      const q: ChatMessageQuoteData = msg.content.quote;
+      // Map the structured quote data to OTCQuote interface
+      const discountBps = Number(q.discountBps || 0);
+      return {
+        quoteId: String(q.quoteId || ""),
+        tokenAmount: String(q.tokenAmount || "0"),
+        tokenSymbol: String(q.tokenSymbol || ""),
+        tokenChain: q.chain as OTCQuote["tokenChain"],
+        lockupMonths: Number(q.lockupMonths || 0),
+        lockupDays: Number(q.lockupDays || 0),
+        discountBps: discountBps,
+        discountPercent: Number(q.discountPercent || discountBps / 100),
+        paymentCurrency: String(q.paymentCurrency || "USDC"),
+        pricePerToken: q.pricePerToken ? Number(q.pricePerToken) : undefined,
+        totalValueUsd: q.totalUsd ? Number(q.totalUsd) : undefined,
+        finalPriceUsd: q.discountedUsd ? Number(q.discountedUsd) : undefined,
+        createdAt: q.createdAt ? String(q.createdAt) : undefined,
+        status: q.status ? String(q.status) : undefined,
+      };
+    }
+    return null;
+  };
+
   // Extract current quote from messages
   useEffect(() => {
     if (!messages.length) return;
@@ -532,15 +666,20 @@ export const Chat = ({
       const msg = messages[i];
       if (!msg || msg.name === USER_NAME) continue;
 
-      const parsed = parseMessageXML(
-        typeof msg.text === "string"
-          ? msg.text
-          : (msg as any).content?.text || "",
-      );
+      // Try structured content first (more reliable)
+      let extractedQuote = getQuoteFromContent(msg);
+      
+      // Fall back to XML parsing if no structured quote
+      if (!extractedQuote) {
+        const messageText = getMessageTextForParsing(msg);
+        const parsed = parseMessageXML(messageText);
+        if (parsed?.type === "otc_quote" && parsed.data && "tokenSymbol" in parsed.data) {
+          extractedQuote = parsed.data as OTCQuote;
+        }
+      }
 
-      if (parsed?.type === "otc_quote" && parsed.data) {
-        const newQuote = parsed.data;
-        const newQuoteId = newQuote.quoteId;
+      if (extractedQuote) {
+        const newQuoteId = extractedQuote.quoteId;
         const prevQuoteId = previousQuoteIdRef.current;
 
         // Only update if quote actually changed
@@ -555,17 +694,60 @@ export const Chat = ({
 
           // Update the ref and state
           previousQuoteIdRef.current = newQuoteId;
-          if ("tokenSymbol" in newQuote) {
-            dispatch({
-              type: "SET_CURRENT_QUOTE",
-              payload: newQuote as OTCQuote,
-            });
-          }
+          dispatch({
+            type: "SET_CURRENT_QUOTE",
+            payload: extractedQuote,
+          });
         }
         break;
       }
     }
   }, [messages]);
+
+  // Set default quote when token is provided but no quote exists yet
+  // This shows the minimum offer (worst terms) that user can accept or negotiate better
+  useEffect(() => {
+    // Only create default if we have a token and no current quote
+    if (!token || currentQuote) return;
+    
+    // Don't create default while still loading messages (a quote might be there)
+    if (isLoadingHistory) return;
+
+    // Wait for consignment data to load to show accurate terms
+    if (!consignmentData) return;
+
+    // Extract chain from token ID (format: token-{chain}-{address})
+    const tokenIdParts = token.id?.split("-") || [];
+    const tokenChain = tokenIdParts[1] as OTCQuote["tokenChain"];
+
+    // Calculate lockup months from days
+    const lockupDays = consignmentData.worstLockupDays;
+    const lockupMonths = Math.ceil(lockupDays / 30);
+
+    // Create default quote with minimum terms from consignment data
+    const defaultQuote: OTCQuote = {
+      quoteId: `default-${token.id}`,
+      tokenAmount: consignmentData.totalAvailable,
+      tokenAmountFormatted: formatTokenAmount(consignmentData.totalAvailable, token.decimals),
+      tokenSymbol: token.symbol,
+      tokenChain: tokenChain,
+      lockupMonths: lockupMonths,
+      lockupDays: lockupDays,
+      discountBps: consignmentData.worstDiscountBps,
+      discountPercent: consignmentData.worstDiscountBps / 100,
+      paymentCurrency: "USDC",
+      pricePerToken: marketData?.priceUsd,
+      totalValueUsd: marketData?.priceUsd 
+        ? (Number(consignmentData.totalAvailable) / Math.pow(10, token.decimals)) * marketData.priceUsd
+        : undefined,
+      status: "default",
+    };
+
+    dispatch({
+      type: "SET_CURRENT_QUOTE",
+      payload: defaultQuote,
+    });
+  }, [token, currentQuote, isLoadingHistory, marketData?.priceUsd, consignmentData]);
 
   const handleAcceptOffer = useCallback(() => {
     if (!currentQuote) {
@@ -573,15 +755,56 @@ export const Chat = ({
       return;
     }
 
-    // Validate quote has required fields
-    if (!currentQuote.quoteId) {
-      console.error("[Chat] Quote missing quoteId - request a new quote");
-      // Don't show alert, just log - user should request a new quote via chat
+    // Check if this is a default quote (not yet negotiated with agent)
+    if (currentQuote.quoteId.startsWith("default-")) {
+      // Default quote - prompt user to chat with agent first to get a real quote
+      // We could auto-send a message, but for now just show the modal which will
+      // request a quote if needed
+      dispatch({ type: "SET_ACCEPT_MODAL", payload: true });
       return;
     }
 
+    // Validate quote has required fields
+    if (!currentQuote.quoteId) {
+      console.error("[Chat] Quote missing quoteId - request a new quote");
+      return;
+    }
+
+    // Determine required chain from quote
+    const isSolanaQuote = currentQuote.tokenChain === "solana";
+    const isEvmQuote = currentQuote.tokenChain === "base" || 
+                      currentQuote.tokenChain === "bsc" || 
+                      currentQuote.tokenChain === "ethereum";
+
+    // If user is not connected at all, just open modal (it will show connect screen)
+    if (!isConnected) {
+      dispatch({ type: "SET_ACCEPT_MODAL", payload: true });
+      return;
+    }
+
+    // User is connected - check if they're on the right chain
+    const needsChainConnection = isSolanaQuote 
+      ? !solanaConnected 
+      : isEvmQuote 
+        ? !evmConnected 
+        : false;
+
+    // If connected but to wrong chain, trigger connection flow for required chain
+    if (needsChainConnection) {
+      const requiredChain = isSolanaQuote ? "solana" : "evm";
+      console.log(`[Chat] Quote requires ${requiredChain}, connecting wallet...`);
+      // Set active family first so Privy knows which chain to connect
+      setActiveFamily(requiredChain);
+      // Trigger Privy connect (user is already authenticated since isConnected is true)
+      connectWallet();
+      // Still open the modal - it will handle the chain mismatch state if connection fails
+      dispatch({ type: "SET_ACCEPT_MODAL", payload: true });
+      return;
+    }
+
+    // User is connected to the right chain, proceed normally
     dispatch({ type: "SET_ACCEPT_MODAL", payload: true });
-  }, [currentQuote]);
+  }, [currentQuote, solanaConnected, evmConnected, privyAuthenticated, connectWallet, login, setActiveFamily]);
 
   const handleClearChat = useCallback(async () => {
     if (!entityId) return;
@@ -643,35 +866,6 @@ export const Chat = ({
     }
   }, [privyAuthenticated, connectWallet, login]);
 
-  // Switch chain - just changes active family if already connected, otherwise prompts connect
-  const handleSwitchChain = useCallback(
-    (targetChain: "evm" | "solana") => {
-      setActiveFamily(targetChain);
-
-      // If not connected to that chain, prompt connect/login
-      if (targetChain === "solana" && !solanaConnected) {
-        if (privyAuthenticated) {
-          connectWallet();
-        } else {
-          login();
-        }
-      } else if (targetChain === "evm" && !evmConnected) {
-        if (privyAuthenticated) {
-          connectWallet();
-        } else {
-          login();
-        }
-      }
-    },
-    [
-      setActiveFamily,
-      solanaConnected,
-      evmConnected,
-      privyAuthenticated,
-      connectWallet,
-      login,
-    ],
-  );
 
   // Memoized setters for child components
   const setInput = useCallback((value: string) => {
@@ -683,7 +877,7 @@ export const Chat = ({
   }, []);
 
   return (
-    <div className="flex flex-col w-full">
+    <div className="flex flex-col h-full min-h-0">
       <ChatBody
         messages={messages}
         isLoadingHistory={isLoadingHistory}
@@ -705,8 +899,6 @@ export const Chat = ({
         }
         onConnect={handleConnect}
         privyReady={privyReady}
-        activeFamily={activeFamily}
-        onSwitchChain={handleSwitchChain}
         token={token}
         marketData={marketData}
       />
@@ -755,159 +947,111 @@ export const Chat = ({
 };
 
 function ChatHeader({
-  messages: _unusedMessages,
   apiQuote,
   onAcceptOffer,
   isOfferGlowing,
   onClearChat,
   isLoadingHistory,
-  activeFamily,
-  onSwitchChain,
 }: {
-  messages: ChatMessage[];
   apiQuote: OTCQuote | null;
   onAcceptOffer: () => void;
   isOfferGlowing: boolean;
   onClearChat: () => void;
   isLoadingHistory: boolean;
-  activeFamily: "evm" | "solana" | null;
-  onSwitchChain: (chain: "evm" | "solana") => void;
 }) {
-  // Use the quote passed from parent (extracted from messages)
   const currentQuote = apiQuote;
 
-  // Determine if user needs to switch chains
-  const needsChainSwitch =
-    currentQuote && currentQuote.tokenChain
-      ? (currentQuote.tokenChain === "solana" && activeFamily !== "solana") ||
-        ((currentQuote.tokenChain === "base" ||
-          currentQuote.tokenChain === "bsc" ||
-          currentQuote.tokenChain === "ethereum") &&
-          activeFamily !== "evm")
-      : false;
+  // Format discount and lockup display
+  const discountDisplay = currentQuote?.discountPercent
+    ? `${currentQuote.discountPercent.toFixed(1)}% off`
+    : null;
+  
+  const lockupDisplay = currentQuote?.lockupDays
+    ? currentQuote.lockupDays >= 30
+      ? `${Math.ceil(currentQuote.lockupDays / 30)}mo lockup`
+      : `${currentQuote.lockupDays}d lockup`
+    : null;
 
-  const requiredChain =
-    currentQuote?.tokenChain === "solana" ? "solana" : "evm";
-  const chainDisplayName =
-    currentQuote?.tokenChain === "solana" ? "Solana" : "EVM";
-
-  console.log("[ChatHeader] Chain check:", {
-    quoteChain: currentQuote?.tokenChain,
-    activeFamily,
-    needsChainSwitch,
-    requiredChain,
-  });
+  // Format token amount for display
+  const amountDisplay = currentQuote?.tokenAmountFormatted 
+    || (currentQuote?.tokenAmount && currentQuote.tokenAmount !== "0"
+      ? Number(currentQuote.tokenAmount).toLocaleString()
+      : null);
 
   return (
-    <div className="mb-3">
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3">
-        {currentQuote ? (
-          <>
-            <h2 className="text-sm font-semibold mb-2 px-1 py-2 text-zinc-600 dark:text-zinc-400 mr-auto">
-              Negotiate a Deal
-            </h2>
-            {/* Desktop version */}
-            <div className="hidden sm:flex items-center gap-6 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 px-4 py-2">
-              <div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                Offer Ready
-              </div>
-              <Button
-                onClick={
-                  needsChainSwitch
-                    ? () => onSwitchChain(requiredChain)
-                    : onAcceptOffer
-                }
-                className={`!h-8 !px-3 !text-xs transition-all duration-300 ${
-                  needsChainSwitch
-                    ? "!bg-blue-500 hover:!bg-blue-600 !text-white !border-blue-600"
-                    : `!bg-brand-500 hover:!bg-brand-600 !text-white !border-brand-600 ${
-                        isOfferGlowing
-                          ? "shadow-lg shadow-brand-500/50 ring-2 ring-brand-400 animate-pulse"
-                          : ""
-                      }`
-                }`}
-                color={
-                  (needsChainSwitch ? "blue" : "orange") as "blue" | "orange"
-                }
-                title={
-                  needsChainSwitch
-                    ? `Switch to ${chainDisplayName}`
-                    : `Accept Offer ${isOfferGlowing ? "(GLOWING)" : ""}`
-                }
-              >
-                {needsChainSwitch
-                  ? `Switch to ${chainDisplayName}`
-                  : "Accept Offer"}
-              </Button>
-            </div>
+    <div className="flex-shrink-0 pb-3 border-b border-zinc-200 dark:border-zinc-800">
+      {/* Header row with title and actions */}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+          Negotiate a Deal
+        </h2>
+        {!isLoadingHistory && (
+          <button
+            onClick={onClearChat}
+            className="text-xs text-zinc-500 hover:text-red-500 dark:text-zinc-400 dark:hover:text-red-400 transition-colors"
+          >
+            Reset Chat
+          </button>
+        )}
+      </div>
 
-            {/* Mobile version */}
-            <div className="flex sm:hidden flex-col gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 p-3">
-              <div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                Offer Ready
+      {/* Offer card - shown when quote exists or loading */}
+      {isLoadingHistory ? (
+        <div className="mt-3 rounded-xl bg-gradient-to-r from-brand-500/10 to-brand-500/5 dark:from-brand-500/20 dark:to-brand-500/10 p-3 animate-pulse">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            {/* Quote details skeleton */}
+            <div className="flex-1 min-w-0 flex items-start gap-3">
+              {/* Badge skeleton */}
+              <div className="h-7 w-24 bg-zinc-200 dark:bg-zinc-800 rounded-full flex-shrink-0"></div>
+              {/* Discount and lockup skeleton */}
+              <div className="flex flex-col gap-1 min-w-0">
+                <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-800 rounded"></div>
+                <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-800 rounded"></div>
               </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={
-                    needsChainSwitch
-                      ? () => onSwitchChain(requiredChain)
-                      : onAcceptOffer
-                  }
-                  className={`flex-1 !h-9 !px-3 !text-sm transition-all duration-300 ${
-                    needsChainSwitch
-                      ? "!bg-blue-500 hover:!bg-blue-600 !text-white !border-blue-600"
-                      : `!bg-brand-500 hover:!bg-brand-600 !text-white !border-brand-600 ${
-                          isOfferGlowing
-                            ? "shadow-lg shadow-brand-500/50 ring-2 ring-brand-400 animate-pulse"
-                            : ""
-                        }`
-                  }`}
-                  color={
-                    (needsChainSwitch ? "blue" : "orange") as "blue" | "orange"
-                  }
-                  title={
-                    needsChainSwitch
-                      ? `Switch to ${chainDisplayName}`
-                      : `Accept Offer ${isOfferGlowing ? "(GLOWING)" : ""}`
-                  }
-                >
-                  {needsChainSwitch
-                    ? `Switch to ${chainDisplayName}`
-                    : "Accept Offer"}
-                </Button>
-                {!isLoadingHistory && (
-                  <Button
-                    onClick={onClearChat}
-                    color="red"
-                    className="!h-9 !px-3 !text-sm"
-                  >
-                    Reset
-                  </Button>
+            </div>
+            {/* Button skeleton */}
+            <div className="h-10 w-32 bg-zinc-200 dark:bg-zinc-800 rounded-lg"></div>
+          </div>
+        </div>
+      ) : currentQuote ? (
+        <div className="mt-3 rounded-xl bg-gradient-to-r from-brand-500/10 to-brand-500/5 dark:from-brand-500/20 dark:to-brand-500/10 p-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            {/* Quote details */}
+            <div className="flex-1 min-w-0 flex items-start gap-3">
+              {/* Offer Ready badge - left column */}
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-green-500/20 text-green-600 dark:bg-green-500/30 dark:text-green-400 flex-shrink-0">
+                Offer Ready
+              </span>
+              {/* Discount and lockup - right column */}
+              <div className="flex flex-col gap-1 min-w-0">
+                {discountDisplay && (
+                  <span className="text-xs font-semibold text-brand-600 dark:text-brand-400">
+                    {discountDisplay}
+                  </span>
+                )}
+                {lockupDisplay && (
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {lockupDisplay}
+                  </span>
                 )}
               </div>
             </div>
-          </>
-        ) : (
-          !isLoadingHistory && (
+
+            {/* Accept button */}
             <Button
-              onClick={onClearChat}
-              color="red"
-              className="!h-9 !px-3 !text-sm sm:hidden"
+              onClick={onAcceptOffer}
+              className={`w-full sm:w-auto !h-10 !px-3 !py-1 !text-sm font-semibold transition-all duration-300 ${
+                isOfferGlowing
+                  ? "shadow-lg shadow-brand-500/50 ring-2 ring-brand-400 animate-pulse"
+                  : ""
+              }`}
+              color="brand"
             >
-              Reset
+              Accept Offer
             </Button>
-          )
-        )}
-        {!isLoadingHistory && (
-          <Button
-            onClick={onClearChat}
-            color="red"
-            className="!h-8 !px-3 !text-xs hidden sm:block"
-          >
-            Reset
-          </Button>
-        )}
-      </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -931,8 +1075,6 @@ function ChatBody({
   onClearChat,
   onConnect,
   privyReady,
-  activeFamily,
-  onSwitchChain,
   token,
   marketData,
 }: {
@@ -954,13 +1096,11 @@ function ChatBody({
   onClearChat: () => void;
   onConnect: () => void;
   privyReady: boolean;
-  activeFamily: "evm" | "solana" | null;
-  onSwitchChain: (chain: "evm" | "solana") => void;
   token?: Token;
   marketData?: TokenMarketData | null;
 }) {
   return (
-    <div className="flex flex-col w-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Connect wallet overlay */}
       <Dialog
         open={showConnectOverlay}
@@ -970,147 +1110,143 @@ function ChatBody({
           setShowConnectOverlay(false);
         }}
       >
-        <div className="w-full rounded-2xl overflow-hidden bg-zinc-50 dark:bg-zinc-900 ring-1 ring-zinc-200 dark:ring-zinc-800 shadow-2xl mx-auto max-h-[90dvh] overflow-y-auto">
-          <div className="relative w-full">
-            <div className="relative min-h-[200px] sm:min-h-[280px] w-full bg-gradient-to-br from-zinc-900 to-zinc-800 py-6 sm:py-8">
-              <div
-                aria-hidden
-                className="absolute inset-0 opacity-30 bg-no-repeat bg-right-bottom"
-                style={{
-                  backgroundImage: "url('/business.png')",
-                  backgroundSize: "contain",
-                }}
-              />
-              <div className="relative z-10 h-full w-full flex flex-col items-center justify-center text-center px-4 sm:px-6">
-                <h2 className="text-xl sm:text-2xl font-semibold text-white tracking-tight mb-2">
-                  Sign in to continue
-                </h2>
-                <Button
-                  onClick={onConnect}
-                  disabled={!privyReady}
-                  color="brand"
-                  className="!px-6 sm:!px-8 !py-2 sm:!py-3 !text-base sm:!text-lg"
-                >
-                  {privyReady ? "Connect Wallet" : "Loading..."}
-                </Button>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  localStorage.setItem("otc-desk-connect-overlay-seen", "1");
-                  localStorage.setItem(
-                    "otc-desk-connect-overlay-dismissed",
-                    "1",
-                  );
-                  setShowConnectOverlay(false);
-                }}
-                className="absolute top-2 right-2 rounded-full bg-white/10 text-white hover:bg-white/20 p-1"
-                aria-label="Close"
+        <div className="w-full max-w-sm rounded-2xl overflow-hidden bg-zinc-50 dark:bg-zinc-900 ring-1 ring-zinc-200 dark:ring-zinc-800 shadow-2xl mx-auto">
+          <div className="relative w-full bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 sm:p-8">
+            <div
+              aria-hidden
+              className="absolute inset-0 opacity-20 bg-no-repeat bg-right-bottom"
+              style={{
+                backgroundImage: "url('/business.png')",
+                backgroundSize: "contain",
+              }}
+            />
+            <div className="relative z-10 flex flex-col items-center text-center">
+              <h2 className="text-xl sm:text-2xl font-semibold text-white tracking-tight mb-4">
+                Sign in to continue
+              </h2>
+              <Button
+                onClick={onConnect}
+                disabled={!privyReady}
+                color="brand"
+                className="!px-6 !py-2.5 !text-base"
               >
-                <svg
-                  className="h-5 w-5"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </button>
+                {privyReady ? "Connect Wallet" : "Loading..."}
+              </Button>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.setItem("otc-desk-connect-overlay-seen", "1");
+                localStorage.setItem(
+                  "otc-desk-connect-overlay-dismissed",
+                  "1",
+                );
+                setShowConnectOverlay(false);
+              }}
+              className="absolute top-3 right-3 rounded-full bg-white/10 text-white hover:bg-white/20 p-1.5 transition-colors"
+              aria-label="Close"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fillRule="evenodd"
+                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
           </div>
         </div>
       </Dialog>
 
-      {/* Main container - full width */}
-      <div className="relative z-10 flex flex-col border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden h-full max-h-[calc(100dvh-120px)]">
-        {/* Chat section - Full width */}
-        <div className="flex flex-col p-2 sm:p-3 h-full min-h-0">
-          {/* Token header inside chat when token is provided */}
-          {token && (
-            <div className="mb-3">
-              <TokenHeader token={token} marketData={marketData ?? null} />
-            </div>
-          )}
+      {/* Main chat container - fills available height */}
+      <div className="relative flex flex-col flex-1 min-h-0 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm overflow-hidden">
+        {/* Token header - fixed at top when provided */}
+        {token && (
+          <div className="flex-shrink-0 p-3 sm:p-4 border-b border-zinc-200 dark:border-zinc-800">
+            <TokenHeader token={token} marketData={marketData ?? null} />
+          </div>
+        )}
+
+        {/* Chat header with offer card */}
+        <div className="flex-shrink-0 px-3 sm:px-4 pt-3 sm:pt-4">
           <ChatHeader
-            messages={messages}
             apiQuote={currentQuote}
             onAcceptOffer={onAcceptOffer}
             isOfferGlowing={isOfferGlowing}
             onClearChat={onClearChat}
             isLoadingHistory={isLoadingHistory}
-            activeFamily={activeFamily}
-            onSwitchChain={onSwitchChain}
           />
+        </div>
 
-          {/* Chat Messages - only scrollable area */}
-          <div
-            ref={messagesContainerRef}
-            className="overflow-y-auto px-2 mb-2 flex-1 min-h-[200px] max-h-[60dvh] sm:max-h-[65dvh]"
-          >
-            {isLoadingHistory ? (
-              <div className="flex items-center justify-center min-h-full">
-                <div className="flex items-center gap-2">
-                  <LoadingSpinner />
-                  <span className="text-zinc-600 dark:text-zinc-400">
-                    Loading conversation...
-                  </span>
-                </div>
-              </div>
-            ) : messages.length === 0 ? (
-              <div className="flex items-center justify-center min-h-[300px] text-center">
-                <div>
-                  <h2 className="text-xl font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
-                    Welcome to AI OTC Desk
-                  </h2>
-                  <p className="text-zinc-500 dark:text-zinc-400">
-                    {isConnected
-                      ? "Ask me about quotes and discounted token deals!"
-                      : "Connect your wallet to get a quote and start chatting."}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <>
-                <ChatMessages
-                  messages={messages}
-                  citationsMap={{}}
-                  followUpPromptsMap={{}}
-                  onFollowUpClick={(prompt) => {
-                    setInput(prompt);
-                  }}
-                  assistantAvatarUrl={token?.logoUrl}
-                  assistantName={token?.name}
-                />
-                {isAgentThinking && (
-                  <div className="flex items-center gap-2 py-4 text-zinc-600 dark:text-zinc-400">
-                    <LoadingSpinner />
-                    <span>Eliza is thinking...</span>
+        {/* Messages area - scrollable, fills remaining space */}
+        <div
+          ref={messagesContainerRef}
+          className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-4 py-3"
+        >
+          {isLoadingHistory ? (
+            <div className="space-y-4">
+              {/* Skeleton messages */}
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-end gap-3 animate-pulse">
+                  <div className="flex-shrink-0 w-12 h-12 bg-zinc-200 dark:bg-zinc-800 rounded-full"></div>
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded w-3/4"></div>
+                    <div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded w-1/2"></div>
                   </div>
-                )}
-              </>
-            )}
-          </div>
+                </div>
+              ))}
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="flex items-center justify-center h-full min-h-[200px] text-center px-4">
+              <div>
+                <h2 className="text-lg sm:text-xl font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                  Welcome to AI OTC Desk
+                </h2>
+                <p className="text-sm sm:text-base text-zinc-500 dark:text-zinc-400">
+                  {isConnected
+                    ? "Ask me about quotes and discounted token deals"
+                    : "Connect your wallet to get a quote and start chatting"}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <ChatMessages
+                messages={messages}
+                citationsMap={{}}
+                followUpPromptsMap={{}}
+                onFollowUpClick={(prompt) => {
+                  setInput(prompt);
+                }}
+                assistantAvatarUrl={token?.logoUrl}
+                assistantName={token?.name}
+              />
+              {isAgentThinking && (
+                <div className="flex items-center gap-2 py-4 text-zinc-600 dark:text-zinc-400">
+                  <LoadingSpinner />
+                  <span>Eliza is thinking...</span>
+                </div>
+              )}
+            </>
+          )}
+        </div>
 
-          {/* Input Area - pinned to bottom of chat */}
-          <div className="mt-4">
-            <TextareaWithActions
-              ref={textareaRef}
-              input={input}
-              onInputChange={(e) => setInput(e.target.value)}
-              onSubmit={handleSubmit}
-              isLoading={isAgentThinking || inputDisabled || !isConnected}
-              placeholder={
-                isConnected
-                  ? currentQuote?.tokenSymbol
-                    ? `Negotiate a deal for $${currentQuote.tokenSymbol}!`
-                    : "Ask about available tokens or request a quote!"
-                  : "Connect wallet to chat"
-              }
-            />
-          </div>
+        {/* Input area - pinned to bottom */}
+        <div className="flex-shrink-0 p-3 sm:p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80">
+          <TextareaWithActions
+            ref={textareaRef}
+            input={input}
+            onInputChange={(e) => setInput(e.target.value)}
+            onSubmit={handleSubmit}
+            isLoading={isAgentThinking || inputDisabled || !isConnected}
+            placeholder={
+              isConnected
+                ? currentQuote?.tokenSymbol
+                  ? `Negotiate a deal for $${currentQuote.tokenSymbol}`
+                  : "Ask about available tokens or request a quote"
+                : "Connect wallet to chat"
+            }
+          />
         </div>
       </div>
     </div>

@@ -213,5 +213,13 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ prices });
+  // Cache for 30 seconds - prices update frequently but can tolerate short delay
+  return NextResponse.json(
+    { prices },
+    {
+      headers: {
+        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120",
+      },
+    },
+  );
 }

@@ -66,7 +66,7 @@ contract OTCHandler is Test {
         try otc.createConsignment{value: 0.001 ether}(
             tokenId,
             amount,
-            true, // negotiable
+            false, // non-negotiable
             0, 0,
             0, 1000, // 0-10% discount
             0, 30,   // 0-30 days lockup  
@@ -90,7 +90,7 @@ contract OTCHandler is Test {
         amount = bound(amount, 100e18, 1000e18);
         
         vm.startPrank(buyer);
-        try otc.createOfferFromConsignment(cid, amount, 0, OTC.PaymentCurrency.USDC, 0) returns (uint256 oid) {
+        try otc.createOfferFromConsignment(cid, amount, 0, OTC.PaymentCurrency.USDC, 0, 0) returns (uint256 oid) {
             ghost_totalOffers++;
             activeOfferIds.push(oid);
         } catch {}

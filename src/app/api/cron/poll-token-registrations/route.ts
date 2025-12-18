@@ -3,6 +3,10 @@ import { createPublicClient, http, parseAbi } from "viem";
 import { base } from "viem/chains";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { TokenRegistryService } from "@/services/tokenRegistry";
+import { TokenDB } from "@/services/database";
+
+// register_token instruction discriminator from IDL
+const REGISTER_TOKEN_DISCRIMINATOR = Buffer.from([32, 146, 36, 240, 80, 183, 36, 84]);
 
 const ERC20_ABI = parseAbi([
   "function symbol() view returns (string)",
@@ -40,8 +44,16 @@ async function pollBaseRegistrations() {
     };
   }
 
-  const rpcUrl =
-    process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+  // Server-side: use Alchemy directly
+  const alchemyKey = process.env.ALCHEMY_API_KEY;
+  if (!alchemyKey) {
+    console.error("[Cron] ALCHEMY_API_KEY not configured");
+    return {
+      processed: 0,
+      error: "ALCHEMY_API_KEY not configured",
+    };
+  }
+  const rpcUrl = `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`;
   const client = createPublicClient({
     chain: base,
     transport: http(rpcUrl),
@@ -163,17 +175,15 @@ async function pollSolanaRegistrations() {
   const connection = new Connection(rpcUrl, "confirmed");
 
   try {
-    // Get recent signatures for the program
     const signatures = await connection.getSignaturesForAddress(
       new PublicKey(programId),
-      { limit: 50 }, // Check last 50 transactions
+      { limit: 50 },
     );
 
     if (signatures.length === 0) {
       return { processed: 0, message: "No recent transactions" };
     }
 
-    // If we have a last signature, only process newer ones
     let startIndex = 0;
     if (lastSolanaSignature) {
       const lastIndex = signatures.findIndex(
@@ -194,6 +204,7 @@ async function pollSolanaRegistrations() {
 
     let processed = 0;
     let lastProcessedSig: string | null = null;
+    const registeredTokens: string[] = [];
 
     for (let i = startIndex; i < signatures.length; i++) {
       const sig = signatures[i];
@@ -210,12 +221,31 @@ async function pollSolanaRegistrations() {
         );
 
         if (hasRegisterToken) {
-          console.log(
-            `[Cron Solana] Detected token registration: ${sig.signature}`,
-          );
-          // TODO: Parse and register token (Solana parsing not fully implemented)
-          // For now, just log it
-          processed++;
+          const parsed = parseSolanaRegisterToken(tx, programId);
+          if (parsed) {
+            try {
+              const tokenData = await fetchSolanaTokenData(connection, parsed.tokenMint);
+              await TokenDB.createToken({
+                symbol: tokenData.symbol,
+                name: tokenData.name,
+                chain: "solana",
+                contractAddress: parsed.tokenMint,
+                decimals: tokenData.decimals,
+                isActive: true,
+                logoUrl: null,
+                priceUsd: null,
+                marketCap: null,
+                volume24h: null,
+                priceChange24h: null,
+                poolAddress: parsed.poolAddress || null,
+              });
+              console.log(`[Cron Solana] ✅ Registered: ${tokenData.symbol} (${parsed.tokenMint})`);
+              registeredTokens.push(parsed.tokenMint);
+              processed++;
+            } catch (regError) {
+              console.error(`[Cron Solana] Failed to register ${parsed.tokenMint}:`, regError);
+            }
+          }
           lastProcessedSig = sig.signature;
         }
       }
@@ -225,7 +255,7 @@ async function pollSolanaRegistrations() {
       lastSolanaSignature = lastProcessedSig;
     }
 
-    return { processed, lastSignature: lastSolanaSignature };
+    return { processed, lastSignature: lastSolanaSignature, registeredTokens };
   } catch (error) {
     console.error("[Cron Solana] Error:", error);
     return {
@@ -233,6 +263,117 @@ async function pollSolanaRegistrations() {
       error: error instanceof Error ? error.message : "Unknown error",
     };
   }
+}
+
+interface SolanaParsedRegistration {
+  tokenMint: string;
+  poolAddress: string;
+}
+
+function parseSolanaRegisterToken(
+  tx: Awaited<ReturnType<Connection["getTransaction"]>>,
+  programId: string,
+): SolanaParsedRegistration | null {
+  if (!tx) return null;
+
+  const message = tx.transaction.message;
+  const accountKeys: PublicKey[] = [];
+
+  if ("staticAccountKeys" in message) {
+    accountKeys.push(...message.staticAccountKeys);
+    if (tx.meta?.loadedAddresses) {
+      accountKeys.push(
+        ...tx.meta.loadedAddresses.writable.map((addr) => new PublicKey(addr)),
+        ...tx.meta.loadedAddresses.readonly.map((addr) => new PublicKey(addr)),
+      );
+    }
+  } else if ("accountKeys" in message) {
+    accountKeys.push(...(message as { accountKeys: PublicKey[] }).accountKeys);
+  }
+
+  const instructions = message.compiledInstructions;
+
+  for (const ix of instructions) {
+    const ixProgramId = accountKeys[ix.programIdIndex];
+    if (ixProgramId.toBase58() !== programId) continue;
+
+    const ixData = Buffer.from(ix.data);
+    if (ixData.length < 8) continue;
+
+    const discriminator = ixData.subarray(0, 8);
+    if (!discriminator.equals(REGISTER_TOKEN_DISCRIMINATOR)) continue;
+
+    const accountIndices = ix.accountKeyIndexes;
+    if (accountIndices.length < 5) continue;
+
+    const tokenMint = accountKeys[accountIndices[2]].toBase58();
+
+    let poolAddress = "";
+    if (ixData.length >= 73) {
+      const poolAddressBytes = ixData.subarray(40, 72);
+      poolAddress = new PublicKey(poolAddressBytes).toBase58();
+    }
+
+    return { tokenMint, poolAddress };
+  }
+
+  return null;
+}
+
+async function fetchSolanaTokenData(
+  connection: Connection,
+  mintAddress: string,
+): Promise<{ name: string; symbol: string; decimals: number }> {
+  const mintInfo = await connection.getParsedAccountInfo(new PublicKey(mintAddress));
+  let decimals = 9;
+
+  if (
+    mintInfo.value?.data &&
+    typeof mintInfo.value.data === "object" &&
+    "parsed" in mintInfo.value.data
+  ) {
+    const parsed = mintInfo.value.data.parsed;
+    if (parsed.type === "mint" && parsed.info) {
+      decimals = parsed.info.decimals;
+    }
+  }
+
+  const METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+  const mintPubkey = new PublicKey(mintAddress);
+
+  const [metadataPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("metadata"), METADATA_PROGRAM_ID.toBuffer(), mintPubkey.toBuffer()],
+    METADATA_PROGRAM_ID,
+  );
+
+  try {
+    const accountInfo = await connection.getAccountInfo(metadataPda);
+    if (accountInfo && accountInfo.data.length >= 100) {
+      const data = accountInfo.data;
+      let offset = 65;
+
+      const nameLen = data.readUInt32LE(offset);
+      offset += 4;
+      const name = data.subarray(offset, offset + nameLen).toString("utf8").replace(/\0/g, "").trim();
+      offset += nameLen;
+
+      const symbolLen = data.readUInt32LE(offset);
+      offset += 4;
+      const symbol = data.subarray(offset, offset + symbolLen).toString("utf8").replace(/\0/g, "").trim();
+
+      if (name && symbol) {
+        return { name, symbol, decimals };
+      }
+    }
+  } catch {
+    // Metadata fetch failed
+  }
+
+  return {
+    name: `Token ${mintAddress.slice(0, 8)}`,
+    symbol: mintAddress.slice(0, 6).toUpperCase(),
+    decimals,
+  };
 }
 
 /**

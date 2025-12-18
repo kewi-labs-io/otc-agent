@@ -5,6 +5,7 @@ import {
   sanitizeConsignmentForBuyer,
   isConsignmentOwner,
 } from "@/utils/consignment-sanitizer";
+import { invalidateConsignmentCache } from "@/lib/cache";
 
 export async function GET(
   request: NextRequest,
@@ -82,6 +83,9 @@ export async function PUT(
     const service = new ConsignmentService();
     const updated = await service.updateConsignment(id, updates);
 
+    // Invalidate cache so trading desk shows fresh data
+    invalidateConsignmentCache();
+
     return NextResponse.json({ success: true, consignment: updated });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -136,6 +140,9 @@ export async function DELETE(
 
     const service = new ConsignmentService();
     await service.withdrawConsignment(id);
+
+    // Invalidate cache so trading desk shows fresh data
+    invalidateConsignmentCache();
 
     return NextResponse.json({ success: true });
   } catch (error) {

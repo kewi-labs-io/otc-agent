@@ -8,24 +8,11 @@ const ALCHEMY_BASE_URL = `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KE
 
 export async function POST(request: NextRequest) {
   if (!ALCHEMY_API_KEY) {
-    // Fall back to public RPC if no Alchemy key
-    const publicRpc = "https://mainnet.base.org";
-    try {
-      const body = await request.json();
-      const response = await fetch(publicRpc, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await response.json();
-      return NextResponse.json(data);
-    } catch (error) {
-      console.error("[RPC Proxy] Public RPC error:", error);
-      return NextResponse.json(
-        { error: "RPC request failed" },
-        { status: 502 },
-      );
-    }
+    console.error("[RPC Proxy] ALCHEMY_API_KEY not configured");
+    return NextResponse.json(
+      { error: "RPC not configured" },
+      { status: 500 },
+    );
   }
 
   try {

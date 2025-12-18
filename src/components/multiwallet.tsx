@@ -245,24 +245,31 @@ export function MultiWalletProvider({
     };
   }, []); // Empty deps - listeners set up once
 
+  // Reset preference initialization when user logs out (handles all logout paths)
+  useEffect(() => {
+    if (!privyAuthenticated) {
+      preferenceInitializedRef.current = false;
+    }
+  }, [privyAuthenticated]);
+
   // Auto-set preference when user connects a wallet for the first time after login
   // Using a ref to ensure this only runs once per session
   useEffect(() => {
     // Skip if preference already set or not authenticated
     if (preferredFamily || !privyAuthenticated) return;
-    // Skip if we've already tried to initialize this session
+    // Skip if we've already successfully initialized this session
     if (preferenceInitializedRef.current) return;
-
-    // Mark as initialized to prevent re-running
-    preferenceInitializedRef.current = true;
 
     // Determine preference based on connected wallets
     // Check Solana FIRST since it's explicit (user chose Solana wallet)
     if (privySolanaWallet) {
+      preferenceInitializedRef.current = true;
       setPreferredFamily("solana");
     } else if (privyEvmWallet || isWagmiConnected) {
+      preferenceInitializedRef.current = true;
       setPreferredFamily("evm");
     }
+    // Don't set ref to true if no wallet detected yet - let effect re-run when wallet loads
   }, [
     privyAuthenticated,
     preferredFamily,
@@ -334,7 +341,7 @@ export function MultiWalletProvider({
     checkPhantom();
     const timer = setTimeout(checkPhantom, 1000);
 
-    // Detect Farcaster
+    // Detect Farcaster (expected to fail in non-Farcaster environments)
     import("@farcaster/miniapp-sdk")
       .then(({ default: miniappSdk }) => {
         miniappSdk.context
@@ -344,12 +351,16 @@ export function MultiWalletProvider({
               miniappSdk.actions.ready();
             }
           })
-          .catch(() => {
-            /* Not in Farcaster context */
+          .catch((err) => {
+            if (process.env.NODE_ENV === "development") {
+              console.debug("[MultiWallet] Not in Farcaster context:", err);
+            }
           });
       })
-      .catch(() => {
-        /* SDK not available */
+      .catch((err) => {
+        if (process.env.NODE_ENV === "development") {
+          console.debug("[MultiWallet] Farcaster SDK not available:", err);
+        }
       });
 
     return () => clearTimeout(timer);
@@ -376,43 +387,94 @@ export function MultiWalletProvider({
   const [solanaWalletAdapter, setSolanaWalletAdapter] =
     useState<SolanaWalletAdapter | null>(null);
 
+  // Type for Phantom provider on window
+  type PhantomSolanaProvider = {
+    isPhantom?: boolean;
+    publicKey?: { toBase58(): string };
+    signTransaction: <T extends SolanaTransaction>(tx: T) => Promise<T>;
+    signAllTransactions: <T extends SolanaTransaction>(txs: T[]) => Promise<T[]>;
+    connect: () => Promise<{ publicKey: { toBase58(): string } }>;
+    isConnected?: boolean;
+  };
+
   useEffect(() => {
     let mounted = true;
-    const currentAddress = privySolanaWallet?.address ?? null;
+    // Use either the active wallet address or the linked address
+    const currentAddress = privySolanaWallet?.address ?? linkedSolanaAddress ?? null;
 
     // Skip if wallet address hasn't changed
     if (solanaWalletAddressRef.current === currentAddress) return;
     solanaWalletAddressRef.current = currentAddress;
 
     async function createAdapter() {
-      if (!solanaWalletRaw) {
-        if (mounted) setSolanaWalletAdapter(null);
-        return;
+      // First try: Use Privy's wallet from useWallets() array
+      if (solanaWalletRaw) {
+        try {
+          const typedWallet = solanaWalletRaw as PrivySolanaWallet;
+          const provider = await typedWallet.getProvider?.();
+          if (mounted && provider) {
+            console.log("[MultiWallet] Created Solana adapter from Privy wallet");
+            setSolanaWalletAdapter({
+              publicKey: { toBase58: () => typedWallet.address },
+              signTransaction: <T extends SolanaTransaction>(tx: T) =>
+                provider.signTransaction(tx),
+              signAllTransactions: <T extends SolanaTransaction>(txs: T[]) =>
+                provider.signAllTransactions(txs),
+            });
+            return;
+          }
+        } catch (error) {
+          console.error("[MultiWallet] Failed to get Privy wallet provider:", error);
+        }
       }
 
-      try {
-        const typedWallet = solanaWalletRaw as PrivySolanaWallet;
-        const provider = await typedWallet.getProvider?.();
-        if (mounted && provider) {
-          setSolanaWalletAdapter({
-            publicKey: { toBase58: () => typedWallet.address },
-            signTransaction: <T extends SolanaTransaction>(tx: T) =>
-              provider.signTransaction(tx),
-            signAllTransactions: <T extends SolanaTransaction>(txs: T[]) =>
-              provider.signAllTransactions(txs),
-          });
+      // Second try: If we have a linked Solana address but no active wallet,
+      // try to use Phantom directly (for external wallet connections)
+      if (linkedSolanaAddress && typeof window !== "undefined") {
+        const phantom = ((window as Window & { phantom?: { solana?: PhantomSolanaProvider } }).phantom?.solana 
+          || (window as Window & { solana?: PhantomSolanaProvider }).solana) as PhantomSolanaProvider | undefined;
+        
+        if (phantom?.isPhantom) {
+          try {
+            // Ensure Phantom is connected
+            if (!phantom.isConnected || !phantom.publicKey) {
+              console.log("[MultiWallet] Connecting to Phantom...");
+              await phantom.connect();
+            }
+            
+            const phantomAddress = phantom.publicKey?.toBase58();
+            
+            // Only use Phantom if addresses match
+            if (phantomAddress === linkedSolanaAddress) {
+              console.log("[MultiWallet] Created Solana adapter from Phantom directly");
+              if (mounted) {
+                setSolanaWalletAdapter({
+                  publicKey: { toBase58: () => linkedSolanaAddress },
+                  signTransaction: <T extends SolanaTransaction>(tx: T) =>
+                    phantom.signTransaction(tx),
+                  signAllTransactions: <T extends SolanaTransaction>(txs: T[]) =>
+                    phantom.signAllTransactions(txs),
+                });
+              }
+              return;
+            } else {
+              console.warn("[MultiWallet] Phantom address mismatch:", { phantomAddress, linkedSolanaAddress });
+            }
+          } catch (error) {
+            console.error("[MultiWallet] Failed to connect to Phantom:", error);
+          }
         }
-      } catch (error) {
-        console.error("Failed to create Solana adapter:", error);
-        if (mounted) setSolanaWalletAdapter(null);
       }
+
+      // No adapter could be created
+      if (mounted) setSolanaWalletAdapter(null);
     }
 
     createAdapter();
     return () => {
       mounted = false;
     };
-  }, [solanaWalletRaw, privySolanaWallet?.address]);
+  }, [solanaWalletRaw, privySolanaWallet?.address, linkedSolanaAddress]);
 
   // === Action handlers ===
   const setActiveFamily = useCallback((family: ChainFamily) => {
@@ -471,6 +533,8 @@ export function MultiWalletProvider({
     }
 
     setPreferredFamily(null);
+    // Reset initialization ref so preference is re-detected on next login
+    preferenceInitializedRef.current = false;
   }, [evmConnected, disconnectWagmi, logout]);
 
   // === Derived values ===

@@ -16,7 +16,7 @@ export default function Card({
   disabled,
 }: ICard) {
   return (
-    <div className="backdrop-blur-md bg-white/5 p-4 sm:p-5 lg:p-6 rounded-lg border border-brand-300 min-h-[200px] sm:min-h-[240px] w-full xl:flex-1 flex flex-col">
+    <div className="backdrop-blur-md bg-white/5 p-4 sm:p-5 lg:p-6 rounded-lg border border-brand-300 w-full xl:flex-1 flex flex-col">
       <div className="flex items-start gap-4">
         <div className="text-brand-500 text-3xl font-bold">{number}</div>
         <div className="items-center">
@@ -31,8 +31,8 @@ export default function Card({
         disabled={disabled}
         className={
           disabled
-            ? "w-full bg-blue-500/10 text-blue-500 py-3 px-4 rounded-lg flex items-center justify-center gap-2 text-sm font-medium mt-auto"
-            : "cursor-pointer w-full bg-brand-500/10 text-brand-500 py-3 px-4 rounded-lg flex items-center justify-center gap-2 text-sm font-medium hover:bg-brand-500/20 transition-colors mt-auto"
+            ? "w-full bg-blue-500/10 text-blue-500 py-3 px-4 rounded-lg flex items-center justify-center gap-2 text-sm font-medium mt-4"
+            : "cursor-pointer w-full bg-brand-500/10 text-brand-500 py-3 px-4 rounded-lg flex items-center justify-center gap-2 text-sm font-medium hover:bg-brand-500/20 transition-colors mt-4"
         }
       >
         {button}

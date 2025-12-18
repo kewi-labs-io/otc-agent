@@ -2,42 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 import { Button } from "@/components/button";
 import { useMultiWallet } from "@/components/multiwallet";
 import { ConsignmentRow } from "@/components/consignment-row";
+import { WalletAvatar } from "@/components/wallet-avatar";
 import { useOTC } from "@/hooks/contracts/useOTC";
+import { useDeals, type DealFromAPI } from "@/hooks/useDeals";
+import { useMyConsignments } from "@/hooks/useConsignments";
 import { resumeFreshAuth } from "@/utils/x-share";
 import { useRenderTracker } from "@/utils/render-tracker";
-import type { OTCConsignment } from "@/types";
-
-// Type for deals from the API
-interface DealFromAPI {
-  offerId: string;
-  beneficiary: string;
-  tokenAmount: string;
-  discountBps: number;
-  paymentCurrency: string;
-  paymentAmount: string;
-  payer: string;
-  createdAt: string;
-  lockupMonths?: number;
-  lockupDays?: number;
-  quoteId?: string;
-  status?: string;
-  // Token metadata
-  tokenSymbol?: string;
-  tokenName?: string;
-  tokenLogoUrl?: string;
-  tokenId?: string;
-  chain?: string;
-  // Price data (from market data at deal time)
-  priceUsdPerToken?: number;
-  ethUsdPrice?: number;
-  totalUsd?: number;
-  discountedUsd?: number;
-}
 
 // Extended offer type with quoteId and token metadata
 interface OfferWithQuoteId {
@@ -224,6 +200,7 @@ function mergeDealsWithOffers(
 
 export function MyDealsContent() {
   useRenderTracker("MyDealsContent");
+  const router = useRouter();
 
   const {
     activeFamily,
@@ -249,12 +226,6 @@ export function MyDealsContent() {
     await disconnect();
   }, [disconnect]);
 
-  const currentAddress =
-    activeFamily === "solana" ? solanaPublicKey : evmAddress;
-  const displayAddress = currentAddress
-    ? `${currentAddress.slice(0, 6)}...${currentAddress.slice(-4)}`
-    : null;
-
   const {
     myOffers,
     claim,
@@ -268,77 +239,125 @@ export function MyDealsContent() {
     type: "success" | "error" | "info";
     message: string;
   } | null>(null);
-  const [solanaDeals, setSolanaDeals] = useState<DealFromAPI[]>([]);
-  const [evmDeals, setEvmDeals] = useState<DealFromAPI[]>([]);
-  const [myListings, setMyListings] = useState<OTCConsignment[]>([]);
-  const [isLoadingDeals, setIsLoadingDeals] = useState(true);
   const [showWithdrawnListings, setShowWithdrawnListings] = useState(false);
 
-  const refreshDeals = useCallback(async () => {
-    setIsLoadingDeals(true);
-    const walletAddr =
-      activeFamily === "solana" ? solanaPublicKey : evmAddress?.toLowerCase();
+  // Query BOTH wallets when both are linked - user may have deals on either chain
+  const evmWalletAddr = evmAddress?.toLowerCase();
+  const solanaWalletAddr = solanaPublicKey;
 
-    if (!walletAddr) {
-      setSolanaDeals([]);
-      setEvmDeals([]);
-      setMyListings([]);
-      setIsLoadingDeals(false);
-      return;
-    }
-
-    try {
-      const [dealsRes, consignmentsRes] = await Promise.all([
-        fetch(`/api/deal-completion?wallet=${walletAddr}`).then((res) =>
-          res.json(),
-        ),
-        fetch(`/api/consignments?consigner=${walletAddr}`).then((res) =>
-          res.json(),
-        ),
-      ]);
-
-      if (dealsRes.success && dealsRes.deals) {
-        if (activeFamily === "solana") {
-          setSolanaDeals(dealsRes.deals);
-        } else {
-          setEvmDeals(dealsRes.deals);
-        }
-      }
-
-      if (consignmentsRes.success) {
-        setMyListings(consignmentsRes.consignments || []);
-      }
-    } catch (error) {
-      console.error("[MyDeals] Error fetching deals:", error);
-    } finally {
-      setIsLoadingDeals(false);
-    }
+  // Primary wallet for display purposes
+  const primaryWalletAddr = useMemo(() => {
+    if (activeFamily === "solana") return solanaPublicKey;
+    if (activeFamily === "evm") return evmAddress?.toLowerCase();
+    return solanaPublicKey || evmAddress?.toLowerCase();
   }, [activeFamily, solanaPublicKey, evmAddress]);
 
-  // Only fetch when wallet address changes, not when callback reference changes
-  const walletAddr =
-    activeFamily === "solana" ? solanaPublicKey : evmAddress?.toLowerCase();
-  useEffect(() => {
-    refreshDeals();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walletAddr]);
+  // Determine if current active wallet is Solana
+  const isSolanaWallet = activeFamily === "solana" || (!activeFamily && !!solanaPublicKey && !evmAddress);
 
+  // Debug logging for wallet state
+  useEffect(() => {
+    console.log("[MyDeals] Wallet state:", {
+      activeFamily,
+      hasWallet,
+      solanaPublicKey: solanaPublicKey?.slice(0, 8),
+      evmAddress: evmAddress?.slice(0, 10),
+      evmWalletAddr: evmWalletAddr?.slice(0, 10),
+      solanaWalletAddr: solanaWalletAddr?.slice(0, 8),
+      networkLabel,
+    });
+  }, [activeFamily, hasWallet, solanaPublicKey, evmAddress, evmWalletAddr, solanaWalletAddr, networkLabel]);
+
+  // Query EVM deals
+  const {
+    data: evmDeals = [],
+    isLoading: isLoadingEvmDeals,
+    isError: isEvmDealsError,
+    refetch: refetchEvmDeals,
+  } = useDeals(evmWalletAddr);
+
+  // Query Solana deals
+  const {
+    data: solanaDeals = [],
+    isLoading: isLoadingSolanaDeals,
+    isError: isSolanaDealsError,
+    refetch: refetchSolanaDeals,
+  } = useDeals(solanaWalletAddr);
+
+  // Query EVM consignments
+  const {
+    data: evmListings = [],
+    isLoading: isLoadingEvmConsignments,
+    isError: isEvmConsignmentsError,
+    refetch: refetchEvmConsignments,
+  } = useMyConsignments(evmWalletAddr);
+
+  // Query Solana consignments
+  const {
+    data: solanaListings = [],
+    isLoading: isLoadingSolanaConsignments,
+    isError: isSolanaConsignmentsError,
+    refetch: refetchSolanaConsignments,
+  } = useMyConsignments(solanaWalletAddr);
+
+  // Merge all listings
+  const myListings = useMemo(() => {
+    const all = [...evmListings, ...solanaListings];
+    // Dedupe by id
+    const seen = new Set<string>();
+    return all.filter((l) => {
+      if (seen.has(l.id)) return false;
+      seen.add(l.id);
+      return true;
+    });
+  }, [evmListings, solanaListings]);
+
+  // Combined loading/error states
+  const isLoadingDeals = isLoadingEvmDeals || isLoadingSolanaDeals;
+  const isDealsError = isEvmDealsError && isSolanaDealsError; // Only error if BOTH fail
+  const isLoadingConsignments = isLoadingEvmConsignments || isLoadingSolanaConsignments;
+  const isConsignmentsError = isEvmConsignmentsError && isSolanaConsignmentsError;
+
+  // Refetch functions
+  const refetchDeals = useCallback(async () => {
+    await Promise.all([refetchEvmDeals(), refetchSolanaDeals()]);
+  }, [refetchEvmDeals, refetchSolanaDeals]);
+
+  const refetchConsignments = useCallback(async () => {
+    await Promise.all([refetchEvmConsignments(), refetchSolanaConsignments()]);
+  }, [refetchEvmConsignments, refetchSolanaConsignments]);
+
+  // Combined loading state - true if any query is loading or we don't have any wallet address yet
+  const isLoading = isLoadingDeals || isLoadingConsignments || (hasWallet && !evmWalletAddr && !solanaWalletAddr);
+  
+  // Error state - only error if ALL queries fail
+  const hasError = isDealsError && isConsignmentsError;
+
+  // Combined refresh function for UI actions
+  const refreshDeals = useCallback(async () => {
+    await Promise.all([refetchDeals(), refetchConsignments()]);
+  }, [refetchDeals, refetchConsignments]);
+
+  // Transform and merge deals from both chains
   const purchases = useMemo(() => {
-    if (activeFamily === "solana") {
-      const walletAddress = solanaPublicKey?.toString() || "";
-      return solanaDeals.map((deal) =>
-        transformSolanaDeal(deal, walletAddress),
+    const allPurchases: OfferWithQuoteId[] = [];
+
+    // Transform Solana deals
+    if (solanaDeals.length > 0 && solanaPublicKey) {
+      const solanaTransformed = solanaDeals.map((deal) =>
+        transformSolanaDeal(deal, solanaPublicKey)
       );
+      allPurchases.push(...solanaTransformed);
     }
-    return mergeDealsWithOffers(evmDeals, myOffers ?? [], evmAddress || "");
-  }, [
-    myOffers,
-    activeFamily,
-    solanaDeals,
-    evmDeals,
-    solanaPublicKey,
-    evmAddress,
-  ]);
+
+    // Transform EVM deals and merge with contract offers
+    if (evmDeals.length > 0 || (myOffers && myOffers.length > 0)) {
+      const evmMerged = mergeDealsWithOffers(evmDeals, myOffers ?? [], evmAddress || "");
+      allPurchases.push(...evmMerged);
+    }
+
+    return allPurchases;
+  }, [myOffers, solanaDeals, evmDeals, solanaPublicKey, evmAddress]);
 
   const sortedPurchases = useMemo(() => {
     const list = [...purchases];
@@ -367,6 +386,36 @@ export function MyDealsContent() {
     });
   }, []);
 
+  // Redirect to trading desk if no deals
+  const hasAnyDeals =
+    filteredListings.length > 0 ||
+    sortedPurchases.length > 0 ||
+    withdrawnCount > 0;
+
+  // Track if we've successfully fetched data at least once
+  const hasFetchedData = useMemo(() => {
+    // Only consider redirect after queries have actually completed successfully
+    // Check that at least one query has fetched (not just enabled=false returning early)
+    const evmDealsLoaded = !isLoadingEvmDeals && evmDeals !== undefined;
+    const solanaDealsLoaded = !isLoadingSolanaDeals && solanaDeals !== undefined;
+    const evmListingsLoaded = !isLoadingEvmConsignments && evmListings !== undefined;
+    const solanaListingsLoaded = !isLoadingSolanaConsignments && solanaListings !== undefined;
+    
+    // Need at least one query per connected wallet to have completed
+    const evmDataLoaded = !evmWalletAddr || (evmDealsLoaded && evmListingsLoaded);
+    const solanaDataLoaded = !solanaWalletAddr || (solanaDealsLoaded && solanaListingsLoaded);
+    
+    return evmDataLoaded && solanaDataLoaded;
+  }, [
+    isLoadingEvmDeals, evmDeals,
+    isLoadingSolanaDeals, solanaDeals,
+    isLoadingEvmConsignments, evmListings,
+    isLoadingSolanaConsignments, solanaListings,
+    evmWalletAddr, solanaWalletAddr,
+  ]);
+
+  const hasAnyWallet = !!evmWalletAddr || !!solanaWalletAddr;
+
   if (!hasWallet) {
     return (
       <main className="flex-1 min-h-[60dvh] flex items-center justify-center">
@@ -391,34 +440,81 @@ export function MyDealsContent() {
     );
   }
 
-  const hasAnyDeals =
-    filteredListings.length > 0 ||
-    sortedPurchases.length > 0 ||
-    withdrawnCount > 0;
+  // Show loading state
+  if (isLoading) {
+    return (
+      <main className="flex-1 min-h-[60dvh] flex items-center justify-center">
+        <div className="text-zinc-600 dark:text-zinc-400">Loading deals…</div>
+      </main>
+    );
+  }
+
+  // Show error state with retry option
+  if (hasError) {
+    return (
+      <main className="flex-1 min-h-[60dvh] flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="text-zinc-600 dark:text-zinc-400">
+            Failed to load deals
+          </div>
+          <Button
+            color="brand"
+            onClick={() => {
+              refetchDeals();
+              refetchConsignments();
+            }}
+            className="!px-6 !py-2"
+          >
+            Retry
+          </Button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="flex-1 px-3 sm:px-4 md:px-6 py-4 sm:py-6">
       <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-xl sm:text-2xl font-semibold">My Deals</h1>
+          <Button
+            color="brand"
+            onClick={() => router.push("/consign")}
+            className="!px-3 !py-1.5 !text-sm lg:hidden"
+          >
+            Create Listing
+          </Button>
         </div>
 
         {/* Wallet & Network Info Banner */}
         <div className="p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-brand-400 flex items-center justify-center">
-                <span className="text-white text-xs font-bold">
-                  {activeFamily === "solana" ? "S" : "E"}
-                </span>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                  {displayAddress || "Not connected"}
-                </p>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  {networkLabel}
-                </p>
+              {primaryWalletAddr ? (
+                <WalletAvatar address={primaryWalletAddr} size={32} />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-brand-400 flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">?</span>
+                </div>
+              )}
+              <div className="space-y-1">
+                {evmAddress && (
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400 mr-1.5">Base</span>
+                    {`${evmAddress.slice(0, 6)}...${evmAddress.slice(-4)}`}
+                  </p>
+                )}
+                {solanaPublicKey && (
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400 mr-1.5">Solana</span>
+                    {`${solanaPublicKey.slice(0, 6)}...${solanaPublicKey.slice(-4)}`}
+                  </p>
+                )}
+                {!evmAddress && !solanaPublicKey && (
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    Not connected
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex gap-2">
@@ -453,23 +549,16 @@ export function MyDealsContent() {
           </div>
         )}
 
-        {isLoadingDeals ? (
-          <div className="text-zinc-600 dark:text-zinc-400">Loading deals…</div>
-        ) : !hasAnyDeals ? (
-          <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-8 text-center">
-            <h3 className="text-lg font-semibold mb-2">No Deals Yet</h3>
-            <p className="text-zinc-600 dark:text-zinc-400 mb-6">
-              Use the chat to buy tokens at a discount, or create a listing from
-              the header.
-            </p>
-            <Link href="/">
-              <Button color="brand" className="!px-4 !py-2">
-                Start Chat
-              </Button>
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-6">
+        <div className="space-y-6">
+            {/* Empty State - shown inline when no deals */}
+            {hasFetchedData && !hasAnyDeals && (
+              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-8 text-center">
+                <p className="text-zinc-600 dark:text-zinc-400">
+                  No deals yet
+                </p>
+              </div>
+            )}
+
             {/* My Listings Section */}
             {(filteredListings.length > 0 || withdrawnCount > 0) && (
               <div>
@@ -532,10 +621,13 @@ export function MyDealsContent() {
                         {/* Token Header */}
                         <div className="flex items-center gap-3 mb-3 pb-3 border-b border-zinc-200 dark:border-zinc-800 min-w-0">
                           {o.tokenLogoUrl ? (
-                            <img
+                            <Image
                               src={o.tokenLogoUrl}
                               alt={o.tokenSymbol || "Token"}
+                              width={32}
+                              height={32}
                               className="w-8 h-8 rounded-full flex-shrink-0"
+                              unoptimized
                               onError={(e) => {
                                 e.currentTarget.style.display = "none";
                               }}
@@ -686,7 +778,6 @@ export function MyDealsContent() {
               </div>
             )}
           </div>
-        )}
       </div>
     </main>
   );

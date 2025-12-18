@@ -127,6 +127,8 @@ export async function setUserQuote(
     tokenLogoUrl?: string;
     chain?: "evm" | "solana";
     consignmentId?: string;
+    // Agent commission (optional - 0 for P2P, 25-150 for negotiated)
+    agentCommissionBps?: number;
   },
 ): Promise<QuoteMemory> {
   const normalized = walletAddress.toLowerCase();
@@ -209,6 +211,8 @@ export async function setUserQuote(
     tokenLogoUrl: quote.tokenLogoUrl,
     chain: quote.chain,
     consignmentId: quote.consignmentId,
+    // Agent commission
+    agentCommissionBps: quote.agentCommissionBps,
   };
 
   await runtime.setCache(`quote:${quoteId}`, quoteData);

@@ -1,9 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Image from "next/image";
 import { useMultiWallet } from "../multiwallet";
 import { Button } from "../button";
-import { Copy, Check, ArrowLeft, AlertCircle } from "lucide-react";
+import { Copy, Check, ArrowLeft, AlertCircle, Info, Loader2 } from "lucide-react";
+
+interface PoolCheckResult {
+  success: boolean;
+  isRegistered: boolean;
+  hasPool: boolean;
+  pool?: {
+    address: string;
+    protocol: string;
+    tvlUsd: number;
+    priceUsd?: number;
+    baseToken: "USDC" | "WETH";
+  };
+  registrationFee?: string;
+  registrationFeeEth?: string;
+  warning?: string;
+  error?: string;
+}
 
 interface ReviewStepProps {
   formData: {
@@ -31,6 +49,7 @@ interface ReviewStepProps {
   privyReady?: boolean;
   selectedTokenSymbol?: string;
   selectedTokenDecimals?: number;
+  selectedTokenLogoUrl?: string | null;
 }
 
 export function ReviewStep({
@@ -42,10 +61,14 @@ export function ReviewStep({
   onConnect,
   privyReady = true,
   selectedTokenSymbol = "TOKEN",
+  selectedTokenLogoUrl,
 }: ReviewStepProps) {
   const { activeFamily, evmAddress, solanaPublicKey } = useMultiWallet();
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState(false);
+  const [poolCheck, setPoolCheck] = useState<PoolCheckResult | null>(null);
+  const [isCheckingPool, setIsCheckingPool] = useState(false);
 
   // Extract chain and address from tokenId (format: token-{chain}-{address})
   const getTokenInfo = (tokenId: string) => {
@@ -58,6 +81,37 @@ export function ReviewStep({
   const { chain: tokenChain, address: rawTokenAddress } = getTokenInfo(
     formData.tokenId,
   );
+
+  // Check pool status for EVM tokens
+  useEffect(() => {
+    if (tokenChain === "solana" || !rawTokenAddress) {
+      setPoolCheck(null);
+      return;
+    }
+
+    const checkPool = async () => {
+      setIsCheckingPool(true);
+      try {
+        const res = await fetch(
+          `/api/token-pool-check?address=${encodeURIComponent(rawTokenAddress)}&chain=${tokenChain}`,
+        );
+        const data = await res.json();
+        setPoolCheck(data);
+      } catch (err) {
+        console.error("[ReviewStep] Pool check error:", err);
+        setPoolCheck({
+          success: false,
+          isRegistered: false,
+          hasPool: false,
+          error: "Failed to check token pool status",
+        });
+      } finally {
+        setIsCheckingPool(false);
+      }
+    };
+
+    checkPool();
+  }, [tokenChain, rawTokenAddress]);
 
   const getDisplayAddress = (addr: string) => {
     if (!addr || addr.length <= 12) return addr;
@@ -90,6 +144,18 @@ export function ReviewStep({
       return;
     }
 
+    // For EVM tokens, require a valid pool
+    if (tokenChain !== "solana") {
+      if (isCheckingPool) {
+        setError("Please wait for pool status check to complete");
+        return;
+      }
+      if (poolCheck && !poolCheck.hasPool) {
+        setError("This token requires a liquidity pool to be listed. Please create a pool on Uniswap V3 or a compatible DEX first.");
+        return;
+      }
+    }
+
     // Proceed to submission step
     onNext();
   };
@@ -100,9 +166,9 @@ export function ReviewStep({
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-y-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="text-center pb-4 border-b border-zinc-200 dark:border-zinc-700">
+      <div className="text-center pb-4">
         <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
           Review Your Listing
         </h3>
@@ -112,12 +178,23 @@ export function ReviewStep({
       </div>
 
       {/* Token Info */}
-      <div className="flex items-center gap-3 p-4 rounded-xl bg-gradient-to-br from-brand-500/10 to-brand-400/10 border border-brand-500/20">
-        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-400 to-brand-500 flex items-center justify-center">
-          <span className="text-white font-bold text-lg">
-            {selectedTokenSymbol.charAt(0)}
-          </span>
-        </div>
+      <div className="flex items-center gap-3 p-4 rounded-xl bg-brand-500/5">
+        {selectedTokenLogoUrl && !logoError ? (
+          <Image
+            src={selectedTokenLogoUrl}
+            alt={selectedTokenSymbol}
+            width={48}
+            height={48}
+            className="w-12 h-12 rounded-full"
+            onError={() => setLogoError(true)}
+          />
+        ) : (
+          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-400 to-brand-500 flex items-center justify-center">
+            <span className="text-white font-bold text-lg">
+              {selectedTokenSymbol.charAt(0)}
+            </span>
+          </div>
+        )}
         <div className="flex-1">
           <p className="font-semibold text-lg text-zinc-900 dark:text-zinc-100">
             {formatAmount(formData.amount)} {selectedTokenSymbol}
@@ -144,9 +221,90 @@ export function ReviewStep({
         </div>
       </div>
 
+      {/* Pool Status Section - EVM only */}
+      {tokenChain !== "solana" && (
+        <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/30 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <Info className="w-4 h-4" />
+            Token Registration Status
+          </div>
+
+          {isCheckingPool ? (
+            <div className="flex items-center gap-2 text-sm text-zinc-500">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Checking pool status...
+            </div>
+          ) : poolCheck ? (
+            <div className="space-y-2">
+              {/* Registration Status */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-zinc-600 dark:text-zinc-400">Registered:</span>
+                <span className={poolCheck.isRegistered ? "text-green-600" : "text-amber-600"}>
+                  {poolCheck.isRegistered ? "Yes" : "No (will register automatically)"}
+                </span>
+              </div>
+
+              {/* Pool Info */}
+              {poolCheck.hasPool && poolCheck.pool && (
+                <>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-zinc-600 dark:text-zinc-400">Price Oracle:</span>
+                    <span className="text-zinc-900 dark:text-zinc-100">
+                      {poolCheck.pool.protocol} ({poolCheck.pool.baseToken})
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-zinc-600 dark:text-zinc-400">Pool Liquidity:</span>
+                    <span className={`${poolCheck.pool.tvlUsd < 10000 ? "text-amber-600" : "text-green-600"}`}>
+                      ${poolCheck.pool.tvlUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  {poolCheck.pool.priceUsd && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-zinc-600 dark:text-zinc-400">Current Price:</span>
+                      <span className="text-zinc-900 dark:text-zinc-100">
+                        ${poolCheck.pool.priceUsd.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Registration Fee */}
+              {!poolCheck.isRegistered && poolCheck.registrationFeeEth && (
+                <div className="flex items-center justify-between text-sm pt-1 border-t border-zinc-200 dark:border-zinc-700">
+                  <span className="text-zinc-600 dark:text-zinc-400">Registration Fee:</span>
+                  <span className="text-zinc-900 dark:text-zinc-100 font-medium">
+                    {poolCheck.registrationFeeEth} ETH
+                  </span>
+                </div>
+              )}
+
+              {/* Warning */}
+              {poolCheck.warning && (
+                <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-amber-700 dark:text-amber-400">{poolCheck.warning}</p>
+                </div>
+              )}
+
+              {/* No Pool Error */}
+              {!poolCheck.hasPool && poolCheck.error && (
+                <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-red-600 dark:text-red-400">
+                    {poolCheck.error}. This token cannot be listed until a liquidity pool is created.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+      )}
+
       {/* Details Grid */}
-      <div className="grid gap-3">
-        <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
+      <div className="grid gap-2">
+        <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
           <span className="text-zinc-600 dark:text-zinc-400">Pricing Type</span>
           <span className="font-medium text-zinc-900 dark:text-zinc-100">
             {formData.isNegotiable ? "Negotiable" : "Fixed Price"}
@@ -155,7 +313,7 @@ export function ReviewStep({
 
         {formData.isNegotiable ? (
           <>
-            <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
+            <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
               <span className="text-zinc-600 dark:text-zinc-400">
                 Discount Range
               </span>
@@ -164,7 +322,7 @@ export function ReviewStep({
                 {formData.maxDiscountBps / 100}%
               </span>
             </div>
-            <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
+            <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
               <span className="text-zinc-600 dark:text-zinc-400">
                 Lockup Range
               </span>
@@ -175,13 +333,13 @@ export function ReviewStep({
           </>
         ) : (
           <>
-            <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
+            <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
               <span className="text-zinc-600 dark:text-zinc-400">Discount</span>
               <span className="font-medium text-zinc-900 dark:text-zinc-100">
                 {formData.fixedDiscountBps / 100}%
               </span>
             </div>
-            <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
+            <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
               <span className="text-zinc-600 dark:text-zinc-400">Lockup</span>
               <span className="font-medium text-zinc-900 dark:text-zinc-100">
                 {formData.fixedLockupDays} days
@@ -190,7 +348,7 @@ export function ReviewStep({
           </>
         )}
 
-        <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
+        <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
           <span className="text-zinc-600 dark:text-zinc-400">
             Deal Size Range
           </span>
@@ -200,7 +358,7 @@ export function ReviewStep({
           </span>
         </div>
 
-        <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
+        <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
           <span className="text-zinc-600 dark:text-zinc-400">Visibility</span>
           <span className="font-medium text-zinc-900 dark:text-zinc-100">
             {formData.isPrivate ? "Private" : "Public"}

@@ -53,10 +53,19 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      marketData,
-    });
+    // Cache for 60 seconds, serve stale for 5 minutes while revalidating
+    // Market data changes frequently but not every request
+    return NextResponse.json(
+      {
+        success: true,
+        marketData,
+      },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        },
+      },
+    );
   } catch (error) {
     return NextResponse.json(
       {

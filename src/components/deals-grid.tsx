@@ -1,15 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, memo, useCallback } from "react";
+import { useMemo, useState, memo, useCallback } from "react";
 import { TokenDealsSection } from "./token-deals-section";
-import { useTokenCache } from "@/hooks/useTokenCache";
+import { useTradingDeskConsignments } from "@/hooks/useConsignments";
+import { useTokenBatch } from "@/hooks/useTokenBatch";
 import { useRenderTracker } from "@/utils/render-tracker";
 import { Button } from "./button";
-import type {
-  OTCConsignment,
-  Token,
-  TokenMarketData,
-} from "@/services/database";
+import type { OTCConsignment, Token, TokenMarketData } from "@/types";
 
 const PAGE_SIZE = 10;
 
@@ -35,9 +32,7 @@ function filterValidConsignments(
   consignments: OTCConsignment[],
 ): OTCConsignment[] {
   return consignments.filter((c) => {
-    // Must be active status
     if (c.status !== "active") return false;
-    // Must have remaining amount > 0
     const remaining = BigInt(c.remainingAmount);
     if (remaining <= 0n) return false;
     return true;
@@ -48,14 +43,10 @@ function filterValidConsignments(
 function groupConsignmentsByToken(
   consignments: OTCConsignment[],
 ): TokenGroup[] {
-  // Filter out invalid consignments first
   const validConsignments = filterValidConsignments(consignments);
-
-  // Deduplicate by ID
   const uniqueMap = new Map(validConsignments.map((c) => [c.id, c]));
   const unique = Array.from(uniqueMap.values());
 
-  // Group by tokenId
   const grouped = new Map<string, TokenGroup>();
   for (const consignment of unique) {
     let group = grouped.get(consignment.tokenId);
@@ -71,48 +62,28 @@ function groupConsignmentsByToken(
     group.consignments.push(consignment);
   }
 
-  // Only return groups that have at least one valid consignment
   return Array.from(grouped.values()).filter((g) => g.consignments.length > 0);
 }
 
-const TokenGroupLoader = memo(function TokenGroupLoader({
-  tokenGroup,
-}: {
+interface TokenGroupWithDataProps {
   tokenGroup: TokenGroup;
-}) {
-  useRenderTracker("TokenGroupLoader", { tokenId: tokenGroup.tokenId });
+  tokenData: { token: Token; marketData: TokenMarketData | null } | null;
+}
 
-  const {
-    token,
-    marketData: cachedMarketData,
-    isLoading,
-  } = useTokenCache(tokenGroup.tokenId);
-
-  // Show loading skeleton while fetching token
-  if (isLoading) {
-    return (
-      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-6 animate-pulse">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-12 h-12 bg-zinc-200 dark:bg-zinc-800 rounded-full"></div>
-          <div className="flex-1">
-            <div className="h-6 bg-zinc-200 dark:bg-zinc-800 rounded w-32 mb-2"></div>
-            <div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded w-48"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+const TokenGroupWithData = memo(function TokenGroupWithData({
+  tokenGroup,
+  tokenData,
+}: TokenGroupWithDataProps) {
+  useRenderTracker("TokenGroupWithData", { tokenId: tokenGroup.tokenId });
 
   // If token failed to load, hide the group
-  // This filters out invalid/test entries with fake token addresses
-  if (!token) {
+  if (!tokenData?.token) {
     return null;
   }
 
   return (
     <TokenDealsSection
-      token={token}
-      marketData={cachedMarketData}
+      token={tokenData.token}
       consignments={tokenGroup.consignments}
     />
   );
@@ -123,49 +94,55 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
     searchQuery,
     chainsCount: filters.chains.length,
   });
-  const [tokenGroups, setTokenGroups] = useState<TokenGroup[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+
   const [currentPage, setCurrentPage] = useState(1);
 
-  useEffect(() => {
-    async function loadConsignments() {
-      setIsLoading(true);
-      try {
-        const params = new URLSearchParams();
-        filters.chains.forEach((chain) => params.append("chains", chain));
-        filters.negotiableTypes.forEach((type) =>
-          params.append("negotiableTypes", type),
-        );
+  // Fetch consignments using React Query (cached, deduplicated)
+  const {
+    data: consignments,
+    isLoading: isLoadingConsignments,
+    error: consignmentsError,
+  } = useTradingDeskConsignments({
+    chains: filters.chains,
+    negotiableTypes: filters.negotiableTypes,
+  });
 
-        const response = await fetch(`/api/consignments?${params.toString()}`);
-        const data = await response.json();
+  // Group consignments by token
+  const tokenGroups = useMemo(() => {
+    if (!consignments) return [];
+    return groupConsignmentsByToken(consignments);
+  }, [consignments]);
 
-        if (data.success) {
-          const consignmentsList = (data.consignments ||
-            []) as OTCConsignment[];
-          setTokenGroups(groupConsignmentsByToken(consignmentsList));
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    }
+  // Extract unique token IDs for batch fetching
+  const tokenIds = useMemo(() => {
+    return tokenGroups.map((g) => g.tokenId);
+  }, [tokenGroups]);
 
-    loadConsignments();
-  }, [filters]);
-
-  // Reset to page 1 when filters or search changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filters, searchQuery]);
+  // Batch fetch all tokens in a single request (cached)
+  const { data: tokensData, isLoading: isLoadingTokens } =
+    useTokenBatch(tokenIds);
 
   // Filter token groups by search query (memoized)
   const filteredGroups = useMemo(() => {
     if (!searchQuery) return tokenGroups;
     const query = searchQuery.toLowerCase();
-    return tokenGroups.filter((group) =>
-      group.tokenId.toLowerCase().includes(query),
-    );
-  }, [tokenGroups, searchQuery]);
+    return tokenGroups.filter((group) => {
+      // Search by tokenId
+      if (group.tokenId.toLowerCase().includes(query)) return true;
+      // Search by token symbol/name if available
+      const tokenData = tokensData?.[group.tokenId];
+      if (tokenData?.token) {
+        if (tokenData.token.symbol.toLowerCase().includes(query)) return true;
+        if (tokenData.token.name.toLowerCase().includes(query)) return true;
+      }
+      return false;
+    });
+  }, [tokenGroups, searchQuery, tokensData]);
+
+  // Reset to page 1 when filters or search changes
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [filters.chains.join(","), filters.negotiableTypes.join(","), searchQuery]);
 
   // Pagination
   const totalPages = Math.ceil(filteredGroups.length / PAGE_SIZE);
@@ -177,11 +154,12 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
   const goToPage = useCallback(
     (page: number) => {
       setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-      // Scroll to top of deals section
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
     [totalPages],
   );
+
+  const isLoading = isLoadingConsignments || (tokenIds.length > 0 && isLoadingTokens);
 
   if (isLoading) {
     return (
@@ -204,6 +182,16 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
             </div>
           </div>
         ))}
+      </div>
+    );
+  }
+
+  if (consignmentsError) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-600 dark:text-red-400">
+          Failed to load deals. Please try again.
+        </p>
       </div>
     );
   }
@@ -250,7 +238,11 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
     <div className="space-y-6 pb-6">
       {/* Token groups */}
       {paginatedGroups.map((group) => (
-        <TokenGroupLoader key={group.tokenId} tokenGroup={group} />
+        <TokenGroupWithData
+          key={group.tokenId}
+          tokenGroup={group}
+          tokenData={tokensData?.[group.tokenId] ?? null}
+        />
       ))}
 
       {/* Pagination controls */}

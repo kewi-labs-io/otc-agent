@@ -56,7 +56,7 @@ contract OTCTest is Test {
         otc.createConsignment{value: gasDeposit}(
             tokenId,
             1000e18,
-            true, // negotiable
+            false, // non-negotiable
             0, 0,
             0, 1000, // 0-10% discount
             0, 30, // 0-30 days lockup
@@ -83,10 +83,10 @@ contract OTCTest is Test {
         // Initial reserved
         assertEq(otc.tokenReserved(tokenId), 0);
         
-        // Create offer
+        // Create offer (negotiable = 100 bps commission)
         vm.startPrank(buyer);
         uint256 offerId = otc.createOfferFromConsignment(
-            1, 100e18, 0, OTC.PaymentCurrency.USDC, 0
+            1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 100
         );
         vm.stopPrank();
         
@@ -128,10 +128,10 @@ contract OTCTest is Test {
         );
         vm.stopPrank();
         
-        // Create offer
+        // Create offer (negotiable = 100 bps commission)
         vm.prank(buyer);
         uint256 offerId = otc.createOfferFromConsignment(
-            1, 100e18, 0, OTC.PaymentCurrency.USDC, 0
+            1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 100
         );
         
         // Check remaining reduced

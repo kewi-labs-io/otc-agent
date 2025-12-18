@@ -3,6 +3,7 @@ import { ConsignmentDB, TokenDB } from "@/services/database";
 import type { Chain } from "@/config/chains";
 import { ConsignmentService } from "@/services/consignmentService";
 import { sanitizeConsignmentForBuyer } from "@/utils/consignment-sanitizer";
+import { getCachedConsignments, getCachedToken, invalidateConsignmentCache, invalidateTokenCache } from "@/lib/cache";
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,11 +15,21 @@ export async function GET(request: NextRequest) {
     const consignerAddress = searchParams.get("consigner");
     const requesterAddress = searchParams.get("requester");
 
-    // Get all consignments (we'll filter in memory for multi-select)
-    const filters: Parameters<typeof ConsignmentDB.getAllConsignments>[0] = {};
-    if (tokenId) filters.tokenId = tokenId;
-
-    let consignments = await ConsignmentDB.getAllConsignments(filters);
+    // For user-specific requests, bypass cache (private data)
+    // For public requests, use serverless-optimized cache
+    let consignments;
+    if (consignerAddress) {
+      // User's own consignments - don't use shared cache
+      consignments = await ConsignmentDB.getConsignmentsByConsigner(
+        consignerAddress,
+        true, // include withdrawn
+      );
+    } else {
+      // Public trading desk - use serverless cache
+      const filters: { chain?: Chain; tokenId?: string } = {};
+      if (tokenId) filters.tokenId = tokenId;
+      consignments = await getCachedConsignments(filters);
+    }
 
     // Filter by chains if specified
     if (chains.length > 0) {
@@ -76,19 +87,18 @@ export async function GET(request: NextRequest) {
     // Hide listings with < 1 token remaining from the public trading desk
     // (consigners can still see their own dust listings via consignerAddress filter)
     if (!consignerAddress) {
-      // Batch fetch all unique tokens at once to avoid N+1 queries
-      const uniqueTokenIds = [...new Set(consignments.map((c) => c.tokenId))];
+      // Batch fetch all unique tokens using serverless cache
+      const uniqueTokenIds = Array.from(new Set(consignments.map((c) => c.tokenId)));
       const tokenMap = new Map<string, { decimals: number }>();
 
-      // Fetch all tokens in parallel
+      // Fetch all tokens in parallel using cached function
       const tokenResults = await Promise.all(
-        uniqueTokenIds.map(async (tokenId) => {
-          try {
-            const token = await TokenDB.getToken(tokenId);
+        uniqueTokenIds.map(async (tokenId: string) => {
+          const token = await getCachedToken(tokenId);
+          if (token) {
             return { tokenId, decimals: token.decimals };
-          } catch {
-            return null;
           }
+          return null;
         }),
       );
 
@@ -116,10 +126,23 @@ export async function GET(request: NextRequest) {
       ? consignments // Owner sees full data
       : consignments.map(sanitizeConsignmentForBuyer); // Buyers see sanitized data
 
-    return NextResponse.json({
-      success: true,
-      consignments: responseConsignments,
-    });
+    // Cache for 60 seconds, serve stale for 5 minutes while revalidating
+    // Private cache if filtering by consigner (user-specific data)
+    const cacheControl = consignerAddress
+      ? "private, s-maxage=30, stale-while-revalidate=60"
+      : "public, s-maxage=60, stale-while-revalidate=300";
+
+    return NextResponse.json(
+      {
+        success: true,
+        consignments: responseConsignments,
+      },
+      {
+        headers: {
+          "Cache-Control": cacheControl,
+        },
+      },
+    );
   } catch (error) {
     console.error("[Consignments GET] Error:", error);
     return NextResponse.json(
@@ -253,6 +276,12 @@ export async function POST(request: NextRequest) {
       chain,
       contractConsignmentId,
     });
+
+    // Invalidate caches so trading desk shows fresh data
+    invalidateConsignmentCache();
+    if (tokenSymbol && tokenAddress) {
+      invalidateTokenCache(); // Token was also created
+    }
 
     return NextResponse.json({
       success: true,

@@ -1,4 +1,6 @@
 import {
+  mainnet,
+  sepolia,
   base,
   baseSepolia,
   bsc,
@@ -42,28 +44,52 @@ export function getRpcUrl(): string {
 
 /**
  * Get RPC URL for a specific chain type
- * @param chainType - Chain identifier (base, bsc, localhost, etc.)
+ * @param chainType - Chain identifier (ethereum, base, bsc, localhost, etc.)
  */
 export function getRpcUrlForChain(chainType: string): string {
   switch (chainType) {
+    case "ethereum":
+      return "/api/rpc/ethereum";
+    case "sepolia":
+      return "/api/rpc/ethereum";
     case "base":
-      return process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+      return "/api/rpc/base";
     case "base-sepolia":
-      return process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://sepolia.base.org";
+      return "/api/rpc/base";
     case "bsc":
-      return (
-        process.env.NEXT_PUBLIC_BSC_RPC_URL ||
-        "https://bsc-dataseed1.binance.org"
-      );
+      return process.env.NEXT_PUBLIC_BSC_RPC_URL!;
     case "bsc-testnet":
-      return (
-        process.env.NEXT_PUBLIC_BSC_RPC_URL ||
-        "https://data-seed-prebsc-1-s1.binance.org:8545"
-      );
+      return process.env.NEXT_PUBLIC_BSC_RPC_URL!;
     case "localhost":
     case "anvil":
       return process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
     default:
       return getRpcUrl();
+  }
+}
+
+/**
+ * Get viem chain config for a chain type
+ * @param chainType - Chain identifier (ethereum, base, bsc, etc.)
+ */
+export function getViemChainForType(chainType: string): Chain {
+  switch (chainType) {
+    case "ethereum":
+      return mainnet;
+    case "sepolia":
+      return sepolia;
+    case "base":
+      return base;
+    case "base-sepolia":
+      return baseSepolia;
+    case "bsc":
+      return bsc;
+    case "bsc-testnet":
+      return bscTestnet;
+    case "localhost":
+    case "anvil":
+      return localhost;
+    default:
+      return base;
   }
 }

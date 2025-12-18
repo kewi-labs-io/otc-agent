@@ -1,0 +1,23 @@
+{
+  "network": "bsc-mainnet",
+  "chainId": 56,
+  "rpc": "/api/rpc/bsc",
+  "deployer": "0x1b324Bfc7A0b93D621d8A85F3fF6375528bFae8D",
+  "contracts": {
+    "otc": "0x0aD688d08D409852668b6BaF6c07978968070221",
+    "registrationHelper": "0x979C01B70B6aD54b8D3093Bf9a1D550F00560037",
+    "usdc": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+    "bnbUsdFeed": "0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE"
+  },
+  "accounts": {
+    "owner": "0x1b324Bfc7A0b93D621d8A85F3fF6375528bFae8D",
+    "agent": "0x1b324Bfc7A0b93D621d8A85F3fF6375528bFae8D",
+    "approver": "0x1b324Bfc7A0b93D621d8A85F3fF6375528bFae8D"
+  },
+  "features": {
+    "p2pAutoApproval": true,
+    "version": "2.0.0"
+  }
+}
+
+

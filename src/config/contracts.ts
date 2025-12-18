@@ -9,14 +9,27 @@ import mainnetSolana from "./deployments/mainnet-solana.json";
 // TYPES
 // =============================================================================
 
+export interface EvmChainConfig {
+  chainId: number;
+  otc: string;
+  registrationHelper?: string;
+  usdc: string;
+  ethUsdFeed?: string;
+  bnbUsdFeed?: string;
+}
+
 export interface EvmDeployment {
   network: string;
-  chainId: number;
-  rpc: string;
+  chainId?: number;
+  rpc?: string;
+  timestamp?: string;
   deployer?: string;
   contracts: {
-    otc: string;
-    usdc: string;
+    otc?: string;
+    usdc?: string;
+    // Legacy names from deployment files
+    deal?: string;
+    usdcToken?: string;
     elizaToken?: string;
     registrationHelper?: string;
     elizaUsdFeed?: string;
@@ -27,6 +40,17 @@ export interface EvmDeployment {
     agent?: string;
     approver?: string;
     testWallet?: string;
+  };
+  testWalletPrivateKey?: string;
+  // Multi-chain support
+  networks?: {
+    base?: EvmChainConfig;
+    bsc?: EvmChainConfig;
+    ethereum?: EvmChainConfig;
+  };
+  features?: {
+    p2pAutoApproval?: boolean;
+    version?: string;
   };
 }
 
@@ -107,20 +131,24 @@ export function getEvmConfig(network?: NetworkType): EvmDeployment {
   const net = network || getCurrentNetwork();
   const config = CONTRACT_DEPLOYMENTS[net].evm;
   
+  // Handle legacy contract names (deal -> otc, usdcToken -> usdc)
+  const otcAddress = config.contracts.otc ?? config.contracts.deal;
+  const usdcAddress = config.contracts.usdc ?? config.contracts.usdcToken;
+  
   // Allow env overrides
   return {
     ...config,
-    rpc: process.env.NEXT_PUBLIC_RPC_URL || config.rpc,
+    rpc: process.env.NEXT_PUBLIC_RPC_URL ?? config.rpc ?? "",
     contracts: {
       ...config.contracts,
-      otc: process.env.NEXT_PUBLIC_OTC_ADDRESS || 
-           (net === "mainnet" ? process.env.NEXT_PUBLIC_OTC_ADDRESS_MAINNET : null) || 
-           config.contracts.otc,
-      usdc: process.env.NEXT_PUBLIC_USDC_ADDRESS || config.contracts.usdc,
+      otc: process.env.NEXT_PUBLIC_OTC_ADDRESS ?? 
+           (net === "mainnet" ? process.env.NEXT_PUBLIC_OTC_ADDRESS_MAINNET : undefined) ?? 
+           otcAddress,
+      usdc: process.env.NEXT_PUBLIC_USDC_ADDRESS ?? usdcAddress,
     },
     accounts: {
       ...config.accounts,
-      approver: process.env.APPROVER_ADDRESS || config.accounts?.approver,
+      approver: process.env.APPROVER_ADDRESS ?? config.accounts?.approver,
     },
   };
 }
@@ -169,3 +197,33 @@ export function getSolanaProgramId(network?: NetworkType): string {
   const config = getSolanaConfig(network);
   return config.programId;
 }
+
+/**
+ * Get OTC address for a specific EVM chain
+ */
+export function getOtcAddressForChain(chainId: number, network?: NetworkType): string | undefined {
+  const config = getEvmConfig(network);
+  
+  // Check multi-chain networks first
+  if (config.networks) {
+    if (chainId === 8453 && config.networks.base) return config.networks.base.otc;
+    if (chainId === 56 && config.networks.bsc) return config.networks.bsc.otc;
+    if (chainId === 1 && config.networks.ethereum) return config.networks.ethereum.otc;
+  }
+  
+  // Fallback to primary contract
+  return config.contracts.otc;
+}
+
+/**
+ * All mainnet OTC contract addresses
+ */
+export const MAINNET_OTC_ADDRESSES = {
+  base: "0x23eD9EC8deb2F88Ec44a2dbbe1bbE7Be7EFc02b9",
+  bsc: "0x0aD688d08D409852668b6BaF6c07978968070221",
+  ethereum: "0x5f36221967E34e3A2d6548aaedF4D1E50FE34D46",
+  solana: {
+    programId: "q9MhHpeydqTdtPaNpzDoWvP1qY5s3sFHTF1uYcXjdsc",
+    desk: "6CBcxFR6dSMJJ7Y4dQZTshJT2KxuwnSXioXEABxNVZPW",
+  },
+} as const;

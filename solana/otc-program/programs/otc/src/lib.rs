@@ -7,7 +7,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer as SplTransfer};
 use pyth_solana_receiver_sdk::price_update::PriceUpdateV2;
 
-declare_id!("6qn8ELVXd957oRjLaomCpKpcVZshUjNvSzw1nc7QVyXc");
+declare_id!("q9MhHpeydqTdtPaNpzDoWvP1qY5s3sFHTF1uYcXjdsc");
 
 #[event]
 pub struct OfferCreated {
@@ -27,6 +27,9 @@ pub struct OfferCancelled { pub offer: Pubkey, pub by: Pubkey }
 
 #[event]
 pub struct OfferPaid { pub offer: Pubkey, pub payer: Pubkey, pub amount: u64, pub currency: u8 }
+
+#[event]
+pub struct AgentCommissionPaid { pub offer: Pubkey, pub agent: Pubkey, pub amount: u64, pub currency: u8 }
 
 #[event]
 pub struct TokensClaimed { pub offer: Pubkey, pub beneficiary: Pubkey, pub amount: u64 }
@@ -217,6 +220,33 @@ pub mod otc {
     pub fn set_token_oracle_feed(ctx: Context<SetTokenOracleFeed>, feed_id: [u8; 32]) -> Result<()> {
         let registry = &mut ctx.accounts.token_registry;
         registry.price_feed_id = feed_id;
+        Ok(())
+    }
+
+    /// Set/update the pool address and type for automatic price updates
+    /// Can be called by owner OR the original registrant (permissionless for the registrant)
+    pub fn set_token_pool_config(
+        ctx: Context<SetTokenPoolConfig>,
+        pool_address: Pubkey,
+        pool_type: u8, // 0=None, 1=Raydium, 2=Orca, 3=PumpSwap
+    ) -> Result<()> {
+        let registry = &mut ctx.accounts.token_registry;
+        let desk = &ctx.accounts.desk;
+        let signer = &ctx.accounts.signer;
+        
+        // Allow owner OR the original registrant to update
+        require!(
+            signer.key() == desk.owner || signer.key() == registry.registered_by,
+            OtcError::NotOwner
+        );
+        
+        registry.pool_address = pool_address;
+        registry.pool_type = match pool_type {
+            1 => PoolType::Raydium,
+            2 => PoolType::Orca,
+            3 => PoolType::PumpSwap,
+            _ => PoolType::None,
+        };
         Ok(())
     }
 
@@ -691,6 +721,7 @@ pub mod otc {
         offer.cancelled = false;
         offer.payer = Pubkey::default();
         offer.amount_paid = 0;
+        offer.agent_commission_bps = 0; // Direct offers have no agent commission
 
         emit!(OfferCreated {
             desk: offer.desk,
@@ -703,6 +734,9 @@ pub mod otc {
         Ok(())
     }
 
+    /// Create an offer from a consignment
+    /// agent_commission_bps: 0 for P2P (non-negotiable), 25-150 for negotiated deals
+    /// Commission is paid to desk.agent from seller proceeds at fulfillment
     pub fn create_offer_from_consignment(
         ctx: Context<CreateOfferFromConsignment>,
         consignment_id: u64,
@@ -710,6 +744,7 @@ pub mod otc {
         discount_bps: u16,
         currency: u8,
         lockup_secs: i64,
+        agent_commission_bps: u16,
     ) -> Result<()> {
         let desk_key = ctx.accounts.desk.key();
         let desk = &mut ctx.accounts.desk;
@@ -738,10 +773,14 @@ pub mod otc {
             require!(discount_bps >= consignment.min_discount_bps && discount_bps <= consignment.max_discount_bps, OtcError::Discount);
             let lockup_days = lockup_secs / 86400;
             require!(lockup_days >= consignment.min_lockup_days as i64 && lockup_days <= consignment.max_lockup_days as i64, OtcError::LockupTooLong);
+            // Negotiated deals: commission must be 25-150 bps (0.25% - 1.5%)
+            require!(agent_commission_bps >= 25 && agent_commission_bps <= 150, OtcError::CommissionRange);
         } else {
             require!(discount_bps == consignment.fixed_discount_bps, OtcError::Discount);
             let lockup_days = lockup_secs / 86400;
             require!(lockup_days == consignment.fixed_lockup_days as i64, OtcError::LockupTooLong);
+            // P2P deals: no commission allowed
+            require!(agent_commission_bps == 0, OtcError::CommissionRange);
         }
 
         // Use registry price for multi-token support
@@ -773,6 +812,11 @@ pub mod otc {
 
         let offer_key = ctx.accounts.offer.key();
         let beneficiary_key = ctx.accounts.beneficiary.key();
+        
+        // Non-negotiable offers are auto-approved for P2P (permissionless)
+        // Negotiable offers require agent/approver approval
+        let auto_approved = !consignment.is_negotiable;
+        
         let offer = &mut ctx.accounts.offer;
         
         offer.desk = desk_key;
@@ -789,12 +833,13 @@ pub mod otc {
         offer.max_price_deviation_bps = consignment.max_price_volatility_bps;
         offer.sol_usd_price_8d = if currency == 0 { desk.sol_usd_price_8d } else { 0 };
         offer.currency = currency;
-        offer.approved = false;
+        offer.approved = auto_approved;
         offer.paid = false;
         offer.fulfilled = false;
         offer.cancelled = false;
         offer.payer = Pubkey::default();
         offer.amount_paid = 0;
+        offer.agent_commission_bps = agent_commission_bps;
 
         emit!(OfferCreated {
             desk: offer.desk,
@@ -804,6 +849,12 @@ pub mod otc {
             discount_bps,
             currency
         });
+        
+        // Emit approval event for non-negotiable (P2P) offers
+        if auto_approved {
+            emit!(OfferApproved { offer: offer_key, approver: beneficiary_key });
+        }
+        
         Ok(())
     }
 
@@ -838,6 +889,10 @@ pub mod otc {
         let offer = &mut ctx.accounts.offer;
         require!(!offer.cancelled && !offer.paid, OtcError::BadState);
         require!(!offer.approved, OtcError::AlreadyApproved);
+        
+        // Non-negotiable offers are P2P (auto-approved at creation) - cannot be manually approved
+        let consignment = &ctx.accounts.consignment;
+        require!(consignment.is_negotiable, OtcError::NonNegotiableP2P);
         
         offer.approved = true;
         emit!(OfferApproved { offer: offer_key, approver: approver_key });
@@ -928,9 +983,31 @@ pub mod otc {
         let mut usd_8d = safe_u128_to_u64(mul_div_u128(offer.token_amount as u128, price_8d as u128, pow10(token_dec) as u128)?)?;
         usd_8d = usd_8d.checked_mul((10_000 - offer.discount_bps as u64) as u64).ok_or(OtcError::Overflow)?.checked_div(10_000).ok_or(OtcError::Overflow)?;
         let usdc_amount = safe_u128_to_u64(mul_div_ceil_u128(usd_8d as u128, 1_000_000u128, 100_000_000u128)?)?;
+        
+        // Calculate agent commission (from seller proceeds)
+        let commission_usd_8d = usd_8d.checked_mul(offer.agent_commission_bps as u64).ok_or(OtcError::Overflow)?.checked_div(10_000).ok_or(OtcError::Overflow)?;
+        let commission_usdc = safe_u128_to_u64(mul_div_u128(commission_usd_8d as u128, 1_000_000u128, 100_000_000u128)?)?;
+        
+        // Transfer full payment from buyer to desk treasury
         let cpi_accounts = SplTransfer { from: ctx.accounts.payer_usdc_ata.to_account_info(), to: ctx.accounts.desk_usdc_treasury.to_account_info(), authority: ctx.accounts.payer.to_account_info() };
         let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
         token::transfer(cpi_ctx, usdc_amount)?;
+        
+        // If there's a commission and agent USDC account is provided, transfer commission to agent
+        if commission_usdc > 0 {
+            if let Some(agent_usdc_ata) = &ctx.accounts.agent_usdc_ata {
+                // Transfer commission from desk treasury to agent (desk_signer authorizes)
+                let cpi_accounts_commission = SplTransfer { 
+                    from: ctx.accounts.desk_usdc_treasury.to_account_info(), 
+                    to: agent_usdc_ata.to_account_info(), 
+                    authority: ctx.accounts.desk_signer.to_account_info() 
+                };
+                let cpi_ctx_commission = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts_commission);
+                token::transfer(cpi_ctx_commission, commission_usdc)?;
+                emit!(AgentCommissionPaid { offer: ctx.accounts.offer.key(), agent: desk.agent, amount: commission_usdc, currency: 1 });
+            }
+        }
+        
         offer.amount_paid = usdc_amount; offer.payer = ctx.accounts.payer.key(); offer.paid = true;
         // Note: desk.token_reserved is deprecated since all tokens are equal now
         emit!(OfferPaid { offer: ctx.accounts.offer.key(), payer: ctx.accounts.payer.key(), amount: usdc_amount, currency: 1 });
@@ -941,6 +1018,7 @@ pub mod otc {
         let desk_ai = ctx.accounts.desk.to_account_info();
         let desk_key = desk_ai.key();
         let desk = &mut ctx.accounts.desk;
+        let agent_key = desk.agent;
         require!(!desk.paused, OtcError::Paused);
         // Removed PDA validation - now using keypairs for offers
         let offer = &mut ctx.accounts.offer;
@@ -961,12 +1039,29 @@ pub mod otc {
         let sol_usd = if offer.sol_usd_price_8d > 0 { offer.sol_usd_price_8d } else { desk.sol_usd_price_8d };
         require!(sol_usd > 0, OtcError::NoPrice);
         let lamports_req = safe_u128_to_u64(mul_div_ceil_u128(usd_8d as u128, 1_000_000_000u128, sol_usd as u128)?)?;
+        
+        // Calculate agent commission (from seller proceeds)
+        let commission_usd_8d = usd_8d.checked_mul(offer.agent_commission_bps as u64).ok_or(OtcError::Overflow)?.checked_div(10_000).ok_or(OtcError::Overflow)?;
+        let commission_lamports = safe_u128_to_u64(mul_div_u128(commission_usd_8d as u128, 1_000_000_000u128, sol_usd as u128)?)?;
+        
+        // Transfer full payment from buyer to desk
         let ix = anchor_lang::solana_program::system_instruction::transfer(&ctx.accounts.payer.key(), &desk_key, lamports_req);
         anchor_lang::solana_program::program::invoke(&ix, &[
             ctx.accounts.payer.to_account_info(),
-            desk_ai,
+            desk_ai.clone(),
             ctx.accounts.system_program.to_account_info(),
         ])?;
+        
+        // If there's a commission and agent account is provided, transfer commission to agent
+        if commission_lamports > 0 {
+            if let Some(agent_account) = &ctx.accounts.agent {
+                // Transfer commission from desk to agent (desk_signer authorizes)
+                **desk_ai.try_borrow_mut_lamports()? -= commission_lamports;
+                **agent_account.to_account_info().try_borrow_mut_lamports()? += commission_lamports;
+                emit!(AgentCommissionPaid { offer: ctx.accounts.offer.key(), agent: agent_key, amount: commission_lamports, currency: 0 });
+            }
+        }
+        
         offer.amount_paid = lamports_req; offer.payer = ctx.accounts.payer.key(); offer.paid = true;
         // Note: desk.token_reserved is deprecated since all tokens are equal now
         emit!(OfferPaid { offer: ctx.accounts.offer.key(), payer: ctx.accounts.payer.key(), amount: lamports_req, currency: 0 });
@@ -1206,6 +1301,14 @@ pub struct SetTokenOracleFeed<'info> {
 }
 
 #[derive(Accounts)]
+pub struct SetTokenPoolConfig<'info> {
+    #[account(mut, constraint = token_registry.desk == desk.key() @ OtcError::BadState)]
+    pub token_registry: Account<'info, TokenRegistry>,
+    pub desk: Account<'info, Desk>,
+    pub signer: Signer<'info>, // Can be owner or registered_by
+}
+
+#[derive(Accounts)]
 pub struct SetManualTokenPrice<'info> {
     #[account(mut, constraint = token_registry.desk == desk.key() @ OtcError::BadState)]
     pub token_registry: Account<'info, TokenRegistry>,
@@ -1322,6 +1425,9 @@ pub struct ApproveOffer<'info> {
     pub desk: Account<'info, Desk>,
     #[account(mut, constraint = offer.desk == desk.key() @ OtcError::BadState)]
     pub offer: Account<'info, Offer>,
+    /// Consignment account - required for negotiable check
+    #[account(constraint = consignment.desk == desk.key() @ OtcError::BadState, constraint = consignment.id == offer.consignment_id @ OtcError::BadState)]
+    pub consignment: Account<'info, Consignment>,
     pub approver: Signer<'info>,
 }
 
@@ -1356,6 +1462,11 @@ pub struct FulfillOfferUsdc<'info> {
     pub desk_usdc_treasury: Account<'info, TokenAccount>,
     #[account(mut, constraint = payer_usdc_ata.mint == desk.usdc_mint, constraint = payer_usdc_ata.owner == payer.key())]
     pub payer_usdc_ata: Account<'info, TokenAccount>,
+    /// Agent USDC account for receiving commission (optional - only needed if commission > 0)
+    #[account(mut)]
+    pub agent_usdc_ata: Option<Account<'info, TokenAccount>>,
+    /// Desk signer for authorizing commission transfer from treasury
+    pub desk_signer: Signer<'info>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub token_program: Program<'info, Token>,
@@ -1371,6 +1482,12 @@ pub struct FulfillOfferSol<'info> {
     /// Token treasury - must match the token_mint in the offer
     #[account(mut, constraint = desk_token_treasury.mint == offer.token_mint, constraint = desk_token_treasury.owner == desk.key())]
     pub desk_token_treasury: Account<'info, TokenAccount>,
+    /// Agent account for receiving SOL commission (optional - only needed if commission > 0)
+    /// CHECK: This is the agent's wallet address, we're just sending SOL to it
+    #[account(mut)]
+    pub agent: Option<AccountInfo<'info>>,
+    /// Desk signer for authorizing lamport transfer
+    pub desk_signer: Signer<'info>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -1656,9 +1773,10 @@ pub struct Offer {
     pub cancelled: bool,
     pub payer: Pubkey,
     pub amount_paid: u64,
+    pub agent_commission_bps: u16, // 0 for P2P, 25-150 for negotiated deals
 }
 
-impl Offer { pub const SIZE: usize = 32+8+32+1+8+32+8+2+8+8+8+2+8+1+1+1+1+1+32+8; }
+impl Offer { pub const SIZE: usize = 32+8+32+1+8+32+8+2+8+8+8+2+8+1+1+1+1+1+32+8+2; } // +2 for agent_commission_bps
 
 /// Returns available inventory for a token treasury
 /// Note: desk.token_reserved is deprecated - now all tokens are equal and tracked separately
@@ -1675,6 +1793,35 @@ fn mul_div_ceil_u128(a: u128, b: u128, d: u128) -> Result<u128> { let prod = a.c
 /// Safe conversion from u128 to u64 with overflow check
 fn safe_u128_to_u64(value: u128) -> Result<u64> {
     u64::try_from(value).map_err(|_| OtcError::Overflow.into())
+}
+
+/// Calculate recommended agent commission based on discount and lockup
+/// Discount component: 100 bps (1.0%) at ≤5% discount, 25 bps (0.25%) at ≥30% discount
+/// Lockup component: 0 bps at 0 days, 50 bps (0.5%) at ≥365 days
+/// Returns value between 25 and 150 bps
+pub fn calculate_agent_commission(discount_bps: u16, lockup_days: u32) -> u16 {
+    // Discount component: 100 bps at 5% discount, 25 bps at 30% discount
+    let discount_component: u32 = if discount_bps <= 500 {
+        100
+    } else if discount_bps >= 3000 {
+        25
+    } else {
+        // Linear interpolation: 100 - (discount_bps - 500) * 75 / 2500
+        100 - ((discount_bps as u32 - 500) * 75) / 2500
+    };
+    
+    // Lockup component: 0 bps at 0 days, 50 bps at 365+ days
+    let lockup_component: u32 = if lockup_days >= 365 {
+        50
+    } else {
+        (lockup_days * 50) / 365
+    };
+    
+    // Total commission: discount + lockup components
+    let total = discount_component + lockup_component;
+    
+    // Ensure within bounds (25-150 bps)
+    if total < 25 { 25 } else if total > 150 { 150 } else { total as u16 }
 }
 
 // =====================================================
@@ -1774,6 +1921,8 @@ pub enum OtcError {
     #[msg("Insufficient pool liquidity")] InsufficientLiquidity,
     #[msg("TWAP deviation too large")] TwapDeviationTooLarge,
     #[msg("Price update too frequent")] UpdateTooFrequent,
+    #[msg("Commission must be 0 for P2P or 25-150 bps for negotiated")] CommissionRange,
+    #[msg("Non-negotiable offers are P2P (auto-approved)")] NonNegotiableP2P,
 }
 
 

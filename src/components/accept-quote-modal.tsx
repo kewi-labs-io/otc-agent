@@ -41,10 +41,9 @@ type StepState =
   | "paying"
   | "complete";
 
-const ONE_MILLION = 1_000_000; // Token cap
-const MIN_TOKENS = 100; // UX minimum
+const ONE_MILLION = 1_000_000;
+const MIN_TOKENS = 100;
 
-// --- Token Metadata from cache ---
 interface TokenMetadata {
   symbol: string;
   name: string;
@@ -52,62 +51,38 @@ interface TokenMetadata {
   contractAddress: string;
 }
 
-// Client-side token metadata cache (permanent - token metadata doesn't change)
 const tokenMetadataCache = new Map<string, TokenMetadata>();
 
-function getCachedTokenMetadata(
-  chain: string,
-  symbol: string,
-): TokenMetadata | null {
-  const key = `${chain}:${symbol.toUpperCase()}`;
-  return tokenMetadataCache.get(key) || null;
+function tokenCacheKey(chain: string, symbol: string): string {
+  return `${chain}:${symbol.toUpperCase()}`;
 }
 
-function setCachedTokenMetadata(
-  chain: string,
-  symbol: string,
-  metadata: TokenMetadata,
-): void {
-  const key = `${chain}:${symbol.toUpperCase()}`;
-  tokenMetadataCache.set(key, metadata);
-  // Also persist to sessionStorage for page reloads
-  try {
-    sessionStorage.setItem(`token-meta:${key}`, JSON.stringify(metadata));
-  } catch {
-    /* ignore */
-  }
-}
-
-function loadCachedTokenMetadata(
-  chain: string,
-  symbol: string,
-): TokenMetadata | null {
-  // Check memory cache first
-  const cached = getCachedTokenMetadata(chain, symbol);
+function loadCachedTokenMetadata(chain: string, symbol: string): TokenMetadata | null {
+  const key = tokenCacheKey(chain, symbol);
+  const cached = tokenMetadataCache.get(key);
   if (cached) return cached;
-  // Check sessionStorage
+  
   try {
-    const key = `${chain}:${symbol.toUpperCase()}`;
     const stored = sessionStorage.getItem(`token-meta:${key}`);
     if (stored) {
       const metadata = JSON.parse(stored) as TokenMetadata;
       tokenMetadataCache.set(key, metadata);
       return metadata;
     }
-  } catch {
-    /* ignore */
-  }
+  } catch { /* sessionStorage unavailable */ }
   return null;
 }
 
-// Contract bytecode cache - keyed by address, stores whether contract exists with TTL
-// TTL of 5 minutes allows for contract deployment during development
-const CONTRACT_CACHE_TTL_MS = 5 * 60 * 1000;
-interface ContractCacheEntry {
-  exists: boolean;
-  cachedAt: number;
+function setCachedTokenMetadata(chain: string, symbol: string, metadata: TokenMetadata): void {
+  const key = tokenCacheKey(chain, symbol);
+  tokenMetadataCache.set(key, metadata);
+  try {
+    sessionStorage.setItem(`token-meta:${key}`, JSON.stringify(metadata));
+  } catch { /* sessionStorage unavailable */ }
 }
-const contractExistsCache = new Map<string, ContractCacheEntry>();
+
+const CONTRACT_CACHE_TTL_MS = 5 * 60 * 1000;
+const contractExistsCache = new Map<string, { exists: boolean; cachedAt: number }>();
 
 function getContractExists(key: string): boolean | null {
   const entry = contractExistsCache.get(key);
@@ -123,7 +98,6 @@ function setContractExists(key: string, exists: boolean): void {
   contractExistsCache.set(key, { exists, cachedAt: Date.now() });
 }
 
-// --- Consolidated Modal State ---
 interface ModalState {
   tokenAmount: number;
   currency: "ETH" | "USDC" | "SOL";
@@ -136,6 +110,8 @@ interface ModalState {
   tokenMetadata: TokenMetadata | null;
   completedTxHash: string | null;
   completedOfferId: string | null;
+  contractConsignmentId: string | null;
+  consignmentRemainingTokens: number | null;
 }
 
 type ModalAction =
@@ -148,6 +124,8 @@ type ModalAction =
   | { type: "SET_CONTRACT_VALID"; payload: boolean }
   | { type: "SET_SOLANA_TOKEN_MINT"; payload: string | null }
   | { type: "SET_TOKEN_METADATA"; payload: TokenMetadata | null }
+  | { type: "SET_CONTRACT_CONSIGNMENT_ID"; payload: string | null }
+  | { type: "SET_CONSIGNMENT_REMAINING_TOKENS"; payload: number | null }
   | {
       type: "SET_COMPLETED";
       payload: { txHash: string | null; offerId: string };
@@ -179,6 +157,10 @@ function modalReducer(state: ModalState, action: ModalAction): ModalState {
       return { ...state, solanaTokenMint: action.payload };
     case "SET_TOKEN_METADATA":
       return { ...state, tokenMetadata: action.payload };
+    case "SET_CONTRACT_CONSIGNMENT_ID":
+      return { ...state, contractConsignmentId: action.payload };
+    case "SET_CONSIGNMENT_REMAINING_TOKENS":
+      return { ...state, consignmentRemainingTokens: action.payload };
     case "SET_COMPLETED":
       return {
         ...state,
@@ -199,6 +181,8 @@ function modalReducer(state: ModalState, action: ModalAction): ModalState {
         tokenMetadata: null,
         completedTxHash: null,
         completedOfferId: null,
+        contractConsignmentId: null,
+        consignmentRemainingTokens: null,
       };
     case "START_TRANSACTION":
       return { ...state, error: null, isProcessing: true, step: "creating" };
@@ -243,13 +227,10 @@ export function AcceptQuoteModal({
   const router = useRouter();
   const {
     otcAddress,
-    createOffer,
+    createOfferFromConsignment,
     defaultUnlockDelaySeconds,
     usdcAddress,
     maxTokenPerOrder,
-    fulfillOffer,
-    approveUsdc,
-    getRequiredPayment,
   } = useOTC();
 
   const abi = useMemo(() => otcArtifact.abi as Abi, []);
@@ -263,8 +244,7 @@ export function AcceptQuoteModal({
     if (isLocal) {
       return process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
     }
-    // Use Base RPC proxy to avoid rate limits on public RPCs
-    // This keeps the Alchemy API key server-side
+    // Use Base RPC proxy to keep Alchemy API key server-side
     if (process.env.NEXT_PUBLIC_BASE_RPC_URL) {
       return process.env.NEXT_PUBLIC_BASE_RPC_URL;
     }
@@ -272,8 +252,8 @@ export function AcceptQuoteModal({
     if (typeof window !== "undefined") {
       return `${window.location.origin}/api/rpc/base`;
     }
-    return isMainnet ? "https://mainnet.base.org" : "https://sepolia.base.org";
-  }, [isLocal, isMainnet]);
+    return "/api/rpc/base";
+  }, [isLocal]);
 
   const isLocalRpc = useMemo(
     () => /localhost|127\.0\.0\.1/.test(rpcUrl),
@@ -299,16 +279,33 @@ export function AcceptQuoteModal({
     [readChain, rpcUrl],
   );
 
+  // --- Token Chain Detection (needed for initial state) ---
+  // IMPORTANT: Use quoteChain (token's chain) for UI, not activeFamily (user's current wallet)
+  // This ensures Solana tokens show SOL options even before user connects Solana wallet
+  const isSolanaToken = quoteChain === "solana";
+  const isEvmToken = quoteChain === "base" || quoteChain === "bsc" || quoteChain === "ethereum";
+
   // --- Consolidated State ---
+  // Max available from quote (or fallback to 1M if not specified)
+  const maxAvailableTokens = useMemo(() => {
+    if (initialQuote?.tokenAmount) {
+      const available = Number(initialQuote.tokenAmount);
+      if (available > 0 && available < ONE_MILLION) {
+        return Math.floor(available);
+      }
+    }
+    return ONE_MILLION;
+  }, [initialQuote?.tokenAmount]);
+
   const initialState: ModalState = {
     tokenAmount: Math.min(
-      ONE_MILLION,
+      maxAvailableTokens,
       Math.max(
         MIN_TOKENS,
-        initialQuote?.tokenAmount ? Number(initialQuote.tokenAmount) : 1000,
+        initialQuote?.tokenAmount ? Math.min(Number(initialQuote.tokenAmount), 1000) : 1000,
       ),
     ),
-    currency: activeFamily === "solana" ? "SOL" : "ETH",
+    currency: isSolanaToken ? "SOL" : "ETH",
     step: "amount",
     isProcessing: false,
     error: null,
@@ -318,6 +315,8 @@ export function AcceptQuoteModal({
     tokenMetadata: null,
     completedTxHash: null,
     completedOfferId: null,
+    contractConsignmentId: null,
+    consignmentRemainingTokens: null,
   };
 
   const [state, dispatch] = useReducer(modalReducer, initialState);
@@ -332,10 +331,13 @@ export function AcceptQuoteModal({
     solanaTokenMint,
     tokenMetadata,
     completedTxHash,
+    contractConsignmentId,
+    consignmentRemainingTokens,
   } = state;
 
   const { handleTransactionError } = useTransactionErrorHandler();
   const { login, ready: privyReady } = usePrivy();
+  // Keep isSolanaActive for execution logic only (user's actual connected wallet)
   const isSolanaActive = activeFamily === "solana";
   const SOLANA_RPC =
     (process.env.NEXT_PUBLIC_SOLANA_RPC as string | undefined) ||
@@ -358,29 +360,27 @@ export function AcceptQuoteModal({
         type: "RESET",
         payload: {
           tokenAmount: Math.min(
-            ONE_MILLION,
+            maxAvailableTokens,
             Math.max(
               MIN_TOKENS,
               initialQuote?.tokenAmount
-                ? Number(initialQuote.tokenAmount)
+                ? Math.min(Number(initialQuote.tokenAmount), 1000)
                 : 1000,
             ),
           ),
-          currency: activeFamily === "solana" ? "SOL" : "ETH",
+          currency: isSolanaToken ? "SOL" : "ETH",
         },
       });
     }
-  }, [isOpen, initialQuote, activeFamily]);
+  }, [isOpen, initialQuote, isSolanaToken, maxAvailableTokens]);
 
   // Look up token metadata from cache first, then database
   useEffect(() => {
     if (!isOpen || !initialQuote?.tokenSymbol) return;
 
-    const chain =
-      initialQuote?.tokenChain || (isSolanaActive ? "solana" : "base");
+    const chain = initialQuote?.tokenChain || (isSolanaToken ? "solana" : "base");
     const symbol = initialQuote.tokenSymbol;
 
-    // Check cache first (memory + sessionStorage)
     const cached = loadCachedTokenMetadata(chain, symbol);
     if (cached) {
       console.log("[AcceptQuote] Using cached token metadata for", symbol);
@@ -394,36 +394,29 @@ export function AcceptQuoteModal({
       return;
     }
 
-    // Fetch from API if not cached
+    // Fetch from API if not cached - use efficient by-symbol endpoint
     (async () => {
       try {
-        const res = await fetch(`/api/tokens?chain=${chain}`);
+        const res = await fetch(
+          `/api/tokens/by-symbol?symbol=${encodeURIComponent(symbol)}&chain=${chain}`,
+        );
         const data = await res.json();
-        if (data.success && data.tokens) {
-          const token = data.tokens.find(
-            (t: {
-              symbol: string;
-              name: string;
-              logoUrl: string;
-              contractAddress: string;
-            }) => t.symbol.toUpperCase() === symbol.toUpperCase(),
-          );
-          if (token) {
-            const metadata: TokenMetadata = {
-              symbol: token.symbol,
-              name: token.name,
-              logoUrl: token.logoUrl || "",
-              contractAddress: token.contractAddress,
-            };
-            // Cache it (permanent - token metadata doesn't change)
-            setCachedTokenMetadata(chain, symbol, metadata);
-            dispatch({ type: "SET_TOKEN_METADATA", payload: metadata });
-            if (chain === "solana") {
-              dispatch({
-                type: "SET_SOLANA_TOKEN_MINT",
-                payload: token.contractAddress,
-              });
-            }
+        if (data.success && data.token) {
+          const token = data.token;
+          const metadata: TokenMetadata = {
+            symbol: token.symbol,
+            name: token.name,
+            logoUrl: token.logoUrl || "",
+            contractAddress: token.contractAddress,
+          };
+          // Cache it (permanent - token metadata doesn't change)
+          setCachedTokenMetadata(chain, symbol, metadata);
+          dispatch({ type: "SET_TOKEN_METADATA", payload: metadata });
+          if (chain === "solana") {
+            dispatch({
+              type: "SET_SOLANA_TOKEN_MINT",
+              payload: token.contractAddress,
+            });
           }
         }
       } catch (err) {
@@ -432,23 +425,121 @@ export function AcceptQuoteModal({
     })();
   }, [
     isOpen,
-    isSolanaActive,
+    isSolanaToken,
     initialQuote?.tokenSymbol,
     initialQuote?.tokenChain,
   ]);
 
-  // Keep currency coherent with active family when modal opens
+  // Fetch consignment data to get on-chain ID (EVM only)
+  useEffect(() => {
+    if (!isOpen || isSolanaToken) return;
+    
+    const consignmentDbId = (initialQuote as { consignmentId?: string })?.consignmentId;
+    
+    (async () => {
+      try {
+        if (consignmentDbId) {
+          const res = await fetch(`/api/consignments/${consignmentDbId}`);
+          if (!res.ok) {
+            dispatch({ type: "SET_ERROR", payload: `Failed to fetch consignment: HTTP ${res.status}` });
+            return;
+          }
+          const data = await res.json();
+          if (data.success && data.consignment?.contractConsignmentId) {
+            dispatch({ type: "SET_CONTRACT_CONSIGNMENT_ID", payload: data.consignment.contractConsignmentId });
+            if (data.consignment.remainingAmount) {
+              dispatch({ type: "SET_CONSIGNMENT_REMAINING_TOKENS", payload: Number(BigInt(data.consignment.remainingAmount) / 10n ** 18n) });
+            }
+          } else {
+            dispatch({ type: "SET_ERROR", payload: "Consignment not deployed on-chain yet." });
+          }
+          return;
+        }
+        
+        // Find consignment by token
+        const { tokenSymbol, tokenChain } = initialQuote || {};
+        if (!tokenSymbol || !tokenChain) {
+          dispatch({ type: "SET_ERROR", payload: "Missing token information." });
+          return;
+        }
+
+        // Look up token ID
+        const tokenRes = await fetch(`/api/tokens/by-symbol?symbol=${encodeURIComponent(tokenSymbol)}&chain=${tokenChain}`);
+        if (!tokenRes.ok) {
+          dispatch({ type: "SET_ERROR", payload: `Token ${tokenSymbol} not found on ${tokenChain}` });
+          return;
+        }
+        const tokenData = await tokenRes.json();
+        if (!tokenData.success || !tokenData.token?.id) {
+          dispatch({ type: "SET_ERROR", payload: `Token ${tokenSymbol} not registered.` });
+          return;
+        }
+        const expectedTokenId = tokenData.token.id;
+
+        // Fetch consignments
+        const res = await fetch(`/api/consignments?chains=${tokenChain}`);
+        if (!res.ok) {
+          dispatch({ type: "SET_ERROR", payload: `Failed to fetch consignments: HTTP ${res.status}` });
+          return;
+        }
+        const data = await res.json();
+        if (!data.success || !data.consignments?.length) {
+          dispatch({ type: "SET_ERROR", payload: `No consignments for ${tokenSymbol}` });
+          return;
+        }
+
+        // Filter matching consignments
+        interface ConsignmentData {
+          id: string;
+          tokenId: string;
+          status: string;
+          contractConsignmentId?: string;
+          remainingAmount?: string;
+        }
+        
+        const matching = data.consignments.filter((c: ConsignmentData) =>
+          c.tokenId === expectedTokenId &&
+          c.status === "active" &&
+          c.contractConsignmentId &&
+          BigInt(c.remainingAmount || "0") > 0n
+        );
+
+        if (matching.length === 0) {
+          dispatch({ type: "SET_ERROR", payload: `No active consignments for ${tokenSymbol}` });
+          return;
+        }
+
+        // Pick consignment with most tokens
+        matching.sort((a: ConsignmentData, b: ConsignmentData) => {
+          const diff = BigInt(b.remainingAmount || "0") - BigInt(a.remainingAmount || "0");
+          return diff > 0n ? 1 : diff < 0n ? -1 : 0;
+        });
+        
+        const best = matching[0] as ConsignmentData;
+        dispatch({ type: "SET_CONTRACT_CONSIGNMENT_ID", payload: best.contractConsignmentId! });
+        if (best.remainingAmount) {
+          dispatch({ type: "SET_CONSIGNMENT_REMAINING_TOKENS", payload: Number(BigInt(best.remainingAmount) / 10n ** 18n) });
+        }
+      } catch (err) {
+        dispatch({ type: "SET_ERROR", payload: err instanceof Error ? err.message : "Failed to load consignment" });
+      }
+    })();
+  }, [isOpen, isSolanaToken, initialQuote]);
+
+  // Keep currency coherent with token's chain when modal opens
   useEffect(() => {
     if (!isOpen) return;
-    if (activeFamily === "solana") {
+    // Set currency based on token's chain, not user's wallet
+    if (isSolanaToken && currency !== "SOL" && currency !== "USDC") {
       dispatch({ type: "SET_CURRENCY", payload: "SOL" });
+    } else if (isEvmToken && currency === "SOL") {
+      dispatch({ type: "SET_CURRENCY", payload: "ETH" });
     }
-  }, [isOpen, activeFamily]);
+  }, [isOpen, isSolanaToken, isEvmToken, currency]);
 
   // Validate contract exists and read config (EVM only) - with caching
   useEffect(() => {
     (async () => {
-      // Skip validation for Solana
       if (activeFamily === "solana") {
         dispatch({ type: "SET_CONTRACT_VALID", payload: true });
         dispatch({ type: "SET_REQUIRE_APPROVER", payload: false });
@@ -462,7 +553,6 @@ export function AcceptQuoteModal({
 
       const cacheKey = `${otcAddress}:${readChain.id}`;
 
-      // Check cache first (with TTL)
       const cachedExists = getContractExists(cacheKey);
       if (cachedExists !== null) {
         dispatch({ type: "SET_CONTRACT_VALID", payload: cachedExists });
@@ -476,7 +566,6 @@ export function AcceptQuoteModal({
         return;
       }
 
-      // Check if contract has code at this address
       const code = await publicClient.getBytecode({
         address: otcAddress as `0x${string}`,
       });
@@ -500,7 +589,6 @@ export function AcceptQuoteModal({
       dispatch({ type: "SET_CONTRACT_VALID", payload: true });
 
       // Read contract state (this changes rarely, but should still be fresh)
-      // Use type assertion to bypass viem's strict authorizationList requirement
       const readContract = publicClient.readContract as (
         params: unknown,
       ) => Promise<unknown>;
@@ -510,17 +598,13 @@ export function AcceptQuoteModal({
         functionName: "requireApproverToFulfill",
         args: [],
       })) as boolean;
-      dispatch({ type: "SET_REQUIRE_APPROVER", payload: Boolean(flag) });
+      dispatch({ type: "SET_REQUIRE_APPROVER", payload: flag });
     })();
   }, [isOpen, otcAddress, publicClient, abi, activeFamily, readChain]);
 
   const discountBps = useMemo(() => {
-    const fromQuote = initialQuote?.discountBps;
-    if (typeof fromQuote === "number" && !Number.isNaN(fromQuote)) {
-      return fromQuote;
-    }
-    // Fallback to worst-case default (1% discount)
-    return 100;
+    const bps = initialQuote?.discountBps;
+    return typeof bps === "number" && !Number.isNaN(bps) ? bps : 100;
   }, [initialQuote?.discountBps]);
 
   const lockupDays = useMemo(() => {
@@ -544,10 +628,17 @@ export function AcceptQuoteModal({
     return Math.max(MIN_TOKENS, Math.min(ONE_MILLION, v));
   }, [maxTokenPerOrder]);
 
+  const effectiveMaxTokens = useMemo(() => {
+    if (consignmentRemainingTokens !== null && consignmentRemainingTokens > 0) {
+      return Math.min(contractMaxTokens, consignmentRemainingTokens);
+    }
+    return Math.min(contractMaxTokens, maxAvailableTokens);
+  }, [contractMaxTokens, maxAvailableTokens, consignmentRemainingTokens]);
+
   const clampAmount = useCallback(
     (value: number) =>
-      Math.min(contractMaxTokens, Math.max(MIN_TOKENS, Math.floor(value))),
-    [contractMaxTokens],
+      Math.min(effectiveMaxTokens, Math.max(MIN_TOKENS, Math.floor(value))),
+    [effectiveMaxTokens],
   );
 
   const setTokenAmount = useCallback(
@@ -567,147 +658,24 @@ export function AcceptQuoteModal({
     return (await res.json()) as Idl;
   }
 
-  async function readNextOfferId(): Promise<bigint> {
-    if (!otcAddress) throw new Error("Missing OTC address");
-    // Use type assertion to bypass viem's strict authorizationList requirement
-    const readContract = publicClient.readContract as (
-      params: unknown,
-    ) => Promise<unknown>;
-    return (await readContract({
-      address: otcAddress as `0x${string}`,
-      abi: abi as Abi,
-      functionName: "nextOfferId",
-      args: [],
-    })) as bigint;
-  }
-
-  // Offer tuple type from the contract
   type OfferTuple = readonly [
-    `0x${string}`,
-    bigint,
-    bigint,
-    bigint,
-    bigint,
-    bigint,
-    bigint,
-    number,
-    boolean,
-    boolean,
-    boolean,
-    boolean,
-    `0x${string}`,
-    bigint,
+    `0x${string}`, bigint, bigint, bigint, bigint, bigint, bigint, number,
+    boolean, boolean, boolean, boolean, `0x${string}`, bigint,
   ];
 
-  async function readOffer(offerId: bigint): Promise<OfferTuple> {
+  async function readContract<T>(fn: string, args: unknown[] = []): Promise<T> {
     if (!otcAddress) throw new Error("Missing OTC address");
-    // Use type assertion to bypass viem's strict authorizationList requirement
-    const readContract = publicClient.readContract as (
-      params: unknown,
-    ) => Promise<unknown>;
-    return (await readContract({
+    const read = publicClient.readContract as (p: unknown) => Promise<unknown>;
+    return (await read({
       address: otcAddress as `0x${string}`,
       abi: abi as Abi,
-      functionName: "offers",
-      args: [offerId],
-    })) as OfferTuple;
+      functionName: fn,
+      args,
+    })) as T;
   }
 
-  async function wait(ms: number) {
-    return new Promise((r) => setTimeout(r, ms));
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async function fulfillWithRetry(
-    offerId: bigint,
-  ): Promise<`0x${string}` | undefined> {
-    // Check if already fulfilled
-    const [, , , , , , , , , isPaid, isFulfilled] = await readOffer(offerId);
-
-    if (isPaid || isFulfilled) {
-      console.log("[AcceptQuote] Offer already fulfilled");
-      return undefined;
-    }
-
-    // Get required payment amount from contract
-    const isEth = currency === "ETH";
-    const requiredAmount = await getRequiredPayment(
-      offerId,
-      isEth ? "ETH" : "USDC",
-    );
-
-    console.log(
-      `[AcceptQuote] Required payment: ${requiredAmount} ${currency}`,
-    );
-
-    let txHash: `0x${string}` | undefined;
-
-    if (isEth) {
-      // Pay with ETH (direct from user wallet via MetaMask)
-      console.log("[AcceptQuote] Fulfilling with ETH...");
-      txHash = (await fulfillOffer(offerId, requiredAmount)) as `0x${string}`;
-    } else {
-      // Pay with USDC (need to approve first)
-      console.log("[AcceptQuote] Approving USDC allowance...");
-      await approveUsdc(requiredAmount);
-
-      console.log("[AcceptQuote] Fulfilling with USDC...");
-      txHash = (await fulfillOffer(offerId)) as `0x${string}`;
-    }
-
-    // Wait for transaction to be mined with timeout
-    if (txHash) {
-      console.log("[AcceptQuote] Waiting for transaction to be mined:", txHash);
-      console.log(
-        "[AcceptQuote] View on explorer: https://basescan.org/tx/" + txHash,
-      );
-      try {
-        const receipt = await publicClient.waitForTransactionReceipt({
-          hash: txHash,
-          timeout: 120_000, // 2 minute timeout
-          confirmations: 1,
-        });
-        if (receipt.status === "reverted") {
-          throw new Error(`Payment transaction reverted. Tx: ${txHash}`);
-        }
-        console.log(
-          "[AcceptQuote] Transaction mined, block:",
-          receipt.blockNumber,
-        );
-      } catch (receiptError) {
-        const errorMessage =
-          receiptError instanceof Error
-            ? receiptError.message
-            : String(receiptError);
-        if (
-          errorMessage.includes("timeout") ||
-          errorMessage.includes("Timed out")
-        ) {
-          throw new Error(
-            `Payment transaction timed out. Check status at: https://basescan.org/tx/${txHash}`,
-          );
-        }
-        throw receiptError;
-      }
-    } else {
-      // Fallback: wait and check
-      await wait(3000);
-    }
-
-    // Verify fulfillment
-    const [, , , , , , , , , isPaidFinal, isFulfilledFinal] =
-      await readOffer(offerId);
-
-    if (!(isPaidFinal || isFulfilledFinal)) {
-      throw new Error(
-        "Payment transaction completed but offer state not updated. Please refresh and try again.",
-      );
-    }
-
-    console.log("[AcceptQuote] ✅ Offer fulfilled successfully");
-    return txHash;
-  }
-
+  const readNextOfferId = () => readContract<bigint>("nextOfferId");
+  const readOffer = (id: bigint) => readContract<OfferTuple>("offers", [id]);
   const handleConfirm = useCallback(async () => {
     if (!walletConnected) return;
 
@@ -721,8 +689,8 @@ export function AcceptQuoteModal({
       return;
     }
 
-    // Block if contract isn't valid (EVM only)
-    if (!isSolanaActive && !contractValid) {
+    // Block if contract isn't valid (EVM tokens only)
+    if (!isSolanaToken && !contractValid) {
       dispatch({
         type: "SET_ERROR",
         payload:
@@ -756,7 +724,7 @@ export function AcceptQuoteModal({
   }, [
     walletConnected,
     initialQuote?.quoteId,
-    isSolanaActive,
+    isSolanaToken,
     contractValid,
     handleTransactionError,
   ]);
@@ -889,6 +857,26 @@ export function AcceptQuoteModal({
         program.programId,
       );
       console.log("Token registry PDA:", tokenRegistryPda.toString());
+
+      // Lazy price update: Ensure price is fresh before creating offer
+      // This prevents StalePrice errors and ensures accurate pricing
+      console.log("Refreshing token price before offer...");
+      try {
+        const priceRes = await fetch("/api/solana/update-price", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tokenMint: solanaTokenMint }),
+        });
+        const priceData = await priceRes.json();
+        if (priceData.updated) {
+          console.log(`✅ Price updated: $${priceData.oldPrice} → $${priceData.newPrice}`);
+        } else {
+          console.log(`✅ Price still fresh: $${priceData.price}`);
+        }
+      } catch (priceErr) {
+        console.warn("Price refresh failed (continuing with cached price):", priceErr);
+        // Don't block the transaction - price update is best-effort
+      }
 
       await program.methods
         .createOffer(
@@ -1066,7 +1054,8 @@ export function AcceptQuoteModal({
     // Run pre-transaction calls in parallel (saves ~500ms)
     const [nextId] = await Promise.all([
       readNextOfferId(),
-      // Fire-and-forget quote update (don't block on it)
+      // Non-blocking quote update (log errors but don't block transaction)
+      // The actual financial data is calculated in /api/deal-completion after the offer is created
       initialQuote?.quoteId
         ? fetch("/api/quote/latest", {
             method: "POST",
@@ -1081,22 +1070,41 @@ export function AcceptQuoteModal({
               discountedUsd: 0,
               paymentAmount: "0",
             }),
-          }).catch(() => {}) // Ignore errors - not critical
+          }).catch((err) => {
+            // Log but don't block - actual data saved in deal-completion
+            console.warn("[AcceptQuote] Pre-transaction quote update failed (non-critical):", err);
+          })
         : Promise.resolve(),
     ]);
     const newOfferId = nextId;
 
-    // Step 1: Create offer (User transaction - ONLY transaction user signs)
+    // Step 1: Create offer from consignment (User transaction - ONLY transaction user signs)
     console.log(`[AcceptQuote] Creating offer ${newOfferId}...`);
+    
+    // Validate we have a consignment ID
+    if (!contractConsignmentId) {
+      throw new Error(
+        "No consignment available. This quote may not be linked to an active listing. Please request a new quote from the chat."
+      );
+    }
+    
     const tokenAmountWei = BigInt(tokenAmount) * 10n ** 18n;
     const lockupSeconds = BigInt(lockupDays * 24 * 60 * 60);
     const paymentCurrency = currency === "ETH" ? 0 : 1;
+    
+    // Get agent commission from quote (0 for P2P, 25-150 for negotiated)
+    const agentCommissionBps = (initialQuote as { agentCommissionBps?: number })?.agentCommissionBps || 0;
 
-    const createTxHash = (await createOffer({
+    console.log(`[AcceptQuote] Using consignment ID: ${contractConsignmentId}`);
+    console.log(`[AcceptQuote] Agent commission: ${agentCommissionBps} bps`);
+    
+    const createTxHash = (await createOfferFromConsignment({
+      consignmentId: BigInt(contractConsignmentId),
       tokenAmountWei,
       discountBps,
       paymentCurrency,
       lockupSeconds,
+      agentCommissionBps,
     })) as `0x${string}`;
 
     console.log(
@@ -1303,8 +1311,8 @@ export function AcceptQuoteModal({
   }, [initialQuote?.pricePerToken, initialQuote?.discountBps]);
 
   const balanceDisplay = useMemo(() => {
-    // For Solana, we don't have wagmi balances - show dash
-    if (isSolanaActive) {
+    // For Solana tokens, we don't have wagmi balances - show dash
+    if (isSolanaToken) {
       return "—"; // Solana balance fetching not implemented via wagmi
     }
     if (!isConnected) return "—";
@@ -1312,32 +1320,40 @@ export function AcceptQuoteModal({
       const v = Number(usdcBalance.data?.formatted || 0);
       return `${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
     }
+    // ETH balance
     const eth = Number(ethBalance.data?.formatted || 0);
     return `${eth.toLocaleString(undefined, { maximumFractionDigits: 4 })}`;
   }, [
     isConnected,
-    isSolanaActive,
+    isSolanaToken,
     currency,
     usdcBalance.data?.formatted,
     ethBalance.data?.formatted,
   ]);
 
   const handleMaxClick = () => {
-    let maxByFunds = MIN_TOKENS; // Default to minimum if we can't calculate
+    // For Solana tokens or when we can't calculate affordability, use max available
+    if (isSolanaToken) {
+      setTokenAmount(effectiveMaxTokens);
+      return;
+    }
+    
+    let maxByFunds = effectiveMaxTokens; // Start with max available
     if (currency === "USDC") {
       const usdc = Number(usdcBalance.data?.formatted || 0);
-      if (estPerTokenUsd > 0) {
-        maxByFunds = Math.floor(usdc / estPerTokenUsd);
+      if (estPerTokenUsd > 0 && usdc > 0) {
+        maxByFunds = Math.min(maxByFunds, Math.floor(usdc / estPerTokenUsd));
       }
-    } else {
+    } else if (currency === "ETH") {
       const eth = Number(ethBalance.data?.formatted || 0);
       const ethUsd = initialQuote?.ethPrice || 0;
-      if (ethUsd > 0 && estPerTokenUsd > 0) {
+      if (ethUsd > 0 && estPerTokenUsd > 0 && eth > 0) {
         const usd = eth * ethUsd;
-        maxByFunds = Math.floor(usd / estPerTokenUsd);
+        maxByFunds = Math.min(maxByFunds, Math.floor(usd / estPerTokenUsd));
       }
+      // If no ETH price, just use max available
     }
-    // If we couldn't calculate a valid max, keep the current amount or use minimum
+    // Ensure we stay above minimum
     if (maxByFunds < MIN_TOKENS) {
       maxByFunds = MIN_TOKENS;
     }
@@ -1369,74 +1385,46 @@ export function AcceptQuoteModal({
     }
   };
 
-  // Calculate max affordable tokens based on balance
   const maxAffordableTokens = useMemo(() => {
-    // For Solana, we can't calculate without balance - don't limit
-    if (isSolanaActive) return ONE_MILLION;
-    if (estPerTokenUsd <= 0) return ONE_MILLION; // Can't calculate, don't limit
+    if (isSolanaToken || estPerTokenUsd <= 0) return maxAvailableTokens;
+    
+    let max = maxAvailableTokens;
     if (currency === "USDC") {
       const usdc = Number(usdcBalance.data?.formatted || 0);
-      return Math.floor(usdc / estPerTokenUsd);
-    } else {
+      if (usdc > 0) max = Math.floor(usdc / estPerTokenUsd);
+    } else if (currency === "ETH") {
       const eth = Number(ethBalance.data?.formatted || 0);
       const ethUsd = initialQuote?.ethPrice || 0;
-      if (ethUsd > 0) {
-        const usd = eth * ethUsd;
-        return Math.floor(usd / estPerTokenUsd);
-      }
+      if (ethUsd > 0 && eth > 0) max = Math.floor((eth * ethUsd) / estPerTokenUsd);
     }
-    return ONE_MILLION;
-  }, [
-    isSolanaActive,
-    estPerTokenUsd,
-    currency,
-    usdcBalance.data?.formatted,
-    ethBalance.data?.formatted,
-    initialQuote?.ethPrice,
-  ]);
+    return Math.min(max, maxAvailableTokens);
+  }, [isSolanaToken, maxAvailableTokens, estPerTokenUsd, currency, usdcBalance.data?.formatted, ethBalance.data?.formatted, initialQuote?.ethPrice]);
 
-  // Validation: enforce token amount limits and check affordability
   const validationError = useMemo(() => {
-    if (tokenAmount < MIN_TOKENS) {
-      return `Order too small. Minimum is ${MIN_TOKENS.toLocaleString()} tokens.`;
-    }
-    if (tokenAmount > contractMaxTokens) {
-      return `Amount exceeds maximum of ${contractMaxTokens.toLocaleString()} tokens.`;
-    }
-    if (estPerTokenUsd > 0 && tokenAmount > maxAffordableTokens) {
-      return `Amount exceeds what you can afford (~${maxAffordableTokens.toLocaleString()} tokens max).`;
+    if (tokenAmount < MIN_TOKENS) return `Minimum is ${MIN_TOKENS.toLocaleString()} tokens.`;
+    if (tokenAmount > maxAvailableTokens) return `Exceeds supply (~${maxAvailableTokens.toLocaleString()} max).`;
+    if (tokenAmount > contractMaxTokens) return `Exceeds maximum of ${contractMaxTokens.toLocaleString()}.`;
+    if (!isSolanaToken && estPerTokenUsd > 0 && tokenAmount > maxAffordableTokens) {
+      return `Exceeds what you can afford (~${maxAffordableTokens.toLocaleString()} max).`;
     }
     return null;
-  }, [tokenAmount, contractMaxTokens, estPerTokenUsd, maxAffordableTokens]);
+  }, [tokenAmount, maxAvailableTokens, contractMaxTokens, estPerTokenUsd, maxAffordableTokens, isSolanaToken]);
 
-  // Estimate payment amount for display
   const estimatedPayment = useMemo(() => {
-    if (estPerTokenUsd <= 0)
-      return { usdc: undefined, eth: undefined, sol: undefined };
+    if (estPerTokenUsd <= 0) return { usdc: undefined, eth: undefined, usd: undefined };
     const totalUsd = tokenAmount * estPerTokenUsd;
-    if (currency === "USDC") {
-      return { usdc: totalUsd.toFixed(2), eth: undefined, sol: undefined };
-    } else if (currency === "SOL") {
-      // For SOL, we'd need SOL/USD price - show USD equivalent for now
-      return { usdc: totalUsd.toFixed(2), eth: undefined, sol: undefined };
-    } else {
-      const ethUsd = initialQuote?.ethPrice || 0;
-      if (ethUsd > 0) {
-        return {
-          usdc: undefined,
-          eth: (totalUsd / ethUsd).toFixed(6),
-          sol: undefined,
-        };
-      }
-    }
-    return { usdc: undefined, eth: undefined, sol: undefined };
+    const usd = totalUsd.toFixed(2);
+    if (currency === "USDC") return { usdc: usd, eth: undefined, usd };
+    if (currency === "SOL") return { usdc: undefined, eth: undefined, usd };
+    const ethUsd = initialQuote?.ethPrice || 0;
+    return { usdc: undefined, eth: ethUsd > 0 ? (totalUsd / ethUsd).toFixed(6) : undefined, usd };
   }, [tokenAmount, estPerTokenUsd, currency, initialQuote?.ethPrice]);
 
-  // Check for insufficient funds
   const insufficientFunds = useMemo(() => {
-    if (estPerTokenUsd <= 0) return false; // Can't check without price
+    if (isSolanaToken || estPerTokenUsd <= 0) return false;
+    if (currency === "ETH" && !initialQuote?.ethPrice) return false;
     return tokenAmount > maxAffordableTokens;
-  }, [estPerTokenUsd, tokenAmount, maxAffordableTokens]);
+  }, [isSolanaToken, estPerTokenUsd, tokenAmount, maxAffordableTokens, currency, initialQuote?.ethPrice]);
 
   return (
     <>
@@ -1519,13 +1507,14 @@ export function AcceptQuoteModal({
                 type="button"
                 className={`px-2 py-1 rounded-md ${currency !== "USDC" ? "bg-white text-black" : "text-zinc-300"}`}
                 onClick={() =>
-                  setCurrency(activeFamily === "solana" ? "SOL" : "ETH")
+                  // Use quoteChain (token's chain), not activeFamily (user's wallet)
+                  setCurrency(isSolanaToken ? "SOL" : "ETH")
                 }
               >
-                {activeFamily === "solana" ? "SOL" : "ETH"}
+                {/* Show SOL for Solana tokens, ETH for EVM tokens */}
+                {isSolanaToken ? "SOL" : "ETH"}
               </button>
             </div>
-            {/* Solana now supported */}
           </div>
 
           {/* Main amount card */}
@@ -1557,7 +1546,7 @@ export function AcceptQuoteModal({
                     setTokenAmount(clampAmount(Number(e.target.value)))
                   }
                   min={MIN_TOKENS}
-                  max={ONE_MILLION}
+                  max={maxAvailableTokens}
                   className="w-full bg-transparent border-none outline-none text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white"
                 />
                 <div className="flex items-center gap-3 text-right flex-shrink-0">
@@ -1598,7 +1587,7 @@ export function AcceptQuoteModal({
                   data-testid="token-amount-slider"
                   type="range"
                   min={MIN_TOKENS}
-                  max={ONE_MILLION}
+                  max={maxAvailableTokens}
                   value={tokenAmount}
                   onChange={(e) =>
                     setTokenAmount(clampAmount(Number(e.target.value)))
@@ -1643,9 +1632,11 @@ export function AcceptQuoteModal({
                     ? `$${Number(estimatedPayment.usdc).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
                     : currency === "ETH" && estimatedPayment.eth
                       ? `${estimatedPayment.eth} ETH`
-                      : currency === "SOL" && estimatedPayment.usdc
-                        ? `~$${Number(estimatedPayment.usdc).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-                        : "—"}
+                      : currency === "ETH" && estimatedPayment.usd
+                        ? `~$${Number(estimatedPayment.usd).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                        : currency === "SOL" && estimatedPayment.usd
+                          ? `~$${Number(estimatedPayment.usd).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                          : "—"}
                 </div>
               </div>
             </div>

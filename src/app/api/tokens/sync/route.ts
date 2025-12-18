@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http, parseAbi } from "viem";
-import { Connection } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { TokenRegistryService } from "@/services/tokenRegistry";
+import { TokenDB } from "@/services/database";
+
+// register_token instruction discriminator from IDL
+const REGISTER_TOKEN_DISCRIMINATOR = Buffer.from([32, 146, 36, 240, 80, 183, 36, 84]);
 
 const ERC20_ABI = parseAbi([
   "function symbol() view returns (string)",
@@ -48,20 +52,22 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Sync EVM token registration immediately (Base or BSC)
+ * Sync EVM token registration immediately (Ethereum, Base or BSC)
  */
 async function syncEvmToken(
   transactionHash: string,
   blockNumber: string | undefined,
   chain: string,
 ) {
-  // Import chains dynamically to handle both Base and BSC
-  const { base, bsc } = await import("viem/chains");
+  // Import chains dynamically to handle Ethereum, Base and BSC
+  const { mainnet, base, bsc } = await import("viem/chains");
 
   const registrationHelperAddress =
-    chain === "bsc"
-      ? process.env.NEXT_PUBLIC_BSC_REGISTRATION_HELPER_ADDRESS
-      : process.env.NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS;
+    chain === "ethereum"
+      ? process.env.NEXT_PUBLIC_ETH_REGISTRATION_HELPER_ADDRESS
+      : chain === "bsc"
+        ? process.env.NEXT_PUBLIC_BSC_REGISTRATION_HELPER_ADDRESS
+        : process.env.NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS;
 
   if (!registrationHelperAddress) {
     return NextResponse.json(
@@ -73,13 +79,22 @@ async function syncEvmToken(
     );
   }
 
+  // Server-side: use Alchemy directly
+  const alchemyKey = process.env.ALCHEMY_API_KEY;
+  if (!alchemyKey && chain !== "bsc") {
+    return NextResponse.json(
+      { success: false, error: "ALCHEMY_API_KEY not configured" },
+      { status: 500 },
+    );
+  }
   const rpcUrl =
-    chain === "bsc"
-      ? process.env.NEXT_PUBLIC_BSC_RPC_URL ||
-        "https://bsc-dataseed1.binance.org"
-      : process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+    chain === "ethereum"
+      ? `https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`
+      : chain === "bsc"
+        ? process.env.NEXT_PUBLIC_BSC_RPC_URL!
+        : `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`;
 
-  const viemChain = chain === "bsc" ? bsc : base;
+  const viemChain = chain === "ethereum" ? mainnet : chain === "bsc" ? bsc : base;
   const client = createPublicClient({
     chain: viemChain,
     transport: http(rpcUrl),
@@ -177,9 +192,9 @@ async function syncEvmToken(
           }),
         ]);
 
-        // Register to database - use the chain parameter (base or bsc)
+        // Register to database - use the chain parameter (ethereum, base or bsc)
         const tokenService = new TokenRegistryService();
-        const dbChain = chain === "bsc" ? "bsc" : "base";
+        const dbChain = chain === "ethereum" ? "ethereum" : chain === "bsc" ? "bsc" : "base";
         const token = await tokenService.registerToken({
           symbol: symbol as string,
           name: name as string,
@@ -272,14 +287,44 @@ async function syncSolanaToken(signature: string) {
       );
     }
 
-    // TODO: Parse Solana transaction to extract token details
-    // For now, just acknowledge we found it
-    console.log(`[Sync Solana] Detected token registration: ${signature}`);
+    // Parse the transaction to extract token mint
+    const parsed = parseSolanaRegisterToken(tx, programId);
+    if (!parsed) {
+      return NextResponse.json(
+        { success: false, error: "Failed to parse register_token instruction" },
+        { status: 400 },
+      );
+    }
+
+    // Fetch token metadata and register
+    const tokenData = await fetchSolanaTokenData(connection, parsed.tokenMint);
+    
+    const token = await TokenDB.createToken({
+      symbol: tokenData.symbol,
+      name: tokenData.name,
+      chain: "solana",
+      contractAddress: parsed.tokenMint,
+      decimals: tokenData.decimals,
+      isActive: true,
+      logoUrl: null,
+      priceUsd: null,
+      marketCap: null,
+      volume24h: null,
+      priceChange24h: null,
+      poolAddress: parsed.poolAddress || null,
+    });
+
+    console.log(`[Sync Solana] ✅ Registered token: ${token.symbol} (${parsed.tokenMint})`);
 
     return NextResponse.json({
       success: true,
-      processed: 0, // Solana parsing not fully implemented yet
-      message: "Token registration detected (Solana parsing pending)",
+      processed: 1,
+      token: {
+        id: token.id,
+        symbol: token.symbol,
+        name: token.name,
+        mint: parsed.tokenMint,
+      },
     });
   } catch (error) {
     console.error("[Sync Solana] Error:", error);
@@ -291,4 +336,119 @@ async function syncSolanaToken(signature: string) {
       { status: 500 },
     );
   }
+}
+
+interface SolanaParsedRegistration {
+  tokenMint: string;
+  poolAddress: string;
+}
+
+function parseSolanaRegisterToken(
+  tx: Awaited<ReturnType<Connection["getTransaction"]>>,
+  programId: string,
+): SolanaParsedRegistration | null {
+  if (!tx) return null;
+  
+  const message = tx.transaction.message;
+  const accountKeys: PublicKey[] = [];
+
+  if ("staticAccountKeys" in message) {
+    accountKeys.push(...message.staticAccountKeys);
+    if (tx.meta?.loadedAddresses) {
+      accountKeys.push(
+        ...tx.meta.loadedAddresses.writable.map((addr) => new PublicKey(addr)),
+        ...tx.meta.loadedAddresses.readonly.map((addr) => new PublicKey(addr)),
+      );
+    }
+  } else if ("accountKeys" in message) {
+    accountKeys.push(...(message as { accountKeys: PublicKey[] }).accountKeys);
+  }
+
+  const instructions = message.compiledInstructions;
+
+  for (const ix of instructions) {
+    const ixProgramId = accountKeys[ix.programIdIndex];
+    if (ixProgramId.toBase58() !== programId) continue;
+
+    const ixData = Buffer.from(ix.data);
+    if (ixData.length < 8) continue;
+
+    const discriminator = ixData.subarray(0, 8);
+    if (!discriminator.equals(REGISTER_TOKEN_DISCRIMINATOR)) continue;
+
+    // register_token accounts: desk[0], payer[1], token_mint[2], token_registry[3], system_program[4]
+    const accountIndices = ix.accountKeyIndexes;
+    if (accountIndices.length < 5) continue;
+
+    const tokenMint = accountKeys[accountIndices[2]].toBase58();
+
+    // Parse pool_address from instruction data (offset 40-72)
+    let poolAddress = "";
+    if (ixData.length >= 73) {
+      const poolAddressBytes = ixData.subarray(40, 72);
+      poolAddress = new PublicKey(poolAddressBytes).toBase58();
+    }
+
+    return { tokenMint, poolAddress };
+  }
+
+  return null;
+}
+
+async function fetchSolanaTokenData(
+  connection: Connection,
+  mintAddress: string,
+): Promise<{ name: string; symbol: string; decimals: number }> {
+  // Get decimals from mint account
+  const mintInfo = await connection.getParsedAccountInfo(new PublicKey(mintAddress));
+  let decimals = 9;
+
+  if (
+    mintInfo.value?.data &&
+    typeof mintInfo.value.data === "object" &&
+    "parsed" in mintInfo.value.data
+  ) {
+    const parsed = mintInfo.value.data.parsed;
+    if (parsed.type === "mint" && parsed.info) {
+      decimals = parsed.info.decimals;
+    }
+  }
+
+  // Try Metaplex metadata
+  const METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+  const mintPubkey = new PublicKey(mintAddress);
+
+  const [metadataPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("metadata"), METADATA_PROGRAM_ID.toBuffer(), mintPubkey.toBuffer()],
+    METADATA_PROGRAM_ID,
+  );
+
+  try {
+    const accountInfo = await connection.getAccountInfo(metadataPda);
+    if (accountInfo && accountInfo.data.length >= 100) {
+      const data = accountInfo.data;
+      let offset = 65; // Skip key + update_authority + mint
+
+      const nameLen = data.readUInt32LE(offset);
+      offset += 4;
+      const name = data.subarray(offset, offset + nameLen).toString("utf8").replace(/\0/g, "").trim();
+      offset += nameLen;
+
+      const symbolLen = data.readUInt32LE(offset);
+      offset += 4;
+      const symbol = data.subarray(offset, offset + symbolLen).toString("utf8").replace(/\0/g, "").trim();
+
+      if (name && symbol) {
+        return { name, symbol, decimals };
+      }
+    }
+  } catch {
+    // Metadata fetch failed, use fallback
+  }
+
+  return {
+    name: `Token ${mintAddress.slice(0, 8)}`,
+    symbol: mintAddress.slice(0, 6).toUpperCase(),
+    decimals,
+  };
 }

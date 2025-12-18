@@ -779,7 +779,15 @@ export async function GET(request: NextRequest) {
     // Cache for 15 minutes
     await setCachedWalletResponse(walletAddress, enrichedTokens);
 
-    return NextResponse.json({ tokens: enrichedTokens });
+    // Cache for 60 seconds - balances can change but short cache is fine for UX
+    return NextResponse.json(
+      { tokens: enrichedTokens },
+      {
+        headers: {
+          "Cache-Control": "private, s-maxage=60, stale-while-revalidate=300",
+        },
+      },
+    );
   } catch (error) {
     console.error("[Solana Balances] Error:", error);
     return NextResponse.json({ tokens: [] });

@@ -26,8 +26,13 @@ export async function startBaseListener() {
     return;
   }
 
-  const rpcUrl =
-    process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+  // Server-side: use Alchemy directly
+  const alchemyKey = process.env.ALCHEMY_API_KEY;
+  if (!alchemyKey) {
+    console.error("[Base Listener] ALCHEMY_API_KEY not configured");
+    return;
+  }
+  const rpcUrl = `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`;
 
   const client = createPublicClient({
     chain: base,
@@ -145,8 +150,12 @@ export async function backfillBaseEvents(fromBlock?: bigint) {
     throw new Error("REGISTRATION_HELPER_ADDRESS not configured");
   }
 
-  const rpcUrl =
-    process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+  // Server-side: use Alchemy directly
+  const alchemyKey = process.env.ALCHEMY_API_KEY;
+  if (!alchemyKey) {
+    throw new Error("ALCHEMY_API_KEY not configured");
+  }
+  const rpcUrl = `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`;
 
   const client = createPublicClient({
     chain: base,

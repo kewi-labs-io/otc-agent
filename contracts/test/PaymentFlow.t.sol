@@ -76,21 +76,19 @@ contract PaymentFlowTest is Test {
         vm.stopPrank();
 
         // 2. Buyer creates offer for 100 tokens at $1 each = $100 USDC
+        // Non-negotiable offers are auto-approved (P2P) so no manual approval needed
         vm.startPrank(buyer);
         uint256 offerId = otc.createOfferFromConsignment(
             1,       // consignment ID
             100e18,  // 100 tokens
             0,       // no discount
             OTC.PaymentCurrency.USDC,
-            0        // no lockup
+            0,       // no lockup
+            0        // no agent commission for P2P
         );
         vm.stopPrank();
 
-        // 3. Approver approves
-        vm.prank(approver);
-        otc.approveOffer(offerId);
-
-        // 4. Buyer pays with USDC
+        // 3. Buyer pays with USDC (offer is already auto-approved for non-negotiable)
         vm.startPrank(buyer);
         uint256 buyerUsdcBefore = usdc.balanceOf(buyer);
         usdc.approve(address(otc), 100e6); // $100 USDC (6 decimals)
@@ -147,17 +145,14 @@ contract PaymentFlowTest is Test {
 
         // 2. Buyer creates offer for 100 tokens, paying in ETH
         // At $1/token and $2000/ETH, 100 tokens = $100 = 0.05 ETH
+        // Non-negotiable offers are auto-approved (P2P)
         vm.startPrank(buyer);
         uint256 offerId = otc.createOfferFromConsignment(
-            1, 100e18, 0, OTC.PaymentCurrency.ETH, 0
+            1, 100e18, 0, OTC.PaymentCurrency.ETH, 0, 0
         );
         vm.stopPrank();
 
-        // 3. Approver approves
-        vm.prank(approver);
-        otc.approveOffer(offerId);
-
-        // 4. Calculate required ETH
+        // 3. Calculate required ETH (offer is already auto-approved)
         uint256 requiredEth = otc.requiredEthWei(offerId);
         assertGt(requiredEth, 0, "Should require ETH payment");
 
@@ -202,18 +197,12 @@ contract PaymentFlowTest is Test {
         );
         vm.stopPrank();
 
-        // Create and pay for 3 offers
+        // Create and pay for 3 offers (non-negotiable = auto-approved P2P)
         for (uint256 i = 0; i < 3; i++) {
             vm.startPrank(buyer);
             uint256 offerId = otc.createOfferFromConsignment(
-                1, 100e18, 0, OTC.PaymentCurrency.USDC, 0
+                1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0
             );
-            vm.stopPrank();
-
-            vm.prank(approver);
-            otc.approveOffer(offerId);
-
-            vm.startPrank(buyer);
             usdc.approve(address(otc), 100e6);
             otc.fulfillOffer(offerId);
             vm.stopPrank();
@@ -241,14 +230,9 @@ contract PaymentFlowTest is Test {
         );
         vm.stopPrank();
 
+        // Non-negotiable offer is auto-approved (P2P)
         vm.startPrank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
-        vm.stopPrank();
-
-        vm.prank(approver);
-        otc.approveOffer(offerId);
-
-        vm.startPrank(buyer);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
         usdc.approve(address(otc), 100e6);
         otc.fulfillOffer(offerId);
         vm.stopPrank();
@@ -283,14 +267,11 @@ contract PaymentFlowTest is Test {
         );
         vm.stopPrank();
 
+        // Non-negotiable offer is auto-approved (P2P)
         vm.startPrank(buyer);
         uint256 offerId = otc.createOfferFromConsignment(
-            1, 100e18, 1000, OTC.PaymentCurrency.USDC, 0
+            1, 100e18, 1000, OTC.PaymentCurrency.USDC, 0, 0
         );
-        vm.stopPrank();
-
-        vm.prank(approver);
-        otc.approveOffer(offerId);
 
         // At $1/token with 10% discount: 100 tokens = $90
         vm.startPrank(buyer);

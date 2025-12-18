@@ -454,15 +454,15 @@ export async function POST(request: NextRequest) {
   // This prevents abuse from stale quotes or manipulated pool prices
   const MAX_PRICE_DIVERGENCE_BPS = 1000; // 10% maximum divergence
 
-  // Skip price validation for local development (Anvil has mock prices)
+  // SECURITY: Only skip validation in development AND when explicitly running locally
+  // In production, this is ALWAYS false regardless of environment variables
   const isLocalNetwork =
-    process.env.NEXT_PUBLIC_NETWORK === "localhost" ||
-    process.env.NEXT_PUBLIC_NETWORK === "anvil" ||
-    process.env.NETWORK === "localhost" ||
-    process.env.NETWORK === "anvil";
+    process.env.NODE_ENV !== "production" &&
+    (process.env.NEXT_PUBLIC_NETWORK === "localhost" ||
+      process.env.NEXT_PUBLIC_NETWORK === "anvil");
 
   if (isLocalNetwork) {
-    console.log("[Approve API] Skipping price validation on local network");
+    console.log("[Approve API] Development mode: price validation relaxed");
   }
 
   try {
@@ -476,14 +476,14 @@ export async function POST(request: NextRequest) {
     // Find the specific token associated with this offer
     // Primary method: Use the on-chain tokenId (keccak256 hash of symbol) to look up token
     let tokenAddress: string | null = null;
-    let tokenChain: "base" | "solana" = "base";
+    let tokenChain: "ethereum" | "base" | "bsc" | "solana" = "base";
 
     // The offer.tokenId is a bytes32 (keccak256 of token symbol)
     if (offer.tokenId) {
       const token = await TokenDB.getTokenByOnChainId(offer.tokenId);
       if (token) {
         tokenAddress = token.contractAddress;
-        tokenChain = token.chain as "base" | "solana";
+        tokenChain = token.chain as "ethereum" | "base" | "bsc" | "solana";
         console.log("[Approve API] Found token via on-chain tokenId:", {
           symbol: token.symbol,
           address: tokenAddress,
@@ -504,7 +504,7 @@ export async function POST(request: NextRequest) {
         const token = await TokenDB.getToken(matchingQuote.tokenId as string);
         if (token) {
           tokenAddress = token.contractAddress;
-          tokenChain = token.chain as "base" | "solana";
+          tokenChain = token.chain as "ethereum" | "base" | "bsc" | "solana";
           console.log("[Approve API] Found token via quote:", {
             symbol: token.symbol,
             address: tokenAddress,
@@ -585,11 +585,21 @@ export async function POST(request: NextRequest) {
       }
     }
   } catch (priceError) {
-    // Log but don't block - fail open for price validation errors
-    console.warn(
-      "[Approve API] Price validation failed (continuing):",
-      priceError,
-    );
+    // In production, price validation failures should block the transaction
+    // The price-validator already handles this, but we add an extra safety net here
+    if (process.env.NODE_ENV === "production") {
+      console.error("[Approve API] Price validation error in production:", priceError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Price validation failed",
+          details: { reason: priceError instanceof Error ? priceError.message : "Unknown error" },
+        },
+        { status: 500 },
+      );
+    }
+    // Development: log and continue
+    console.warn("[Approve API] Price validation failed (dev mode - continuing):", priceError);
   }
   // ============ END PRICE VALIDATION ============
 

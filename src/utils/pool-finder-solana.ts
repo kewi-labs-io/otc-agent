@@ -71,7 +71,7 @@ export async function findBestSolanaPool(
 
   // Check cache first
   const cached = getCached<SolanaPoolInfo | null>(cacheKey);
-  if (cached !== null) {
+  if (cached !== undefined) {
     return cached;
   }
 

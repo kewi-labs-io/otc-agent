@@ -3,14 +3,14 @@ pragma solidity ^0.8.26;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import {SimplePoolOracle} from "./SimplePoolOracle.sol";
+import {UniswapV3TWAPOracle} from "./UniswapV3TWAPOracle.sol";
 import {IUniswapV3Pool} from "./interfaces/IUniswapV3Pool.sol";
 import {IOTC} from "./interfaces/IOTC.sol";
 import {IAggregatorV3} from "./interfaces/IAggregatorV3.sol";
 
 /// @title RegistrationHelper
 /// @notice Allows users to register tokens to the OTC contract by paying a fee
-/// @dev Deploys SimplePoolOracle and registers token in single transaction
+/// @dev Deploys UniswapV3TWAPOracle and registers token in single transaction
 contract RegistrationHelper is Ownable {
     IOTC public immutable otc;
     address public immutable ethUsdFeed;
@@ -79,11 +79,11 @@ contract RegistrationHelper is Ownable {
      */
     function validateOracle(address pool, address token) internal returns (bool) {
         // Create a temporary oracle instance to test
-        SimplePoolOracle testOracle = new SimplePoolOracle(pool, token, ethUsdFeed);
+        UniswapV3TWAPOracle testOracle = new UniswapV3TWAPOracle(pool, token, ethUsdFeed);
 
         // Test oracle functionality
         (bool success, bytes memory data) = address(testOracle).staticcall(
-            abi.encodeWithSelector(SimplePoolOracle.getTWAPPrice.selector)
+            abi.encodeWithSelector(UniswapV3TWAPOracle.getTWAPPrice.selector)
         );
 
         if (!success) return false;
@@ -100,11 +100,11 @@ contract RegistrationHelper is Ownable {
      */
     function hasSufficientLiquidity(address pool, address token) internal returns (bool) {
         // Create a temporary oracle instance to test
-        SimplePoolOracle testOracle = new SimplePoolOracle(pool, token, ethUsdFeed);
+        UniswapV3TWAPOracle testOracle = new UniswapV3TWAPOracle(pool, token, ethUsdFeed);
 
         // Get current price to estimate liquidity
         (bool success, bytes memory data) = address(testOracle).staticcall(
-            abi.encodeWithSelector(SimplePoolOracle.getTWAPPrice.selector)
+            abi.encodeWithSelector(UniswapV3TWAPOracle.getTWAPPrice.selector)
         );
 
         if (!success) return false;
@@ -159,8 +159,8 @@ contract RegistrationHelper is Ownable {
         // Generate tokenId (use keccak256 of address for uniqueness)
         bytes32 tokenId = keccak256(abi.encodePacked(tokenAddress));
         
-        // Deploy SimplePoolOracle
-        SimplePoolOracle poolOracle = new SimplePoolOracle(
+        // Deploy UniswapV3TWAPOracle
+        UniswapV3TWAPOracle poolOracle = new UniswapV3TWAPOracle(
             poolAddress,
             tokenAddress,
             ethUsdFeed

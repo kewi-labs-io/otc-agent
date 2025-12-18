@@ -101,8 +101,15 @@ async function setCachedWalletBalances(
 }
 
 /**
+ * Check if blob storage is available (BLOB_READ_WRITE_TOKEN is set)
+ */
+function isBlobStorageAvailable(): boolean {
+  return !!process.env.BLOB_READ_WRITE_TOKEN;
+}
+
+/**
  * Cache an image URL to Vercel Blob storage
- * Returns the cached blob URL, or null if caching fails
+ * Returns the cached blob URL, or the original URL if caching fails/unavailable
  */
 async function cacheImageToBlob(
   imageUrl: string | null,
@@ -111,6 +118,11 @@ async function cacheImageToBlob(
 
   // Skip if already a blob URL
   if (imageUrl.includes("blob.vercel-storage.com")) {
+    return imageUrl;
+  }
+
+  // If blob storage isn't configured, return original URL
+  if (!isBlobStorageAvailable()) {
     return imageUrl;
   }
 
@@ -132,7 +144,7 @@ async function cacheImageToBlob(
     });
 
     if (!response.ok) {
-      return null;
+      return imageUrl; // Return original on download failure
     }
 
     const contentType = response.headers.get("content-type") || "image/png";
@@ -146,8 +158,9 @@ async function cacheImageToBlob(
     });
 
     return blob.url;
-  } catch {
-    return null;
+  } catch (err) {
+    console.log("[EVM Balances] Image caching failed, using original URL:", err);
+    return imageUrl; // Return original URL as fallback
   }
 }
 
@@ -177,6 +190,10 @@ const CHAIN_CONFIG: Record<
   string,
   { alchemyNetwork: string; coingeckoPlatform: string }
 > = {
+  ethereum: {
+    alchemyNetwork: "eth-mainnet",
+    coingeckoPlatform: "ethereum",
+  },
   base: {
     alchemyNetwork: "base-mainnet",
     coingeckoPlatform: "base",
@@ -336,13 +353,7 @@ async function fetchAlchemyBalances(
                 logoUrl: result.logo || undefined,
               };
 
-              // Fire-and-forget image caching
-              if (result.logo) {
-                cacheImageToBlob(result.logo).catch(() => {
-                  // Ignore image caching failures - non-critical
-                });
-              }
-
+              console.log(`[EVM Balances] Token ${result.symbol}: logo=${result.logo ? 'yes' : 'no'}`);
               return { contractAddress, metadata };
             }
           } catch {
@@ -364,16 +375,77 @@ async function fetchAlchemyBalances(
       getBulkMetadataCache(chain)
         .then((existing) => {
           const merged = { ...existing, ...cachedMetadata };
-          setBulkMetadataCache(chain, merged).catch(() => {
-            // Cache write failures are non-critical
+          setBulkMetadataCache(chain, merged).catch((err) => {
+            console.debug("[EVM Balances] Cache write failed (non-critical):", err);
           });
         })
-        .catch(() => {
-          // Cache read failures are non-critical - proceed without merging
+        .catch((err) => {
+          console.debug("[EVM Balances] Cache read failed (non-critical):", err);
         });
     }
 
-    // Step 4: Build token list
+    // Step 3.5: Check blob cache for all logo URLs and cache missing ones
+    // Skip if blob storage isn't configured
+    if (isBlobStorageAvailable()) {
+      const logoUrls = Object.values(cachedMetadata)
+        .map((m) => m.logoUrl)
+        .filter((url): url is string => !!url && !url.includes("blob.vercel-storage.com"));
+
+      const blobUrlMap: Record<string, string> = {};
+      if (logoUrls.length > 0) {
+        console.log(`[EVM Balances] Checking blob cache for ${logoUrls.length} logo URLs`);
+        
+        const blobChecks = await Promise.all(
+          logoUrls.map(async (originalUrl) => {
+            const urlHash = crypto.createHash("md5").update(originalUrl).digest("hex");
+            const extension = getExtensionFromUrl(originalUrl) || "png";
+            const blobPath = `token-images/${urlHash}.${extension}`;
+            const existing = await head(blobPath).catch(() => null);
+            
+            if (existing) {
+              return { originalUrl, blobUrl: existing.url };
+            }
+            
+            // Try to cache the image now (with timeout to not slow down response too much)
+            const cachedUrl = await cacheImageToBlob(originalUrl);
+            return { originalUrl, blobUrl: cachedUrl };
+          }),
+        );
+
+        for (const { originalUrl, blobUrl } of blobChecks) {
+          if (blobUrl) {
+            blobUrlMap[originalUrl] = blobUrl;
+          }
+        }
+        
+        console.log(`[EVM Balances] Found/cached ${Object.keys(blobUrlMap).length} blob URLs`);
+
+        // Update metadata cache with blob URLs for faster future lookups
+        let metadataUpdated = false;
+        for (const [addr, metadata] of Object.entries(cachedMetadata)) {
+          if (metadata.logoUrl && blobUrlMap[metadata.logoUrl]) {
+            cachedMetadata[addr] = { ...metadata, logoUrl: blobUrlMap[metadata.logoUrl] };
+            metadataUpdated = true;
+          }
+        }
+        
+        // Re-save metadata cache with blob URLs
+        if (metadataUpdated) {
+          getBulkMetadataCache(chain)
+            .then((existing) => {
+              const merged = { ...existing, ...cachedMetadata };
+              setBulkMetadataCache(chain, merged).catch((err) => {
+                console.debug("[EVM Balances] Blob cache write failed:", err);
+              });
+            })
+            .catch((err) => {
+              console.debug("[EVM Balances] Blob cache read failed:", err);
+            });
+        }
+      }
+    }
+
+    // Step 4: Build token list (metadata already has blob-cached logo URLs)
     const tokens: TokenBalance[] = nonZeroBalances.map(
       (tokenData: { contractAddress: string; tokenBalance: string }) => {
         const contractAddress = tokenData.contractAddress.toLowerCase();
@@ -527,6 +599,68 @@ async function fetchPrices(
 }
 
 /**
+ * Upgrade logo URLs to blob-cached URLs for a list of tokens
+ * If blob storage isn't available, returns tokens unchanged
+ */
+async function upgradeToBlobUrls(tokens: TokenBalance[]): Promise<TokenBalance[]> {
+  // If blob storage isn't configured, skip upgrading
+  if (!isBlobStorageAvailable()) {
+    return tokens;
+  }
+
+  // Find tokens with non-blob logo URLs
+  const tokensNeedingUpgrade = tokens.filter(
+    (t) => t.logoUrl && !t.logoUrl.includes("blob.vercel-storage.com")
+  );
+
+  if (tokensNeedingUpgrade.length === 0) {
+    return tokens;
+  }
+
+  console.log(`[EVM Balances] Checking blob cache for ${tokensNeedingUpgrade.length} logo URLs`);
+
+  // Check blob cache for all URLs in parallel
+  const blobChecks = await Promise.all(
+    tokensNeedingUpgrade.map(async (token) => {
+      const originalUrl = token.logoUrl;
+      if (!originalUrl) return { contractAddress: token.contractAddress, blobUrl: null };
+
+      const urlHash = crypto.createHash("md5").update(originalUrl).digest("hex");
+      const extension = getExtensionFromUrl(originalUrl) || "png";
+      const blobPath = `token-images/${urlHash}.${extension}`;
+      const existing = await head(blobPath).catch(() => null);
+
+      if (existing) {
+        return { contractAddress: token.contractAddress, blobUrl: existing.url };
+      }
+
+      // Try to cache the image now
+      const cachedUrl = await cacheImageToBlob(originalUrl);
+      return { contractAddress: token.contractAddress, blobUrl: cachedUrl };
+    }),
+  );
+
+  // Build a map of contract address -> blob URL
+  const blobUrlMap: Record<string, string> = {};
+  for (const { contractAddress, blobUrl } of blobChecks) {
+    if (blobUrl) {
+      blobUrlMap[contractAddress.toLowerCase()] = blobUrl;
+    }
+  }
+
+  console.log(`[EVM Balances] Found/cached ${Object.keys(blobUrlMap).length} blob URLs`);
+
+  // Update tokens with blob URLs
+  return tokens.map((token) => {
+    const blobUrl = blobUrlMap[token.contractAddress.toLowerCase()];
+    if (blobUrl) {
+      return { ...token, logoUrl: blobUrl };
+    }
+    return token;
+  });
+}
+
+/**
  * GET /api/evm-balances?address=0x...&chain=base&refresh=true
  */
 export async function GET(request: NextRequest) {
@@ -547,7 +681,18 @@ export async function GET(request: NextRequest) {
     if (!forceRefresh) {
       const cachedTokens = await getCachedWalletBalances(chain, address);
       if (cachedTokens) {
-        return NextResponse.json({ tokens: cachedTokens });
+        // Upgrade cached tokens to blob URLs if needed
+        const upgradedTokens = await upgradeToBlobUrls(cachedTokens);
+        
+        // If any tokens were upgraded, update the cache
+        const hasUpgrades = upgradedTokens.some((t, i) => t.logoUrl !== cachedTokens[i].logoUrl);
+        if (hasUpgrades) {
+          setCachedWalletBalances(chain, address, upgradedTokens).catch((err) => {
+            console.debug("[EVM Balances] Failed to update wallet cache:", err);
+          });
+        }
+        
+        return NextResponse.json({ tokens: upgradedTokens });
       }
     } else {
       console.log("[EVM Balances] Force refresh requested");
@@ -615,7 +760,9 @@ export async function GET(request: NextRequest) {
             console.debug("[EVM Balances] Price cache write failed:", err),
           );
         })
-        .catch(() => {});
+        .catch((err) => {
+          console.debug("[EVM Balances] Price cache read failed:", err);
+        });
     }
 
     // Calculate USD values
@@ -668,7 +815,15 @@ export async function GET(request: NextRequest) {
     // Cache the result for 15 minutes
     await setCachedWalletBalances(chain, address, filteredTokens);
 
-    return NextResponse.json({ tokens: filteredTokens });
+    // Cache for 60 seconds - balances can change but short cache is fine for UX
+    return NextResponse.json(
+      { tokens: filteredTokens },
+      {
+        headers: {
+          "Cache-Control": "private, s-maxage=60, stale-while-revalidate=300",
+        },
+      },
+    );
   } catch (error) {
     console.error("[EVM Balances] Error:", error);
     return NextResponse.json({ tokens: [] });

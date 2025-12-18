@@ -1,4 +1,6 @@
 import {
+  mainnet,
+  sepolia,
   base,
   baseSepolia,
   bsc,
@@ -25,6 +27,7 @@ export interface ChainConfig {
   contracts: {
     otc?: string;
     usdc?: string;
+    registrationHelper?: string;
   };
   type: ChainFamily;
   viemChain?: ViemChain; // Reference to viem chain for wagmi (EVM only)
@@ -36,23 +39,56 @@ const env = getCurrentNetwork();
 const deployments = getContracts(env);
 
 export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
-  ethereum: {
-    id: localhost.id.toString(),
-    name: "Anvil Local",
-    rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545",
-    explorerUrl: "http://localhost:8545",
-    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-    contracts: {
-      otc:
-        deployments.evm?.contracts?.otc || process.env.NEXT_PUBLIC_OTC_ADDRESS,
-      usdc:
-        deployments.evm?.contracts?.usdc ||
-        process.env.NEXT_PUBLIC_USDC_ADDRESS,
-    },
-    type: "evm",
-    viemChain: localhost,
-    chainId: localhost.id,
-  },
+  ethereum: (() => {
+    const isMainnet = env === "mainnet";
+    const isLocal = env === "local";
+    
+    // Local dev uses localhost/Anvil, testnet uses Sepolia, mainnet uses Ethereum mainnet
+    const chain = isLocal ? localhost : isMainnet ? mainnet : sepolia;
+    
+    // Hardcoded mainnet addresses from deployment (v2 with authorizedRegistrar)
+    const MAINNET_OTC = "0xBD1DfF36696d5ce706ad4D475B0270a88675bd24";
+    const MAINNET_REGISTRATION_HELPER = "0x00ca6e384a5B8A43E95b46943E8B142cfAC90Fdb";
+    
+    const otc = isMainnet
+      ? MAINNET_OTC
+      : isLocal
+        ? (deployments.evm?.contracts?.otc || process.env.NEXT_PUBLIC_OTC_ADDRESS)
+        : process.env.NEXT_PUBLIC_ETH_OTC_ADDRESS;
+
+    // RPC URL: local uses Anvil, mainnet/testnet use proxy
+    const rpcUrl = isLocal
+      ? (process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545")
+      : "/api/rpc/ethereum";
+
+    return {
+      id: chain.id.toString(),
+      name: isLocal ? "Anvil Local" : isMainnet ? "Ethereum" : "Sepolia",
+      rpcUrl,
+      explorerUrl: isLocal
+        ? "http://localhost:8545"
+        : isMainnet
+          ? "https://etherscan.io"
+          : "https://sepolia.etherscan.io",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      contracts: {
+        otc: otc,
+        usdc: isMainnet
+          ? "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" // USDC on Ethereum mainnet
+          : isLocal
+            ? (deployments.evm?.contracts?.usdc || process.env.NEXT_PUBLIC_USDC_ADDRESS)
+            : "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", // USDC on Sepolia
+        registrationHelper: isMainnet
+          ? MAINNET_REGISTRATION_HELPER
+          : isLocal
+            ? (deployments.evm?.contracts?.registrationHelper || process.env.NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS)
+            : process.env.NEXT_PUBLIC_ETH_REGISTRATION_HELPER_ADDRESS,
+      },
+      type: "evm" as ChainFamily,
+      viemChain: chain,
+      chainId: chain.id,
+    };
+  })(),
   base: (() => {
     const isMainnet = env === "mainnet";
     const chain = isMainnet ? base : baseSepolia;
@@ -67,11 +103,8 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
       process.env.NEXT_PUBLIC_BASE_OTC_ADDRESS ||
       (isMainnet ? MAINNET_OTC : TESTNET_OTC);
 
-    // For mainnet, use proxy route to keep Alchemy key server-side
-    // For testnet, use public Sepolia RPC
-    const rpcUrl =
-      process.env.NEXT_PUBLIC_BASE_RPC_URL ||
-      (isMainnet ? "/api/rpc/base" : "https://sepolia.base.org");
+    // Use proxy route to keep Alchemy key server-side
+    const rpcUrl = "/api/rpc/base";
 
     return {
       id: chain.id.toString(),
@@ -86,6 +119,7 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
         usdc: isMainnet
           ? "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
           : "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        registrationHelper: process.env.NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS,
       },
       type: "evm" as ChainFamily,
       viemChain: chain,
@@ -95,9 +129,14 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
   bsc: (() => {
     const isMainnet = env === "mainnet";
     const chain = isMainnet ? bsc : bscTestnet;
-    const otc =
-      deployments.evm?.contracts?.otc ||
-      process.env.NEXT_PUBLIC_BSC_OTC_ADDRESS;
+    
+    // Hardcoded mainnet addresses from deployment (v2 with authorizedRegistrar)
+    const MAINNET_OTC = "0x0A4AC866833400F91D0E4d7Be28De54b0FD2995E";
+    const MAINNET_REGISTRATION_HELPER = "0x4CE191081D27F1b98378b2FbeC17C85c5909eF92";
+    
+    const otc = isMainnet
+      ? MAINNET_OTC
+      : process.env.NEXT_PUBLIC_BSC_OTC_ADDRESS;
 
     return {
       id: chain.id.toString(),
@@ -114,6 +153,9 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
       contracts: {
         otc: otc,
         usdc: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+        registrationHelper: isMainnet
+          ? MAINNET_REGISTRATION_HELPER
+          : process.env.NEXT_PUBLIC_BSC_REGISTRATION_HELPER_ADDRESS,
       },
       type: "evm" as ChainFamily,
       viemChain: chain,
@@ -125,10 +167,10 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
     const isLocal = env === "local";
 
     const otc =
-      deployments.solana?.NEXT_PUBLIC_SOLANA_DESK ||
+      deployments.solana?.desk ||
       process.env.NEXT_PUBLIC_SOLANA_DESK;
     const usdc =
-      deployments.solana?.NEXT_PUBLIC_SOLANA_USDC_MINT ||
+      deployments.solana?.usdcMint ||
       process.env.NEXT_PUBLIC_SOLANA_USDC_MINT;
 
     return {

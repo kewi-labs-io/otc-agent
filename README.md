@@ -354,6 +354,20 @@ CRON_SECRET=<your-secure-random-string>
 EVM_PRIVATE_KEY=<your-approver-private-key>
 ```
 
+#### Required for Solana Mainnet Deployment
+
+```env
+# Solana Configuration (REQUIRED for Solana withdrawals/claims)
+NEXT_PUBLIC_SOLANA_RPC=https://api.mainnet-beta.solana.com
+NEXT_PUBLIC_SOLANA_DESK=<your-desk-public-key>
+
+# Desk Private Key (REQUIRED for signing withdrawal/claim transactions)
+# Can be base58 encoded or JSON array format
+SOLANA_DESK_PRIVATE_KEY=<your-desk-private-key-base58>
+```
+
+**Note:** The `SOLANA_DESK_PRIVATE_KEY` must be the private key for the desk account that was created during Solana program initialization. This key is used server-side to co-sign withdrawal and claim transactions.
+
 
 #### Troubleshooting Production Issues
 

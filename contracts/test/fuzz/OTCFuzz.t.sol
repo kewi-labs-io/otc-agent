@@ -92,13 +92,13 @@ contract OTCFuzzTest is Test {
         );
         vm.stopPrank();
         
-        // Create offer with fuzzed discount
+        // Create offer with fuzzed discount (negotiable = 100 bps commission)
         vm.startPrank(buyer);
         uint256 offerId = otc.createOfferFromConsignment(
-            1, 100e18, discountBps, OTC.PaymentCurrency.USDC, 0
+            1, 100e18, discountBps, OTC.PaymentCurrency.USDC, 0, 100
         );
         
-        (,,, uint256 tokenAmount, uint256 offerDiscount,,,,,,,,,,,,) = otc.offers(offerId);
+        (,,, uint256 tokenAmount, uint256 offerDiscount,,,,,,,,,,,,,) = otc.offers(offerId);
         assertEq(tokenAmount, 100e18);
         assertEq(offerDiscount, discountBps);
         vm.stopPrank();
@@ -120,36 +120,41 @@ contract OTCFuzzTest is Test {
         );
         vm.stopPrank();
         
-        // Create offer with fuzzed lockup
+        // Create offer with fuzzed lockup (negotiable = 100 bps commission)
         vm.startPrank(buyer);
         uint256 offerId = otc.createOfferFromConsignment(
-            1, 100e18, 0, OTC.PaymentCurrency.USDC, lockupSeconds
+            1, 100e18, 0, OTC.PaymentCurrency.USDC, lockupSeconds, 100
         );
         
-        (,,,,,, uint256 unlockTime,,,,,,,,,,) = otc.offers(offerId);
+        (,,,,,, uint256 unlockTime,,,,,,,,,,,) = otc.offers(offerId);
         assertEq(unlockTime, block.timestamp + lockupSeconds);
         vm.stopPrank();
     }
 
     /**
      * @notice Fuzz test price volatility checks
+     * @dev Uses negotiable consignment to test approval flow (non-negotiable is auto-approved P2P)
      */
     function testFuzz_PriceVolatility(uint256 newPriceRaw) public {
         // Bound price to reasonable range (avoid negative/zero)
         int256 newPrice = int256(bound(newPriceRaw, 1e6, 100e8));
         
-        // Setup consignment with 5% max volatility (500 bps)
+        // Setup negotiable consignment with 5% max volatility (500 bps)
         vm.startPrank(consigner);
         token.approve(address(otc), 10000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 10000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 10000e18, 500
+            tokenId, 10000e18, true, // negotiable - requires manual approval
+            0, 0, // fixed values (ignored for negotiable)
+            0, 1000, // discount range
+            0, 30, // lockup range
+            100e18, 10000e18, 500
         );
         vm.stopPrank();
         
-        // Create offer at current price
+        // Create offer at current price (negotiable = 100 bps commission)
         vm.startPrank(buyer);
         uint256 offerId = otc.createOfferFromConsignment(
-            1, 100e18, 0, OTC.PaymentCurrency.USDC, 0
+            1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 100
         );
         vm.stopPrank();
         
@@ -177,12 +182,13 @@ contract OTCFuzzTest is Test {
 
     /**
      * @notice Fuzz test ETH payment amounts
+     * @dev Non-negotiable offers are auto-approved (P2P), no manual approval needed
      */
     function testFuzz_ETHPayment(uint256 tokenAmount) public {
         // Bound to minimum deal amount and reasonable max
         tokenAmount = bound(tokenAmount, 100e18, 10000e18);
         
-        // Setup
+        // Setup non-negotiable consignment (P2P - auto-approved)
         vm.startPrank(consigner);
         token.approve(address(otc), 100000e18);
         otc.createConsignment{value: 0.001 ether}(
@@ -190,26 +196,21 @@ contract OTCFuzzTest is Test {
         );
         vm.stopPrank();
         
-        // Create ETH offer
+        // Create ETH offer (auto-approved for non-negotiable)
         vm.startPrank(buyer);
         uint256 offerId = otc.createOfferFromConsignment(
-            1, tokenAmount, 0, OTC.PaymentCurrency.ETH, 0
+            1, tokenAmount, 0, OTC.PaymentCurrency.ETH, 0, 0
         );
-        vm.stopPrank();
-        
-        // Approve
-        vm.prank(approver);
-        otc.approveOffer(offerId);
         
         // Calculate required ETH
         uint256 requiredEth = otc.requiredEthWei(offerId);
         
-        // Fulfill with exact amount
-        vm.prank(buyer);
+        // Fulfill with exact amount (already approved)
         otc.fulfillOffer{value: requiredEth}(offerId);
+        vm.stopPrank();
         
         // Verify paid
-        (,,,,,,,,,,,, bool paid,,,, ) = otc.offers(offerId);
+        (,,,,,,,,,,,, bool paid,,,,, ) = otc.offers(offerId);
         assertTrue(paid);
     }
 
@@ -252,7 +253,7 @@ contract OTCFuzzTest is Test {
         vm.stopPrank();
         
         vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
         
         // Try to cancel after wait time
         vm.warp(block.timestamp + waitTime);
@@ -263,7 +264,7 @@ contract OTCFuzzTest is Test {
         if (waitTime >= quoteExpiry) {
             // Should succeed - past expiry
             otc.cancelOffer(offerId);
-            (,,,,,,,,,,,,,,bool cancelled,,) = otc.offers(offerId);
+            (,,,,,,,,,,,,,,bool cancelled,,,) = otc.offers(offerId);
             assertTrue(cancelled);
         } else {
             // Should revert - not yet expired for buyer
@@ -290,7 +291,7 @@ contract OTCFuzzTest is Test {
         vm.stopPrank();
         
         vm.startPrank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, lockupSeconds);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, lockupSeconds, 100);
         vm.stopPrank();
         
         vm.prank(approver);

@@ -1,0 +1,23 @@
+{
+  "network": "ethereum-mainnet",
+  "chainId": 1,
+  "rpc": "/api/rpc/ethereum",
+  "deployer": "0x1b324Bfc7A0b93D621d8A85F3fF6375528bFae8D",
+  "contracts": {
+    "otc": "0x5f36221967E34e3A2d6548aaedF4D1E50FE34D46",
+    "registrationHelper": "0x60bD4C45c2512d0C652eecE6dfDA292EA9D3E06d",
+    "usdc": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "ethUsdFeed": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"
+  },
+  "accounts": {
+    "owner": "0x1b324Bfc7A0b93D621d8A85F3fF6375528bFae8D",
+    "agent": "0x1b324Bfc7A0b93D621d8A85F3fF6375528bFae8D",
+    "approver": "0x1b324Bfc7A0b93D621d8A85F3fF6375528bFae8D"
+  },
+  "features": {
+    "p2pAutoApproval": true,
+    "version": "2.0.0"
+  }
+}
+
+

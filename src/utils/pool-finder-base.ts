@@ -6,7 +6,7 @@ import {
   type Abi,
   type Address,
 } from "viem";
-import { base, baseSepolia, bsc, bscTestnet } from "viem/chains";
+import { mainnet, sepolia, base, baseSepolia, bsc, bscTestnet } from "viem/chains";
 import { getCached, setCache, withRetryAndCache } from "./retry-cache";
 
 /**
@@ -41,11 +41,30 @@ const CONFIG: Record<
     pancakeswapFactory?: string;
     usdc: string;
     weth: string;
-    rpcUrl: string;
+    rpcUrl: string; // Proxy route path (e.g. "/api/rpc/base") - uses Alchemy server-side
     nativeToken: string;
     nativeTokenPriceEstimate: number; // For TVL estimation
   }
 > = {
+  // Ethereum Mainnet
+  1: {
+    uniV3Factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984", // Official Uniswap V3 Factory
+    usdc: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    weth: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    // Always use Alchemy via proxy route
+    rpcUrl: "/api/rpc/ethereum",
+    nativeToken: "ETH",
+    nativeTokenPriceEstimate: 3200,
+  },
+  // Ethereum Sepolia
+  11155111: {
+    uniV3Factory: "0x0227628f3F023bb0B980b67D528571c95c6DaC1c", // Uniswap V3 Factory on Sepolia
+    usdc: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+    weth: "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+    rpcUrl: "https://rpc.sepolia.org",
+    nativeToken: "ETH",
+    nativeTokenPriceEstimate: 3200,
+  },
   // Base Mainnet
   8453: {
     uniV3Factory: "0x33128a8fC17869897dcE68Ed026d694621f6FDfD",
@@ -55,8 +74,8 @@ const CONFIG: Record<
     aerodromeCLFactory: "0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A",
     usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     weth: "0x4200000000000000000000000000000000000006",
-    // Fallback RPC for Base Mainnet to avoid rate limits on public endpoint
-    rpcUrl: process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://base.llamarpc.com",
+    // Always use Alchemy via proxy route
+    rpcUrl: "/api/rpc/base",
     nativeToken: "ETH",
     nativeTokenPriceEstimate: 3200,
   },
@@ -173,23 +192,42 @@ export async function findBestPool(
 
   // Determine chain based on chainId
   const chain =
-    chainId === 84532
-      ? baseSepolia
-      : chainId === 56
-        ? bsc
-        : chainId === 97
-          ? bscTestnet
-          : base;
+    chainId === 1
+      ? mainnet
+      : chainId === 11155111
+        ? sepolia
+        : chainId === 84532
+          ? baseSepolia
+          : chainId === 56
+            ? bsc
+            : chainId === 97
+              ? bscTestnet
+              : base;
+
+  // Determine which RPC URL to use:
+  // - In browser: use relative proxy route (e.g., "/api/rpc/base")
+  // - Server-side: prepend localhost to make it a full URL
+  const isBrowser = typeof window !== "undefined";
+  // For server-side, use PORT env var (Next.js sets this) or default to 4444
+  const port = process.env.PORT || "4444";
+  const baseUrl = isBrowser ? "" : `http://localhost:${port}`;
+  const effectiveRpcUrl = config.rpcUrl.startsWith("/") 
+    ? `${baseUrl}${config.rpcUrl}` 
+    : config.rpcUrl;
+
+  if (process.env.NODE_ENV === "development") {
+    console.log(`[PoolFinder] Using RPC: ${effectiveRpcUrl} (browser: ${isBrowser})`);
+  }
 
   // Create client with explicit type to avoid deep type instantiation
   const client = createPublicClient({
     chain,
-    transport: http(config.rpcUrl),
+    transport: http(effectiveRpcUrl),
   }) as unknown as PublicClient;
 
   const promises = [findUniswapV3Pools(client, tokenAddress, config)];
 
-  // Aerodrome Slipstream (CL) pools - compatible with SimplePoolOracle (Uniswap V3 interface)
+  // Aerodrome Slipstream (CL) pools - compatible with UniswapV3TWAPOracle (Uniswap V3 interface)
   // Note: Aerodrome V2 pools (Basic/Volatile) do NOT support the IUniswapV3Pool interface
   if (config.aerodromeCLFactory) {
     promises.push(findAerodromeCLPools(client, tokenAddress, config));
@@ -202,6 +240,13 @@ export async function findBestPool(
   const results = await Promise.all(promises);
   const allPools = results.flat();
 
+  if (process.env.NODE_ENV === "development") {
+    console.log(`[PoolFinder] Found ${allPools.length} pools for ${tokenAddress} on chain ${chainId}`);
+    if (allPools.length > 0) {
+      allPools.forEach((p, i) => console.log(`[PoolFinder]   ${i + 1}. ${p.protocol} ${p.address} TVL=$${p.tvlUsd.toFixed(2)}`));
+    }
+  }
+
   if (allPools.length === 0) {
     // Cache null result too
     setCache(cacheKey, null, POOL_CACHE_TTL_MS);
@@ -211,8 +256,13 @@ export async function findBestPool(
   // Sort by TVL descending
   allPools.sort((a, b) => b.tvlUsd - a.tvlUsd);
 
-  // Return pool with highest TVL
+  // Return pool with highest TVL (even if TVL is 0 - pool existence is what matters for registration)
   const bestPool = allPools[0];
+  
+  if (bestPool.tvlUsd < 1000 && process.env.NODE_ENV === "development") {
+    console.warn(`[PoolFinder] Warning: Best pool has low TVL ($${bestPool.tvlUsd.toFixed(2)}). Pool may have limited liquidity.`);
+  }
+  
   setCache(cacheKey, bestPool, POOL_CACHE_TTL_MS);
   return bestPool;
 }
@@ -265,13 +315,16 @@ async function findUniswapV3Pools(
         );
         if (poolInfo) pools.push(poolInfo);
       }
-    } catch {
-      // Silently ignore pool check errors (pool doesn't exist or RPC error)
+    } catch (error) {
+      // Log errors for debugging in development
+      if (process.env.NODE_ENV === "development") {
+        console.warn(`[PoolFinder] Error checking pool for ${baseTokenSymbol}/${fee}:`, error instanceof Error ? error.message : error);
+      }
     }
   };
 
   // Check all combinations
-  // Only check USDC if NOT on BSC, because BSC USDC is 18 decimals and breaks SimplePoolOracle
+  // Only check USDC if NOT on BSC, because BSC USDC is 18 decimals and breaks UniswapV3TWAPOracle
   if (config.nativeToken !== "BNB") {
     await Promise.all([
       ...FEE_TIERS.map((fee) => checkPool(config.usdc, "USDC", fee)),
@@ -289,7 +342,7 @@ async function findUniswapV3Pools(
 
 /**
  * Find Aerodrome Slipstream (CL) pools
- * These are compatible with SimplePoolOracle (Uniswap V3 interface)
+ * These are compatible with UniswapV3TWAPOracle (Uniswap V3 interface)
  * Uses the official Velodrome Slipstream PoolFactory
  */
 async function findAerodromeCLPools(
@@ -345,8 +398,10 @@ async function findAerodromeCLPools(
           pools.push(poolInfo);
         }
       }
-    } catch {
-      // Silently ignore pool check errors (pool doesn't exist)
+    } catch (error) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn(`[PoolFinder] Error checking Aerodrome CL pool for ${baseTokenSymbol}/${tickSpacing}:`, error instanceof Error ? error.message : error);
+      }
     }
   };
 
@@ -462,13 +517,15 @@ async function findPancakeswapPools(
           pools.push(poolInfo);
         }
       }
-    } catch {
-      // Ignore pool lookup errors
+    } catch (error) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn(`[PoolFinder] Error checking PancakeSwap pool for ${baseTokenSymbol}/${fee}:`, error instanceof Error ? error.message : error);
+      }
     }
   };
 
   // Check all combinations
-  // Only check USDC if NOT on BSC, because BSC USDC is 18 decimals and breaks SimplePoolOracle
+  // Only check USDC if NOT on BSC, because BSC USDC is 18 decimals and breaks UniswapV3TWAPOracle
   if (config.nativeToken !== "BNB") {
     await Promise.all([
       ...FEE_TIERS.map((fee) => checkPool(config.usdc, "USDC", fee)),

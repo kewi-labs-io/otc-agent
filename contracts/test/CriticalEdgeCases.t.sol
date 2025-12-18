@@ -63,14 +63,14 @@ contract CriticalEdgeCasesTest is Test {
      * @dev Should revert due to min USD check
      */
     function test_EDGE_MaxDiscountRejected() public {
-        // Create consignment allowing 100% discount
+        // Create negotiable consignment allowing 100% discount
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
             tokenId, 1000e18, 
-            true,  // negotiable
-            0, 0,  // fixed params unused
-            10000, 10000, // 100% discount allowed
+            true, // negotiable - allows discount range
+            0, 0,  // fixed params (unused for negotiable)
+            0, 10000, // 0-100% discount allowed
             0, 30,
             100e18, 1000e18, 500
         );
@@ -79,7 +79,7 @@ contract CriticalEdgeCasesTest is Test {
         // Try to create offer with 100% discount - should fail min USD check
         vm.prank(buyer);
         vm.expectRevert("min usd not met");
-        otc.createOfferFromConsignment(1, 100e18, 10000, OTC.PaymentCurrency.USDC, 0);
+        otc.createOfferFromConsignment(1, 100e18, 10000, OTC.PaymentCurrency.USDC, 0, 100);
     }
 
     // ============================================================
@@ -88,6 +88,7 @@ contract CriticalEdgeCasesTest is Test {
     
     /**
      * @notice Verify emergency refund returns ETH correctly
+     * Note: Using non-negotiable (P2P) - no approval needed
      */
     function test_EDGE_EmergencyRefundETH() public {
         vm.startPrank(consigner);
@@ -97,12 +98,11 @@ contract CriticalEdgeCasesTest is Test {
         );
         vm.stopPrank();
         
-        // Create and pay ETH offer
+        // Create and pay ETH offer (P2P - auto-approved)
         vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.ETH, 0);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.ETH, 0, 0);
         
-        vm.prank(approver);
-        otc.approveOffer(offerId);
+        // No approval needed - non-negotiable offers are P2P (auto-approved)
         
         uint256 required = otc.requiredEthWei(offerId);
         uint256 buyerBalBefore = buyer.balance;
@@ -136,9 +136,10 @@ contract CriticalEdgeCasesTest is Test {
     
     /**
      * @notice Verify pause blocks all user operations
+     * Note: Using non-negotiable (P2P) - no approval needed
      */
     function test_EDGE_PauseBlocksOperations() public {
-        // Setup consignment first
+        // Setup consignment first (non-negotiable = P2P)
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
@@ -147,10 +148,9 @@ contract CriticalEdgeCasesTest is Test {
         vm.stopPrank();
         
         vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
         
-        vm.prank(approver);
-        otc.approveOffer(offerId);
+        // No approval needed - non-negotiable offers are P2P (auto-approved)
         
         // Pause contract
         vm.prank(owner);
@@ -187,9 +187,10 @@ contract CriticalEdgeCasesTest is Test {
     
     /**
      * @notice Verify autoClaim gracefully skips invalid offers
+     * Note: Using non-negotiable (P2P) - no approval needed
      */
     function test_EDGE_AutoClaimSkipsInvalid() public {
-        // Setup valid offer
+        // Setup valid offer (non-negotiable = P2P)
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
@@ -197,13 +198,11 @@ contract CriticalEdgeCasesTest is Test {
         );
         vm.stopPrank();
         
-        vm.prank(buyer);
-        uint256 validId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
-        
-        vm.prank(approver);
-        otc.approveOffer(validId);
-        
         vm.startPrank(buyer);
+        uint256 validId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
+        
+        // No approval needed - non-negotiable offers are P2P (auto-approved)
+        
         usdc.approve(address(otc), 100e6);
         otc.fulfillOffer(validId);
         vm.stopPrank();
@@ -221,7 +220,7 @@ contract CriticalEdgeCasesTest is Test {
         otc.autoClaim(offerIds);
         
         // Verify valid offer was claimed
-        (,,,,,,,,,,,,,bool fulfilled,,,) = otc.offers(validId);
+        (,,,,,,,,,,,,,bool fulfilled,,,,) = otc.offers(validId);
         assertTrue(fulfilled, "Valid offer should be fulfilled");
         assertEq(token.balanceOf(buyer), 100e18, "Buyer received tokens");
     }
@@ -304,7 +303,7 @@ contract CriticalEdgeCasesTest is Test {
         vm.stopPrank();
         
         vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
         
         uint256 reservedBefore = otc.tokenReserved(tokenId);
         assertEq(reservedBefore, 100e18, "Tokens reserved");
@@ -314,7 +313,7 @@ contract CriticalEdgeCasesTest is Test {
         otc.cancelOffer(offerId);
         
         // Verify cancelled
-        (,,,,,,,,,,,,,,bool cancelled,,) = otc.offers(offerId);
+        (,,,,,,,,,,,,,,bool cancelled,,,) = otc.offers(offerId);
         assertTrue(cancelled, "Offer cancelled");
         
         // Tokens returned
@@ -348,7 +347,7 @@ contract CriticalEdgeCasesTest is Test {
         
         // Create large offer: 1M tokens at $1000 = $1B
         vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 1_000_000e18, 0, OTC.PaymentCurrency.USDC, 0);
+        uint256 offerId = otc.createOfferFromConsignment(1, 1_000_000e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
         
         // Check USD calculation didn't overflow
         uint256 totalUsd = otc.totalUsdForOffer(offerId);
@@ -393,7 +392,7 @@ contract CriticalEdgeCasesTest is Test {
         // Cannot create offer on withdrawn consignment
         vm.prank(buyer);
         vm.expectRevert("consignment not active");
-        otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
+        otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
     }
 
     // ============================================================
@@ -408,7 +407,7 @@ contract CriticalEdgeCasesTest is Test {
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
             tokenId, 1000e18, 
-            true,  // negotiable
+            true, // negotiable - allows lockup range
             0, 0,
             0, 1000,
             0, 365, // 0-365 days lockup range
@@ -416,9 +415,9 @@ contract CriticalEdgeCasesTest is Test {
         );
         vm.stopPrank();
         
-        // Create offer with 30-day lockup
+        // Create offer with 30-day lockup (negotiable = 100 bps commission)
         vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 30 days);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 30 days, 100);
         
         vm.prank(approver);
         otc.approveOffer(offerId);
@@ -450,6 +449,7 @@ contract CriticalEdgeCasesTest is Test {
     
     /**
      * @notice Verify fulfillment fails after quote expiry
+     * Note: Using non-negotiable (P2P) - no approval needed
      */
     function test_EDGE_FulfillAfterExpiryFails() public {
         vm.startPrank(consigner);
@@ -460,10 +460,9 @@ contract CriticalEdgeCasesTest is Test {
         vm.stopPrank();
         
         vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
         
-        vm.prank(approver);
-        otc.approveOffer(offerId);
+        // No approval needed - non-negotiable offers are P2P (auto-approved)
         
         // Warp past quote expiry (default 30 minutes)
         vm.warp(block.timestamp + 31 minutes);
@@ -481,6 +480,7 @@ contract CriticalEdgeCasesTest is Test {
     
     /**
      * @notice Verify only beneficiary can claim tokens
+     * Note: Using non-negotiable (P2P) - no approval needed
      */
     function test_EDGE_OnlyBeneficiaryCanClaim() public {
         vm.startPrank(consigner);
@@ -490,13 +490,11 @@ contract CriticalEdgeCasesTest is Test {
         );
         vm.stopPrank();
         
-        vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
-        
-        vm.prank(approver);
-        otc.approveOffer(offerId);
-        
         vm.startPrank(buyer);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
+        
+        // No approval needed - non-negotiable offers are P2P (auto-approved)
+        
         usdc.approve(address(otc), 100e6);
         otc.fulfillOffer(offerId);
         vm.stopPrank();
@@ -594,12 +592,13 @@ contract FeeOnTransferEdgeCases is Test {
 
     /**
      * @notice Full cycle with fee-on-transfer token
+     * Note: Using non-negotiable (P2P) - no approval needed
      */
     function test_FeeTokenFullCycle() public {
         uint256 depositAmount = 1000e18;
         uint256 actualDeposited = 990e18; // After 1% fee
         
-        // Create consignment
+        // Create consignment (non-negotiable = P2P)
         vm.startPrank(consigner);
         feeToken.approve(address(otc), depositAmount);
         otc.createConsignment{value: 0.001 ether}(
@@ -607,14 +606,12 @@ contract FeeOnTransferEdgeCases is Test {
         );
         vm.stopPrank();
         
-        // Create offer for 100 tokens (will work since actualDeposited is 990)
-        vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
-        
-        vm.prank(approver);
-        otc.approveOffer(offerId);
-        
+        // Create offer for 100 tokens (P2P - auto-approved)
         vm.startPrank(buyer);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
+        
+        // No approval needed - non-negotiable offers are P2P (auto-approved)
+        
         usdc.approve(address(otc), 100e6);
         otc.fulfillOffer(offerId);
         otc.claim(offerId);
@@ -674,6 +671,7 @@ contract AdminEmergencyWithdrawTest is Test {
 
     /**
      * @notice Verify admin cannot emergency withdraw too early
+     * Note: Using non-negotiable (P2P) - no approval needed
      */
     function test_AdminEmergencyWithdrawTooEarly() public {
         vm.startPrank(consigner);
@@ -683,13 +681,11 @@ contract AdminEmergencyWithdrawTest is Test {
         );
         vm.stopPrank();
         
-        vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
-        
-        vm.prank(approver);
-        otc.approveOffer(offerId);
-        
         vm.startPrank(buyer);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
+        
+        // No approval needed - non-negotiable offers are P2P (auto-approved)
+        
         usdc.approve(address(otc), 100e6);
         otc.fulfillOffer(offerId);
         vm.stopPrank();
@@ -710,6 +706,9 @@ contract AdminEmergencyWithdrawTest is Test {
     /**
      * @notice Verify admin emergency withdraw works after 180 days
      */
+    /**
+     * Note: Using non-negotiable (P2P) - no approval needed
+     */
     function test_AdminEmergencyWithdrawAfterWait() public {
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
@@ -718,13 +717,11 @@ contract AdminEmergencyWithdrawTest is Test {
         );
         vm.stopPrank();
         
-        vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
-        
-        vm.prank(approver);
-        otc.approveOffer(offerId);
-        
         vm.startPrank(buyer);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
+        
+        // No approval needed - non-negotiable offers are P2P (auto-approved)
+        
         usdc.approve(address(otc), 100e6);
         otc.fulfillOffer(offerId);
         vm.stopPrank();
@@ -742,7 +739,7 @@ contract AdminEmergencyWithdrawTest is Test {
         assertEq(token.balanceOf(buyer), buyerBalBefore + 100e18, "Buyer received tokens");
         
         // Verify state
-        (,,,,,,,,,,,,,bool fulfilled,,,) = otc.offers(offerId);
+        (,,,,,,,,,,,,,bool fulfilled,,,,) = otc.offers(offerId);
         assertTrue(fulfilled, "Offer marked fulfilled");
         
         assertEq(otc.tokenReserved(tokenId), 0, "Tokens unreserved");
@@ -751,6 +748,7 @@ contract AdminEmergencyWithdrawTest is Test {
 
     /**
      * @notice Verify non-owner cannot admin emergency withdraw
+     * Note: Using non-negotiable (P2P) - no approval needed
      */
     function test_OnlyOwnerCanAdminEmergencyWithdraw() public {
         vm.startPrank(consigner);
@@ -760,13 +758,11 @@ contract AdminEmergencyWithdrawTest is Test {
         );
         vm.stopPrank();
         
-        vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
-        
-        vm.prank(approver);
-        otc.approveOffer(offerId);
-        
         vm.startPrank(buyer);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 0);
+        
+        // No approval needed - non-negotiable offers are P2P (auto-approved)
+        
         usdc.approve(address(otc), 100e6);
         otc.fulfillOffer(offerId);
         vm.stopPrank();

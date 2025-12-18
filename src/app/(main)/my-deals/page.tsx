@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 import { Suspense } from "react";
-import { Footer } from "@/components/footer";
 
 // Dynamically import the deals component to avoid SSR issues with wagmi hooks
 const MyDealsContent = dynamic(
@@ -35,7 +34,6 @@ export default function Page() {
       >
         <MyDealsContent />
       </Suspense>
-      <Footer />
     </>
   );
 }

@@ -55,16 +55,21 @@ contract PotentialImprovementsTest is Test {
      *      This might be intentional (gift purchases) or unintended
      */
     function test_DESIGN_AnyoneCanPayForOffer() public {
+        // Use negotiable consignment to test approval flow (non-negotiable is auto-approved P2P)
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
+            tokenId, 1000e18, true, // negotiable - requires approval
+            0, 0, // fixed values (ignored for negotiable)
+            0, 1000, // min/max discount (10%)
+            0, 30, // min/max lockup
+            100e18, 1000e18, 500
         );
         vm.stopPrank();
         
-        // Buyer creates offer
+        // Buyer creates offer with commission for negotiable deal
         vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 100);
         
         vm.prank(approver);
         otc.approveOffer(offerId);
@@ -102,22 +107,27 @@ contract PotentialImprovementsTest is Test {
         otc.setApprover(approver2, true);
         vm.stopPrank();
         
+        // Use negotiable consignment to test approval flow (non-negotiable is auto-approved P2P)
         vm.startPrank(consigner);
         token.approve(address(otc), 1000e18);
         otc.createConsignment{value: 0.001 ether}(
-            tokenId, 1000e18, false, 0, 0, 0, 0, 0, 0, 100e18, 1000e18, 500
+            tokenId, 1000e18, true, // negotiable - requires approval
+            0, 0, // fixed values (ignored for negotiable)
+            0, 1000, // min/max discount
+            0, 30, // min/max lockup
+            100e18, 1000e18, 500
         );
         vm.stopPrank();
         
         vm.prank(buyer);
-        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0);
+        uint256 offerId = otc.createOfferFromConsignment(1, 100e18, 0, OTC.PaymentCurrency.USDC, 0, 100);
         
         // First approval
         vm.prank(approver);
         otc.approveOffer(offerId);
         
         // Offer not yet approved (needs 2)
-        (,,,,,,,,,,, bool approved,,,,,) = otc.offers(offerId);
+        (,,,,,,,,,,, bool approved,,,,,,) = otc.offers(offerId);
         assertFalse(approved, "Not yet approved with 1 of 2");
         
         // Admin changes requirement to 1
@@ -125,7 +135,7 @@ contract PotentialImprovementsTest is Test {
         otc.setRequiredApprovals(1);
         
         // Offer is STILL not approved (requires another approval call to trigger check)
-        (,,,,,,,,,,, approved,,,,,) = otc.offers(offerId);
+        (,,,,,,,,,,, approved,,,,,,) = otc.offers(offerId);
         assertFalse(approved, "Still not approved after requirement change");
         
         // But next approval from same approver fails
@@ -137,7 +147,7 @@ contract PotentialImprovementsTest is Test {
         vm.prank(approver2);
         otc.approveOffer(offerId);
         
-        (,,,,,,,,,,, approved,,,,,) = otc.offers(offerId);
+        (,,,,,,,,,,, approved,,,,,,) = otc.offers(offerId);
         assertTrue(approved, "Now approved");
         
         console.log("NOTE: Changing requiredApprovals mid-offer requires additional approval");

@@ -18,14 +18,16 @@ const MAX_DELAY_MS = 10_000; // 10 seconds
 
 /**
  * Get a cached value if it exists and hasn't expired
+ * Returns undefined if the key is not in cache (cache miss)
+ * Returns the cached value (which may be null) if found
  */
-export function getCached<T>(key: string): T | null {
+export function getCached<T>(key: string): T | undefined {
   const entry = cache.get(key) as CacheEntry<T> | undefined;
-  if (!entry) return null;
+  if (!entry) return undefined;
 
   if (Date.now() > entry.expiresAt) {
     cache.delete(key);
-    return null;
+    return undefined;
   }
 
   return entry.value;
@@ -100,7 +102,7 @@ export async function withRetryAndCache<T>(
   // Check cache first (unless skipped)
   if (!skipCache) {
     const cached = getCached<T>(cacheKey);
-    if (cached !== null) {
+    if (cached !== undefined) {
       return cached;
     }
   }
@@ -191,7 +193,7 @@ export async function fetchJsonWithRetryAndCache<T>(
 
   // Check cache first
   const cached = getCached<T>(cacheKey);
-  if (cached !== null) {
+  if (cached !== undefined) {
     return cached;
   }
 

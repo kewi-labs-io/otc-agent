@@ -242,23 +242,27 @@ describe("EVM OTC Flow", () => {
     })) as bigint;
 
     try {
+      // OTC.sol createConsignment signature:
+      // bytes32 tokenId, uint256 amount, bool isNegotiable, uint16 fixedDiscountBps, uint32 fixedLockupDays,
+      // uint16 minDiscountBps, uint16 maxDiscountBps, uint32 minLockupDays, uint32 maxLockupDays,
+      // uint256 minDealAmount, uint256 maxDealAmount, uint16 maxPriceVolatilityBps
       const { request: consignReq } = await publicClient.simulateContract({
         address: otcAddress,
         abi,
         functionName: "createConsignment",
         args: [
-          tokenId,
-          sellerAmount,
-          false, // isNegotiable
-          1000, // fixedDiscountBps (10%)
-          180, // fixedLockupDays
-          0, 0, 0, 0,
-          parseEther("1000"),
-          parseEther("50000"),
-          true, // isFractionalized
-          false, // isPrivate
-          1000,
-          1800,
+          tokenId,           // bytes32 tokenId
+          sellerAmount,      // uint256 amount
+          false,             // bool isNegotiable
+          1000,              // uint16 fixedDiscountBps (10%)
+          180,               // uint32 fixedLockupDays
+          0,                 // uint16 minDiscountBps
+          0,                 // uint16 maxDiscountBps
+          0,                 // uint32 minLockupDays
+          0,                 // uint32 maxLockupDays
+          parseEther("1000"),  // uint256 minDealAmount
+          parseEther("50000"), // uint256 maxDealAmount
+          500,               // uint16 maxPriceVolatilityBps (5%)
         ],
         account: testAccount,
         value: requiredGasDeposit,

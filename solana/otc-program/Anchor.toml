@@ -5,14 +5,17 @@ anchor_version = "0.31.1"
 resolution = true
 skip-lint = true
 
-[programs.localnet]
-otc = "6qn8ELVXd957oRjLaomCpKpcVZshUjNvSzw1nc7QVyXc"
-
 [programs.devnet]
 otc = "6qn8ELVXd957oRjLaomCpKpcVZshUjNvSzw1nc7QVyXc"
 
-[programs.mainnet]
+[programs.localnet]
 otc = "6qn8ELVXd957oRjLaomCpKpcVZshUjNvSzw1nc7QVyXc"
+
+[programs.mainnet]
+otc = "q9MhHpeydqTdtPaNpzDoWvP1qY5s3sFHTF1uYcXjdsc"
+
+[registry]
+url = "https://api.apr.dev"
 
 [provider]
 cluster = "localnet"
@@ -25,4 +28,3 @@ test = "bunx --bun ts-mocha -p ./tsconfig.json -t 1000000 tests/otc.pool-oracle-
 startup_wait = 10000
 shutdown_wait = 2000
 upgradeable = false
-

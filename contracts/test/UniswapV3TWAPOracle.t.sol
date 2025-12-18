@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {Test, console} from "forge-std/Test.sol";
-import {SimplePoolOracle} from "../contracts/SimplePoolOracle.sol";
+import {UniswapV3TWAPOracle} from "../contracts/UniswapV3TWAPOracle.sol";
 import {MockERC20} from "../contracts/MockERC20.sol";
 import {MockAggregatorV3} from "../contracts/mocks/MockAggregator.sol";
 
@@ -57,8 +57,8 @@ contract MockUniswapV3Pool {
     }
 }
 
-contract SimplePoolOracleTest is Test {
-    SimplePoolOracle public oracle;
+contract UniswapV3TWAPOracleTest is Test {
+    UniswapV3TWAPOracle public oracle;
     MockUniswapV3Pool public pool;
     MockERC20 public token;
     MockERC20 public usdc;
@@ -84,7 +84,7 @@ contract SimplePoolOracleTest is Test {
         // Let's just set a tick and see what happens.
         pool.setTick(0); // Tick 0 => ratio 1.
         
-        oracle = new SimplePoolOracle(address(pool), address(token), address(ethFeed));
+        oracle = new UniswapV3TWAPOracle(address(pool), address(token), address(ethFeed));
     }
     
     function test_PriceCalculation() public {

@@ -390,6 +390,7 @@ export const quoteAction: Action = {
   <quoteId>${quoteId}</quoteId>
   <tokenSymbol>${tokenSymbol}</tokenSymbol>
   ${tokenChain ? `<tokenChain>${tokenChain}</tokenChain>` : ""}
+  ${negotiated.consignmentId ? `<consignmentId>${negotiated.consignmentId}</consignmentId>` : ""}
   <lockupMonths>${negotiated.lockupMonths}</lockupMonths>
   <lockupDays>${lockupDays}</lockupDays>
   <pricePerToken>0</pricePerToken>
@@ -442,6 +443,12 @@ export const quoteAction: Action = {
     const ethPriceUsd = paymentCurrency === "ETH" ? await getEthPriceUsd() : 0;
 
     const now = Date.now();
+    
+    // Calculate agent commission based on discount and lockup
+    // Import the calculation function
+    const { calculateAgentCommission } = await import("../types");
+    const lockupDays = DEFAULT_MAX_LOCKUP_MONTHS * 30;
+    const agentCommissionBps = calculateAgentCommission(discountBps, lockupDays);
 
     const quote = {
       tokenAmount: "0",
@@ -460,6 +467,8 @@ export const quoteAction: Action = {
       tokenName,
       tokenLogoUrl,
       chain: tokenChain,
+      // Agent commission
+      agentCommissionBps,
     };
 
     console.log("[CREATE_OTC_QUOTE] Creating quote with simple terms");
@@ -480,6 +489,7 @@ export const quoteAction: Action = {
   <discountPercent>${(discountBps / 100).toFixed(2)}</discountPercent>
   <paymentCurrency>${paymentCurrency}</paymentCurrency>
   ${paymentCurrency === "ETH" ? `<ethPrice>${ethPriceUsd.toFixed(2)}</ethPrice>` : ""}
+  <agentCommissionBps>${agentCommissionBps}</agentCommissionBps>
   <createdAt>${new Date(now).toISOString()}</createdAt>
   <status>created</status>
   <message>OTC quote terms generated. Price will be determined by Chainlink oracle when you create the offer on-chain.</message>

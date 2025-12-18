@@ -299,15 +299,55 @@ export function SubmissionStepComponent({
         );
         isProcessingRef.current = false;
 
+        // Map error messages to user-friendly versions
         let displayError = errorMessage;
-        if (errorMessage.includes("rejected")) {
+        const lowerError = errorMessage.toLowerCase();
+        
+        // User rejection errors
+        if (lowerError.includes("rejected") || lowerError.includes("denied") || lowerError.includes("cancelled")) {
           if (currentStep.id === "approve") {
-            displayError =
-              "Token approval was rejected. Click retry to try again.";
+            displayError = "Token approval was rejected. Click retry to try again.";
           } else if (currentStep.id === "create-onchain") {
-            displayError =
-              "Consignment creation was rejected. Your token approval is still active. Click retry to try again.";
+            displayError = "Consignment creation was rejected. Your token approval is still active. Click retry to try again.";
+          } else {
+            displayError = "Transaction was rejected. Click retry to try again.";
           }
+        }
+        // Insufficient funds errors
+        else if (lowerError.includes("insufficient funds") || lowerError.includes("insufficient balance")) {
+          displayError = "Insufficient funds in your wallet. Please ensure you have enough tokens and ETH/SOL for gas fees.";
+        }
+        // Chain/network errors
+        else if (lowerError.includes("switch") || lowerError.includes("chain")) {
+          displayError = `Network switch required. Please switch your wallet to the correct network and try again.`;
+        }
+        // Pool/registration errors
+        else if (lowerError.includes("no liquidity pool") || lowerError.includes("cannot auto-register")) {
+          displayError = "This token needs a liquidity pool (Uniswap V3 or compatible) to be listed. Please create a pool first.";
+        }
+        // Registration fee errors
+        else if (lowerError.includes("registration fee") || lowerError.includes("registration failed")) {
+          displayError = "Token registration failed. Please ensure you have enough ETH to cover the registration fee.";
+        }
+        // RPC/Network errors
+        else if (lowerError.includes("timeout") || lowerError.includes("network") || lowerError.includes("connection")) {
+          displayError = "Network error occurred. Please check your connection and try again.";
+        }
+        // Contract errors
+        else if (lowerError.includes("execution reverted") || lowerError.includes("revert")) {
+          displayError = "Transaction failed on-chain. This could be due to token restrictions or contract conditions.";
+        }
+        // Wallet not connected
+        else if (lowerError.includes("wallet") || lowerError.includes("connect")) {
+          displayError = "Wallet connection issue. Please ensure your wallet is connected and try again.";
+        }
+        // Solana specific errors
+        else if (lowerError.includes("solana") && lowerError.includes("sign")) {
+          displayError = "Solana wallet signing failed. Please ensure your Solana wallet is connected and unlocked.";
+        }
+        // ATA creation errors
+        else if (lowerError.includes("ata") || lowerError.includes("associated token")) {
+          displayError = "Failed to create token account. Please try again.";
         }
 
         updateStepStatus(currentStep.id, {
@@ -372,9 +412,9 @@ export function SubmissionStepComponent({
   const isProcessing = isProcessingRef.current && !isComplete && !hasError;
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-y-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="text-center pb-4 border-b border-zinc-200 dark:border-zinc-700">
+      <div className="text-center pb-4">
         <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
           {isComplete ? "Listing Created" : "Creating Your Listing"}
         </h3>
@@ -479,7 +519,7 @@ export function SubmissionStepComponent({
       </div>
 
       {/* Navigation */}
-      <div className="flex gap-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+      <div className="flex gap-3 pt-4">
         {!isComplete && !isProcessing && hasError && (
           <Button
             onClick={onBack}

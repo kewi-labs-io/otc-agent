@@ -98,15 +98,12 @@ contract DeployElizaOTC is Script {
             elizaTokenId,
             fundAmount,
             true, // negotiable
-            0, 0, // no fixed values
-            100, 2500, // 1% - 25% discount
-            7, 365, // 7-365 days lockup
-            100 * 10**18, // min 100 tokens
-            1_000_000 * 10**18, // max 1M tokens
-            true, // fractionalized
-            false, // not private
-            2000, // 20% max volatility
-            7 days // 7 days to execute
+            0, 0, // fixedDiscountBps, fixedLockupDays (not used when negotiable)
+            100, 2500, // minDiscountBps, maxDiscountBps (1% - 25% discount)
+            7, 365, // minLockupDays, maxLockupDays (7-365 days lockup)
+            100 * 10**18, // minDealAmount (min 100 tokens)
+            1_000_000 * 10**18, // maxDealAmount (max 1M tokens)
+            2000 // maxPriceVolatilityBps (20% max volatility)
         );
         console.log("Consignment created with 10M elizaOS");
         

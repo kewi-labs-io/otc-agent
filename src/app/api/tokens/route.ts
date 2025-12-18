@@ -3,6 +3,7 @@ import { MarketDataDB, TokenDB, type Chain } from "@/services/database";
 import { TokenRegistryService } from "@/services/tokenRegistry";
 import { MarketDataService } from "@/services/marketDataService";
 import { agentRuntime } from "@/lib/agent-runtime";
+import { getCachedTokens, getCachedMarketData, invalidateTokenCache } from "@/lib/cache";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -11,19 +12,27 @@ export async function GET(request: NextRequest) {
   const maxMarketCap = searchParams.get("maxMarketCap");
   const isActive = searchParams.get("isActive");
 
-  const service = new TokenRegistryService();
-
-  const filters: Parameters<typeof service.getAllTokens>[0] = {};
+  // Use serverless-optimized cache for token list
+  const filters: { chain?: Chain; isActive?: boolean } = {};
   if (chain) filters.chain = chain;
   if (isActive !== null) filters.isActive = isActive === "true";
-  if (minMarketCap) filters.minMarketCap = Number(minMarketCap);
-  if (maxMarketCap) filters.maxMarketCap = Number(maxMarketCap);
 
-  const tokens = await service.getAllTokens(filters);
+  let tokens = await getCachedTokens(filters);
 
+  // Apply market cap filters (client-side since they require market data)
+  if (minMarketCap || maxMarketCap) {
+    const service = new TokenRegistryService();
+    tokens = await service.getAllTokens({
+      ...filters,
+      minMarketCap: minMarketCap ? Number(minMarketCap) : undefined,
+      maxMarketCap: maxMarketCap ? Number(maxMarketCap) : undefined,
+    });
+  }
+
+  // Batch fetch market data with cache
   const tokensWithMarketData = await Promise.all(
     tokens.map(async (token) => {
-      const marketData = await MarketDataDB.getMarketData(token.id);
+      const marketData = await getCachedMarketData(token.id);
       return {
         ...token,
         marketData,
@@ -104,6 +113,9 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // Invalidate token cache so next request gets fresh data
+  invalidateTokenCache();
+
   return NextResponse.json({
     success: true,
     token,
@@ -127,6 +139,8 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const updated = await TokenDB.updateToken(tokenId, updates);
+    // Invalidate cache after update
+    invalidateTokenCache();
     return NextResponse.json({ success: true, token: updated });
   } catch (error) {
     return NextResponse.json(

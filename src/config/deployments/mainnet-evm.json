@@ -1,15 +1,44 @@
 {
   "network": "base-mainnet",
   "chainId": 8453,
-  "rpc": "https://mainnet.base.org",
-  "deployer": "0x5dB1268e424da5C26451e4a8B9C221e6DE3C3064",
+  "rpc": "/api/rpc/base",
+  "deployer": "0x1b324Bfc7A0b93D621d8A85F3fF6375528bFae8D",
   "contracts": {
-    "otc": "0x12FA61c9d77AEd9BeDA0FF4bF2E900F31bdBdc45",
-    "registrationHelper": "0xae1cE3dd1Dd1fAB4D4aDe443Aa38A13164413246",
+    "otc": "0x23eD9EC8deb2F88Ec44a2dbbe1bbE7Be7EFc02b9",
+    "registrationHelper": "0x30E2Fc66C19a999b8E8112eF5A78E84AeeF441E0",
     "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     "ethUsdFeed": "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70"
   },
   "accounts": {
-    "approver": "0x5dB1268e424da5C26451e4a8B9C221e6DE3C3064"
+    "owner": "0x1b324Bfc7A0b93D621d8A85F3fF6375528bFae8D",
+    "agent": "0x1b324Bfc7A0b93D621d8A85F3fF6375528bFae8D",
+    "approver": "0x1b324Bfc7A0b93D621d8A85F3fF6375528bFae8D"
+  },
+  "features": {
+    "p2pAutoApproval": true,
+    "version": "2.0.0"
+  },
+  "networks": {
+    "base": {
+      "chainId": 8453,
+      "otc": "0x23eD9EC8deb2F88Ec44a2dbbe1bbE7Be7EFc02b9",
+      "registrationHelper": "0x30E2Fc66C19a999b8E8112eF5A78E84AeeF441E0",
+      "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "ethUsdFeed": "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70"
+    },
+    "bsc": {
+      "chainId": 56,
+      "otc": "0x0aD688d08D409852668b6BaF6c07978968070221",
+      "registrationHelper": "0x979C01B70B6aD54b8D3093Bf9a1D550F00560037",
+      "usdc": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+      "bnbUsdFeed": "0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE"
+    },
+    "ethereum": {
+      "chainId": 1,
+      "otc": "0x5f36221967E34e3A2d6548aaedF4D1E50FE34D46",
+      "registrationHelper": "0x60bD4C45c2512d0C652eecE6dfDA292EA9D3E06d",
+      "usdc": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "ethUsdFeed": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"
+    }
   }
 }

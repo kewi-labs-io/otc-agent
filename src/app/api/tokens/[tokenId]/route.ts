@@ -23,12 +23,20 @@ export async function GET(
     // This prevents gaming the negotiation by querying the API
     const sanitizedConsignments = consignments.map(sanitizeConsignmentForBuyer);
 
-    return NextResponse.json({
-      success: true,
-      token,
-      marketData,
-      consignments: sanitizedConsignments,
-    });
+    // Cache for 2 minutes - token metadata rarely changes
+    return NextResponse.json(
+      {
+        success: true,
+        token,
+        marketData,
+        consignments: sanitizedConsignments,
+      },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
+        },
+      },
+    );
   } catch (error) {
     if (error instanceof Error && error.message.includes("not found")) {
       return NextResponse.json(

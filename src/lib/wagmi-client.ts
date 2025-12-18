@@ -1,10 +1,11 @@
 import { createConfig, http } from "wagmi";
 import type { Config } from "wagmi";
-import { localhost, base, baseSepolia, bsc, bscTestnet } from "wagmi/chains";
+import { mainnet, sepolia, localhost, base, baseSepolia, bsc, bscTestnet } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector";
 
 // Custom RPC URLs - use proxy routes to keep API keys server-side
+const ethRpcUrl = process.env.NEXT_PUBLIC_ETH_RPC_URL;
 const baseRpcUrl = process.env.NEXT_PUBLIC_BASE_RPC_URL;
 const bscRpcUrl = process.env.NEXT_PUBLIC_BSC_RPC_URL;
 const anvilRpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
@@ -30,6 +31,9 @@ function getAvailableChains() {
     chains.push(localhost);
   }
 
+  // Add Ethereum chains (mainnet + testnet)
+  chains.push(mainnet, sepolia);
+
   // Add Base chains (always available)
   chains.push(base, baseSepolia);
 
@@ -53,27 +57,18 @@ function getTransports() {
     transports[localhost.id] = http(anvilRpcUrl);
   }
 
-  // Add Base transports
-  if (baseRpcUrl) {
-    transports[base.id] = http(baseRpcUrl);
-    transports[baseSepolia.id] = http(baseRpcUrl);
-  } else {
-    // Use proxy route for Base mainnet (keeps Alchemy API key server-side)
-    // Falls back to public RPC if proxy isn't available
-    transports[base.id] = http(getProxyUrl("/api/rpc/base"));
-    transports[baseSepolia.id] = http("https://sepolia.base.org");
-  }
+  // Add Ethereum transports - use proxy to keep Alchemy key server-side
+  transports[mainnet.id] = http(ethRpcUrl || getProxyUrl("/api/rpc/ethereum"));
+  transports[sepolia.id] = http(ethRpcUrl || getProxyUrl("/api/rpc/ethereum"));
+
+  // Add Base transports - use proxy to keep Alchemy key server-side
+  transports[base.id] = http(baseRpcUrl || getProxyUrl("/api/rpc/base"));
+  transports[baseSepolia.id] = http(baseRpcUrl || getProxyUrl("/api/rpc/base"));
 
   // Add BSC transports
   if (bscRpcUrl) {
     transports[bsc.id] = http(bscRpcUrl);
     transports[bscTestnet.id] = http(bscRpcUrl);
-  } else {
-    // Use public RPCs
-    transports[bsc.id] = http("https://bsc-dataseed1.binance.org");
-    transports[bscTestnet.id] = http(
-      "https://data-seed-prebsc-1-s1.binance.org:8545",
-    );
   }
 
   return transports;

@@ -9,6 +9,7 @@ import Image from "next/image";
 import { memo, useState } from "react";
 
 import { MemoizedMarkdown } from "@/components/memoized-markdown";
+import { WalletAvatar } from "@/components/wallet-avatar";
 import { Citation } from "@/types/chat";
 import { ChatMessage as ChatMessageType } from "@/types/chat-message";
 
@@ -269,16 +270,9 @@ export const ChatMessage = memo(function ChatMessage({
           )}
         </div>
 
-        {isUser && (
-          <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center overflow-hidden rounded-full">
-            <Image
-              src="/user.png"
-              alt="You"
-              width={48}
-              height={48}
-              className="object-cover w-full h-full rounded-full"
-              unoptimized
-            />
+        {isUser && safeMessage.senderId && (
+          <div className="flex-shrink-0">
+            <WalletAvatar address={safeMessage.senderId} size={48} />
           </div>
         )}
       </div>

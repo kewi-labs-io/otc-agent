@@ -56,17 +56,13 @@ contract RugPullTest is Test {
         vm.stopPrank();
         
         // 2. Buyer creates offer (must respect 365 days)
+        // Non-negotiable offer is auto-approved (P2P)
         vm.startPrank(buyer);
         uint256 offerId = otc.createOfferFromConsignment(
-            1, 100e18, 0, OTC.PaymentCurrency.USDC, 365 days
+            1, 100e18, 0, OTC.PaymentCurrency.USDC, 365 days, 0
         );
-        vm.stopPrank();
         
-        // 3. Approve
-        vm.prank(approver);
-        otc.approveOffer(offerId);
-        
-        // 4. Pay
+        // 3. Pay (offer is already auto-approved)
         vm.startPrank(buyer);
         usdc.approve(address(otc), 100e6);
         otc.fulfillOffer(offerId);
@@ -85,7 +81,7 @@ contract RugPullTest is Test {
         vm.stopPrank();
         
         // 8. Check state
-        (,,,,,,,,,,,,,,bool cancelled,,) = otc.offers(offerId);
+        (,,,,,,,,,,,,,,bool cancelled,,,) = otc.offers(offerId);
         assertTrue(cancelled, "Offer should be cancelled");
         
         // Buyer got money back?

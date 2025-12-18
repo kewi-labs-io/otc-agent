@@ -1,12 +1,35 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Image from "next/image";
-import type { OTCConsignment, Token } from "@/services/database";
+import type { OTCConsignment } from "@/services/database";
 import { Button } from "./button";
 import { useOTC } from "@/hooks/contracts/useOTC";
-import { useAccount, usePublicClient } from "wagmi";
-import { erc20Abi } from "viem";
+import { useAccount, useChainId } from "wagmi";
+import { useTokenCache } from "@/hooks/useTokenCache";
+import { SUPPORTED_CHAINS, isSolanaChain, type Chain } from "@/config/chains";
+import { useMultiWallet } from "./multiwallet";
+
+// Solana imports
+import type { Idl, Wallet } from "@coral-xyz/anchor";
+import * as anchor from "@coral-xyz/anchor";
+import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import {
+  Connection,
+  PublicKey as SolPubkey,
+  Transaction,
+  Keypair,
+} from "@solana/web3.js";
+
+// Solana config
+const SOLANA_RPC = SUPPORTED_CHAINS.solana.rpcUrl;
+const SOLANA_DESK = SUPPORTED_CHAINS.solana.contracts.otc;
+
+async function fetchSolanaIdl(): Promise<Idl> {
+  const res = await fetch("/api/solana/idl");
+  if (!res.ok) throw new Error("Failed to load Solana IDL");
+  return (await res.json()) as Idl;
+}
 
 interface ConsignmentRowProps {
   consignment: OTCConsignment;
@@ -14,8 +37,9 @@ interface ConsignmentRowProps {
 }
 
 export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
-  const [token, setToken] = useState<Token | null>(null);
-  const [isLoadingToken, setIsLoadingToken] = useState(true);
+  // Use shared token cache - deduplicates requests across components
+  const { token, isLoading: isLoadingToken } = useTokenCache(consignment.tokenId);
+  
   const [dealCount, setDealCount] = useState<number>(0);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [withdrawTxHash, setWithdrawTxHash] = useState<string | null>(null);
@@ -23,99 +47,60 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
   const [isWithdrawn, setIsWithdrawn] = useState(
     consignment.status === "withdrawn",
   );
-  const fetchedTokenId = useRef<string | null>(null);
-  const { withdrawConsignment } = useOTC();
+  const { withdrawConsignment, switchToChain } = useOTC();
   const { address } = useAccount();
-  const publicClient = usePublicClient();
+  const chainId = useChainId();
+  const { solanaPublicKey, solanaWallet } = useMultiWallet();
 
-  useEffect(() => {
-    if (fetchedTokenId.current === consignment.tokenId) return;
+  // Check chain compatibility for withdrawal
+  const consignmentChain = consignment.chain as Chain;
+  const isSolana = isSolanaChain(consignmentChain);
+  const chainConfig = SUPPORTED_CHAINS[consignmentChain];
+  
+  // For EVM chains, check if wallet is on the correct chain
+  const isOnCorrectChain = useMemo(() => {
+    if (isSolana) return false;
+    if (!chainConfig?.chainId) return false;
+    return chainId === chainConfig.chainId;
+  }, [isSolana, chainConfig, chainId]);
 
-    async function loadData() {
-      fetchedTokenId.current = consignment.tokenId;
-      setIsLoadingToken(true);
-
-      try {
-        const tokenRes = await fetch(`/api/tokens/${consignment.tokenId}`);
-        const tokenData = await tokenRes.json();
-
-        if (tokenData.success) {
-          setToken(tokenData.token);
-        } else if (publicClient) {
-          const tokenIdParts = consignment.tokenId?.split("-") || [];
-          const tokenAddress = tokenIdParts[2] as `0x${string}`;
-
-          if (tokenAddress?.startsWith("0x")) {
-            try {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const readContract = publicClient.readContract.bind(
-                publicClient,
-              ) as any;
-              const [symbol, name, decimals] = await Promise.all([
-                readContract({
-                  address: tokenAddress,
-                  abi: erc20Abi,
-                  functionName: "symbol",
-                }),
-                readContract({
-                  address: tokenAddress,
-                  abi: erc20Abi,
-                  functionName: "name",
-                }),
-                readContract({
-                  address: tokenAddress,
-                  abi: erc20Abi,
-                  functionName: "decimals",
-                }),
-              ]);
-
-              setToken({
-                id: consignment.tokenId,
-                symbol: symbol as string,
-                name: name as string,
-                decimals: decimals as number,
-                chain: consignment.chain,
-                contractAddress: tokenAddress,
-                logoUrl: "",
-                description: "",
-                isActive: true,
-                createdAt: Date.now(),
-                updatedAt: Date.now(),
-              });
-            } catch (err) {
-              console.error(
-                "[ConsignmentRow] Failed to fetch token from chain:",
-                err,
-              );
-            }
-          }
-        }
-
-        const totalAmount = BigInt(consignment.totalAmount);
-        const remainingAmount = BigInt(consignment.remainingAmount);
-        const soldAmount = totalAmount - remainingAmount;
-        if (soldAmount > 0n && consignment.isFractionalized) {
-          const avgDealSize =
-            BigInt(consignment.minDealAmount) +
-            BigInt(consignment.maxDealAmount);
-          const estimatedDeals = Number(soldAmount / (avgDealSize / 2n));
-          setDealCount(Math.max(1, estimatedDeals));
-        }
-      } finally {
-        setIsLoadingToken(false);
-      }
+  // Only truly blocking reasons disable the button
+  const withdrawDisabledReason = useMemo(() => {
+    if (isSolana) {
+      if (!solanaPublicKey) return "Connect Solana wallet";
+      if (!solanaWallet?.signTransaction) return "Solana wallet not ready";
+      if (!consignment.contractConsignmentId) return "Not deployed on-chain";
+      return null;
     }
-    loadData();
+    if (!address) return "Connect wallet";
+    if (!consignment.contractConsignmentId) return "Not deployed on-chain";
+    return null;
+  }, [isSolana, solanaPublicKey, solanaWallet, address, consignment.contractConsignmentId]);
+
+  // Calculate deal count based on sold amount (memoized)
+  const calculatedDealCount = useMemo(() => {
+    const totalAmount = BigInt(consignment.totalAmount);
+    const remainingAmount = BigInt(consignment.remainingAmount);
+    const soldAmount = totalAmount - remainingAmount;
+    if (soldAmount > 0n && consignment.isFractionalized) {
+      const avgDealSize =
+        BigInt(consignment.minDealAmount) + BigInt(consignment.maxDealAmount);
+      const estimatedDeals = Number(soldAmount / (avgDealSize / 2n));
+      return Math.max(1, estimatedDeals);
+    }
+    return 0;
   }, [
-    consignment.tokenId,
     consignment.totalAmount,
     consignment.remainingAmount,
     consignment.isFractionalized,
     consignment.minDealAmount,
     consignment.maxDealAmount,
-    consignment.chain,
-    publicClient,
   ]);
+
+  // Update dealCount when calculation changes
+  useEffect(() => {
+    setDealCount(calculatedDealCount);
+  }, [calculatedDealCount]);
 
   const isWithdrawnStatus = isWithdrawn || consignment.status === "withdrawn";
 
@@ -139,74 +124,267 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
     setWithdrawError(null);
     setWithdrawTxHash(null);
 
-    if (!address) {
-      setWithdrawError("Please connect your wallet first");
-      return;
-    }
-
-    if (!consignment.contractConsignmentId) {
-      setWithdrawError(
-        "Consignment was not deployed on-chain. Nothing to withdraw.",
-      );
-      return;
-    }
-
-    if (
-      !confirm(
-        `Withdraw ${formatAmount(consignment.remainingAmount)} ${tokenSymbol} from the smart contract?\n\nYou will pay the gas fee for this transaction. This cannot be undone.`,
-      )
-    )
-      return;
-
-    setIsWithdrawing(true);
-
-    try {
-      const contractConsignmentId = BigInt(consignment.contractConsignmentId);
-
-      // Execute on-chain withdrawal (user pays gas)
-      const txHash = await withdrawConsignment(contractConsignmentId);
-      setWithdrawTxHash(txHash as string);
-
-      // Update database status after successful on-chain withdrawal
-      const response = await fetch(
-        `/api/consignments/${consignment.id}?callerAddress=${encodeURIComponent(address)}`,
-        {
-          method: "DELETE",
-        },
-      );
-
-      if (!response.ok) {
-        console.warn(
-          "[ConsignmentRow] Failed to update database, but withdrawal succeeded on-chain",
-        );
-        // Still hide the row since on-chain succeeded
-        setIsWithdrawn(true);
-        setWithdrawError(
-          "Withdrawal successful on-chain, but database update failed. Your tokens are in your wallet.",
-        );
-      } else {
-        // Optimistically hide immediately
-        setIsWithdrawn(true);
+    if (isSolana) {
+      // Solana withdrawal path
+      if (!solanaPublicKey || !solanaWallet?.signTransaction || !consignment.contractConsignmentId) {
+        setWithdrawError("Solana wallet not connected or ready");
+        return;
       }
-
-      // Refresh parent to sync state (with small delay to ensure DB is updated)
-      setTimeout(() => {
-        if (onUpdate) onUpdate();
-      }, 500);
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
 
       if (
-        errorMessage.includes("rejected") ||
-        errorMessage.includes("denied")
-      ) {
-        setWithdrawError("Transaction was rejected. No changes were made.");
-      } else {
-        setWithdrawError(`Withdrawal failed: ${errorMessage}`);
+        !confirm(
+          `Withdraw ${formatAmount(consignment.remainingAmount)} ${tokenSymbol} from the smart contract?\n\nYou will pay the transaction fee.`,
+        )
+      )
+        return;
+
+      setIsWithdrawing(true);
+
+      try {
+        const connection = new Connection(SOLANA_RPC, "confirmed");
+        
+        if (!SOLANA_DESK) {
+          throw new Error("SOLANA_DESK not configured");
+        }
+
+        // Fetch IDL and create program
+        const idl = await fetchSolanaIdl();
+        const desk = new SolPubkey(SOLANA_DESK);
+        const consignmentPubkey = new SolPubkey(consignment.contractConsignmentId);
+        const consignerPk = new SolPubkey(solanaPublicKey);
+
+        // Adapt wallet to Anchor's Wallet interface
+        type SignableTransaction = Transaction;
+        const signTransaction = solanaWallet.signTransaction as (
+          tx: SignableTransaction,
+        ) => Promise<SignableTransaction>;
+
+        const anchorWallet: Wallet = {
+          publicKey: consignerPk,
+          signTransaction: signTransaction as Wallet["signTransaction"],
+          signAllTransactions: solanaWallet.signAllTransactions as Wallet["signAllTransactions"],
+          payer: Keypair.generate(), // Not used for signing, just satisfies type
+        };
+
+        const provider = new anchor.AnchorProvider(connection, anchorWallet, {
+          commitment: "confirmed",
+        });
+
+        const program = new anchor.Program(idl, provider);
+
+        // Fetch consignment to get token mint
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const programAccounts = program.account as any;
+        const consignmentData = await programAccounts.consignment.fetch(
+          consignmentPubkey,
+        );
+
+        if (!consignmentData) {
+          throw new Error("Consignment not found on-chain");
+        }
+
+        // Verify consignment belongs to expected desk
+        if (consignmentData.desk.toString() !== desk.toString()) {
+          throw new Error("Consignment does not belong to the expected desk");
+        }
+
+        // Verify consigner matches
+        if (consignmentData.consigner.toString() !== solanaPublicKey) {
+          throw new Error("You are not the consigner of this consignment");
+        }
+
+        // Verify consignment is active and has remaining amount
+        if (!consignmentData.isActive) {
+          throw new Error("Consignment is not active");
+        }
+
+        // consignmentData.remainingAmount is a BN, convert to string for comparison
+        const remainingAmountStr = consignmentData.remainingAmount.toString();
+        if (remainingAmountStr === "0") {
+          throw new Error("Nothing to withdraw");
+        }
+
+        const tokenMintPk = new SolPubkey(consignmentData.tokenMint);
+
+        // Get consigner's token ATA (must exist to receive tokens)
+        const consignerTokenAta = await getAssociatedTokenAddress(
+          tokenMintPk,
+          consignerPk,
+          false,
+        );
+
+        // Verify consigner ATA exists (SPL Token program requires it for transfers)
+        const consignerAtaInfo = await connection.getAccountInfo(consignerTokenAta);
+        if (!consignerAtaInfo) {
+          throw new Error("Your token account does not exist. You need to have a token account for this token to receive the withdrawal.");
+        }
+
+        // Get desk's token treasury
+        const deskTokenTreasury = await getAssociatedTokenAddress(
+          tokenMintPk,
+          desk,
+          true, // allowOwnerOffCurve - desk is a PDA
+        );
+
+        // Build withdrawal transaction
+        // Note: The consignmentId argument is for logging/verification, the actual consignment is identified by the account
+        const consignmentId = new anchor.BN(consignmentData.id.toString());
+
+        console.log("[ConsignmentRow] Building withdrawal transaction:", {
+          consignment: consignmentPubkey.toString(),
+          consignmentId: consignmentId.toString(),
+          consigner: consignerPk.toString(),
+          desk: desk.toString(),
+          tokenMint: tokenMintPk.toString(),
+          remainingAmount: remainingAmountStr,
+        });
+
+        const tx = await program.methods
+          .withdrawConsignment(consignmentId)
+          .accounts({
+            consignment: consignmentPubkey,
+            desk: desk,
+            deskSigner: desk, // Desk public key - API will add signature via partialSign
+            consigner: consignerPk,
+            deskTokenTreasury: deskTokenTreasury,
+            consignerTokenAta: consignerTokenAta,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .transaction();
+
+        // Set recent blockhash and fee payer
+        const { blockhash } = await connection.getLatestBlockhash("confirmed");
+        tx.recentBlockhash = blockhash;
+        tx.feePayer = consignerPk;
+
+        // Sign with user wallet (consigner signature)
+        console.log("[ConsignmentRow] Signing transaction with consigner wallet...");
+        const signedTx = await signTransaction(tx);
+        console.log("[ConsignmentRow] Transaction signed by consigner");
+
+        // Send to API to add desk signature and submit
+        const signedTxBase64 = signedTx.serialize({ requireAllSignatures: false }).toString("base64");
+
+        const apiResponse = await fetch("/api/solana/withdraw-consignment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            consignmentAddress: consignment.contractConsignmentId,
+            consignerAddress: solanaPublicKey,
+            signedTransaction: signedTxBase64,
+          }),
+        });
+
+        if (!apiResponse.ok) {
+          const errorData = await apiResponse.json();
+          throw new Error(errorData.error || "Withdrawal failed");
+        }
+
+        const { signature } = await apiResponse.json();
+        setWithdrawTxHash(signature);
+
+        // Update database status after successful on-chain withdrawal
+        const response = await fetch(
+          `/api/consignments/${consignment.id}?callerAddress=${encodeURIComponent(solanaPublicKey)}`,
+          {
+            method: "DELETE",
+          },
+        );
+
+        if (!response.ok) {
+          console.warn(
+            "[ConsignmentRow] Failed to update database, but withdrawal succeeded on-chain",
+          );
+          setIsWithdrawn(true);
+          setWithdrawError(
+            "Withdrawal successful on-chain, but database update failed. Your tokens are in your wallet.",
+          );
+        } else {
+          setIsWithdrawn(true);
+        }
+
+        setTimeout(() => {
+          if (onUpdate) onUpdate();
+        }, 500);
+      } catch (error: unknown) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+
+        if (
+          errorMessage.includes("rejected") ||
+          errorMessage.includes("denied") ||
+          errorMessage.includes("User rejected")
+        ) {
+          setWithdrawError("Transaction was rejected.");
+        } else {
+          setWithdrawError(`Withdrawal failed: ${errorMessage}`);
+        }
+      } finally {
+        setIsWithdrawing(false);
       }
-    } finally {
-      setIsWithdrawing(false);
+    } else {
+      // EVM withdrawal path
+      if (!address || !consignment.contractConsignmentId) return;
+
+      if (
+        !confirm(
+          `Withdraw ${formatAmount(consignment.remainingAmount)} ${tokenSymbol} from the smart contract?\n\nYou will pay the gas fee for this transaction.`,
+        )
+      )
+        return;
+
+      setIsWithdrawing(true);
+
+      try {
+        // Switch chain if needed - wallet handles the prompt
+        if (!isOnCorrectChain) {
+          await switchToChain(consignmentChain);
+        }
+
+        const contractConsignmentId = BigInt(consignment.contractConsignmentId);
+
+        // Execute on-chain withdrawal (user pays gas)
+        const txHash = await withdrawConsignment(contractConsignmentId);
+        setWithdrawTxHash(txHash as string);
+
+        // Update database status after successful on-chain withdrawal
+        const response = await fetch(
+          `/api/consignments/${consignment.id}?callerAddress=${encodeURIComponent(address)}`,
+          {
+            method: "DELETE",
+          },
+        );
+
+        if (!response.ok) {
+          console.warn(
+            "[ConsignmentRow] Failed to update database, but withdrawal succeeded on-chain",
+          );
+          setIsWithdrawn(true);
+          setWithdrawError(
+            "Withdrawal successful on-chain, but database update failed. Your tokens are in your wallet.",
+          );
+        } else {
+          setIsWithdrawn(true);
+        }
+
+        setTimeout(() => {
+          if (onUpdate) onUpdate();
+        }, 500);
+      } catch (error: unknown) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+
+        if (
+          errorMessage.includes("rejected") ||
+          errorMessage.includes("denied")
+        ) {
+          setWithdrawError("Transaction was rejected.");
+        } else {
+          setWithdrawError(`Withdrawal failed: ${errorMessage}`);
+        }
+      } finally {
+        setIsWithdrawing(false);
+      }
     }
   };
 
@@ -267,6 +445,14 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2 items-center flex-shrink-0 sm:ml-auto">
+          {/* Chain badge */}
+          <span className={`inline-flex items-center rounded-full px-2 sm:px-3 py-1 text-xs font-medium ${
+            isSolana 
+              ? "bg-purple-500/10 text-purple-700 dark:text-purple-400"
+              : "bg-blue-500/10 text-blue-700 dark:text-blue-400"
+          }`}>
+            {chainConfig?.name || consignmentChain}
+          </span>
           {consignment.isNegotiable ? (
             <span className="inline-flex items-center rounded-full bg-blue-600/15 text-blue-700 dark:text-blue-400 px-2 sm:px-3 py-1 text-xs font-medium">
               Negotiable
@@ -291,19 +477,11 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
             <Button
               color="red"
               onClick={handleWithdraw}
-              disabled={
-                isWithdrawing || !address || !consignment.contractConsignmentId
-              }
+              disabled={isWithdrawing || !!withdrawDisabledReason}
               className="!py-2 !px-3 sm:!px-4 !text-xs"
-              title={
-                !consignment.contractConsignmentId
-                  ? "Consignment not deployed on-chain"
-                  : isWithdrawing
-                    ? "Withdrawing..."
-                    : "Withdraw remaining tokens"
-              }
+              title={withdrawDisabledReason || "Withdraw remaining tokens"}
             >
-              {isWithdrawing ? "Withdrawing..." : "Withdraw"}
+              {isWithdrawing ? "Withdrawing..." : withdrawDisabledReason || "Withdraw"}
             </Button>
           )}
         </div>

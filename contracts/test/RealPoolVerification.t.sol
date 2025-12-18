@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {Test, console} from "forge-std/Test.sol";
-import {SimplePoolOracle} from "../contracts/SimplePoolOracle.sol";
+import {UniswapV3TWAPOracle} from "../contracts/UniswapV3TWAPOracle.sol";
 import {RegistrationHelper} from "../contracts/RegistrationHelper.sol";
 import {OTC} from "../contracts/OTC.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
@@ -46,17 +46,17 @@ contract RealPoolTest is Test {
         console.log("Decimals:", tkn.decimals());
         
         // This part depends on finding a valid pool.
-        // I will just test that SimplePoolOracle works if we had a pool.
+        // I will just test that UniswapV3TWAPOracle works if we had a pool.
         // But the user wants to verify THIS token.
         // So I will try to find the pool address using console logs if possible or use a known one.
         
-        // Verify coherence of SimplePoolOracle with known WETH/USDC pair
+        // Verify coherence of UniswapV3TWAPOracle with known WETH/USDC pair
         address weth = 0x4200000000000000000000000000000000000006;
         
         // Base WETH/USDC 0.05% pool
         address wethUsdcPool = 0xD4AAE53973A28CB484149d001f6269a566cd4E64; 
         
-        SimplePoolOracle oracle = new SimplePoolOracle(wethUsdcPool, weth, ETH_USD_FEED);
+        UniswapV3TWAPOracle oracle = new UniswapV3TWAPOracle(wethUsdcPool, weth, ETH_USD_FEED);
         uint256 price = oracle.getTWAPPrice();
         console.log("WETH Price:", price);
         assertGt(price, 2000e8); // Expect > $2000

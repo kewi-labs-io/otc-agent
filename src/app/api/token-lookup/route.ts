@@ -101,7 +101,7 @@ async function lookupEvmToken(
   chain: string,
   alchemyKey: string,
 ): Promise<TokenInfo | null> {
-  const alchemyNetwork = chain === "bsc" ? "bnb-mainnet" : "base-mainnet";
+  const alchemyNetwork = chain === "ethereum" ? "eth-mainnet" : chain === "bsc" ? "bnb-mainnet" : "base-mainnet";
 
   const url = `https://${alchemyNetwork}.g.alchemy.com/v2/${alchemyKey}`;
 

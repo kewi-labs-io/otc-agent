@@ -6,13 +6,23 @@ const BASE_URL = `http://localhost:${OTC_DESK_PORT}`;
 /**
  * Synpress + Playwright configuration for wallet-based E2E tests
  * 
- * These tests use real MetaMask wallets to test:
+ * These tests use real wallet extensions (MetaMask and Phantom) to test:
  * - Wallet connection flows
  * - Order creation with transaction signing
  * - Two-party trading (buyer + seller)
+ * - Solana withdrawals (Phantom)
  * 
  * IMPORTANT: Run with `npx playwright test --config=synpress.config.ts`
  * The wallet setup is cached in .cache/synpress-cache to prevent re-setup loops.
+ * 
+ * WALLETS SUPPORTED:
+ * - MetaMask: For EVM chains (Base, Ethereum)
+ * - Phantom: For Solana chain
+ * 
+ * RUN EXAMPLES:
+ * - All tests: npx playwright test --config=synpress.config.ts
+ * - MetaMask only: npx playwright test --config=synpress.config.ts tests/synpress/wallet-e2e.test.ts
+ * - Phantom only: npx playwright test --config=synpress.config.ts tests/synpress/solana-withdrawal.test.ts
  */
 export default defineConfig({
   testDir: './tests/synpress',
@@ -44,7 +54,7 @@ export default defineConfig({
     actionTimeout: 60000,
     navigationTimeout: 60000,
     
-    // Headed mode required for MetaMask
+    // Headed mode required for wallet extensions
     headless: false,
   },
   
@@ -53,15 +63,12 @@ export default defineConfig({
       name: 'chromium-synpress',
       use: { 
         ...devices['Desktop Chrome'],
-        // Use Chrome stable channel in CI for better extension support
         channel: process.env.CI ? 'chrome' : undefined,
-        // Required for MetaMask extension
         launchOptions: {
           headless: false,
           args: [
             '--disable-web-security',
             '--disable-features=IsolateOrigins,site-per-process',
-            // CI-specific flags for extension loading
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',

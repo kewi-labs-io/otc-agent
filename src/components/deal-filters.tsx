@@ -160,27 +160,46 @@ export const DealFilters = memo(function DealFilters({
             onChange={(chains) => onFiltersChange({ ...filters, chains })}
           />
 
-          {/* Type toggle - 3 options */}
+          {/* Type toggle - independent buttons */}
           <div className="flex-1 flex rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-            {typeOptions.map(({ value, label }) => {
-              const isSelected = currentType === value;
-              return (
-                <button
-                  key={value}
-                  onClick={() => handleTypeChange(value)}
-                  className={`
-                    flex-1 px-3 py-2.5 text-xs font-medium transition-colors
-                    ${
-                      isSelected
-                        ? "bg-brand-500 text-white"
-                        : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                    }
-                  `}
-                >
-                  {label}
-                </button>
-              );
-            })}
+            <button
+              onClick={() => {
+                const isOn = filters.negotiableTypes.includes("negotiable");
+                const newTypes = isOn
+                  ? filters.negotiableTypes.filter((t) => t !== "negotiable")
+                  : [...filters.negotiableTypes, "negotiable"] as ("negotiable" | "fixed")[];
+                onFiltersChange({ ...filters, negotiableTypes: newTypes });
+              }}
+              className={`
+                flex-1 px-3 py-2.5 text-xs font-medium transition-colors
+                ${
+                  filters.negotiableTypes.includes("negotiable")
+                    ? "bg-brand-500 text-white"
+                    : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                }
+              `}
+            >
+              Negotiable
+            </button>
+            <button
+              onClick={() => {
+                const isOn = filters.negotiableTypes.includes("fixed");
+                const newTypes = isOn
+                  ? filters.negotiableTypes.filter((t) => t !== "fixed")
+                  : [...filters.negotiableTypes, "fixed"] as ("negotiable" | "fixed")[];
+                onFiltersChange({ ...filters, negotiableTypes: newTypes });
+              }}
+              className={`
+                flex-1 px-3 py-2.5 text-xs font-medium transition-colors border-l border-zinc-200 dark:border-zinc-800
+                ${
+                  filters.negotiableTypes.includes("fixed")
+                    ? "bg-brand-500 text-white"
+                    : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                }
+              `}
+            >
+              Fixed
+            </button>
           </div>
         </div>
       </div>

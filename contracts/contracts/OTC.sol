@@ -63,6 +63,7 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
     bool cancelled;
     address payer;
     uint256 amountPaid;
+    uint16 agentCommissionBps; // 0 for P2P, 25-150 for negotiated deals
   }
 
   // Multi-token registry
@@ -75,6 +76,7 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
   
   // Shared
   IERC20 public immutable usdc;
+  uint8 public immutable usdcDecimals;
   AggregatorV3Interface public ethUsdFeed;
   
   // Limits and controls
@@ -102,6 +104,7 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
   // Roles
   address public agent;
   mapping(address => bool) public isApprover; // distributors/approvers
+  mapping(address => bool) public authorizedRegistrar; // can register tokens (e.g. RegistrationHelper)
   uint256 public requiredApprovals = 1; // Number of approvals needed (for multi-sig)
   mapping(uint256 => mapping(address => bool)) public offerApprovals; // offerId => approver => approved
   mapping(uint256 => uint256) public approvalCount; // offerId => count
@@ -127,11 +130,13 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
   event RequiredGasDepositUpdated(uint256 newAmount);
   event AgentUpdated(address indexed previous, address indexed newAgent);
   event ApproverUpdated(address indexed approver, bool allowed);
+  event AuthorizedRegistrarUpdated(address indexed registrar, bool allowed);
   event StableWithdrawn(address indexed to, uint256 usdcAmount, uint256 ethAmount);
-  event OfferCreated(uint256 indexed id, address indexed beneficiary, uint256 tokenAmount, uint256 discountBps, PaymentCurrency currency);
+  event OfferCreated(uint256 indexed id, address indexed beneficiary, uint256 tokenAmount, uint256 discountBps, PaymentCurrency currency, uint16 agentCommissionBps);
   event OfferApproved(uint256 indexed id, address indexed by);
   event OfferCancelled(uint256 indexed id, address indexed by);
   event OfferPaid(uint256 indexed id, address indexed payer, uint256 amountPaid);
+  event AgentCommissionPaid(uint256 indexed offerId, address indexed agent, uint256 amount, PaymentCurrency currency);
   event TokensClaimed(uint256 indexed id, address indexed beneficiary, uint256 amount);
   event FeedsUpdated(address indexed tokenUsdFeed, address indexed ethUsdFeed);
   event LimitsUpdated(uint256 minUsdAmount, uint256 maxTokenPerOrder, uint256 quoteExpirySeconds, uint256 defaultUnlockDelaySeconds);
@@ -157,10 +162,12 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
     require(address(usdc_) != address(0), "bad usdc");
     require(agent_ != address(0), "bad agent");
     usdc = usdc_;
+    uint8 decimals_ = IERC20Metadata(address(usdc_)).decimals();
+    require(decimals_ == 6 || decimals_ == 18, "usdc decimals must be 6 or 18");
+    usdcDecimals = decimals_;
     ethUsdFeed = ethUsdFeed_;
     agent = agent_;
     require(ethUsdFeed.decimals() == 8, "eth feed decimals");
-    require(IERC20Metadata(address(usdc_)).decimals() == 6, "usdc decimals");
   }
 
   // Admin
@@ -170,6 +177,10 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
     agent = newAgent; 
   }
   function setApprover(address a, bool allowed) external onlyOwner { isApprover[a] = allowed; emit ApproverUpdated(a, allowed); }
+  function setAuthorizedRegistrar(address registrar, bool allowed) external onlyOwner { 
+    authorizedRegistrar[registrar] = allowed; 
+    emit AuthorizedRegistrarUpdated(registrar, allowed); 
+  }
   function setRequiredApprovals(uint256 required) external onlyOwner {
     require(required > 0 && required <= 10, "invalid required approvals");
     requiredApprovals = required;
@@ -202,7 +213,8 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
   function unpause() external onlyOwner { _unpause(); }
 
   // Multi-token management
-  function registerToken(bytes32 tokenId, address tokenAddress, address priceOracle) external onlyOwner {
+  function registerToken(bytes32 tokenId, address tokenAddress, address priceOracle) external {
+    require(msg.sender == owner() || authorizedRegistrar[msg.sender], "not authorized");
     require(tokens[tokenId].tokenAddress == address(0), "token exists");
     require(tokenAddress != address(0), "zero address");
     uint8 decimals = IERC20Metadata(tokenAddress).decimals();
@@ -353,12 +365,15 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
   }
 
   // Multi-token offer creation
+  // agentCommissionBps: 0 for P2P (non-negotiable), 25-150 for negotiated deals
+  // Commission is calculated as: discount component (25-100 bps) + lockup component (0-50 bps)
   function createOfferFromConsignment(
     uint256 consignmentId,
     uint256 tokenAmount,
     uint256 discountBps,
     PaymentCurrency currency,
-    uint256 lockupSeconds
+    uint256 lockupSeconds,
+    uint16 agentCommissionBps
   ) external nonReentrant whenNotPaused returns (uint256) {
     Consignment storage c = consignments[consignmentId];
     require(c.isActive, "consignment not active");
@@ -369,10 +384,14 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
       require(discountBps >= c.minDiscountBps && discountBps <= c.maxDiscountBps, "discount out of range");
       uint256 lockupDays = lockupSeconds / 1 days;
       require(lockupDays >= c.minLockupDays && lockupDays <= c.maxLockupDays, "lockup out of range");
+      // Negotiated deals: commission must be 25-150 bps (0.25% - 1.5%)
+      require(agentCommissionBps >= 25 && agentCommissionBps <= 150, "commission out of range");
     } else {
       require(discountBps == c.fixedDiscountBps, "must use fixed discount");
       uint256 lockupDays = lockupSeconds / 1 days;
       require(lockupDays == c.fixedLockupDays, "must use fixed lockup");
+      // P2P deals: no commission allowed
+      require(agentCommissionBps == 0, "P2P deals have no commission");
     }
 
     RegisteredToken memory tkn = tokens[c.tokenId];
@@ -388,6 +407,11 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
     if (c.remainingAmount == 0) c.isActive = false;
 
     uint256 offerId = nextOfferId++;
+    
+    // Non-negotiable offers are auto-approved for P2P (permissionless)
+    // Negotiable offers require agent/approver approval
+    bool autoApproved = !c.isNegotiable;
+    
     offers[offerId] = Offer({
       consignmentId: consignmentId,
       tokenId: c.tokenId,
@@ -400,17 +424,24 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
       maxPriceDeviation: c.maxPriceVolatilityBps,
       ethUsdPrice: currency == PaymentCurrency.ETH ? _readEthUsdPrice() : 0,
       currency: currency,
-      approved: false,
+      approved: autoApproved,
       paid: false,
       fulfilled: false,
       cancelled: false,
       payer: address(0),
-      amountPaid: 0
+      amountPaid: 0,
+      agentCommissionBps: agentCommissionBps
     });
 
     _beneficiaryOfferIds[msg.sender].push(offerId);
     openOfferIds.push(offerId);
-    emit OfferCreated(offerId, msg.sender, tokenAmount, discountBps, currency);
+    emit OfferCreated(offerId, msg.sender, tokenAmount, discountBps, currency, agentCommissionBps);
+    
+    // Emit approval event for non-negotiable (P2P) offers
+    if (autoApproved) {
+      emit OfferApproved(offerId, msg.sender);
+    }
+    
     return offerId;
   }
 
@@ -419,6 +450,12 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
     Offer storage o = offers[offerId];
     require(o.beneficiary != address(0), "no offer");
     require(!o.cancelled && !o.paid, "bad state");
+    require(!o.approved, "already approved");
+    
+    // Non-negotiable offers are P2P (auto-approved at creation) - cannot be manually approved
+    Consignment storage c = consignments[o.consignmentId];
+    require(c.isNegotiable, "non-negotiable offers are P2P");
+    
     require(!offerApprovals[offerId][msg.sender], "already approved by you");
     
     RegisteredToken memory tkn = tokens[o.tokenId];
@@ -500,26 +537,59 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
     uint256 usd = totalUsdForOffer(offerId);
     uint256 refundAmount = 0;
     
+    // Calculate agent commission (deducted from seller proceeds, not buyer payment)
+    uint256 commissionUsd = (usd * o.agentCommissionBps) / 10_000;
+    
     if (o.currency == PaymentCurrency.ETH) {
       uint256 ethUsd = o.ethUsdPrice > 0 ? o.ethUsdPrice : _readEthUsdPrice();
       uint256 weiAmount = _mulDivRoundingUp(usd, 1e18, ethUsd);
       require(msg.value >= weiAmount, "insufficient eth");
       
+      // Calculate commission upfront
+      uint256 commissionWei = 0;
+      if (commissionUsd > 0 && agent != address(0)) {
+        commissionWei = _mulDiv(commissionUsd, 1e18, ethUsd);
+        if (commissionWei > weiAmount) commissionWei = 0; // Safety check
+      }
+      
       // CEI: Update state BEFORE external calls
-      o.amountPaid = weiAmount;
+      // amountPaid reflects net amount (after commission) for accurate refunds
+      o.amountPaid = weiAmount - commissionWei;
       o.payer = msg.sender;
       o.paid = true;
       refundAmount = msg.value - weiAmount;
+      
+      // Transfer commission to agent
+      if (commissionWei > 0) {
+        (bool commissionSent, ) = payable(agent).call{value: commissionWei}("");
+        if (commissionSent) {
+          emit AgentCommissionPaid(offerId, agent, commissionWei, PaymentCurrency.ETH);
+        }
+      }
     } else {
-      uint256 usdcAmount = _mulDivRoundingUp(usd, 1e6, 1e8);
+      uint256 usdcAmount = _mulDivRoundingUp(usd, 10 ** usdcDecimals, 1e8);
+      
+      // Calculate commission upfront
+      uint256 commissionUsdc = 0;
+      if (commissionUsd > 0 && agent != address(0)) {
+        commissionUsdc = _mulDiv(commissionUsd, 10 ** usdcDecimals, 1e8);
+        if (commissionUsdc > usdcAmount) commissionUsdc = 0; // Safety check
+      }
       
       // CEI: Update state BEFORE external calls
-      o.amountPaid = usdcAmount;
+      // amountPaid reflects net amount (after commission) for accurate refunds
+      o.amountPaid = usdcAmount - commissionUsdc;
       o.payer = msg.sender;
       o.paid = true;
       
       // External call after state update
       usdc.safeTransferFrom(msg.sender, address(this), usdcAmount);
+      
+      // Transfer commission to agent
+      if (commissionUsdc > 0) {
+        usdc.safeTransfer(agent, commissionUsdc);
+        emit AgentCommissionPaid(offerId, agent, commissionUsdc, PaymentCurrency.USDC);
+      }
     }
     
     // Emit event before potential ETH refund
@@ -642,6 +712,44 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
   }
 
   // View helpers for off-chain integrations
+  
+  /// @notice Calculate recommended agent commission based on discount and lockup
+  /// @param discountBps The discount in basis points (e.g., 500 = 5%)
+  /// @param lockupDays The lockup period in days
+  /// @return commissionBps The recommended commission in basis points (25-150)
+  /// @dev Discount component: 100 bps at ≤5% discount, 25 bps at ≥30% discount
+  /// @dev Lockup component: 0 bps at 0 days, 50 bps at ≥365 days
+  function calculateAgentCommission(uint256 discountBps, uint256 lockupDays) public pure returns (uint16) {
+    // Discount component: 100 bps (1.0%) at 5% discount, 25 bps (0.25%) at 30% discount
+    // Linear interpolation between 500 and 3000 bps discount
+    uint256 discountComponent;
+    if (discountBps <= 500) {
+      discountComponent = 100; // 1.0%
+    } else if (discountBps >= 3000) {
+      discountComponent = 25; // 0.25%
+    } else {
+      // Linear interpolation: 100 - (discountBps - 500) * 75 / 2500
+      discountComponent = 100 - ((discountBps - 500) * 75) / 2500;
+    }
+    
+    // Lockup component: 0 bps at 0 days, 50 bps (0.5%) at 365+ days
+    // Linear interpolation between 0 and 365 days
+    uint256 lockupComponent;
+    if (lockupDays >= 365) {
+      lockupComponent = 50; // 0.5%
+    } else {
+      lockupComponent = (lockupDays * 50) / 365;
+    }
+    
+    // Total commission: discount + lockup components
+    uint256 totalCommission = discountComponent + lockupComponent;
+    
+    // Ensure within bounds (25-150 bps)
+    if (totalCommission < 25) return 25;
+    if (totalCommission > 150) return 150;
+    return uint16(totalCommission);
+  }
+  
   function requiredEthWei(uint256 offerId) external view returns (uint256) {
     Offer storage o = offers[offerId];
     require(o.beneficiary != address(0), "no offer");
@@ -655,7 +763,7 @@ contract OTC is IOTC, Ownable, Pausable, ReentrancyGuard {
     require(o.beneficiary != address(0), "no offer");
     require(o.currency == PaymentCurrency.USDC, "not USDC");
     uint256 usd = totalUsdForOffer(offerId);
-    return _mulDivRoundingUp(usd, 1e6, 1e8);
+    return _mulDivRoundingUp(usd, 10 ** usdcDecimals, 1e8);
   }
 
   // Emergency functions

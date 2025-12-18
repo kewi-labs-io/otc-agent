@@ -24,6 +24,12 @@ export function TokenHeader({ token, marketData }: TokenHeaderProps) {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
+  const formatPrice = (price: number) => {
+    if (price < 0.0001) return price.toExponential(2);
+    if (price < 1) return price.toFixed(6);
+    return price.toFixed(4);
+  };
+
   return (
     <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-3">
       <div className="flex items-center justify-between gap-3">
@@ -76,7 +82,7 @@ export function TokenHeader({ token, marketData }: TokenHeaderProps) {
               </div>
               <div className="text-right">
                 <div className="text-lg font-bold">
-                  ${marketData?.priceUsd.toFixed(4) || "—"}
+                  ${formatPrice(marketData.priceUsd)}
                 </div>
                 <div className={`text-xs ${priceChangeColor}`}>
                   {priceChange >= 0 ? "+" : ""}

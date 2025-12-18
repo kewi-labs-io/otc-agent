@@ -133,7 +133,7 @@ interface EVMContext {
   publicClient: ReturnType<typeof createPublicClient>;
   walletClient: ReturnType<typeof createWalletClient>;
   account: ReturnType<typeof privateKeyToAccount>;
-  testToken: Address | null;
+  testToken?: Address;
 }
 
 interface SolanaContext {
@@ -141,7 +141,7 @@ interface SolanaContext {
   program: anchor.Program;
   wallet: Keypair;
   desk: PublicKey;
-  testTokenMint: PublicKey | null;
+  testTokenMint?: PublicKey;
 }
 
 let evmCtx: Partial<EVMContext> = {};
@@ -176,7 +176,7 @@ async function waitForTx(
 async function findTestToken(
   publicClient: ReturnType<typeof createPublicClient>,
   wallet: Address
-): Promise<Address | null> {
+): Promise<Address | undefined> {
   // Try to find a token the wallet has balance of
   // First check if there's a configured test token
   const configuredToken = process.env.EVM_TEST_TOKEN as Address | undefined;
@@ -203,9 +203,9 @@ async function findTestToken(
     }
   }
   
-  // For now, return null if no token configured
+  // For now, return undefined if no token configured
   console.log(`  ⚠️ No test token found - set EVM_TEST_TOKEN env var`);
-  return null;
+  return undefined;
 }
 
 // =============================================================================
@@ -228,20 +228,21 @@ describe("EVM Real Listing Flow", () => {
     }
 
     try {
+      // Cast to base type to avoid chain-specific type incompatibilities (deposit tx type)
       evmCtx.publicClient = createPublicClient({
         chain: base,
         transport: http(BASE_RPC),
-      });
+      }) as ReturnType<typeof createPublicClient>;
 
       evmCtx.account = privateKeyToAccount(privateKey as `0x${string}`);
       evmCtx.walletClient = createWalletClient({
         account: evmCtx.account,
         chain: base,
         transport: http(BASE_RPC),
-      });
+      }) as ReturnType<typeof createWalletClient>;
 
       // Check ETH balance
-      const ethBalance = await evmCtx.publicClient.getBalance({
+      const ethBalance = await evmCtx.publicClient!.getBalance({
         address: evmCtx.account.address,
       });
       console.log(`✅ Wallet: ${evmCtx.account.address}`);
@@ -253,7 +254,7 @@ describe("EVM Real Listing Flow", () => {
       }
 
       // Find a test token
-      evmCtx.testToken = await findTestToken(evmCtx.publicClient, evmCtx.account.address);
+      evmCtx.testToken = await findTestToken(evmCtx.publicClient!, evmCtx.account.address);
 
       evmReady = !!evmCtx.testToken;
       if (evmReady) {
@@ -633,11 +634,9 @@ describe("Solana Real Listing Flow", () => {
       });
       anchor.setProvider(provider);
 
-      try {
-        solanaCtx.program = new anchor.Program(idl, provider);
-      } catch {
-        solanaCtx.program = new anchor.Program(idl, new PublicKey(SOLANA_PROGRAM_ID), provider) as anchor.Program;
-      }
+      // Create the program - newer Anchor versions take (idl, provider) 
+      // and get programId from the idl.metadata.address
+      solanaCtx.program = new anchor.Program(idl, provider);
 
       if (!SOLANA_DESK) {
         console.warn("⚠️ SOLANA_DESK not set");
@@ -673,6 +672,11 @@ describe("Solana Real Listing Flow", () => {
     }
 
     const { connection, program, wallet, desk, testTokenMint } = solanaCtx as Required<SolanaContext>;
+
+    if (!testTokenMint) {
+      console.log("⚠️ SKIP: No test token mint configured");
+      return;
+    }
 
     console.log("\n📝 CREATE REAL LISTING ON SOLANA\n");
 
@@ -774,6 +778,11 @@ describe("Solana Real Buy Flow", () => {
     }
 
     const { connection, program, wallet, desk, testTokenMint } = solanaCtx as Required<SolanaContext>;
+
+    if (!testTokenMint) {
+      console.log("⚠️ SKIP: No test token mint configured");
+      return;
+    }
 
     console.log("\n📝 MAKE REAL BUY ON SOLANA\n");
 

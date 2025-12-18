@@ -141,11 +141,13 @@ We will notify you of material changes to this Privacy Policy. Your continued us
     `.trim();
 
   return (
-    <div
-      className="prose prose-zinc dark:prose-invert mx-auto p-4 lg:max-w-2xl"
-      suppressHydrationWarning
-    >
-      <Markdown>{privacy}</Markdown>
+    <div className="flex-1 overflow-y-auto">
+      <div
+        className="prose prose-zinc dark:prose-invert mx-auto p-4 lg:max-w-2xl"
+        suppressHydrationWarning
+      >
+        <Markdown>{privacy}</Markdown>
+      </div>
     </div>
   );
 }

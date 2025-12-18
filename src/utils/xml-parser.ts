@@ -29,6 +29,8 @@ export interface OTCQuote {
   message?: string;
   consignmentId?: string;
   isFixedPrice?: boolean;
+  // Agent commission in basis points (0 for P2P, 25-150 for negotiated)
+  agentCommissionBps?: number;
 }
 
 export interface QuoteAccepted {
@@ -141,6 +143,8 @@ export function parseOTCQuoteXML(xmlString: string): OTCQuote | null {
     createdAt: getElementText("createdAt"),
     status: getElementText("status") || undefined,
     message: getElementText("message"),
+    consignmentId: getElementText("consignmentId") || undefined,
+    agentCommissionBps: getElementNumber("agentCommissionBps") || undefined,
   };
 }
 

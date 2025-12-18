@@ -19,27 +19,27 @@ export const Header = memo(function Header() {
   const NavLinks = ({ mobile = false }) => (
     <>
       <Link
-        href="/"
+        href="/trading-desk"
         className={clsx(
           "text-sm font-semibold m-1 p-1",
           mobile
             ? clsx(
                 "-mx-3 block rounded-lg px-3 py-2 text-base/7 font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-900",
-                pathname === "/"
+                pathname === "/trading-desk"
                   ? "text-zinc-900 dark:text-white"
                   : "text-zinc-600 dark:text-zinc-400",
               )
             : clsx(
-                pathname === "/"
+                pathname === "/trading-desk"
                   ? "text-zinc-900 dark:text-white"
                   : "text-zinc-600 dark:text-zinc-400",
                 "hover:text-zinc-900 dark:hover:text-white",
               ),
         )}
         onClick={() => setMobileMenuOpen(false)}
-        aria-current={pathname === "/" ? "page" : undefined}
+        aria-current={pathname === "/trading-desk" ? "page" : undefined}
       >
-        Trading Desk
+        AI Trading Desk
       </Link>
       <Link
         href="/my-deals"
@@ -63,29 +63,6 @@ export const Header = memo(function Header() {
         aria-current={pathname === "/my-deals" ? "page" : undefined}
       >
         My Deals
-      </Link>
-      <Link
-        href="/how-it-works"
-        className={clsx(
-          "text-sm font-semibold m-1 p-1",
-          mobile
-            ? clsx(
-                "-mx-3 block rounded-lg px-3 py-2 text-base/7 font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-900",
-                pathname === "/how-it-works"
-                  ? "text-zinc-900 dark:text-white"
-                  : "text-zinc-600 dark:text-zinc-400",
-              )
-            : clsx(
-                pathname === "/how-it-works"
-                  ? "text-zinc-900 dark:text-white"
-                  : "text-zinc-600 dark:text-zinc-400",
-                "hover:text-zinc-900 dark:hover:text-white",
-              ),
-        )}
-        onClick={() => setMobileMenuOpen(false)}
-        aria-current={pathname === "/how-it-works" ? "page" : undefined}
-      >
-        How It Works
       </Link>
       {mobile && (
         <>
@@ -159,31 +136,31 @@ export const Header = memo(function Header() {
 
       {/* Mobile menu panel */}
       {mobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-50">
+        <div className="lg:hidden fixed inset-0 z-[1000]">
           {/* Backdrop */}
           <div
-            className="fixed inset-0 bg-black/50"
+            className="fixed inset-0 z-[1000] bg-black/50"
             onClick={() => setMobileMenuOpen(false)}
             aria-hidden="true"
           />
 
           {/* Menu panel */}
-          <div className="fixed inset-y-0 right-0 w-3/4 max-w-[280px] sm:max-w-[230px] bg-white dark:bg-zinc-900 shadow-xl">
+          <div className="fixed inset-y-0 right-0 z-[1000] w-3/4 max-w-[280px] sm:max-w-[230px] bg-white dark:bg-zinc-900 shadow-xl">
             <div className="px-4 py-4 space-y-1">
               {/* First row: Trading Desk + X button */}
               <div className="flex items-center justify-between -mx-3 px-3">
                 <Link
-                  href="/"
+                  href="/trading-desk"
                   className={clsx(
                     "block rounded-lg py-2 text-base/7 font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-900",
-                    pathname === "/"
+                    pathname === "/trading-desk"
                       ? "text-zinc-900 dark:text-white"
                       : "text-zinc-600 dark:text-zinc-400",
                   )}
                   onClick={() => setMobileMenuOpen(false)}
-                  aria-current={pathname === "/" ? "page" : undefined}
+                  aria-current={pathname === "/trading-desk" ? "page" : undefined}
                 >
-                  Trading Desk
+                  AI Trading Desk
                 </Link>
                 <button
                   type="button"
@@ -207,19 +184,6 @@ export const Header = memo(function Header() {
                 aria-current={pathname === "/my-deals" ? "page" : undefined}
               >
                 My Deals
-              </Link>
-              <Link
-                href="/how-it-works"
-                className={clsx(
-                  "-mx-3 block rounded-lg px-3 py-2 text-base/7 font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-900",
-                  pathname === "/how-it-works"
-                    ? "text-zinc-900 dark:text-white"
-                    : "text-zinc-600 dark:text-zinc-400",
-                )}
-                onClick={() => setMobileMenuOpen(false)}
-                aria-current={pathname === "/how-it-works" ? "page" : undefined}
-              >
-                How It Works
               </Link>
               <Link
                 href="/consign"

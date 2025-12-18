@@ -22,10 +22,10 @@ interface IUniswapV3Pool {
     );
 }
 
-/// @title SimplePoolOracle
+/// @title UniswapV3TWAPOracle
 /// @notice Implements Chainlink's IAggregatorV3 interface using Uniswap V3 TWAP
 /// @dev Provides manipulation-resistant price feeds for any token with a Uniswap V3 pool
-contract SimplePoolOracle is IAggregatorV3, Ownable {
+contract UniswapV3TWAPOracle is IAggregatorV3, Ownable {
     IUniswapV3Pool public immutable pool;
     address public immutable targetToken;
     address public immutable baseToken;
@@ -33,7 +33,7 @@ contract SimplePoolOracle is IAggregatorV3, Ownable {
     uint8 public immutable targetDecimals;
     uint8 public immutable baseDecimals;
     
-    uint32 public twapInterval = 300; // Start at 5 minutes (300 seconds)
+    uint32 public twapInterval = 86400; // 24 hours (86400 seconds) for manipulation resistance
 
     // Price safety bounds to prevent manipulation
     uint256 public constant MIN_PRICE_USD = 1e4; // $0.0001 in 8 decimals
@@ -79,9 +79,9 @@ contract SimplePoolOracle is IAggregatorV3, Ownable {
     }
     
     /// @notice Set the TWAP interval (owner only)
-    /// @param newInterval New interval in seconds (300-3600, i.e. 5min-1hr)
+    /// @param newInterval New interval in seconds (300-86400, i.e. 5min-24hr)
     function setTWAPInterval(uint32 newInterval) external onlyOwner {
-        require(newInterval >= 300 && newInterval <= 3600, "invalid interval");
+        require(newInterval >= 300 && newInterval <= 86400, "invalid interval");
         uint32 oldInterval = twapInterval;
         twapInterval = newInterval;
         emit TWAPIntervalUpdated(oldInterval, newInterval);
