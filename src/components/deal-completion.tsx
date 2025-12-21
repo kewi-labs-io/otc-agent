@@ -120,7 +120,10 @@ export function DealCompletion({ quote }: DealCompletionProps) {
       setShareImageUrl(dataUrl);
     };
 
-    init();
+    init().catch((err) => {
+      // Log but don't show to user - deal is already complete, this is just for share image
+      console.error("[DealCompletion] Init error:", err);
+    });
   }, [quote]);
 
   const shareToTwitter = async () => {
