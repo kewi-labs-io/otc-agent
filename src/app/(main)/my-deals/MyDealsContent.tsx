@@ -13,6 +13,7 @@ import { WalletAvatar } from "@/components/wallet-avatar";
 import { useOTC } from "@/hooks/contracts/useOTC";
 import { useMyConsignments } from "@/hooks/useConsignments";
 import { useDeals } from "@/hooks/useDeals";
+import { usePrefetchQuote } from "@/hooks/useQuote";
 import {
   mergeDealsWithOffers,
   type OfferWithMetadata,
@@ -62,6 +63,9 @@ export function MyDealsContent() {
     emergencyRefund,
     emergencyRefundsEnabled,
   } = useOTC();
+
+  // Prefetch quote data on hover for faster deal page loading
+  const prefetchQuote = usePrefetchQuote();
 
   const [refunding, setRefunding] = useState<bigint | null>(null);
   const [refundStatus, setRefundStatus] = useState<{
@@ -571,6 +575,12 @@ export function MyDealsContent() {
                       <div className="flex flex-wrap gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
                         <Button
                           color="zinc"
+                          onMouseEnter={() => {
+                            // Prefetch quote data on hover for faster navigation
+                            if (o.quoteId) {
+                              prefetchQuote(o.quoteId);
+                            }
+                          }}
                           onClick={async () => {
                             if (o.quoteId) {
                               window.location.href = `/deal/${o.quoteId}`;

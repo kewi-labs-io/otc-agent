@@ -15,12 +15,18 @@ import {
 } from "wagmi/chains";
 import { InlineLoading } from "@/components/ui/loading-spinner";
 import type { Chain } from "@/config/chains";
+import { usePrefetchPoolCheck } from "@/hooks/usePoolCheck";
 import { useTokenLookup } from "@/hooks/useTokenLookup";
 import {
   useRefetchWalletTokens,
   useWalletTokens,
   type WalletToken,
 } from "@/hooks/useWalletTokens";
+import {
+  isContractAddress,
+  isEvmAddress,
+  isSolanaAddress,
+} from "@/utils/address-utils";
 import { formatRawTokenAmount, formatUsdCompact } from "@/utils/format";
 import { Button } from "../button";
 import { useMultiWallet } from "../multiwallet";
@@ -68,20 +74,6 @@ function TokenAvatar({
       onError={() => setHasError(true)}
     />
   );
-}
-
-// Address detection helpers
-function isSolanaAddress(address: string): boolean {
-  const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-  return base58Regex.test(address);
-}
-
-function isEvmAddress(address: string): boolean {
-  return /^0x[a-fA-F0-9]{40}$/i.test(address);
-}
-
-function isContractAddress(query: string): boolean {
-  return isSolanaAddress(query) || isEvmAddress(query);
 }
 
 // Re-export type from hook for compatibility
@@ -265,6 +257,19 @@ export function TokenSelectionStep({
     setIsRefreshing(false);
   }, [userAddress, chain, refetchWalletTokens, refetchTokens]);
 
+  const prefetchPoolCheck = usePrefetchPoolCheck();
+
+  // Prefetch pool check on hover for faster form-step loading
+  const handleTokenHover = useCallback(
+    (token: TokenWithBalance) => {
+      // Prefetch pool check for EVM tokens (Solana doesn't use pool checks)
+      if (token.chain !== "solana") {
+        prefetchPoolCheck(token.contractAddress, token.chain);
+      }
+    },
+    [prefetchPoolCheck],
+  );
+
   const handleTokenClick = (token: TokenWithBalance) => {
     updateFormData({ tokenId: token.id });
     if (onTokenSelect) {
@@ -406,6 +411,7 @@ export function TokenSelectionStep({
               </p>
               <div
                 onClick={() => handleTokenClick(searchedToken)}
+                onMouseEnter={() => handleTokenHover(searchedToken)}
                 className="p-3 rounded-lg bg-brand-500/5 border border-brand-500/20 cursor-pointer transition-all hover:bg-brand-500/10"
               >
                 <div className="flex items-center gap-3">
@@ -495,6 +501,7 @@ export function TokenSelectionStep({
               key={token.id}
               data-testid={`token-row-${token.id}`}
               onClick={() => handleTokenClick(token)}
+              onMouseEnter={() => handleTokenHover(token)}
               className={`p-3 rounded-lg cursor-pointer transition-all ${
                 formData.tokenId === token.id
                   ? "bg-brand-500/10 ring-1 ring-brand-500/30"

@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { usePrefetchToken } from "@/hooks";
 import type { OTCConsignment, Token } from "@/services/database";
 import { formatRawTokenAmount } from "@/utils/format";
 
@@ -52,6 +53,12 @@ export function TokenDealsSection({
 }: TokenDealsSectionProps) {
   const router = useRouter();
   const [isExpanded, setIsExpanded] = useState(true);
+  const prefetchToken = usePrefetchToken();
+
+  // Prefetch token data on hover for faster navigation
+  const handleMouseEnter = useCallback(() => {
+    prefetchToken(token.id);
+  }, [prefetchToken, token.id]);
 
   // formatAmount uses centralized formatRawTokenAmount from @/utils/format
   const formatAmount = (amount: string) =>
@@ -165,6 +172,7 @@ export function TokenDealsSection({
                 key={consignment.id}
                 className="p-4 hover:bg-zinc-50 dark:hover:bg-zinc-900/30 transition-colors cursor-pointer group"
                 onClick={() => router.push(`/token/${token.id}`)}
+                onMouseEnter={handleMouseEnter}
               >
                 <div className="flex items-center justify-between gap-4">
                   <span className="font-medium group-hover:text-brand-500 transition-colors">
