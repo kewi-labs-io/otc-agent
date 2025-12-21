@@ -39,7 +39,8 @@ contract TestCommission is Script {
         otc = OTC(payable(otcAddr));
         token = MockERC20(tokenAddr);
         usdc = MockERC20(usdcAddr);
-        tokenId = keccak256("elizaOS");
+        // TokenId must match how RegistrationHelper and DeployElizaOTC compute it
+        tokenId = keccak256(abi.encodePacked(tokenAddr));
         
         console.log("");
         console.log("=============================================================");

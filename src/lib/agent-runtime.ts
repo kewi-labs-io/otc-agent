@@ -8,9 +8,15 @@ import {
   elizaLogger,
   stringToUuid,
   type UUID,
+  type Plugin,
 } from "@elizaos/core";
 import agent from "./agent";
-import { getDatabaseUrl, getGroqApiKey, getGroqModels, isProduction } from "@/config/env";
+import {
+  getDatabaseUrl,
+  getGroqApiKey,
+  getGroqModels,
+  isProduction,
+} from "@/config/env";
 
 // Global state for serverless environment persistence
 interface GlobalElizaState {
@@ -26,7 +32,9 @@ interface GlobalElizaState {
   };
 }
 
-const globalState = globalThis as unknown as GlobalElizaState;
+// Type assertion needed: globalThis doesn't have our custom properties by default
+// This is a standard TypeScript pattern for extending global scope
+const globalState = globalThis as GlobalElizaState;
 if (typeof globalState.__elizaMigrationsRan === "undefined")
   globalState.__elizaMigrationsRan = false;
 if (typeof globalState.__elizaManagerLogged === "undefined")
@@ -105,6 +113,7 @@ class AgentRuntimeManager {
     // Priority 4: Create new runtime with single initialization promise
     this.initializationPromise = this.createRuntime();
 
+    // FAIL-FAST: If initialization fails, clear promise and throw
     try {
       const runtime = await this.initializationPromise;
       return runtime;
@@ -121,11 +130,14 @@ class AgentRuntimeManager {
 
     // Get database URL from centralized config
     const postgresUrl = getDatabaseUrl();
-    const isLocalDb = postgresUrl.includes("localhost") || postgresUrl.includes("127.0.0.1");
+    const isLocalDb =
+      postgresUrl.includes("localhost") || postgresUrl.includes("127.0.0.1");
 
     // Validate database URL in production
     if (isProduction() && isLocalDb) {
-      console.error("[AgentRuntime] ERROR: No database URL found in production");
+      console.error(
+        "[AgentRuntime] ERROR: No database URL found in production",
+      );
       throw new Error(
         "Database connection failed: No database URL configured in production. " +
           "Vercel Neon Storage should provide DATABASE_POSTGRES_URL automatically. " +
@@ -143,10 +155,16 @@ class AgentRuntimeManager {
           "[AgentRuntime] WARNING: Database URL doesn't start with postgres:// or postgresql://",
         );
       }
-      // Check for hostname (basic validation)
-      const url = new URL(
-        postgresUrl.replace(/^postgres(ql)?:\/\//, "http://"),
-      );
+      // FAIL-FAST: Validate URL format - new URL() throws if invalid
+      let url: URL;
+      try {
+        url = new URL(postgresUrl.replace(/^postgres(ql)?:\/\//, "http://"));
+      } catch {
+        throw new Error(
+          "Database connection failed: Invalid database URL format",
+        );
+      }
+      // FAIL-FAST: hostname is required in URL - if missing, URL is invalid
       if (!url.hostname || url.hostname === "") {
         throw new Error(
           "Database connection failed: Invalid database URL format (missing hostname)",
@@ -163,32 +181,66 @@ class AgentRuntimeManager {
 
     // Use the existing agent ID from DB (b850bc30-45f8-0041-a00a-83df46d8555d)
     const RUNTIME_AGENT_ID = "b850bc30-45f8-0041-a00a-83df46d8555d" as UUID;
-    this.runtime = new AgentRuntime({
-      ...agent,
+    // FAIL-FAST: Plugins must be defined and non-null
+    // Type assertion needed due to duplicate Plugin types from different node_modules locations
+    if (!agent.plugins || !Array.isArray(agent.plugins)) {
+      throw new Error("agent.plugins must be a non-empty array");
+    }
+    const plugins = agent.plugins.filter((p) => p != null) as Plugin[];
+    if (plugins.length === 0) {
+      throw new Error(
+        "agent.plugins array contains only null/undefined values",
+      );
+    }
+
+    // FAIL-FAST: Providers and actions are defined in agent.ts as filtered arrays
+    // They should always be arrays, but validate for safety
+    if (!Array.isArray(agent.providers)) {
+      throw new Error("agent.providers must be an array");
+    }
+    if (!Array.isArray(agent.actions)) {
+      throw new Error("agent.actions must be an array");
+    }
+
+    // FAIL-FAST: GROQ API key is required
+    const groqApiKey = getGroqApiKey();
+    if (!groqApiKey) {
+      throw new Error("GROQ_API_KEY is required but not configured");
+    }
+
+    // Build runtime config - spread operator conflicts with strict typing
+    // so we construct a minimal config object
+    const runtimeConfig = {
       agentId: RUNTIME_AGENT_ID,
+      character: agent.character,
+      plugins,
+      providers: agent.providers,
+      actions: agent.actions,
       settings: {
-        GROQ_API_KEY: getGroqApiKey() || "",
+        GROQ_API_KEY: groqApiKey,
         SMALL_GROQ_MODEL: models.small,
         LARGE_GROQ_MODEL: models.large,
         POSTGRES_URL: postgresUrl,
         ...agent.character.settings,
       },
-    } as any);
+    };
+
+    // Type assertion: @elizaos/core runtime config is loosely typed
+    this.runtime = new AgentRuntime(
+      runtimeConfig as ConstructorParameters<typeof AgentRuntime>[0],
+    );
 
     // Cache globally for reuse in warm container
     globalState.__elizaRuntime = this.runtime;
 
     // Ensure runtime has a logger with all required methods
-    if (!this.runtime.logger || !this.runtime.logger.log) {
-      this.runtime.logger = {
-        log: console.log.bind(console),
-        info: console.info.bind(console),
-        warn: console.warn.bind(console),
-        error: console.error.bind(console),
-        debug: console.debug.bind(console),
-        success: (message: string) => console.log(`✓ ${message}`),
-        notice: console.info.bind(console),
-      } as any;
+    // elizaLogger provides the core logging methods required by AgentRuntime
+    if (!this.runtime.logger) {
+      // Type assertion: AgentRuntime.logger type comes from @elizaos/core
+      // elizaLogger implements all required methods (log, info, warn, error, debug)
+      // but may have additional methods not in the Logger interface
+      type RuntimeLogger = typeof this.runtime.logger;
+      this.runtime.logger = elizaLogger as RuntimeLogger;
     }
 
     // Ensure SQL plugin built-in tables exist (idempotent)
@@ -217,10 +269,11 @@ class AgentRuntimeManager {
   }
 
   // Helper method to handle messages
+  // Note: attachments type matches ElizaOS Memory.content.attachments (Media[])
   public async handleMessage(
     roomId: string,
     entityId: string,
-    content: { text?: string; attachments?: any[] },
+    content: { text?: string; attachments?: Memory["content"]["attachments"] },
   ): Promise<Memory> {
     const runtime = await this.getRuntime();
 
@@ -228,14 +281,17 @@ class AgentRuntimeManager {
     const entityUuid = stringToUuid(entityId) as UUID;
     await runtime.ensureConnection({
       entityId: entityUuid,
-      roomId: roomId as UUID,
+      roomId: stringToUuid(roomId),
       worldId: stringToUuid("otc-desk-world"),
       source: "web",
       type: ChannelType.DM,
       channelId: roomId,
       serverId: "otc-desk-server",
       userName: entityId,
-    } as any);
+    });
+
+    const messageText = content.text || "";
+    const messageAttachments = content.attachments || [];
 
     // Create user message
     const userMessage: Memory = {
@@ -243,8 +299,8 @@ class AgentRuntimeManager {
       entityId: entityUuid,
       agentId: runtime.agentId as UUID,
       content: {
-        text: content.text || "",
-        attachments: content.attachments || [],
+        text: messageText,
+        attachments: messageAttachments,
       },
     };
     // Emit MESSAGE_RECEIVED and delegate handling to plugins
@@ -259,8 +315,8 @@ class AgentRuntimeManager {
       message: {
         id: userMessage.id,
         content: {
-          text: content.text || "",
-          attachments: content.attachments || [],
+          text: messageText,
+          attachments: messageAttachments,
         },
         entityId: stringToUuid(entityId) as UUID,
         agentId: runtime.agentId,

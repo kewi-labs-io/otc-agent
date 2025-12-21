@@ -14,273 +14,208 @@
 import { createPublicClient, http, parseAbi, type Abi } from "viem";
 import { base } from "viem/chains";
 import { Connection, PublicKey } from "@solana/web3.js";
+import { getAppUrl } from "../src/config/env";
+import {
+  getEvmConfig,
+  getRegistrationHelperForChain,
+  getSolanaConfig,
+} from "../src/config/contracts";
 
-const BASE_RPC = process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
-const SOLANA_RPC = process.env.NEXT_PUBLIC_SOLANA_RPC || "https://api.mainnet-beta.solana.com";
+const evm = getEvmConfig("mainnet");
+const solana = getSolanaConfig("mainnet");
 
-const OTC_ADDRESS = process.env.NEXT_PUBLIC_BASE_OTC_ADDRESS;
-const REGISTRATION_HELPER_ADDRESS = process.env.NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS;
-const SOLANA_PROGRAM_ID = process.env.NEXT_PUBLIC_SOLANA_PROGRAM_ID;
-const SOLANA_DESK = process.env.NEXT_PUBLIC_SOLANA_DESK;
+let BASE_RPC: string;
+if (process.env.BASE_RPC_URL) {
+  BASE_RPC = process.env.BASE_RPC_URL;
+} else if (evm.rpc && evm.rpc.startsWith("/")) {
+  BASE_RPC = `${getAppUrl()}${evm.rpc}`;
+} else if (evm.rpc) {
+  BASE_RPC = evm.rpc;
+} else {
+  throw new Error("BASE_RPC_URL environment variable or evm.rpc config is required");
+}
+
+let SOLANA_RPC: string;
+if (process.env.SOLANA_MAINNET_RPC) {
+  SOLANA_RPC = process.env.SOLANA_MAINNET_RPC;
+} else if (solana.rpc && solana.rpc.startsWith("/")) {
+  SOLANA_RPC = `${getAppUrl()}${solana.rpc}`;
+} else if (solana.rpc) {
+  SOLANA_RPC = solana.rpc;
+} else {
+  throw new Error("SOLANA_MAINNET_RPC environment variable or solana.rpc config is required");
+}
+
+const OTC_ADDRESS = evm.contracts.otc;
+const REGISTRATION_HELPER_ADDRESS = getRegistrationHelperForChain(8453, "mainnet");
+const SOLANA_PROGRAM_ID = solana.programId;
+const SOLANA_DESK = solana.desk;
 
 async function verifyBaseDeployment() {
   console.log("\n=== Verifying Base Deployment ===\n");
 
   if (!OTC_ADDRESS) {
-    console.error("❌ NEXT_PUBLIC_BASE_OTC_ADDRESS not set");
-    return false;
+    throw new Error("OTC address missing from deployment config (src/config/deployments/mainnet-evm.json)");
   }
 
   if (!REGISTRATION_HELPER_ADDRESS) {
-    console.error("❌ NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS not set");
-    return false;
+    throw new Error("RegistrationHelper address missing from deployment config (src/config/deployments/mainnet-evm.json)");
   }
 
   const client = createPublicClient({
     chain: base,
     transport: http(BASE_RPC),
   });
-
-  try {
-    // Check OTC contract - verify it has code
-    console.log("Checking OTC contract at:", OTC_ADDRESS);
-    
-    // Use getCode instead of getBytecode (getBytecode might not work on all RPCs)
-    const code = await client.getCode({ address: OTC_ADDRESS as `0x${string}` });
-    if (!code || code === "0x") {
-      console.warn("⚠️  Could not verify contract code via RPC (may be indexing delay)");
-      console.warn("   Contract was deployed successfully - checking via function call...");
-      // Try to call a function instead
-      try {
-        const otcAbi = parseAbi(["function nextOfferId() view returns (uint256)"]);
-        await client.readContract({
-          address: OTC_ADDRESS as `0x${string}`,
-          abi: otcAbi as Abi,
-          functionName: "nextOfferId",
-        });
-        console.log("✅ OTC contract responds to function calls (deployed and working)");
-      } catch (funcError) {
-        console.warn("⚠️  Function call also failed - contract may still be indexing");
-        console.warn("   Check on Basescan: https://basescan.org/address/" + OTC_ADDRESS);
-        console.warn("   Deployment was successful, so contract exists - this is likely an RPC indexing delay");
-        // Don't fail - deployment was successful
-        return true;
-      }
-    } else {
-      console.log("✅ OTC contract has code (deployed)");
-    }
-
-    // Try to read a simple function to verify it's the right contract
-    const otcAbi = parseAbi([
-      "function nextOfferId() view returns (uint256)",
-      "function agent() view returns (address)",
-      "function usdc() view returns (address)",
-      "function owner() view returns (address)",
-    ]);
-
-    try {
-      const nextOfferId = await client.readContract({
-        address: OTC_ADDRESS as `0x${string}`,
-        abi: otcAbi as Abi,
-        functionName: "nextOfferId",
-      }) as bigint;
-      console.log("  Next Offer ID:", nextOfferId.toString());
-    } catch (error) {
-      console.warn("⚠️  Could not read nextOfferId (contract deployed but may have ABI mismatch)");
-    }
-
-    try {
-      const agent = await client.readContract({
-        address: OTC_ADDRESS as `0x${string}`,
-        abi: otcAbi as Abi,
-        functionName: "agent",
-      }) as string;
-      console.log("  Agent:", agent);
-    } catch (error) {
-      throw error;
-    }
-
-    try {
-      const usdc = await client.readContract({
-        address: OTC_ADDRESS as `0x${string}`,
-        abi: otcAbi as Abi,
-        functionName: "usdc",
-      }) as string;
-      console.log("  USDC:", usdc);
-    } catch (error) {
-      throw error;
-    }
-
-    try {
-      const owner = await client.readContract({
-        address: OTC_ADDRESS as `0x${string}`,
-        abi: otcAbi as Abi,
-        functionName: "owner",
-      }) as string;
-      console.log("  Owner:", owner);
-    } catch (error) {
-      throw error;
-    }
-
-    // Check RegistrationHelper
-    console.log("\nChecking RegistrationHelper at:", REGISTRATION_HELPER_ADDRESS);
-    
-    const helperCode = await client.getCode({ address: REGISTRATION_HELPER_ADDRESS as `0x${string}` });
-    if (!helperCode || helperCode === "0x") {
-      console.warn("⚠️  Could not verify RegistrationHelper code via RPC (may be indexing delay)");
-      console.warn("   Contract was deployed successfully - checking via function call...");
-      try {
-        const helperAbi = parseAbi(["function otc() view returns (address)"]);
-        await client.readContract({
-          address: REGISTRATION_HELPER_ADDRESS as `0x${string}`,
-          abi: helperAbi as Abi,
-          functionName: "otc",
-        });
-        console.log("✅ RegistrationHelper responds to function calls (deployed and working)");
-      } catch (funcError) {
-        console.warn("⚠️  Function call also failed - contract may still be indexing");
-        console.warn("   Check on Basescan: https://basescan.org/address/" + REGISTRATION_HELPER_ADDRESS);
-        console.warn("   Deployment was successful, so contract exists - this is likely an RPC indexing delay");
-        // Don't fail - deployment was successful
-        return true;
-      }
-    } else {
-      console.log("✅ RegistrationHelper has code (deployed)");
-    }
-
-    // Try to read functions (non-critical if they fail due to ABI issues)
-    const helperAbi = parseAbi([
-      "function otc() view returns (address)",
-      "function registrationFee() view returns (uint256)",
-      "function feeRecipient() view returns (address)",
-    ]);
-
-    try {
-      const helperOtc = await client.readContract({
-        address: REGISTRATION_HELPER_ADDRESS as `0x${string}`,
-        abi: helperAbi as Abi,
-        functionName: "otc",
-      }) as string;
-      console.log("  OTC Address:", helperOtc);
-      
-      // Verify RegistrationHelper points to correct OTC
-      if (helperOtc.toLowerCase() !== OTC_ADDRESS.toLowerCase()) {
-        console.warn("⚠️  RegistrationHelper points to different OTC:", helperOtc);
-        console.warn("     Expected:", OTC_ADDRESS);
-      }
-    } catch (error) {
-      console.warn("⚠️  Could not verify RegistrationHelper.otc (non-critical)");
-    }
-
-    try {
-      const regFee = await client.readContract({
-        address: REGISTRATION_HELPER_ADDRESS as `0x${string}`,
-        abi: helperAbi as Abi,
-        functionName: "registrationFee",
-      }) as bigint;
-      console.log("  Registration Fee:", (Number(regFee) / 1e18).toFixed(4), "ETH");
-    } catch (error) {
-      throw error;
-    }
-
-    try {
-      const feeRecipient = await client.readContract({
-        address: REGISTRATION_HELPER_ADDRESS as `0x${string}`,
-        abi: helperAbi as Abi,
-        functionName: "feeRecipient",
-      }) as string;
-      console.log("  Fee Recipient:", feeRecipient);
-    } catch (error) {
-      throw error;
-    }
-
-    console.log("\n✅ Base deployment verified successfully");
-    return true;
-  } catch (error) {
-    console.error("❌ Failed to verify Base deployment:", error);
-    return false;
+  
+  // Check OTC contract - verify it has code
+  console.log("Checking OTC contract at:", OTC_ADDRESS);
+  
+  const code = await client.getCode({ address: OTC_ADDRESS as `0x${string}` });
+  if (!code || code === "0x") {
+    throw new Error(`OTC contract not deployed at ${OTC_ADDRESS}`);
   }
+  console.log("✅ OTC contract has code (deployed)");
+
+  // Read contract functions to verify it's the right contract
+  const otcAbi = parseAbi([
+    "function nextOfferId() view returns (uint256)",
+    "function agent() view returns (address)",
+    "function usdc() view returns (address)",
+    "function owner() view returns (address)",
+  ]);
+
+  const nextOfferId = await client.readContract({
+    address: OTC_ADDRESS as `0x${string}`,
+    abi: otcAbi as Abi,
+    functionName: "nextOfferId",
+  }) as bigint;
+  console.log("  Next Offer ID:", nextOfferId.toString());
+
+  const agent = await client.readContract({
+    address: OTC_ADDRESS as `0x${string}`,
+    abi: otcAbi as Abi,
+    functionName: "agent",
+  }) as string;
+  console.log("  Agent:", agent);
+
+  const usdc = await client.readContract({
+    address: OTC_ADDRESS as `0x${string}`,
+    abi: otcAbi as Abi,
+    functionName: "usdc",
+  }) as string;
+  console.log("  USDC:", usdc);
+
+  const owner = await client.readContract({
+    address: OTC_ADDRESS as `0x${string}`,
+    abi: otcAbi as Abi,
+    functionName: "owner",
+  }) as string;
+  console.log("  Owner:", owner);
+
+  // Check RegistrationHelper
+  console.log("\nChecking RegistrationHelper at:", REGISTRATION_HELPER_ADDRESS);
+  
+  const helperCode = await client.getCode({ address: REGISTRATION_HELPER_ADDRESS as `0x${string}` });
+  if (!helperCode || helperCode === "0x") {
+    throw new Error(`RegistrationHelper not deployed at ${REGISTRATION_HELPER_ADDRESS}`);
+  }
+  console.log("✅ RegistrationHelper has code (deployed)");
+
+  // Read RegistrationHelper functions
+  const helperAbi = parseAbi([
+    "function otc() view returns (address)",
+    "function registrationFee() view returns (uint256)",
+    "function feeRecipient() view returns (address)",
+  ]);
+
+  const helperOtc = await client.readContract({
+    address: REGISTRATION_HELPER_ADDRESS as `0x${string}`,
+    abi: helperAbi as Abi,
+    functionName: "otc",
+  }) as string;
+  console.log("  OTC Address:", helperOtc);
+  
+  // Verify RegistrationHelper points to correct OTC
+  if (helperOtc.toLowerCase() !== OTC_ADDRESS.toLowerCase()) {
+    throw new Error(`RegistrationHelper points to different OTC: ${helperOtc}, expected: ${OTC_ADDRESS}`);
+  }
+
+  const regFee = await client.readContract({
+    address: REGISTRATION_HELPER_ADDRESS as `0x${string}`,
+    abi: helperAbi as Abi,
+    functionName: "registrationFee",
+  }) as bigint;
+  console.log("  Registration Fee:", (Number(regFee) / 1e18).toFixed(4), "ETH");
+
+  const feeRecipient = await client.readContract({
+    address: REGISTRATION_HELPER_ADDRESS as `0x${string}`,
+    abi: helperAbi as Abi,
+    functionName: "feeRecipient",
+  }) as string;
+  console.log("  Fee Recipient:", feeRecipient);
+
+  console.log("\n✅ Base deployment verified successfully");
 }
 
 async function verifySolanaDeployment() {
   console.log("\n=== Verifying Solana Deployment ===\n");
 
   if (!SOLANA_PROGRAM_ID) {
-    console.warn("⚠️  NEXT_PUBLIC_SOLANA_PROGRAM_ID not set - skipping Solana verification");
-    return true; // Not a failure if Solana isn't configured
+    throw new Error("Solana programId not configured");
   }
 
   if (!SOLANA_DESK) {
-    console.warn("⚠️  NEXT_PUBLIC_SOLANA_DESK not set - skipping Solana verification");
-    return true; // Not a failure if Solana isn't configured
+    throw new Error("Solana desk not configured");
   }
 
-  try {
-    const connection = new Connection(SOLANA_RPC, "confirmed");
+  const connection = new Connection(SOLANA_RPC, "confirmed");
 
-    // Check program exists
-    console.log("Checking Solana program at:", SOLANA_PROGRAM_ID);
-    const programInfo = await connection.getAccountInfo(new PublicKey(SOLANA_PROGRAM_ID));
-    
-    if (!programInfo) {
-      console.warn("⚠️  Solana program not found on mainnet");
-      console.warn("   This is OK if Solana is deployed on devnet/testnet instead");
-      console.warn("   Program ID:", SOLANA_PROGRAM_ID);
-      return true; // Not a failure - might be on different network
-    }
-
-    console.log("✅ Solana program is deployed");
-    console.log("  Executable:", programInfo.executable);
-    console.log("  Owner:", programInfo.owner.toBase58());
-
-    // Check desk account
-    console.log("\nChecking desk account at:", SOLANA_DESK);
-    const deskInfo = await connection.getAccountInfo(new PublicKey(SOLANA_DESK));
-    
-    if (!deskInfo) {
-      console.warn("⚠️  Desk account not found on mainnet");
-      console.warn("   This is OK if Solana is deployed on devnet/testnet instead");
-      return true; // Not a failure - might be on different network
-    }
-
-    console.log("✅ Desk account exists");
-    console.log("  Data Size:", deskInfo.data.length, "bytes");
-    console.log("  Owner:", deskInfo.owner.toBase58());
-
-    console.log("\n✅ Solana deployment verified successfully");
-    return true;
-  } catch (error) {
-    console.warn("⚠️  Failed to verify Solana deployment (may be on different network):", (error as Error).message);
-    return true; // Not a failure - Solana might not be on mainnet
+  // Check program exists
+  console.log("Checking Solana program at:", SOLANA_PROGRAM_ID);
+  const programInfo = await connection.getAccountInfo(new PublicKey(SOLANA_PROGRAM_ID));
+  
+  if (!programInfo) {
+    throw new Error(`Solana program not found at ${SOLANA_PROGRAM_ID}`);
   }
-}
+
+  console.log("✅ Solana program is deployed");
+  console.log("  Executable:", programInfo.executable);
+  console.log("  Owner:", programInfo.owner.toBase58());
+
+  // Check desk account
+  console.log("\nChecking desk account at:", SOLANA_DESK);
+  const deskInfo = await connection.getAccountInfo(new PublicKey(SOLANA_DESK));
+  
+  if (!deskInfo) {
+    throw new Error(`Desk account not found at ${SOLANA_DESK}`);
+  }
+
+  console.log("✅ Desk account exists");
+  console.log("  Data Size:", deskInfo.data.length, "bytes");
+  console.log("  Owner:", deskInfo.owner.toBase58());
+
+  console.log("\n✅ Solana deployment verified successfully");
+  return true;
 
 async function testWalletScanning() {
   console.log("\n=== Testing Wallet Scanning ===\n");
 
-  try {
-    // Note: Actual wallet scanning requires user authentication
-    // This just checks if the required APIs are configured
-    
-    const alchemyKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
-    const heliusKey = process.env.HELIUS_API_KEY;
+  // Note: Actual wallet scanning requires user authentication
+  // This just checks if the required APIs are configured
+  
+  const alchemyKey = process.env.ALCHEMY_API_KEY;
+  const heliusKey = process.env.HELIUS_API_KEY;
 
-    console.log("Alchemy API Key configured:", alchemyKey ? "✅" : "❌");
-    console.log("Helius API Key configured:", heliusKey ? "✅" : "❌");
-
-    if (!alchemyKey) {
-      console.warn("⚠️  Alchemy API key not configured - Base wallet scanning won't work");
-    }
-
-    if (!heliusKey) {
-      console.warn("⚠️  Helius API key not configured - Solana metadata will be limited");
-    }
-
-    return true;
-  } catch (error) {
-    console.error("❌ Failed to test wallet scanning:", error);
-    return false;
+  if (!alchemyKey) {
+    throw new Error("ALCHEMY_API_KEY not configured - Base wallet scanning requires it");
   }
+
+  if (!heliusKey) {
+    throw new Error("HELIUS_API_KEY not configured - Solana metadata requires it");
+  }
+
+  console.log("Alchemy API Key configured: ✅");
+  console.log("Helius API Key configured: ✅");
 }
 
 async function main() {
@@ -288,37 +223,27 @@ async function main() {
   console.log("║  Multi-Chain OTC Deployment Verification      ║");
   console.log("╚════════════════════════════════════════════════╝");
 
-  const results = {
-    base: await verifyBaseDeployment(),
-    solana: await verifySolanaDeployment(),
-    walletScanning: await testWalletScanning(),
-  };
+  await verifyBaseDeployment();
+  await verifySolanaDeployment();
+  await testWalletScanning();
 
   console.log("\n╔════════════════════════════════════════════════╗");
   console.log("║  Verification Summary                          ║");
   console.log("╚════════════════════════════════════════════════╝\n");
 
-  console.log("Base Deployment:", results.base ? "✅ PASS" : "❌ FAIL");
-  console.log("Solana Deployment:", results.solana ? "✅ PASS" : "❌ FAIL");
-  console.log("Wallet Scanning:", results.walletScanning ? "✅ PASS" : "❌ FAIL");
+  console.log("Base Deployment: ✅ PASS");
+  console.log("Solana Deployment: ✅ PASS");
+  console.log("Wallet Scanning: ✅ PASS");
 
-  const allPassed = Object.values(results).every(Boolean);
-
-  if (allPassed) {
-    console.log("\n🎉 All verifications passed!");
-    console.log("\nNext steps:");
-    console.log("1. Start backend event listeners:");
-    console.log("   - Run token registration listeners for both chains");
-    console.log("2. Test token registration in UI:");
-    console.log("   - Connect wallet");
-    console.log("   - Click 'Register Token from Wallet'");
-    console.log("   - Select a token and complete registration");
-    console.log("3. Monitor backend logs for TokenRegistered events");
-    process.exit(0);
-  } else {
-    console.log("\n❌ Some verifications failed. Please check the errors above.");
-    process.exit(1);
-  }
+  console.log("\n🎉 All verifications passed!");
+  console.log("\nNext steps:");
+  console.log("1. Start backend event listeners:");
+  console.log("   - Run token registration listeners for both chains");
+  console.log("2. Test token registration in UI:");
+  console.log("   - Connect wallet");
+  console.log("   - Click 'Register Token from Wallet'");
+  console.log("   - Select a token and complete registration");
+  console.log("3. Monitor backend logs for TokenRegistered events");
 }
 
 main().catch((error) => {

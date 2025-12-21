@@ -47,7 +47,10 @@ export function FarcasterSolanaWrapper({
     hasLoggedInit.current = true;
 
     if (process.env.NODE_ENV === "development") {
-      console.log("[FarcasterSolanaWrapper] Initialized with endpoint:", endpoint);
+      console.log(
+        "[FarcasterSolanaWrapper] Initialized with endpoint:",
+        endpoint,
+      );
     }
   }, [endpoint]);
 

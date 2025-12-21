@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+} from "react";
 import { v4 as uuidv4 } from "uuid";
 
 import { ChatMessages } from "@/components/chat-messages";
@@ -14,7 +20,11 @@ import { Button } from "@/components/button";
 import { TokenHeader } from "@/components/token-header";
 import { CHAT_SOURCE, USER_NAME } from "@/constants";
 import { useConsignments } from "@/hooks/useConsignments";
-import type { ChatMessage, ChatMessageContent, ChatMessageQuoteData } from "@/types/chat-message";
+import type {
+  ChatMessage,
+  ChatMessageContent,
+  ChatMessageQuoteData,
+} from "@/types/chat-message";
 import type { Token, TokenMarketData } from "@/types";
 import { parseMessageXML, type OTCQuote } from "@/utils/xml-parser";
 
@@ -125,25 +135,39 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
   }
 }
 
-// Raw message format from API
-interface RawRoomMessage {
-  id?: string;
-  entityId?: string;
-  agentId?: string;
-  createdAt?: number | string;
-  content?: string | { text?: string; xml?: string; quote?: Record<string, unknown>; type?: string };
-  text?: string;
-}
+// RawRoomMessage imported from @/types
+import type { RawRoomMessage } from "@/types";
 
 // --- Helper: Parse room message into ChatMessage format ---
 function parseRoomMessage(
   msg: RawRoomMessage,
   roomId: string,
 ): ChatMessage | null {
+  // FAIL-FAST: Validate required fields first
+  if (!msg.id) {
+    throw new Error("RawRoomMessage missing id field");
+  }
+  // FAIL-FAST: Required fields must exist
+  if (msg.entityId == null) {
+    throw new Error("RawRoomMessage missing entityId field");
+  }
+  if (msg.agentId == null) {
+    throw new Error("RawRoomMessage missing agentId field");
+  }
+  if (msg.createdAt == null) {
+    throw new Error("RawRoomMessage missing createdAt field");
+  }
+
   // Parse message text from various possible formats
   let messageText = "";
   const rawContent = msg.content;
-  if (typeof rawContent === "object" && rawContent?.text) {
+  // rawContent.text exists if rawContent is an object with text property
+  if (
+    typeof rawContent === "object" &&
+    rawContent !== null &&
+    "text" in rawContent &&
+    typeof rawContent.text === "string"
+  ) {
     messageText = rawContent.text;
   } else if (msg.text) {
     messageText = msg.text;
@@ -151,6 +175,10 @@ function parseRoomMessage(
     messageText = rawContent;
   } else if (rawContent) {
     messageText = JSON.stringify(rawContent);
+  }
+  // FAIL-FAST: Message must have text (empty string is valid)
+  if (messageText === undefined) {
+    throw new Error(`RawRoomMessage ${msg.id} has no text content`);
   }
 
   // Filter out system messages
@@ -170,15 +198,15 @@ function parseRoomMessage(
       : undefined;
 
   return {
-    id: msg.id || `msg-${msg.createdAt}`,
+    id: msg.id,
     name: msg.entityId === msg.agentId ? "Eliza" : USER_NAME,
-    text: messageText,
+    text: messageText, // Always a string (validated above)
     senderId: msg.entityId,
     roomId: roomId,
     createdAt:
       typeof msg.createdAt === "number"
         ? msg.createdAt
-        : new Date(msg.createdAt || Date.now()).getTime(),
+        : new Date(msg.createdAt).getTime(),
     source: CHAT_SOURCE,
     isLoading: false,
     serverMessageId: msg.id,
@@ -241,42 +269,38 @@ export const Chat = ({
 
   // Fetch consignments for this token to get available amounts and terms
   const { data: consignments } = useConsignments({
-    filters: { tokenId: token?.id },
-    enabled: !!token?.id,
+    filters: token && token.id ? { tokenId: token.id } : {},
+    enabled: !!(token && token.id),
   });
 
   // Helper to safely parse BigInt
   const safeBigInt = (value: string | undefined | null): bigint => {
     if (!value) return 0n;
-    try {
-      return BigInt(value);
-    } catch {
-      return 0n;
-    }
+    return BigInt(value);
   };
 
   // Calculate aggregated consignment data for the token
   // Uses sanitized display fields (worst case for negotiable, actual for fixed)
   const consignmentData = useMemo(() => {
     if (!consignments?.length) return null;
-    
+
     // Filter to active consignments with remaining balance
     const activeConsignments = consignments.filter((c) => {
       if (c.status !== "active") return false;
       const remaining = safeBigInt(c.remainingAmount);
       return remaining > 0n;
     });
-    
+
     if (!activeConsignments.length) return null;
 
     // Sum up total available
     const totalAvailable = activeConsignments.reduce(
       (sum, c) => sum + safeBigInt(c.remainingAmount),
-      0n
+      0n,
     );
 
     // Extended type for sanitized consignments with display fields
-    type ConsignmentWithDisplay = typeof activeConsignments[0] & {
+    type ConsignmentWithDisplay = (typeof activeConsignments)[0] & {
       displayDiscountBps?: number;
       displayLockupDays?: number;
     };
@@ -284,31 +308,75 @@ export const Chat = ({
     // Get starting terms using sanitized display fields
     // For negotiable: displayDiscountBps = minDiscount (worst), displayLockupDays = maxLockup (worst)
     // For fixed: displayDiscountBps = fixedDiscount, displayLockupDays = fixedLockup
-    const startingDiscount = Math.min(...activeConsignments.map(c => {
-      const cwd = c as ConsignmentWithDisplay;
-      // Use display field if available (sanitized API), fallback to raw fields (owner view)
-      if (cwd.displayDiscountBps !== undefined) return cwd.displayDiscountBps;
-      return c.isNegotiable ? (c.minDiscountBps ?? 0) : (c.fixedDiscountBps ?? 0);
-    }));
-    
-    const startingLockupDays = Math.max(...activeConsignments.map(c => {
-      const cwd = c as ConsignmentWithDisplay;
-      // Use display field if available (sanitized API), fallback to raw fields (owner view)
-      if (cwd.displayLockupDays !== undefined) return cwd.displayLockupDays;
-      return c.isNegotiable ? (c.maxLockupDays ?? 365) : (c.fixedLockupDays ?? 365);
-    }));
+    const startingDiscount = Math.min(
+      ...activeConsignments.map((c) => {
+        const cwd = c as ConsignmentWithDisplay;
+        // Use display field if available (sanitized API), fallback to raw fields (owner view)
+        if (cwd.displayDiscountBps !== undefined) return cwd.displayDiscountBps;
+        if (c.isNegotiable) {
+          // FAIL-FAST: Negotiable consignments must have minDiscountBps
+          if (c.minDiscountBps == null) {
+            throw new Error(
+              `Negotiable consignment ${c.id} missing minDiscountBps`,
+            );
+          }
+          return c.minDiscountBps;
+        }
+        // FAIL-FAST: Fixed consignments must have fixedDiscountBps
+        if (c.fixedDiscountBps == null) {
+          throw new Error(`Fixed consignment ${c.id} missing fixedDiscountBps`);
+        }
+        return c.fixedDiscountBps;
+      }),
+    );
+
+    const startingLockupDays = Math.max(
+      ...activeConsignments.map((c) => {
+        const cwd = c as ConsignmentWithDisplay;
+        // Use display field if available (sanitized API), fallback to raw fields (owner view)
+        if (cwd.displayLockupDays !== undefined) return cwd.displayLockupDays;
+        if (c.isNegotiable) {
+          // FAIL-FAST: Negotiable consignments must have maxLockupDays
+          if (c.maxLockupDays == null) {
+            throw new Error(
+              `Negotiable consignment ${c.id} missing maxLockupDays`,
+            );
+          }
+          return c.maxLockupDays;
+        }
+        // FAIL-FAST: Fixed consignments must have fixedLockupDays
+        if (c.fixedLockupDays == null) {
+          throw new Error(`Fixed consignment ${c.id} missing fixedLockupDays`);
+        }
+        return c.fixedLockupDays;
+      }),
+    );
 
     const maxDealAmount = totalAvailable; // Can buy up to total available
-    
+
     // Check if any consignment is fractionalized (allows partial purchases)
-    const hasFractionalized = activeConsignments.some(c => c.isFractionalized);
-    const hasNegotiable = activeConsignments.some(c => c.isNegotiable);
+    const hasFractionalized = activeConsignments.some(
+      (c) => c.isFractionalized,
+    );
+    const hasNegotiable = activeConsignments.some((c) => c.isNegotiable);
+
+    // FAIL-FAST: startingDiscount and startingLockupDays must be valid numbers
+    // activeConsignments is guaranteed to have at least one element (checked above)
+    // so Math.min/Math.max should always return valid numbers, not Infinity/-Infinity
+    if (!Number.isFinite(startingDiscount) || startingDiscount < 0) {
+      throw new Error(`Invalid startingDiscount computed: ${startingDiscount}`);
+    }
+    if (!Number.isFinite(startingLockupDays) || startingLockupDays < 0) {
+      throw new Error(
+        `Invalid startingLockupDays computed: ${startingLockupDays}`,
+      );
+    }
 
     return {
       totalAvailable: totalAvailable.toString(),
       // Starting terms (worst case for negotiable, actual for fixed)
-      startingDiscountBps: startingDiscount || 100, // Default to 1% if no discount found
-      startingLockupDays: startingLockupDays || 365, // Default to 1 year if no lockup found
+      startingDiscountBps: startingDiscount,
+      startingLockupDays: startingLockupDays,
       maxDealAmount: maxDealAmount.toString(),
       hasNegotiable,
       hasFractionalized,
@@ -381,7 +449,13 @@ export const Chat = ({
 
       if (response.ok) {
         const data = await response.json();
-        const rawMessages = data.messages || [];
+        // FAIL-FAST: API response must have messages array
+        if (!data.messages || !Array.isArray(data.messages)) {
+          throw new Error(
+            "Invalid API response: messages array is missing or not an array",
+          );
+        }
+        const rawMessages = data.messages;
 
         // Format messages using helper function
         const formattedMessages = (rawMessages as RawRoomMessage[])
@@ -392,16 +466,15 @@ export const Chat = ({
 
         // Sort by timestamp
         formattedMessages.sort(
-          (a: ChatMessage, b: ChatMessage) =>
-            (a.createdAt || 0) - (b.createdAt || 0),
+          (a: ChatMessage, b: ChatMessage) => a.createdAt - b.createdAt,
         );
 
         dispatch({ type: "SET_MESSAGES", payload: formattedMessages });
 
         // Update last message timestamp
         if (formattedMessages.length > 0) {
-          lastMessageTimestampRef.current =
-            formattedMessages[formattedMessages.length - 1].createdAt;
+          const lastMessage = formattedMessages[formattedMessages.length - 1];
+          lastMessageTimestampRef.current = lastMessage.createdAt;
         }
       }
       dispatch({ type: "SET_LOADING_HISTORY", payload: false });
@@ -435,7 +508,13 @@ export const Chat = ({
 
       if (response.ok) {
         const data = await response.json();
-        const newMessages = data.messages || [];
+        // FAIL-FAST: API response must have messages array
+        if (!data.messages || !Array.isArray(data.messages)) {
+          throw new Error(
+            "Invalid API response: messages array is missing or not an array",
+          );
+        }
+        const newMessages = data.messages;
 
         if (newMessages.length > 0) {
           const formattedMessages = (newMessages as RawRoomMessage[])
@@ -453,21 +532,35 @@ export const Chat = ({
           // Merge with new messages and dedupe by server ID
           const byServerId = new Map<string, ChatMessage>();
           withoutOptimistic.forEach((m) => {
-            byServerId.set(m.serverMessageId || m.id, m);
+            // Use serverMessageId if available, otherwise fall back to id
+            // Both are required fields - at least one must exist
+            const key = m.serverMessageId?.trim() || m.id?.trim();
+            if (!key) {
+              throw new Error("Message missing both serverMessageId and id");
+            }
+            byServerId.set(key, m);
           });
           formattedMessages.forEach((m: ChatMessage) => {
-            byServerId.set(m.serverMessageId || m.id, m);
+            // Use serverMessageId if available, otherwise fall back to id
+            // Both are required fields - at least one must exist
+            const key = m.serverMessageId?.trim() || m.id?.trim();
+            if (!key) {
+              throw new Error("Message missing both serverMessageId and id");
+            }
+            byServerId.set(key, m);
           });
 
           const merged = Array.from(byServerId.values());
-          merged.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+          merged.sort((a, b) => a.createdAt - b.createdAt);
 
           dispatch({ type: "SET_MESSAGES", payload: merged });
 
           // Update last message timestamp
-          const lastNewMessage =
-            formattedMessages[formattedMessages.length - 1];
-          lastMessageTimestampRef.current = lastNewMessage.createdAt;
+          if (formattedMessages.length > 0) {
+            const lastNewMessage =
+              formattedMessages[formattedMessages.length - 1];
+            lastMessageTimestampRef.current = lastNewMessage.createdAt;
+          }
 
           // Check if we received an agent message
           const hasAgentMessage = (newMessages as RawRoomMessage[]).some(
@@ -556,10 +649,13 @@ export const Chat = ({
       if (!response.ok) throw new Error("Failed to send message");
 
       // Prefer server timestamp to avoid client/server clock skew missing agent replies
-      const result = await response.json();
-      const serverCreatedAt = result?.message?.createdAt
-        ? new Date(result.message.createdAt).getTime()
-        : undefined;
+      const result = (await response.json()) as {
+        message?: { createdAt?: string | number };
+      };
+      const serverCreatedAt =
+        result.message && result.message.createdAt
+          ? new Date(result.message.createdAt).getTime()
+          : undefined;
       if (
         typeof serverCreatedAt === "number" &&
         !Number.isNaN(serverCreatedAt)
@@ -627,11 +723,11 @@ export const Chat = ({
       return msg.text;
     }
     // Fallback 1: check content.text
-    if (msg.content?.text) {
+    if (msg.content && msg.content.text) {
       return msg.content.text;
     }
     // Fallback 2: check content.xml (agent sends quotes here too)
-    if (msg.content?.xml) {
+    if (msg.content && msg.content.xml) {
       return msg.content.xml;
     }
     return "";
@@ -639,28 +735,74 @@ export const Chat = ({
 
   // Helper: Try to extract quote directly from structured content
   const getQuoteFromContent = (msg: ChatMessage): OTCQuote | null => {
-    if (msg.content?.type === "otc_quote" && msg.content?.quote) {
-      const q: ChatMessageQuoteData = msg.content.quote;
-      // Map the structured quote data to OTCQuote interface
-      const discountBps = Number(q.discountBps || 0);
-      return {
-        quoteId: String(q.quoteId || ""),
-        tokenAmount: String(q.tokenAmount || "0"),
-        tokenSymbol: String(q.tokenSymbol || ""),
-        tokenChain: q.chain as OTCQuote["tokenChain"],
-        lockupMonths: Number(q.lockupMonths || 0),
-        lockupDays: Number(q.lockupDays || 0),
-        discountBps: discountBps,
-        discountPercent: Number(q.discountPercent || discountBps / 100),
-        paymentCurrency: String(q.paymentCurrency || "USDC"),
-        pricePerToken: q.pricePerToken ? Number(q.pricePerToken) : undefined,
-        totalValueUsd: q.totalUsd ? Number(q.totalUsd) : undefined,
-        finalPriceUsd: q.discountedUsd ? Number(q.discountedUsd) : undefined,
-        createdAt: q.createdAt ? String(q.createdAt) : undefined,
-        status: q.status ? String(q.status) : undefined,
-      };
+    if (!msg.content) return null;
+    if (msg.content.type !== "otc_quote") return null;
+    if (!msg.content.quote) return null;
+
+    const q: ChatMessageQuoteData = msg.content.quote;
+
+    // FAIL-FAST: Validate required quote fields
+    if (!q.quoteId) {
+      throw new Error("Quote missing quoteId");
     }
-    return null;
+    if (!q.tokenAmount) {
+      throw new Error("Quote missing tokenAmount");
+    }
+    if (!q.tokenSymbol) {
+      throw new Error("Quote missing tokenSymbol");
+    }
+    if (!q.chain) {
+      throw new Error("Quote missing chain");
+    }
+    // FAIL-FAST: Required quote fields must exist
+    if (q.discountBps == null) {
+      throw new Error("Quote missing discountBps");
+    }
+    if (q.lockupDays == null) {
+      throw new Error("Quote missing lockupDays");
+    }
+    if (!q.paymentCurrency) {
+      throw new Error("Quote missing paymentCurrency");
+    }
+
+    // Map the structured quote data to OTCQuote interface
+    const discountBps = Number(q.discountBps);
+    const lockupDays = Number(q.lockupDays);
+    // lockupMonths is optional - calculate from lockupDays if not provided
+    const lockupMonths =
+      typeof q.lockupMonths === "number"
+        ? Number(q.lockupMonths)
+        : Math.ceil(lockupDays / 30);
+
+    return {
+      quoteId: String(q.quoteId),
+      tokenAmount: String(q.tokenAmount),
+      tokenSymbol: String(q.tokenSymbol),
+      tokenChain: q.chain as OTCQuote["tokenChain"],
+      tokenAddress: q.tokenAddress ? String(q.tokenAddress) : undefined,
+      lockupMonths,
+      lockupDays,
+      discountBps,
+      discountPercent:
+        q.discountPercent !== undefined && q.discountPercent !== null
+          ? Number(q.discountPercent)
+          : discountBps / 100,
+      paymentCurrency: String(q.paymentCurrency),
+      pricePerToken:
+        q.pricePerToken !== undefined && q.pricePerToken !== null
+          ? Number(q.pricePerToken)
+          : undefined,
+      totalValueUsd:
+        q.totalUsd !== undefined && q.totalUsd !== null
+          ? Number(q.totalUsd)
+          : undefined,
+      finalPriceUsd:
+        q.discountedUsd !== undefined && q.discountedUsd !== null
+          ? Number(q.discountedUsd)
+          : undefined,
+      createdAt: q.createdAt ? String(q.createdAt) : undefined,
+      status: q.status ? String(q.status) : undefined,
+    };
   };
 
   // Extract current quote from messages
@@ -670,16 +812,24 @@ export const Chat = ({
     // Find the latest quote in messages
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
-      if (!msg || msg.name === USER_NAME) continue;
+      if (!msg) {
+        throw new Error(`Message at index ${i} is null or undefined`);
+      }
+      if (msg.name === USER_NAME) continue;
 
       // Try structured content first (more reliable)
       let extractedQuote = getQuoteFromContent(msg);
-      
+
       // Fall back to XML parsing if no structured quote
       if (!extractedQuote) {
         const messageText = getMessageTextForParsing(msg);
         const parsed = parseMessageXML(messageText);
-        if (parsed?.type === "otc_quote" && parsed.data && "tokenSymbol" in parsed.data) {
+        if (
+          parsed &&
+          parsed.type === "otc_quote" &&
+          parsed.data &&
+          "tokenSymbol" in parsed.data
+        ) {
           extractedQuote = parsed.data as OTCQuote;
         }
       }
@@ -715,7 +865,7 @@ export const Chat = ({
   useEffect(() => {
     // Only create default if we have a token and no current quote
     if (!token || currentQuote) return;
-    
+
     // Don't create default while still loading messages (a quote might be there)
     if (isLoadingHistory) return;
 
@@ -723,21 +873,42 @@ export const Chat = ({
     if (!consignmentData) return;
 
     // Extract chain from token ID (format: token-{chain}-{address})
-    const tokenIdParts = token.id?.split("-") || [];
+    if (!token.id) {
+      throw new Error("Token missing id field");
+    }
+    const tokenIdParts = token.id.split("-");
+    if (tokenIdParts.length < 3) {
+      throw new Error(`Invalid token ID format: ${token.id}`);
+    }
     const tokenChain = tokenIdParts[1] as OTCQuote["tokenChain"];
+    const validChains: OTCQuote["tokenChain"][] = [
+      "ethereum",
+      "base",
+      "bsc",
+      "solana",
+    ];
+    if (!validChains.includes(tokenChain)) {
+      throw new Error(`Invalid chain in token ID: ${tokenChain}`);
+    }
 
     // Calculate lockup months from days (starting terms for negotiable, actual for fixed)
     const lockupDays = consignmentData.startingLockupDays;
     const lockupMonths = Math.ceil(lockupDays / 30);
 
     // Extract token address from token ID (format: token-{chain}-{address})
-    const tokenAddress = tokenIdParts.slice(2).join("-") || token.contractAddress;
+    const tokenAddress = tokenIdParts.slice(2).join("-");
+    if (!tokenAddress && !token.contractAddress) {
+      throw new Error("Token missing both tokenId address and contractAddress");
+    }
 
     // Create default quote with starting terms from consignment data
     const defaultQuote: OTCQuote = {
       quoteId: `default-${token.id}`,
       tokenAmount: consignmentData.totalAvailable,
-      tokenAmountFormatted: formatTokenAmount(consignmentData.totalAvailable, token.decimals),
+      tokenAmountFormatted: formatTokenAmount(
+        consignmentData.totalAvailable,
+        token.decimals,
+      ),
       tokenSymbol: token.symbol,
       tokenChain: tokenChain,
       tokenAddress: tokenAddress, // Include for direct lookup
@@ -746,10 +917,17 @@ export const Chat = ({
       discountBps: consignmentData.startingDiscountBps,
       discountPercent: consignmentData.startingDiscountBps / 100,
       paymentCurrency: "USDC",
-      pricePerToken: marketData?.priceUsd,
-      totalValueUsd: marketData?.priceUsd 
-        ? (Number(consignmentData.totalAvailable) / Math.pow(10, token.decimals)) * marketData.priceUsd
-        : undefined,
+      // marketData.priceUsd is optional - use typeof check
+      pricePerToken:
+        typeof marketData?.priceUsd === "number"
+          ? marketData.priceUsd
+          : undefined,
+      totalValueUsd:
+        typeof marketData?.priceUsd === "number"
+          ? (Number(consignmentData.totalAvailable) /
+              Math.pow(10, token.decimals)) *
+            marketData.priceUsd
+          : undefined,
       status: "default",
       // Pass consignment properties for UI
       isFractionalized: consignmentData.hasFractionalized,
@@ -761,7 +939,15 @@ export const Chat = ({
       type: "SET_CURRENT_QUOTE",
       payload: defaultQuote,
     });
-  }, [token, currentQuote, isLoadingHistory, marketData?.priceUsd, consignmentData]);
+  }, [
+    token,
+    currentQuote,
+    isLoadingHistory,
+    marketData && marketData.priceUsd !== undefined
+      ? marketData.priceUsd
+      : undefined,
+    consignmentData,
+  ]);
 
   const handleAcceptOffer = useCallback(() => {
     if (!currentQuote) {
@@ -786,9 +972,10 @@ export const Chat = ({
 
     // Determine required chain from quote
     const isSolanaQuote = currentQuote.tokenChain === "solana";
-    const isEvmQuote = currentQuote.tokenChain === "base" || 
-                      currentQuote.tokenChain === "bsc" || 
-                      currentQuote.tokenChain === "ethereum";
+    const isEvmQuote =
+      currentQuote.tokenChain === "base" ||
+      currentQuote.tokenChain === "bsc" ||
+      currentQuote.tokenChain === "ethereum";
 
     // If user is not connected at all, just open modal (it will show connect screen)
     if (!isConnected) {
@@ -797,16 +984,18 @@ export const Chat = ({
     }
 
     // User is connected - check if they're on the right chain
-    const needsChainConnection = isSolanaQuote 
-      ? !solanaConnected 
-      : isEvmQuote 
-        ? !evmConnected 
+    const needsChainConnection = isSolanaQuote
+      ? !solanaConnected
+      : isEvmQuote
+        ? !evmConnected
         : false;
 
     // If connected but to wrong chain, trigger connection flow for required chain
     if (needsChainConnection) {
       const requiredChain = isSolanaQuote ? "solana" : "evm";
-      console.log(`[Chat] Quote requires ${requiredChain}, connecting wallet...`);
+      console.log(
+        `[Chat] Quote requires ${requiredChain}, connecting wallet...`,
+      );
       // Set active family first so Privy knows which chain to connect
       setActiveFamily(requiredChain);
       // Trigger Privy connect (user is already authenticated since isConnected is true)
@@ -818,7 +1007,15 @@ export const Chat = ({
 
     // User is connected to the right chain, proceed normally
     dispatch({ type: "SET_ACCEPT_MODAL", payload: true });
-  }, [currentQuote, solanaConnected, evmConnected, privyAuthenticated, connectWallet, login, setActiveFamily]);
+  }, [
+    currentQuote,
+    solanaConnected,
+    evmConnected,
+    privyAuthenticated,
+    connectWallet,
+    login,
+    setActiveFamily,
+  ]);
 
   const handleClearChat = useCallback(async () => {
     if (!entityId) return;
@@ -880,7 +1077,6 @@ export const Chat = ({
     }
   }, [privyAuthenticated, connectWallet, login]);
 
-
   // Memoized setters for child components
   const setInput = useCallback((value: string) => {
     dispatch({ type: "SET_INPUT", payload: value });
@@ -916,12 +1112,14 @@ export const Chat = ({
         token={token}
         marketData={marketData}
       />
-      <AcceptQuoteModal
-        isOpen={showAcceptModal}
-        onClose={() => dispatch({ type: "SET_ACCEPT_MODAL", payload: false })}
-        initialQuote={currentQuote}
-        onComplete={handleDealComplete}
-      />
+      {currentQuote && (
+        <AcceptQuoteModal
+          isOpen={showAcceptModal}
+          onClose={() => dispatch({ type: "SET_ACCEPT_MODAL", payload: false })}
+          initialQuote={currentQuote}
+          onComplete={handleDealComplete}
+        />
+      )}
 
       {/* Clear Chat Confirmation Modal */}
       <Dialog
@@ -976,21 +1174,25 @@ function ChatHeader({
   const currentQuote = apiQuote;
 
   // Format discount and lockup display
-  const discountDisplay = currentQuote?.discountPercent
-    ? `${currentQuote.discountPercent.toFixed(1)}% off`
-    : null;
-  
-  const lockupDisplay = currentQuote?.lockupDays
-    ? currentQuote.lockupDays >= 30
-      ? `${Math.ceil(currentQuote.lockupDays / 30)}mo lockup`
-      : `${currentQuote.lockupDays}d lockup`
-    : null;
+  const discountDisplay =
+    currentQuote && currentQuote.discountPercent !== undefined
+      ? `${currentQuote.discountPercent.toFixed(1)}% off`
+      : null;
+
+  const lockupDisplay =
+    currentQuote && currentQuote.lockupDays !== undefined
+      ? currentQuote.lockupDays >= 30
+        ? `${Math.ceil(currentQuote.lockupDays / 30)}mo lockup`
+        : `${currentQuote.lockupDays}d lockup`
+      : null;
 
   // Format token amount for display
-  const amountDisplay = currentQuote?.tokenAmountFormatted 
-    || (currentQuote?.tokenAmount && currentQuote.tokenAmount !== "0"
-      ? Number(currentQuote.tokenAmount).toLocaleString()
-      : null);
+  const amountDisplay = currentQuote
+    ? currentQuote.tokenAmountFormatted ||
+      (currentQuote.tokenAmount && currentQuote.tokenAmount !== "0"
+        ? Number(currentQuote.tokenAmount).toLocaleString()
+        : null)
+    : null;
 
   return (
     <div className="flex-shrink-0 pb-3 border-b border-zinc-200 dark:border-zinc-800">
@@ -1151,10 +1353,7 @@ function ChatBody({
               type="button"
               onClick={() => {
                 localStorage.setItem("otc-desk-connect-overlay-seen", "1");
-                localStorage.setItem(
-                  "otc-desk-connect-overlay-dismissed",
-                  "1",
-                );
+                localStorage.setItem("otc-desk-connect-overlay-dismissed", "1");
                 setShowConnectOverlay(false);
               }}
               className="absolute top-3 right-3 rounded-full bg-white/10 text-white hover:bg-white/20 p-1.5 transition-colors"
@@ -1232,8 +1431,8 @@ function ChatBody({
                 onFollowUpClick={(prompt) => {
                   setInput(prompt);
                 }}
-                assistantAvatarUrl={token?.logoUrl}
-                assistantName={token?.name}
+                assistantAvatarUrl={token ? token.logoUrl : undefined}
+                assistantName={token ? token.name : undefined}
               />
               {isAgentThinking && (
                 <div className="flex items-center gap-2 py-4 text-zinc-600 dark:text-zinc-400">
@@ -1255,7 +1454,7 @@ function ChatBody({
             isLoading={isAgentThinking || inputDisabled || !isConnected}
             placeholder={
               isConnected
-                ? currentQuote?.tokenSymbol
+                ? currentQuote && currentQuote.tokenSymbol
                   ? `Negotiate a deal for $${currentQuote.tokenSymbol}`
                   : "Ask about available tokens or request a quote"
                 : "Connect wallet to chat"

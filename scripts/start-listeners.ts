@@ -9,42 +9,35 @@
 
 import { startBaseListener, backfillBaseEvents } from '../src/services/token-registration-listener-base';
 import { startSolanaListener, backfillSolanaEvents } from '../src/services/token-registration-listener-solana';
+import { getRegistrationHelperForChain, getSolanaConfig } from '../src/config/contracts';
+import { getNetwork } from '../src/config/env';
 
 async function main() {
   console.log('🚀 Starting token registration listeners...\n');
 
-  // Check environment variables
-  const requiredEnvVars = [
-    'NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS',
-    'NEXT_PUBLIC_BASE_RPC_URL',
-    'NEXT_PUBLIC_SOLANA_PROGRAM_ID',
-    'NEXT_PUBLIC_SOLANA_RPC'
-  ];
+  const network = getNetwork();
+  const registrationHelperBaseMainnet = getRegistrationHelperForChain(8453);
+  const solana = getSolanaConfig(network);
 
-  const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
-  if (missingVars.length > 0) {
-    console.warn('⚠️  Missing environment variables:', missingVars);
-    console.log('Some listeners may not start properly.\n');
-  }
+  console.log('Config:');
+  console.log(`  • network: ${network}`);
+  console.log(
+    `  • base RegistrationHelper (8453): ${registrationHelperBaseMainnet ?? '(not configured)'}`
+  );
+  console.log(`  • solana programId: ${solana.programId}`);
+  console.log(`  • solana desk: ${solana.desk}`);
+  console.log(`  • solana rpc: ${solana.rpc}`);
+  console.log();
 
   // Start Base listener
-  try {
-    console.log('📡 Starting Base listener...');
-    await startBaseListener();
-    console.log('✅ Base listener started\n');
-  } catch (error) {
-    console.error('❌ Failed to start Base listener:', error);
-  }
+  console.log('📡 Starting Base listener...');
+  await startBaseListener();
+  console.log('✅ Base listener started\n');
 
   // Start Solana listener
-  try {
-    console.log('📡 Starting Solana listener...');
-    await startSolanaListener();
-    console.log('✅ Solana listener started\n');
-  } catch (error) {
-    console.error('❌ Failed to start Solana listener:', error);
-  }
+  console.log('📡 Starting Solana listener...');
+  await startSolanaListener();
+  console.log('✅ Solana listener started\n');
 
   console.log('🎯 All listeners initialized successfully!');
   console.log('\n📝 Available endpoints:');

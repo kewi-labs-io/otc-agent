@@ -9,7 +9,7 @@ import {
   type Chain,
 } from "viem/chains";
 import { getNetwork, getEvmConfig } from "@/config/contracts";
-import { LOCAL_DEFAULTS } from "@/config/env";
+import { LOCAL_DEFAULTS, getAppUrl } from "@/config/env";
 
 // Anvil chain with correct chain ID (31337)
 const anvil: Chain = {
@@ -36,26 +36,44 @@ export function getChain(): Chain {
 
 /**
  * Get RPC URL for the current chain
- * Uses deployment config
+ * Uses deployment config. Server-side converts relative URLs to absolute.
  */
 export function getRpcUrl(): string {
   const config = getEvmConfig();
-  return config.rpc || LOCAL_DEFAULTS.evmRpc;
+  let rpcUrl = config.rpc || LOCAL_DEFAULTS.evmRpc;
+
+  // If it's a relative URL and we're server-side, make it absolute
+  if (rpcUrl.startsWith("/") && typeof window === "undefined") {
+    rpcUrl = `${getAppUrl()}${rpcUrl}`;
+  }
+
+  return rpcUrl;
 }
 
 /**
  * Get RPC URL for a specific chain type
  * Uses proxy routes for mainnet to keep API keys server-side
+ * Server-side converts relative URLs to absolute.
  * @param chainType - Chain identifier (ethereum, base, bsc, localhost, etc.)
  */
 export function getRpcUrlForChain(chainType: string): string {
+  const isServer = typeof window === "undefined";
+  const baseUrl = isServer ? getAppUrl() : "";
+  const network = getNetwork();
+
+  // In local development, ALWAYS use the local Anvil RPC regardless of chainType.
+  // This keeps "base"/"ethereum"/etc UI labels working while still talking to Anvil.
+  if (network === "local") {
+    return LOCAL_DEFAULTS.evmRpc;
+  }
+
   switch (chainType) {
     case "ethereum":
     case "sepolia":
-      return "/api/rpc/ethereum";
+      return `${baseUrl}/api/rpc/ethereum`;
     case "base":
     case "base-sepolia":
-      return "/api/rpc/base";
+      return `${baseUrl}/api/rpc/base`;
     case "bsc":
     case "bsc-testnet":
       return "https://bsc-dataseed1.binance.org";

@@ -37,28 +37,42 @@ import * as anchor from "@coral-xyz/anchor";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import * as fs from "fs";
 import * as path from "path";
+import { getEvmConfig, getSolanaConfig } from "../src/config/contracts";
 
 // =============================================================================
 // CONFIGURATION
 // =============================================================================
 
 const EXECUTE_TX = process.env.EXECUTE_TX === "true";
-const BASE_RPC = process.env.MAINNET_RPC_URL || "https://mainnet.base.org";
-const SOLANA_RPC = process.env.SOLANA_MAINNET_RPC || "https://api.mainnet-beta.solana.com";
-const BACKEND_URL = process.env.NEXT_PUBLIC_URL || "http://localhost:4444";
 
-// Load deployment config
-const evmConfig = JSON.parse(
-  fs.readFileSync(path.join(process.cwd(), "src/config/deployments/mainnet-evm.json"), "utf8")
-);
-const solanaConfig = JSON.parse(
-  fs.readFileSync(path.join(process.cwd(), "src/config/deployments/mainnet-solana.json"), "utf8")
-);
+if (!process.env.MAINNET_RPC_URL) {
+  throw new Error("MAINNET_RPC_URL environment variable is required");
+}
+const BASE_RPC = process.env.MAINNET_RPC_URL;
+
+if (!process.env.NEXT_PUBLIC_URL) {
+  throw new Error("NEXT_PUBLIC_URL environment variable is required");
+}
+const BACKEND_URL = process.env.NEXT_PUBLIC_URL;
+
+const evmConfig = getEvmConfig("mainnet");
+const solanaConfig = getSolanaConfig("mainnet");
+
+let SOLANA_RPC: string;
+if (process.env.SOLANA_MAINNET_RPC) {
+  SOLANA_RPC = process.env.SOLANA_MAINNET_RPC;
+} else if (solanaConfig.rpc.startsWith("/")) {
+  SOLANA_RPC = `${BACKEND_URL}${solanaConfig.rpc}`;
+} else if (solanaConfig.rpc) {
+  SOLANA_RPC = solanaConfig.rpc;
+} else {
+  throw new Error("SOLANA_MAINNET_RPC environment variable or solanaConfig.rpc is required");
+}
 
 const OTC_ADDRESS = evmConfig.contracts.otc as Address;
 const USDC_ADDRESS = evmConfig.contracts.usdc as Address;
-const SOLANA_DESK = solanaConfig.NEXT_PUBLIC_SOLANA_DESK;
-const SOLANA_PROGRAM_ID = solanaConfig.NEXT_PUBLIC_SOLANA_PROGRAM_ID;
+const SOLANA_DESK = solanaConfig.desk;
+const SOLANA_PROGRAM_ID = solanaConfig.programId;
 
 // =============================================================================
 // ABI (Load from artifact or use parseAbi)
@@ -105,7 +119,11 @@ const ERC20_ABI = parseAbi([
 // UTILITIES
 // =============================================================================
 
-function log(category: string, message: string, data?: Record<string, unknown>) {
+function log(
+  category: string,
+  message: string,
+  data?: Record<string, string | number | boolean | null | undefined>,
+) {
   const prefix = {
     INFO: "ℹ️",
     SUCCESS: "✅",
@@ -146,8 +164,7 @@ async function validateEVM() {
   log("CHECK", "Verifying OTC contract deployment...");
   const code = await publicClient.getCode({ address: OTC_ADDRESS });
   if (!code || code === "0x") {
-    log("ERROR", "OTC contract not deployed", { address: OTC_ADDRESS });
-    return false;
+    throw new Error(`OTC contract not deployed at ${OTC_ADDRESS}`);
   }
   log("SUCCESS", "OTC contract deployed", { 
     address: OTC_ADDRESS,
@@ -160,47 +177,34 @@ async function validateEVM() {
   const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
   
   // Read critical values one at a time with delays
-  let nextConsignmentId: bigint = 0n;
-  let nextOfferId: bigint = 0n;
-  let minUsdAmount: bigint = 0n;
-  let agent = "";
-  let requiredApprovals: bigint = 0n;
-  let requireApproverToFulfill = false;
+  const nextConsignmentId = (await publicClient.readContract({ 
+    address: OTC_ADDRESS, abi: OTC_ABI, functionName: "nextConsignmentId" 
+  })) as bigint;
+  await delay(500);
   
-  try {
-    nextConsignmentId = (await publicClient.readContract({ 
-      address: OTC_ADDRESS, abi: OTC_ABI, functionName: "nextConsignmentId" 
-    })) as bigint;
-    await delay(500);
-    
-    nextOfferId = (await publicClient.readContract({ 
-      address: OTC_ADDRESS, abi: OTC_ABI, functionName: "nextOfferId" 
-    })) as bigint;
-    await delay(500);
-    
-    minUsdAmount = (await publicClient.readContract({ 
-      address: OTC_ADDRESS, abi: OTC_ABI, functionName: "minUsdAmount" 
-    })) as bigint;
-    await delay(500);
-    
-    agent = (await publicClient.readContract({ 
-      address: OTC_ADDRESS, abi: OTC_ABI, functionName: "agent" 
-    })) as string;
-    await delay(500);
-    
-    requiredApprovals = (await publicClient.readContract({ 
-      address: OTC_ADDRESS, abi: OTC_ABI, functionName: "requiredApprovals" 
-    })) as bigint;
-    await delay(500);
-    
-    requireApproverToFulfill = (await publicClient.readContract({ 
-      address: OTC_ADDRESS, abi: OTC_ABI, functionName: "requireApproverToFulfill" 
-    })) as boolean;
-  } catch (err) {
-    log("WARNING", "Rate limited - some values may be unavailable", {
-      error: err instanceof Error ? err.message.slice(0, 100) : "unknown"
-    });
-  }
+  const nextOfferId = (await publicClient.readContract({ 
+    address: OTC_ADDRESS, abi: OTC_ABI, functionName: "nextOfferId" 
+  })) as bigint;
+  await delay(500);
+  
+  const minUsdAmount = (await publicClient.readContract({ 
+    address: OTC_ADDRESS, abi: OTC_ABI, functionName: "minUsdAmount" 
+  })) as bigint;
+  await delay(500);
+  
+  const agent = (await publicClient.readContract({ 
+    address: OTC_ADDRESS, abi: OTC_ABI, functionName: "agent" 
+  })) as string;
+  await delay(500);
+  
+  const requiredApprovals = (await publicClient.readContract({ 
+    address: OTC_ADDRESS, abi: OTC_ABI, functionName: "requiredApprovals" 
+  })) as bigint;
+  await delay(500);
+  
+  const requireApproverToFulfill = (await publicClient.readContract({ 
+    address: OTC_ADDRESS, abi: OTC_ABI, functionName: "requireApproverToFulfill" 
+  })) as boolean;
 
   log("INFO", "Contract State:", {
     "Total Consignments": Number(nextConsignmentId) - 1,
@@ -218,32 +222,28 @@ async function validateEVM() {
   if (numConsignments > 0) {
     log("INFO", `Found ${numConsignments} consignments`);
     
-    try {
-      await delay(500);
-      // Sample first consignment
-      const consignment = await publicClient.readContract({
-        address: OTC_ADDRESS,
-        abi: OTC_ABI,
-        functionName: "consignments",
-        args: [1n],
-      }) as [
-        `0x${string}`, Address, bigint, bigint, boolean, number, number, 
-        number, number, number, number, bigint, bigint, number, boolean, bigint
-      ];
-      
-      log("INFO", "Sample Consignment #1:", {
-        "Token ID": consignment[0].slice(0, 18) + "...",
-        "Consigner": consignment[1],
-        "Total Amount": formatEther(consignment[2]),
-        "Remaining": formatEther(consignment[3]),
-        "Is Negotiable": consignment[4],
-        "Fixed Discount": `${consignment[5] / 100}%`,
-        "Fixed Lockup": `${consignment[6]} days`,
-        "Is Active": consignment[14],
-      });
-    } catch {
-      log("WARNING", "Could not read consignment details (rate limited)");
-    }
+    await delay(500);
+    // Sample first consignment
+    const consignment = await publicClient.readContract({
+      address: OTC_ADDRESS,
+      abi: OTC_ABI,
+      functionName: "consignments",
+      args: [1n],
+    }) as [
+      `0x${string}`, Address, bigint, bigint, boolean, number, number, 
+      number, number, number, number, bigint, bigint, number, boolean, bigint
+    ];
+    
+    log("INFO", "Sample Consignment #1:", {
+      "Token ID": consignment[0].slice(0, 18) + "...",
+      "Consigner": consignment[1],
+      "Total Amount": formatEther(consignment[2]),
+      "Remaining": formatEther(consignment[3]),
+      "Is Negotiable": consignment[4],
+      "Fixed Discount": `${consignment[5] / 100}%`,
+      "Fixed Lockup": `${consignment[6]} days`,
+      "Is Active": consignment[14],
+    });
   } else {
     log("INFO", "No consignments found - desk is empty (or this is a fresh deployment)");
   }
@@ -255,34 +255,30 @@ async function validateEVM() {
   if (numOffers > 0) {
     log("INFO", `Found ${numOffers} offers`);
     
-    try {
-      await delay(500);
-      // Check most recent offer
-      const latestOffer = await publicClient.readContract({
-        address: OTC_ADDRESS,
-        abi: OTC_ABI,
-        functionName: "offers",
-        args: [BigInt(numOffers)],
-      }) as [
-        bigint, `0x${string}`, Address, bigint, bigint, bigint, bigint, bigint,
-        bigint, bigint, number, boolean, boolean, boolean, boolean, Address, bigint
-      ];
-      
-      log("INFO", `Latest Offer #${numOffers}:`, {
-        "Consignment ID": Number(latestOffer[0]),
-        "Beneficiary": latestOffer[2],
-        "Token Amount": formatEther(latestOffer[3]),
-        "Discount": `${Number(latestOffer[4]) / 100}%`,
-        "Price (8 decimals)": `$${Number(latestOffer[7]) / 1e8}`,
-        "Currency": latestOffer[10] === 0 ? "ETH" : "USDC",
-        "Approved": latestOffer[11],
-        "Paid": latestOffer[12],
-        "Fulfilled": latestOffer[13],
-        "Cancelled": latestOffer[14],
-      });
-    } catch {
-      log("WARNING", "Could not read offer details (rate limited)");
-    }
+    await delay(500);
+    // Check most recent offer
+    const latestOffer = await publicClient.readContract({
+      address: OTC_ADDRESS,
+      abi: OTC_ABI,
+      functionName: "offers",
+      args: [BigInt(numOffers)],
+    }) as [
+      bigint, `0x${string}`, Address, bigint, bigint, bigint, bigint, bigint,
+      bigint, bigint, number, boolean, boolean, boolean, boolean, Address, bigint
+    ];
+    
+    log("INFO", `Latest Offer #${numOffers}:`, {
+      "Consignment ID": Number(latestOffer[0]),
+      "Beneficiary": latestOffer[2],
+      "Token Amount": formatEther(latestOffer[3]),
+      "Discount": `${Number(latestOffer[4]) / 100}%`,
+      "Price (8 decimals)": `$${Number(latestOffer[7]) / 1e8}`,
+      "Currency": latestOffer[10] === 0 ? "ETH" : "USDC",
+      "Approved": latestOffer[11],
+      "Paid": latestOffer[12],
+      "Fulfilled": latestOffer[13],
+      "Cancelled": latestOffer[14],
+    });
   } else {
     log("INFO", "No offers found yet");
   }
@@ -292,33 +288,29 @@ async function validateEVM() {
   
   const privateKey = process.env.MAINNET_PRIVATE_KEY;
   if (privateKey) {
-    try {
-      const account = privateKeyToAccount(privateKey as `0x${string}`);
-      await delay(500);
-      const balance = await publicClient.getBalance({ address: account.address });
-      await delay(500);
-      const isAgentResult = await publicClient.readContract({
-        address: OTC_ADDRESS,
-        abi: OTC_ABI,
-        functionName: "isApprover",
-        args: [account.address],
-      });
+    const account = privateKeyToAccount(privateKey as `0x${string}`);
+    await delay(500);
+    const balance = await publicClient.getBalance({ address: account.address });
+    await delay(500);
+    const isAgentResult = await publicClient.readContract({
+      address: OTC_ADDRESS,
+      abi: OTC_ABI,
+      functionName: "isApprover",
+      args: [account.address],
+    });
 
-      log("INFO", "Deployer Wallet:", {
-        "Address": account.address,
-        "ETH Balance": formatEther(balance),
-        "Is Approver": isAgentResult,
-      });
+    log("INFO", "Deployer Wallet:", {
+      "Address": account.address,
+      "ETH Balance": formatEther(balance),
+      "Is Approver": isAgentResult,
+    });
 
-      if (!isAgentResult) {
-        log("WARNING", "Deployer is NOT an approver - cannot approve offers");
-      }
+    if (!isAgentResult) {
+      log("WARNING", "Deployer is NOT an approver - cannot approve offers");
+    }
 
-      if (balance < parseEther("0.01")) {
-        log("WARNING", "Low ETH balance - may need gas for transactions");
-      }
-    } catch {
-      log("WARNING", "Could not check wallet (rate limited)");
+    if (balance < parseEther("0.01")) {
+      log("WARNING", "Low ETH balance - may need gas for transactions");
     }
   } else {
     log("WARNING", "MAINNET_PRIVATE_KEY not set - cannot execute transactions");
@@ -327,22 +319,17 @@ async function validateEVM() {
   // 6. Test price feed
   log("CHECK", "Testing price feeds via backend...");
   
-  try {
-    const priceResponse = await fetch(`${BACKEND_URL}/api/tokens`);
-    if (priceResponse.ok) {
-      const tokens = await priceResponse.json();
-      log("SUCCESS", "Backend is responding", { 
-        "Token count": Array.isArray(tokens) ? tokens.length : "N/A" 
-      });
-    } else {
-      log("WARNING", "Backend not responding - ensure server is running");
-    }
-  } catch {
-    log("WARNING", "Cannot reach backend at " + BACKEND_URL);
+  const priceResponse = await fetch(`${BACKEND_URL}/api/tokens`);
+  if (!priceResponse.ok) {
+    throw new Error(`Backend not responding: ${priceResponse.status} ${priceResponse.statusText}`);
   }
+  const tokens = await priceResponse.json();
+  const tokenCount = Array.isArray(tokens) ? tokens.length : 0;
+  log("SUCCESS", "Backend is responding", { 
+    "Token count": tokenCount
+  });
 
   log("SUCCESS", "EVM validation complete");
-  return true;
 }
 
 // =============================================================================
@@ -352,9 +339,11 @@ async function validateEVM() {
 async function validateSolana() {
   section("SOLANA MAINNET VALIDATION");
 
-  if (!SOLANA_DESK || !SOLANA_PROGRAM_ID) {
-    log("ERROR", "Solana configuration missing");
-    return false;
+  if (!SOLANA_DESK) {
+    throw new Error("SOLANA_DESK not configured");
+  }
+  if (!SOLANA_PROGRAM_ID) {
+    throw new Error("SOLANA_PROGRAM_ID not configured");
   }
 
   const connection = new Connection(SOLANA_RPC, "confirmed");
@@ -363,8 +352,7 @@ async function validateSolana() {
   log("CHECK", "Verifying OTC program deployment...");
   const programInfo = await connection.getAccountInfo(new PublicKey(SOLANA_PROGRAM_ID));
   if (!programInfo) {
-    log("ERROR", "OTC program not deployed", { address: SOLANA_PROGRAM_ID });
-    return false;
+    throw new Error(`OTC program not deployed at ${SOLANA_PROGRAM_ID}`);
   }
   log("SUCCESS", "OTC program deployed", {
     "Program ID": SOLANA_PROGRAM_ID,
@@ -376,8 +364,7 @@ async function validateSolana() {
   log("CHECK", "Verifying desk account...");
   const deskInfo = await connection.getAccountInfo(new PublicKey(SOLANA_DESK));
   if (!deskInfo) {
-    log("ERROR", "Desk account not found", { address: SOLANA_DESK });
-    return false;
+    throw new Error(`Desk account not found at ${SOLANA_DESK}`);
   }
   log("SUCCESS", "Desk account exists", {
     "Desk": SOLANA_DESK,
@@ -390,23 +377,17 @@ async function validateSolana() {
   
   const idlPath = path.join(process.cwd(), "solana/otc-program/target/idl/otc.json");
   if (!fs.existsSync(idlPath)) {
-    log("WARNING", "IDL not found - cannot decode desk state");
-    log("INFO", "Expected path", { path: idlPath });
-  } else {
-    try {
-      const idl = JSON.parse(fs.readFileSync(idlPath, "utf8"));
-      
-      // Create a dummy wallet for read-only operations
-      const dummyKeypair = Keypair.generate();
-      const wallet = new anchor.Wallet(dummyKeypair);
-      const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
-      
-      let program: anchor.Program;
-      try {
-        program = new anchor.Program(idl, provider);
-      } catch {
-        program = new anchor.Program(idl, new PublicKey(SOLANA_PROGRAM_ID), provider) as anchor.Program;
-      }
+    throw new Error(`IDL not found at ${idlPath} - cannot decode desk state`);
+  }
+  
+  const idl = JSON.parse(fs.readFileSync(idlPath, "utf8"));
+  
+  // Create a dummy wallet for read-only operations
+  const dummyKeypair = Keypair.generate();
+  const wallet = new anchor.Wallet(dummyKeypair);
+  const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
+  
+  const program = new anchor.Program(idl, new PublicKey(SOLANA_PROGRAM_ID), provider) as anchor.Program;
 
       type DeskAccount = {
         owner: PublicKey;
@@ -420,9 +401,13 @@ async function validateSolana() {
         restrictFulfill: boolean;
       };
 
-      const deskAccount = await (
-        program.account as { desk: { fetch: (addr: PublicKey) => Promise<DeskAccount> } }
-      ).desk.fetch(new PublicKey(SOLANA_DESK));
+      interface DeskAccountProgram {
+        desk: {
+          fetch: (addr: PublicKey) => Promise<DeskAccount>;
+        };
+      }
+      
+      const deskAccount = await (program.account as DeskAccountProgram).desk.fetch(new PublicKey(SOLANA_DESK));
 
       log("INFO", "Desk State:", {
         "Owner": deskAccount.owner.toBase58(),
@@ -451,12 +436,6 @@ async function validateSolana() {
       } else {
         log("WARNING", "No token registries found - no tokens registered on desk");
       }
-
-    } catch (err) {
-      log("WARNING", "Could not decode desk state", { 
-        error: err instanceof Error ? err.message : String(err) 
-      });
-    }
   }
 
   // 4. Check deployer wallet
@@ -464,41 +443,29 @@ async function validateSolana() {
   
   const privateKey = process.env.SOLANA_MAINNET_PRIVATE_KEY;
   if (privateKey) {
-    try {
-      let keypairBytes: Uint8Array;
-      if (privateKey.startsWith("[")) {
-        keypairBytes = Uint8Array.from(JSON.parse(privateKey));
-      } else {
-        const bs58 = await import("bs58").then(m => m.default).catch(() => null);
-        if (bs58) {
-          keypairBytes = bs58.decode(privateKey);
-        } else {
-          log("WARNING", "bs58 not available");
-          return true;
-        }
-      }
-      const wallet = Keypair.fromSecretKey(keypairBytes);
-      const balance = await connection.getBalance(wallet.publicKey);
-      
-      log("INFO", "Deployer Wallet:", {
-        "Address": wallet.publicKey.toBase58(),
-        "SOL Balance": balance / LAMPORTS_PER_SOL,
-      });
+    let keypairBytes: Uint8Array;
+    if (privateKey.startsWith("[")) {
+      keypairBytes = Uint8Array.from(JSON.parse(privateKey));
+    } else {
+      const bs58 = await import("bs58").then(m => m.default);
+      keypairBytes = bs58.decode(privateKey);
+    }
+    const wallet = Keypair.fromSecretKey(keypairBytes);
+    const balance = await connection.getBalance(wallet.publicKey);
+    
+    log("INFO", "Deployer Wallet:", {
+      "Address": wallet.publicKey.toBase58(),
+      "SOL Balance": balance / LAMPORTS_PER_SOL,
+    });
 
-      if (balance < 0.1 * LAMPORTS_PER_SOL) {
-        log("WARNING", "Low SOL balance - may need gas for transactions");
-      }
-    } catch (err) {
-      log("WARNING", "Could not load Solana wallet", {
-        error: err instanceof Error ? err.message : String(err)
-      });
+    if (balance < 0.1 * LAMPORTS_PER_SOL) {
+      log("WARNING", "Low SOL balance - may need gas for transactions");
     }
   } else {
     log("WARNING", "SOLANA_MAINNET_PRIVATE_KEY not set");
   }
 
   log("SUCCESS", "Solana validation complete");
-  return true;
 }
 
 // =============================================================================
@@ -512,52 +479,39 @@ async function validateFlows() {
   log("CHECK", "Testing backend API endpoints...");
 
   // 1. Token list
-  try {
-    const tokensRes = await fetch(`${BACKEND_URL}/api/tokens`);
-    if (tokensRes.ok) {
-      const tokens = await tokensRes.json();
-      log("SUCCESS", "GET /api/tokens", { count: Array.isArray(tokens) ? tokens.length : 0 });
-    } else {
-      log("WARNING", "GET /api/tokens failed", { status: tokensRes.status });
-    }
-  } catch (err) {
-    log("ERROR", "Backend unreachable", { url: BACKEND_URL });
-    return false;
+  const tokensRes = await fetch(`${BACKEND_URL}/api/tokens`);
+  if (!tokensRes.ok) {
+    throw new Error(`GET /api/tokens failed: ${tokensRes.status} ${tokensRes.statusText}`);
   }
+  const tokens = await tokensRes.json();
+  log("SUCCESS", "GET /api/tokens", { count: Array.isArray(tokens) ? tokens.length : 0 });
 
   // 2. Consignments
-  try {
-    const consignRes = await fetch(`${BACKEND_URL}/api/consignments`);
-    if (consignRes.ok) {
-      const data = await consignRes.json();
-      log("SUCCESS", "GET /api/consignments", { 
-        count: Array.isArray(data) ? data.length : (data.consignments?.length || 0) 
-      });
-    } else {
-      log("WARNING", "GET /api/consignments failed", { status: consignRes.status });
-    }
-  } catch {
-    log("WARNING", "GET /api/consignments failed");
+  const consignRes = await fetch(`${BACKEND_URL}/api/consignments`);
+  if (!consignRes.ok) {
+    throw new Error(`GET /api/consignments failed: ${consignRes.status} ${consignRes.statusText}`);
   }
+  const data = await consignRes.json() as { consignments?: unknown[] } | unknown[];
+  const count = Array.isArray(data) 
+    ? data.length 
+    : (Array.isArray((data as { consignments?: unknown[] }).consignments) 
+        ? (data as { consignments: unknown[] }).consignments.length 
+        : 0);
+  log("SUCCESS", "GET /api/consignments", { count });
 
   // 3. Test approve endpoint (dry run)
-  try {
-    const approveRes = await fetch(`${BACKEND_URL}/api/otc/approve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ offerId: "999999", chain: "base", dryRun: true }),
-    });
-    // Should fail gracefully (offer doesn't exist)
-    log("INFO", "POST /api/otc/approve (dry run)", { 
-      status: approveRes.status,
-      reachable: true 
-    });
-  } catch {
-    log("WARNING", "POST /api/otc/approve unreachable");
-  }
+  const approveRes = await fetch(`${BACKEND_URL}/api/otc/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ offerId: "999999", chain: "base", dryRun: true }),
+  });
+  // Should fail gracefully (offer doesn't exist)
+  log("INFO", "POST /api/otc/approve (dry run)", { 
+    status: approveRes.status,
+    reachable: true 
+  });
 
   log("SUCCESS", "Flow validation complete");
-  return true;
 }
 
 // =============================================================================
@@ -639,61 +593,55 @@ async function executeRealTransactions() {
     "Currency": "USDC",
   });
 
-  try {
-    const { request } = await publicClient.simulateContract({
-      address: OTC_ADDRESS,
-      abi: OTC_ABI,
-      functionName: "createOfferFromConsignment",
-      args: [
-        1n, // consignmentId
-        testAmount,
-        BigInt(discountBps),
-        1, // USDC
-        BigInt(lockupDays * 24 * 60 * 60), // lockupSeconds
-      ],
-      account,
-    });
+  const { request } = await publicClient.simulateContract({
+    address: OTC_ADDRESS,
+    abi: OTC_ABI,
+    functionName: "createOfferFromConsignment",
+    args: [
+      1n, // consignmentId
+      testAmount,
+      BigInt(discountBps),
+      1, // USDC
+      BigInt(lockupDays * 24 * 60 * 60), // lockupSeconds
+    ],
+    account,
+  });
 
-    const txHash = await walletClient.writeContract(request);
-    log("SUCCESS", "Offer created", { txHash });
-    log("INFO", "View on Basescan", { url: `https://basescan.org/tx/${txHash}` });
+  const txHash = await walletClient.writeContract(request);
+  log("SUCCESS", "Offer created", { txHash });
+  log("INFO", "View on Basescan", { url: `https://basescan.org/tx/${txHash}` });
 
-    // Wait for confirmation
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-    if (receipt.status === "success") {
-      log("SUCCESS", "Transaction confirmed");
-      
-      // Try backend approval
-      const nextOfferId = await publicClient.readContract({
-        address: OTC_ADDRESS,
-        abi: OTC_ABI,
-        functionName: "nextOfferId",
-      }) as bigint;
-      
-      const offerId = Number(nextOfferId) - 1;
-      log("STEP", `Requesting backend approval for offer #${offerId}...`);
-
-      const approveRes = await fetch(`${BACKEND_URL}/api/otc/approve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offerId: offerId.toString(), chain: "base" }),
-      });
-
-      if (approveRes.ok) {
-        const approveData = await approveRes.json();
-        log("SUCCESS", "Backend approval", approveData);
-      } else {
-        const errorText = await approveRes.text();
-        log("WARNING", "Backend approval failed", { error: errorText });
-      }
-    } else {
-      log("ERROR", "Transaction failed");
-    }
-  } catch (err) {
-    log("ERROR", "Transaction failed", { 
-      error: err instanceof Error ? err.message : String(err) 
-    });
+  // Wait for confirmation
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+  if (receipt.status !== "success") {
+    throw new Error("Transaction failed");
   }
+  
+  log("SUCCESS", "Transaction confirmed");
+  
+  // Backend approval
+  const nextOfferId = await publicClient.readContract({
+    address: OTC_ADDRESS,
+    abi: OTC_ABI,
+    functionName: "nextOfferId",
+  }) as bigint;
+  
+  const offerId = Number(nextOfferId) - 1;
+  log("STEP", `Requesting backend approval for offer #${offerId}...`);
+
+  const approveRes = await fetch(`${BACKEND_URL}/api/otc/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ offerId: offerId.toString(), chain: "base" }),
+  });
+
+  if (!approveRes.ok) {
+    const errorText = await approveRes.text();
+    throw new Error(`Backend approval failed: ${approveRes.status} ${approveRes.statusText} - ${errorText}`);
+  }
+  
+  const approveData = await approveRes.json();
+  log("SUCCESS", "Backend approval", approveData);
 }
 
 // =============================================================================
@@ -720,27 +668,23 @@ async function main() {
 ╚══════════════════════════════════════════════════════════════════════════════╝
 `);
 
-  const evmOk = await validateEVM();
-  const solanaOk = await validateSolana();
-  const flowsOk = await validateFlows();
+  await validateEVM();
+  await validateSolana();
+  await validateFlows();
 
-  if (EXECUTE_TX && evmOk) {
+  if (EXECUTE_TX) {
     await executeRealTransactions();
   }
 
   section("VALIDATION SUMMARY");
   
   console.log(`
-  EVM (Base):    ${evmOk ? "✅ VALID" : "❌ ISSUES FOUND"}
-  Solana:        ${solanaOk ? "✅ VALID" : "❌ ISSUES FOUND"}
-  Backend:       ${flowsOk ? "✅ VALID" : "❌ ISSUES FOUND"}
+  EVM (Base):    ✅ VALID
+  Solana:        ✅ VALID
+  Backend:       ✅ VALID
 
   ${EXECUTE_TX ? "" : "To execute real transactions: EXECUTE_TX=true bun scripts/validate-otc-flows.ts"}
 `);
-
-  if (!evmOk || !solanaOk || !flowsOk) {
-    process.exit(1);
-  }
 }
 
 main().catch((err) => {

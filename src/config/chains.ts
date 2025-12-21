@@ -8,7 +8,12 @@ import {
   localhost,
   type Chain as ViemChain,
 } from "viem/chains";
-import { getContracts, getNetwork } from "./contracts";
+import {
+  getContracts,
+  getNetwork,
+  getSolanaConfig,
+  getEvmConfig,
+} from "./contracts";
 import { LOCAL_DEFAULTS, getSolanaRpcProxyUrl } from "./env";
 
 // String-based chain identifier for database/API (lowercase, URL-safe)
@@ -38,18 +43,36 @@ export interface ChainConfig {
 // Use centralized network resolution from contracts.ts
 const env = getNetwork();
 const deployments = getContracts(env);
+// Get validated configs (these throw if required fields are missing)
+const solanaConfig = getSolanaConfig(env);
+const evmConfig = getEvmConfig(env);
 
 export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
   ethereum: (() => {
     const isMainnet = env === "mainnet";
     const isLocal = env === "local";
-    
+
     // Local dev uses localhost/Anvil, testnet uses Sepolia, mainnet uses Ethereum mainnet
     const chain = isLocal ? localhost : isMainnet ? mainnet : sepolia;
-    
-    // Get addresses from deployment config
-    const networkConfig = deployments.evm?.networks?.ethereum;
-    
+
+    // Get addresses from deployment config (validated)
+    // FAIL-FAST: If networks exists, ethereum should exist (or we should know why it doesn't)
+    const networkConfig = evmConfig.networks?.ethereum ?? null;
+
+    // FAIL-FAST: Validate required contracts
+    if (!evmConfig.contracts) {
+      throw new Error("EVM config missing contracts");
+    }
+    if (!evmConfig.contracts.otc) {
+      throw new Error("EVM config missing contracts.otc");
+    }
+    if (!evmConfig.contracts.usdc && !isMainnet) {
+      throw new Error("EVM config missing contracts.usdc");
+    }
+    if (!evmConfig.contracts.registrationHelper) {
+      throw new Error("EVM config missing contracts.registrationHelper");
+    }
+
     // RPC URL: local uses Anvil, mainnet/testnet use proxy to keep API key server-side
     const rpcUrl = isLocal ? LOCAL_DEFAULTS.evmRpc : "/api/rpc/ethereum";
 
@@ -64,13 +87,18 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
           : "https://sepolia.etherscan.io",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
       contracts: {
-        otc: networkConfig?.otc || deployments.evm?.contracts?.otc,
-        usdc: networkConfig?.usdc || (isMainnet 
-          ? "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"  // USDC on Ethereum mainnet
-          : isLocal 
-            ? deployments.evm?.contracts?.usdc
-            : "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"), // USDC on Sepolia
-        registrationHelper: networkConfig?.registrationHelper || deployments.evm?.contracts?.registrationHelper,
+        // networkConfig overrides evmConfig.contracts if present
+        otc: networkConfig?.otc ?? evmConfig.contracts.otc,
+        usdc:
+          networkConfig?.usdc ??
+          (isMainnet
+            ? "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" // USDC on Ethereum mainnet
+            : isLocal
+              ? evmConfig.contracts.usdc
+              : "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"), // USDC on Sepolia
+        registrationHelper:
+          networkConfig?.registrationHelper ??
+          evmConfig.contracts.registrationHelper,
       },
       type: "evm" as ChainFamily,
       viemChain: chain,
@@ -81,10 +109,17 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
     const isMainnet = env === "mainnet";
     const isLocal = env === "local";
     const chain = isLocal ? localhost : isMainnet ? base : baseSepolia;
-    
-    // Get addresses from deployment config
-    const networkConfig = deployments.evm?.networks?.base;
-    
+
+    // Get addresses from deployment config (validated)
+    // networks is optional - if it exists, validate the specific network config
+    const networkConfig = evmConfig.networks?.base ?? null;
+    // If networks exists but base doesn't, that's a config bug (networks should be complete)
+    if (evmConfig.networks && !evmConfig.networks.base) {
+      throw new Error(
+        "EVM config has networks but missing base network config",
+      );
+    }
+
     // Use proxy route to keep Alchemy key server-side
     const rpcUrl = isLocal ? LOCAL_DEFAULTS.evmRpc : "/api/rpc/base";
 
@@ -99,11 +134,16 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
           : "https://sepolia.basescan.org",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
       contracts: {
-        otc: networkConfig?.otc || deployments.evm?.contracts?.otc,
-        usdc: networkConfig?.usdc || (isMainnet
-          ? "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-          : "0x036CbD53842c5426634e7929541eC2318f3dCF7e"),
-        registrationHelper: networkConfig?.registrationHelper || deployments.evm?.contracts?.registrationHelper,
+        // networkConfig overrides evmConfig.contracts if present
+        otc: networkConfig?.otc ?? evmConfig.contracts.otc,
+        usdc:
+          networkConfig?.usdc ??
+          (isMainnet
+            ? "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+            : "0x036CbD53842c5426634e7929541eC2318f3dCF7e"),
+        registrationHelper:
+          networkConfig?.registrationHelper ??
+          evmConfig.contracts.registrationHelper,
       },
       type: "evm" as ChainFamily,
       viemChain: chain,
@@ -113,9 +153,22 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
   bsc: (() => {
     const isMainnet = env === "mainnet";
     const chain = isMainnet ? bsc : bscTestnet;
-    
-    // Get addresses from deployment config
-    const networkConfig = deployments.evm?.networks?.bsc;
+
+    // Get addresses from deployment config (validated)
+    // networks is optional - if it exists, validate the specific network config
+    const networkConfig = evmConfig.networks?.bsc ?? null;
+    // If networks exists but bsc doesn't, that's a config bug (networks should be complete)
+    if (evmConfig.networks && !evmConfig.networks.bsc) {
+      throw new Error("EVM config has networks but missing bsc network config");
+    }
+
+    // FAIL-FAST: BSC requires network config with OTC contract
+    if (!networkConfig) {
+      throw new Error("BSC requires network config with otc contract address");
+    }
+    if (!networkConfig.otc) {
+      throw new Error("BSC network config missing otc contract address");
+    }
 
     return {
       id: chain.id.toString(),
@@ -128,9 +181,22 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
         : "https://testnet.bscscan.com",
       nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
       contracts: {
-        otc: networkConfig?.otc,
-        usdc: networkConfig?.usdc || "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
-        registrationHelper: networkConfig?.registrationHelper,
+        otc: networkConfig.otc,
+        // FAIL-FAST: USDC address must be provided in config
+        usdc:
+          typeof networkConfig.usdc === "string" &&
+          networkConfig.usdc.trim() !== ""
+            ? networkConfig.usdc
+            : (() => {
+                // Only use hardcoded fallback for mainnet (known address)
+                if (isMainnet) {
+                  return "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
+                }
+                throw new Error(
+                  "BSC network config missing usdc contract address",
+                );
+              })(),
+        registrationHelper: networkConfig.registrationHelper,
       },
       type: "evm" as ChainFamily,
       viemChain: chain,
@@ -146,7 +212,7 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
     const rpcUrl = isLocal
       ? LOCAL_DEFAULTS.solanaRpc
       : isMainnet
-        ? getSolanaRpcProxyUrl()  // Proxy to /api/rpc/solana -> Helius
+        ? getSolanaRpcProxyUrl() // Proxy to /api/rpc/solana -> Helius
         : "https://api.devnet.solana.com";
 
     return {
@@ -164,10 +230,8 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
       explorerUrl: "https://explorer.solana.com",
       nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },
       contracts: {
-        otc: deployments.solana?.desk,
-        usdc: deployments.solana?.usdcMint || (isMainnet
-          ? "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
-          : "Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr"), // Devnet USDC
+        otc: solanaConfig.desk,
+        usdc: solanaConfig.usdcMint,
       },
       type: "solana" as ChainFamily,
     };
@@ -176,9 +240,14 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
 
 /**
  * Get chain config by identifier
+ * FAIL-FAST: Throws if chain is not supported (should never happen with proper typing)
  */
 export function getChainConfig(chain: Chain): ChainConfig {
-  return SUPPORTED_CHAINS[chain];
+  const config = SUPPORTED_CHAINS[chain];
+  if (!config) {
+    throw new Error(`Unsupported chain: ${chain}`);
+  }
+  return config;
 }
 
 /**

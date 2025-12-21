@@ -28,13 +28,11 @@ import { tokenProvider as shawProvider } from "./providers/shaw";
 import { tokenProvider as elizaTokenProvider } from "./providers/token";
 import QuoteService from "./services/quoteService";
 import { UserSessionStorageService } from "./services/userSessionStorage";
-import type { QuoteMemory, PaymentCurrency } from "./types";
-
-// Helper type for entity metadata from various sources (web, discord, etc.)
-interface EntitySourceMetadata {
-  username?: string;
-  name?: string;
-}
+import type {
+  QuoteMemory,
+  PaymentCurrency,
+  EntitySourceMetadata,
+} from "./types";
 
 // Helper function to safely get entity metadata for a source
 function getEntitySourceMetadata(
@@ -165,7 +163,7 @@ async function getLatestResponseId(
   return (
     (await runtime.getCache<string>(
       `response_id:${runtime.agentId}:${roomId}`,
-    )) ?? null
+    )) || null
   );
 }
 
@@ -322,7 +320,7 @@ const messageReceivedHandler = async ({
     let retries = 0;
     const maxRetries = 3;
 
-    while (retries < maxRetries && (!responseContent || !responseContent)) {
+    while (retries < maxRetries) {
       const response = await runtime.useModel(ModelType.TEXT_LARGE, {
         prompt,
       });
@@ -337,16 +335,24 @@ const messageReceivedHandler = async ({
       // Attempt to parse the XML response
       const extractedContent = extractResponseText(response);
 
-      if (!extractedContent) {
-        logger.warn(
-          "*** Missing required fields (thought or actions), retrying... ***",
-        );
-        responseContent = "";
-      } else {
+      if (extractedContent) {
         responseContent = extractedContent;
         break;
       }
+
       retries++;
+      if (retries < maxRetries) {
+        logger.warn(
+          `*** Missing required fields (thought or actions), retrying (${retries}/${maxRetries})... ***`,
+        );
+      }
+    }
+
+    // FAIL-FAST: Throw if we couldn't extract valid content after all retries
+    if (!responseContent) {
+      throw new Error(
+        `Failed to extract valid response content after ${maxRetries} attempts`,
+      );
     }
 
     // Check if this is still the latest response ID for this room
@@ -423,12 +429,33 @@ const messageReceivedHandler = async ({
         const paymentCurrency: PaymentCurrency =
           paymentCurrencyRaw === "USDC" ? "USDC" : "ETH";
 
+        // FAIL-FAST: Required token metadata must be present
+        // Extract and validate token metadata before creating quote
+        const tokenChain = getTag("tokenChain") || "base"; // Default to "base" if not specified
+        const tokenId = getTag("tokenId");
+        const tokenSymbol = getTag("tokenSymbol");
+        const tokenName = getTag("tokenName");
+        const tokenAmount = getTag("tokenAmount");
+
+        if (!tokenId) {
+          throw new Error("Quote missing required tokenId field");
+        }
+        if (!tokenSymbol) {
+          throw new Error("Quote missing required tokenSymbol field");
+        }
+        if (!tokenName) {
+          throw new Error("Quote missing required tokenName field");
+        }
+        if (!tokenAmount) {
+          throw new Error("Quote missing required tokenAmount field");
+        }
+
         const quoteData: QuoteMemory = {
           id: (await import("uuid")).v4(),
           quoteId,
           entityId: walletToEntityId(entityId),
           beneficiary: entityId.toLowerCase(),
-          tokenAmount: getTag("tokenAmount") || "0",
+          tokenAmount,
           discountBps: getNumTag("discountBps", DEFAULT_MIN_DISCOUNT_BPS),
           apr: 0,
           lockupMonths: getNumTag("lockupMonths", DEFAULT_MAX_LOCKUP_MONTHS),
@@ -450,13 +477,19 @@ const messageReceivedHandler = async ({
           blockNumber: 0,
           rejectionReason: "",
           approvalNote: "",
+          chain: tokenChain as QuoteMemory["chain"],
+          tokenId: tokenId,
+          tokenSymbol: tokenSymbol,
+          tokenName: tokenName,
+          tokenLogoUrl: getTag("tokenLogoUrl") || "",
+          consignmentId: getTag("consignmentId") || "",
+          agentCommissionBps: 0, // P2P quote from LLM - no commission
         };
 
         await runtime.setCache(`quote:${quoteId}`, quoteData);
 
-        // Add to indexes
         const allQuotes =
-          (await runtime.getCache<string[]>("all_quotes")) ?? [];
+          (await runtime.getCache<string[]>("all_quotes")) || [];
         if (!allQuotes.includes(quoteId)) {
           allQuotes.push(quoteId);
           await runtime.setCache("all_quotes", allQuotes);
@@ -466,7 +499,7 @@ const messageReceivedHandler = async ({
         const entityQuoteIds =
           (await runtime.getCache<string[]>(
             `entity_quotes:${quoteEntityId}`,
-          )) ?? [];
+          )) || [];
         if (!entityQuoteIds.includes(quoteId)) {
           entityQuoteIds.push(quoteId);
           await runtime.setCache(
@@ -514,7 +547,15 @@ const messageReceivedHandler = async ({
           });
 
           // The action handler provides the actual response text
-          const finalResponseText = content.text || responseContent;
+          // FAIL-FAST: Response must have text content
+          const finalResponseText =
+            typeof content.text === "string" ? content.text : responseContent;
+          if (
+            typeof finalResponseText !== "string" ||
+            finalResponseText.trim() === ""
+          ) {
+            throw new Error("Action response missing text content");
+          }
 
           // Save the response to database
           const finalResponseMemory: Memory = {
@@ -599,10 +640,11 @@ const syncSingleUser = async (
   const sourceMetadata = getEntitySourceMetadata(entity, source);
   logger.info(`Syncing user: ${sourceMetadata.username || entityId}`);
 
-  // Ensure we're not using WORLD type and that we have a valid channelId
+  // FAIL-FAST: Validate required fields
   if (!channelId) {
-    logger.warn(`Cannot sync user ${entity?.id} without a valid channelId`);
-    return;
+    throw new Error(
+      `Cannot sync user ${entity?.id || "unknown"} without a valid channelId`,
+    );
   }
 
   const roomId = createUniqueUuid(runtime, channelId);
@@ -645,7 +687,6 @@ const handleServerSync = async ({
     },
   });
 
-  // First sync all rooms/channels
   if (rooms && rooms.length > 0) {
     for (const room of rooms) {
       await runtime.ensureRoomExists({
@@ -660,7 +701,6 @@ const handleServerSync = async ({
     }
   }
 
-  // Then sync all users
   if (entities && entities.length > 0) {
     // Process entities in batches to avoid overwhelming the system
     const batchSize = 50;
@@ -673,9 +713,11 @@ const handleServerSync = async ({
       // Process each user in the batch
       await Promise.all(
         entityBatch.map(async (entity: Entity) => {
-          if (!firstRoomUserIsIn || !entity.id) {
-            logger.warn(`Skipping entity sync - missing room or entity id`);
-            return;
+          if (!firstRoomUserIsIn) {
+            throw new Error("Cannot sync entities without at least one room");
+          }
+          if (!entity.id) {
+            throw new Error("Entity missing id - cannot sync");
           }
           const entitySourceMeta = getEntitySourceMetadata(entity, source);
           await runtime.ensureConnection({
@@ -747,8 +789,9 @@ const controlMessageHandler = async ({
     const websocketService = runtime.getService(websocketServiceName);
     if (websocketService && "sendMessage" in websocketService) {
       // Send the control message through the WebSocket service
-      const wsService =
-        websocketService as unknown as WebSocketServiceWithSendMessage;
+      // Type assertion needed: Service base type doesn't include sendMessage,
+      // but runtime services may implement it
+      const wsService = websocketService as WebSocketServiceWithSendMessage;
       await wsService.sendMessage({
         type: "controlMessage",
         payload: {
@@ -807,17 +850,19 @@ const events = {
 
   [EventType.ENTITY_JOINED]: [
     async (payload: EntityPayload) => {
-      // Check for required fields
-      if (!payload.worldId || !payload.metadata?.type || !payload.roomId) {
-        logger.warn(
-          `Skipping entity sync - missing worldId, roomId, or metadata.type`,
-        );
-        return;
+      // FAIL-FAST: Validate required fields
+      if (!payload.worldId) {
+        throw new Error("ENTITY_JOINED event missing worldId");
+      }
+      if (!payload.roomId) {
+        throw new Error("ENTITY_JOINED event missing roomId");
+      }
+      if (!payload.metadata || !payload.metadata.type) {
+        throw new Error("ENTITY_JOINED event missing metadata.type");
       }
 
-      // TypeScript should know these are defined now, but we'll use type assertions to be explicit
-      const serverId = payload.worldId as string;
-      const channelId = payload.roomId as string;
+      const serverId = payload.worldId;
+      const channelId = payload.roomId;
       const channelType = payload.metadata.type;
 
       await syncSingleUser(

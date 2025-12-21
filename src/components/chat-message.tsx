@@ -12,6 +12,7 @@ import { MemoizedMarkdown } from "@/components/memoized-markdown";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { Citation } from "@/types/chat";
 import { ChatMessage as ChatMessageType } from "@/types/chat-message";
+import type { MarkdownOptions } from "@/types";
 
 // Define constants if needed, or use literals directly
 const USER_NAME = "User";
@@ -37,81 +38,100 @@ export const ChatMessage = memo(function ChatMessage({
 }: ChatMessageProps) {
   const [isSourcesExpanded, setIsSourcesExpanded] = useState(false);
 
-  // Generous parsing - handle various message formats
-  if (!message || typeof message !== "object") return null;
+  // FAIL-FAST: Message must be valid object
+  if (!message || typeof message !== "object") {
+    throw new Error(`Invalid message at index ${i}: not an object`);
+  }
 
-  // Ensure we have required fields with defaults
+  // FAIL-FAST: Required fields must exist
+  if (!message.id) {
+    throw new Error(`Message at index ${i} missing id`);
+  }
+  if (!message.name) {
+    throw new Error(`Message at index ${i} missing name`);
+  }
+  if (message.text == null) {
+    throw new Error(`Message at index ${i} missing text`);
+  }
+  if (!message.createdAt) {
+    throw new Error(`Message at index ${i} missing createdAt`);
+  }
+
+  // All fields validated above - no fallbacks needed
   const safeMessage = {
     ...message,
-    name: message.name || "Unknown",
-    text: message.text || "",
-    id: message.id || `msg-${i}`,
-    createdAt: message.createdAt || Date.now(),
+    name: message.name, // Guaranteed to exist (validated above)
+    text: message.text, // Guaranteed to be string (validated above)
+    id: message.id, // Guaranteed to exist (validated above)
+    createdAt: message.createdAt, // Guaranteed to exist (validated above)
   };
 
-  const markdownOptions = {
+  // Null component to hide XML tags
+  const NullComponent = () => null;
+
+  // Reference component for citations
+  const ReferenceComponent = ({
+    children,
+    index,
+  }: {
+    children?: React.ReactNode;
+    index?: string | number;
+  }) => {
+    const citationIndex =
+      typeof index === "string" ? Number(index) : (index ?? 0);
+    const citation = citations?.find((c, i) => i === citationIndex);
+
+    // If citation not found in uniqueCitations, find first citation with same URL
+    const displayCitation =
+      uniqueCitations?.find((c) => c.url === citation?.url) || citation;
+
+    return (
+      <a
+        href={displayCitation?.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={clsx([
+          "inline-flex items-center justify-center",
+          "align-super text-[0.6em] font-normal",
+          "no-underline rounded-sm",
+          "text-brand-500",
+          "hover:text-brand-700",
+          "py-0.5",
+          "leading-none",
+        ])}
+      >
+        [{children}]
+      </a>
+    );
+  };
+
+  const markdownOptions: MarkdownOptions = {
     forceBlock: true,
     overrides: {
       // Hide embedded XML quote blocks so React doesn't attempt to render unknown tags
-      quote: {
-        component: () => null,
-      },
+      quote: NullComponent,
       // Extra safety: ignore all child tags that can appear inside <quote>
-      quoteId: { component: () => null },
-      tokenAmount: { component: () => null },
-      tokenAmountFormatted: { component: () => null },
-      tokenSymbol: { component: () => null },
-      tokenName: { component: () => null },
-      lockupMonths: { component: () => null },
-      lockupDays: { component: () => null },
-      pricePerToken: { component: () => null },
-      totalValueUsd: { component: () => null },
-      discountBps: { component: () => null },
-      discountPercent: { component: () => null },
-      discountUsd: { component: () => null },
-      finalPriceUsd: { component: () => null },
-      paymentCurrency: { component: () => null },
-      paymentAmount: { component: () => null },
-      paymentSymbol: { component: () => null },
-      ethPrice: { component: () => null },
-      createdAt: { component: () => null },
-      status: { component: () => null },
-      message: { component: () => null },
-      reference: {
-        component: ({
-          children,
-          index,
-        }: {
-          children: React.ReactNode;
-          index: string | number;
-        }) => {
-          const citationIndex = Number(index);
-          const citation = citations?.find((c, i) => i === citationIndex);
-
-          // If citation not found in uniqueCitations, find first citation with same URL
-          const displayCitation =
-            uniqueCitations?.find((c) => c.url === citation?.url) || citation;
-
-          return (
-            <a
-              href={displayCitation?.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={clsx([
-                "inline-flex items-center justify-center",
-                "align-super text-[0.6em] font-normal",
-                "no-underline rounded-sm",
-                "text-brand-500",
-                "hover:text-brand-700",
-                "py-0.5",
-                "leading-none",
-              ])}
-            >
-              [{children}]
-            </a>
-          );
-        },
-      },
+      quoteId: NullComponent,
+      tokenAmount: NullComponent,
+      tokenAmountFormatted: NullComponent,
+      tokenSymbol: NullComponent,
+      tokenName: NullComponent,
+      lockupMonths: NullComponent,
+      lockupDays: NullComponent,
+      pricePerToken: NullComponent,
+      totalValueUsd: NullComponent,
+      discountBps: NullComponent,
+      discountPercent: NullComponent,
+      discountUsd: NullComponent,
+      finalPriceUsd: NullComponent,
+      paymentCurrency: NullComponent,
+      paymentAmount: NullComponent,
+      paymentSymbol: NullComponent,
+      ethPrice: NullComponent,
+      createdAt: NullComponent,
+      status: NullComponent,
+      message: NullComponent,
+      reference: ReferenceComponent,
     },
   };
 
@@ -129,9 +149,9 @@ export const ChatMessage = memo(function ChatMessage({
     [] as (Citation & { index: number })[],
   );
 
+  // name is guaranteed to exist (validated above) - no optional chaining needed
   const isUser =
-    safeMessage.name === USER_NAME ||
-    safeMessage.name?.toLowerCase() === "user";
+    safeMessage.name === USER_NAME || safeMessage.name.toLowerCase() === "user";
 
   // Parse message text - handle both raw text and structured content
   let messageText = "";
@@ -202,7 +222,7 @@ export const ChatMessage = memo(function ChatMessage({
             )}
           >
             <MemoizedMarkdown
-              id={safeMessage.id || `msg-${i}-${safeMessage.createdAt}`}
+              id={safeMessage.id}
               content={cleanMessageText}
               options={markdownOptions}
             />
@@ -254,10 +274,13 @@ export const ChatMessage = memo(function ChatMessage({
                             wrapper: "span",
                             forceInline: true,
                             overrides: {
-                              p: {
-                                component: "span",
-                                props: { className: "truncate" },
-                              },
+                              p: ({
+                                children,
+                              }: {
+                                children?: React.ReactNode;
+                              }) => (
+                                <span className="truncate">{children}</span>
+                              ),
                             },
                           }}
                         />

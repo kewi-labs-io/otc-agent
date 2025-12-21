@@ -2,7 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { agentRuntime } from "@/lib/agent-runtime";
 import { v4 as uuidv4 } from "uuid";
 import { walletToEntityId } from "@/lib/entityId";
-import { stringToUuid, type Memory, type UUID } from "@elizaos/core";
+import {
+  stringToUuid,
+  type Memory,
+  type UUID,
+  ChannelType,
+} from "@elizaos/core";
+import {
+  validateQueryParams,
+  parseOrThrow,
+  validationErrorResponse,
+} from "@/lib/validation/helpers";
+import {
+  CreateRoomRequestSchema,
+  RoomsResponseSchema,
+} from "@/types/validation/api-schemas";
+import { z } from "zod";
 
 // GET /api/rooms - Get user's rooms
 export async function GET(request: NextRequest) {
@@ -18,7 +33,7 @@ export async function GET(request: NextRequest) {
 
   const runtime = await agentRuntime.getRuntime();
   const roomIds = await runtime.getRoomsForParticipants([
-    stringToUuid(entityId) as any,
+    stringToUuid(entityId),
   ]);
 
   // Get room details
@@ -32,41 +47,40 @@ export async function GET(request: NextRequest) {
     }),
   );
 
-  return NextResponse.json({
-    success: true,
+  const response = {
+    success: true as const,
     rooms,
-  });
+  };
+  const validatedResponse = RoomsResponseSchema.parse(response);
+  return NextResponse.json(validatedResponse);
 }
 
 // POST /api/rooms - Create new room
 export async function POST(request: NextRequest) {
   console.log("[Rooms API] POST request received");
   const body = await request.json();
-  const { entityId } = body;
+  const data = parseOrThrow(CreateRoomRequestSchema, body);
+
+  const { entityId } = data;
   console.log("[Rooms API] entityId:", entityId);
 
-  if (!entityId) {
-    return NextResponse.json(
-      { error: "entityId is required" },
-      { status: 400 },
-    );
-  }
-
   const runtime = await agentRuntime.getRuntime();
-  const roomId = uuidv4();
+  const roomIdStr = uuidv4();
+  const roomId = stringToUuid(roomIdStr);
+  const worldId = stringToUuid("otc-desk-world");
 
   // Ensure room exists
   await runtime.ensureRoomExists({
-    id: roomId as any,
+    id: roomId,
     source: "web",
-    type: "DM" as any,
-    channelId: roomId,
+    type: ChannelType.DM,
+    channelId: roomIdStr,
     serverId: "otc-desk-server",
-    worldId: stringToUuid("otc-desk-world") as any,
+    worldId: worldId,
     agentId: runtime.agentId,
   });
 
-  console.log("[Rooms API] Created room:", roomId, "for entity:", entityId);
+  console.log("[Rooms API] Created room:", roomIdStr, "for entity:", entityId);
 
   // Create initial welcome message with default quote
   console.log(
@@ -74,18 +88,21 @@ export async function POST(request: NextRequest) {
     entityId,
   );
 
+  // FAIL-FAST: entityId is validated by Zod schema, but TypeScript needs assertion
+  const validatedEntityId = entityId as string;
+
   // Ensure entity exists in database to prevent foreign key errors
-  const userEntityId = walletToEntityId(entityId);
+  const userEntityId = stringToUuid(walletToEntityId(validatedEntityId));
   await runtime.ensureConnection({
-    entityId: userEntityId as any,
-    roomId: roomId as any,
-    userName: entityId,
-    name: entityId,
+    entityId: userEntityId,
+    roomId: roomId,
+    userName: validatedEntityId,
+    name: validatedEntityId,
     source: "web",
-    channelId: roomId,
+    channelId: roomIdStr,
     serverId: "otc-desk-server",
-    type: "DM" as any,
-    worldId: stringToUuid("otc-desk-world") as any,
+    type: ChannelType.DM,
+    worldId: worldId,
   });
 
   // Save initial quote to cache with consistent ID generation
@@ -109,25 +126,24 @@ export async function POST(request: NextRequest) {
     id: uuidv4(),
     quoteId: initialQuoteId,
     entityId: userEntityId,
-    beneficiary: entityId.toLowerCase(),
+    beneficiary: validatedEntityId.toLowerCase(),
     tokenAmount: "0",
     discountBps: DEFAULT_MIN_DISCOUNT_BPS,
     apr: 0,
     lockupMonths: DEFAULT_MAX_LOCKUP_MONTHS,
     lockupDays: DEFAULT_MAX_LOCKUP_DAYS,
-    paymentCurrency: "USDC" as any,
+    paymentCurrency: "USDC",
     priceUsdPerToken: 0.00127,
     totalUsd: 0,
     discountUsd: 0,
     discountedUsd: 0,
     paymentAmount: "0",
     signature: "",
-    status: "active" as any,
+    status: "active",
     createdAt: Date.now(),
     executedAt: 0,
     rejectedAt: 0,
     approvedAt: 0,
-    offerId: "",
     transactionHash: "",
     blockNumber: 0,
     rejectionReason: "",
@@ -136,18 +152,28 @@ export async function POST(request: NextRequest) {
 
   await runtime.setCache(`quote:${initialQuoteId}`, initialQuoteData);
 
-  // Add to indexes
-  const allQuotes = (await runtime.getCache<string[]>("all_quotes")) ?? [];
-  if (!allQuotes.includes(initialQuoteId)) {
-    allQuotes.push(initialQuoteId);
-    await runtime.setCache("all_quotes", allQuotes);
+  // Add to indexes - initialize arrays if they don't exist
+  const allQuotes = await runtime.getCache<string[]>("all_quotes");
+  // allQuotes is optional - default to empty array if not present
+  const allQuotesArray = Array.isArray(allQuotes) ? allQuotes : [];
+  if (!allQuotesArray.includes(initialQuoteId)) {
+    allQuotesArray.push(initialQuoteId);
+    await runtime.setCache("all_quotes", allQuotesArray);
   }
 
-  const entityQuoteIds =
-    (await runtime.getCache<string[]>(`entity_quotes:${userEntityId}`)) ?? [];
-  if (!entityQuoteIds.includes(initialQuoteId)) {
-    entityQuoteIds.push(initialQuoteId);
-    await runtime.setCache(`entity_quotes:${userEntityId}`, entityQuoteIds);
+  const entityQuoteIds = await runtime.getCache<string[]>(
+    `entity_quotes:${userEntityId}`,
+  );
+  // entityQuoteIds is optional - default to empty array if not present
+  const entityQuoteIdsArray = Array.isArray(entityQuoteIds)
+    ? entityQuoteIds
+    : [];
+  if (!entityQuoteIdsArray.includes(initialQuoteId)) {
+    entityQuoteIdsArray.push(initialQuoteId);
+    await runtime.setCache(
+      `entity_quotes:${userEntityId}`,
+      entityQuoteIdsArray,
+    );
   }
 
   console.log(
@@ -183,9 +209,11 @@ For example, try: "I want to buy ELIZA tokens" or "What tokens are available?"`;
   await runtime.createMemory(agentMessage, "messages");
   console.log("[Rooms API] ✅ Initial welcome message created");
 
-  return NextResponse.json({
+  const postResponse = {
     success: true,
     roomId,
     createdAt: Date.now(),
-  });
+  };
+  const validatedPost = RoomsResponseSchema.parse(postResponse);
+  return NextResponse.json(validatedPost);
 }

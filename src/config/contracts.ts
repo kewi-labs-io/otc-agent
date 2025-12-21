@@ -63,12 +63,20 @@ export interface SolanaDeployment {
   desk: string;
   deskOwner?: string;
   usdcMint: string;
-  registeredTokens?: Record<string, {
-    mint: string;
-    registry: string;
-    treasury: string;
-    priceUsd?: number;
-  }>;
+  elizaosMint?: string;
+  features?: {
+    p2pAutoApproval?: boolean;
+    version?: string;
+  };
+  registeredTokens?: Record<
+    string,
+    {
+      mint: string;
+      registry: string;
+      treasury: string;
+      priceUsd?: number;
+    }
+  >;
 }
 
 // =============================================================================
@@ -110,15 +118,35 @@ export function getContracts(network?: NetworkType) {
 /**
  * Get EVM contract addresses from deployment config
  * All values come from deployment JSON - no env var overrides
+ * FAIL-FAST: Validates required fields exist
  */
 export function getEvmConfig(network?: NetworkType): EvmDeployment {
   const net = network || getNetwork();
   const config = CONTRACT_DEPLOYMENTS[net].evm;
-  
+
   // Handle legacy contract names (deal -> otc, usdcToken -> usdc)
-  const otcAddress = config.contracts.otc ?? config.contracts.deal;
-  const usdcAddress = config.contracts.usdc ?? config.contracts.usdcToken;
-  
+  // FAIL-FAST: At least one of the field names must exist
+  const otcAddress =
+    config.contracts.otc !== undefined
+      ? config.contracts.otc
+      : config.contracts.deal;
+  const usdcAddress =
+    config.contracts.usdc !== undefined
+      ? config.contracts.usdc
+      : config.contracts.usdcToken;
+
+  // FAIL-FAST: Required contract addresses must exist
+  if (!otcAddress) {
+    throw new Error(
+      `EVM OTC contract address not configured for network: ${net}. Expected contracts.otc or contracts.deal`,
+    );
+  }
+  if (!usdcAddress) {
+    throw new Error(
+      `EVM USDC contract address not configured for network: ${net}. Expected contracts.usdc or contracts.usdcToken`,
+    );
+  }
+
   return {
     ...config,
     contracts: {
@@ -132,10 +160,24 @@ export function getEvmConfig(network?: NetworkType): EvmDeployment {
 /**
  * Get Solana config from deployment config
  * All values come from deployment JSON - no env var overrides
+ * FAIL-FAST: Validates required fields exist
  */
 export function getSolanaConfig(network?: NetworkType): SolanaDeployment {
   const net = network || getNetwork();
-  return CONTRACT_DEPLOYMENTS[net].solana;
+  const config = CONTRACT_DEPLOYMENTS[net].solana;
+
+  // Validate required fields
+  if (!config.desk) {
+    throw new Error(`Solana desk not configured for network: ${net}`);
+  }
+  if (!config.programId) {
+    throw new Error(`Solana programId not configured for network: ${net}`);
+  }
+  if (!config.usdcMint) {
+    throw new Error(`Solana usdcMint not configured for network: ${net}`);
+  }
+
+  return config;
 }
 
 /**
@@ -145,7 +187,9 @@ export function getOtcAddress(network?: NetworkType): string {
   const config = getEvmConfig(network);
   const address = config.contracts.otc;
   if (!address) {
-    throw new Error(`OTC contract address not configured for network: ${network || getNetwork()}`);
+    throw new Error(
+      `OTC contract address not configured for network: ${network || getNetwork()}`,
+    );
   }
   return address;
 }
@@ -169,16 +213,21 @@ export function getSolanaProgramId(network?: NetworkType): string {
 /**
  * Get OTC address for a specific EVM chain
  */
-export function getOtcAddressForChain(chainId: number, network?: NetworkType): string | undefined {
+export function getOtcAddressForChain(
+  chainId: number,
+  network?: NetworkType,
+): string | undefined {
   const config = getEvmConfig(network);
-  
+
   // Check multi-chain networks first
   if (config.networks) {
-    if (chainId === 8453 && config.networks.base) return config.networks.base.otc;
+    if (chainId === 8453 && config.networks.base)
+      return config.networks.base.otc;
     if (chainId === 56 && config.networks.bsc) return config.networks.bsc.otc;
-    if (chainId === 1 && config.networks.ethereum) return config.networks.ethereum.otc;
+    if (chainId === 1 && config.networks.ethereum)
+      return config.networks.ethereum.otc;
   }
-  
+
   // Fallback to primary contract
   return config.contracts.otc;
 }
@@ -186,43 +235,55 @@ export function getOtcAddressForChain(chainId: number, network?: NetworkType): s
 /**
  * Get registration helper address for a chain
  */
-export function getRegistrationHelperForChain(chainId: number, network?: NetworkType): string | undefined {
+export function getRegistrationHelperForChain(
+  chainId: number,
+  network?: NetworkType,
+): string | undefined {
   const config = getEvmConfig(network);
-  
+
   if (config.networks) {
-    if (chainId === 8453 && config.networks.base) return config.networks.base.registrationHelper;
-    if (chainId === 56 && config.networks.bsc) return config.networks.bsc.registrationHelper;
-    if (chainId === 1 && config.networks.ethereum) return config.networks.ethereum.registrationHelper;
+    if (chainId === 8453 && config.networks.base)
+      return config.networks.base.registrationHelper;
+    if (chainId === 56 && config.networks.bsc)
+      return config.networks.bsc.registrationHelper;
+    if (chainId === 1 && config.networks.ethereum)
+      return config.networks.ethereum.registrationHelper;
   }
-  
+
   return config.contracts.registrationHelper;
 }
 
 /**
  * Get USDC address for a chain
  */
-export function getUsdcAddressForChain(chainId: number, network?: NetworkType): string | undefined {
+export function getUsdcAddressForChain(
+  chainId: number,
+  network?: NetworkType,
+): string | undefined {
   const config = getEvmConfig(network);
-  
+
   if (config.networks) {
-    if (chainId === 8453 && config.networks.base) return config.networks.base.usdc;
+    if (chainId === 8453 && config.networks.base)
+      return config.networks.base.usdc;
     if (chainId === 56 && config.networks.bsc) return config.networks.bsc.usdc;
-    if (chainId === 1 && config.networks.ethereum) return config.networks.ethereum.usdc;
+    if (chainId === 1 && config.networks.ethereum)
+      return config.networks.ethereum.usdc;
   }
-  
+
   return config.contracts.usdc;
 }
 
 /**
  * All mainnet OTC contract addresses (hardcoded for reference)
  * In practice, use getOtcAddressForChain() which reads from deployment JSON
+ * NOTE: Solana program was closed on mainnet and needs redeployment
  */
 export const MAINNET_OTC_ADDRESSES = {
-  base: "0x23eD9EC8deb2F88Ec44a2dbbe1bbE7Be7EFc02b9",
-  bsc: "0x0aD688d08D409852668b6BaF6c07978968070221",
-  ethereum: "0x5f36221967E34e3A2d6548aaedF4D1E50FE34D46",
+  base: "0x5a1C9911E104F18267505918894fd7d343739657",
+  bsc: "0x5a1C9911E104F18267505918894fd7d343739657",
+  ethereum: "0x5a1C9911E104F18267505918894fd7d343739657",
   solana: {
-    programId: "q9MhHpeydqTdtPaNpzDoWvP1qY5s3sFHTF1uYcXjdsc",
-    desk: "6CBcxFR6dSMJJ7Y4dQZTshJT2KxuwnSXioXEABxNVZPW",
+    programId: "3uTdWzoAcBFKTVYRd2z2jDKAcuyW64rQLxa9wMreDJKo",
+    desk: "EDzQZXDT3iZcXxkp56vb7LLJ1tgaTn1gbf1CgWQuKXtY",
   },
 } as const;

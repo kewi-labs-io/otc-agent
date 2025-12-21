@@ -23,24 +23,20 @@ async function checkDeployment(name: string, chain: any, rpc: string, addresses:
     transport: http(rpc),
   });
   
-  try {
-    const code = await client.getCode({ address: addresses.otc as `0x${string}` });
-    if (code && code !== "0x") {
-      console.log("  ✅ OTC deployed at:", addresses.otc);
-      console.log("  Bytecode size:", code.length / 2, "bytes");
-      
-      const helperCode = await client.getCode({ address: addresses.registrationHelper as `0x${string}` });
-      if (helperCode && helperCode !== "0x") {
-        console.log("  ✅ RegistrationHelper:", addresses.registrationHelper);
-      }
-      return true;
-    }
-    console.log("  ❌ No contract at address");
-    return false;
-  } catch (e) {
-    console.log("  ⚠️ Error checking deployment");
-    return false;
+  const code = await client.getCode({ address: addresses.otc as `0x${string}` });
+  if (!code || code === "0x") {
+    throw new Error(`No contract at OTC address: ${addresses.otc}`);
   }
+  
+  console.log("  ✅ OTC deployed at:", addresses.otc);
+  console.log("  Bytecode size:", code.length / 2, "bytes");
+  
+  const helperCode = await client.getCode({ address: addresses.registrationHelper as `0x${string}` });
+  if (!helperCode || helperCode === "0x") {
+    throw new Error(`No contract at RegistrationHelper address: ${addresses.registrationHelper}`);
+  }
+  
+  console.log("  ✅ RegistrationHelper:", addresses.registrationHelper);
 }
 
 async function main() {
@@ -48,11 +44,9 @@ async function main() {
   console.log("  ALL OTC DEPLOYMENTS - FINAL STATUS");
   console.log("═══════════════════════════════════════════════════════════════");
 
-  const results: Record<string, boolean> = {};
-  
-  results.base = await checkDeployment("Base Mainnet", base, "https://mainnet.base.org", DEPLOYMENTS.base);
-  results.ethereum = await checkDeployment("Ethereum Mainnet", mainnet, "https://eth-mainnet.g.alchemy.com/v2/b_Ou4aeoKR4tGaTPVp36T", DEPLOYMENTS.ethereum);
-  results.bsc = await checkDeployment("BSC Mainnet", bsc, "https://bsc-dataseed1.binance.org", DEPLOYMENTS.bsc);
+  await checkDeployment("Base Mainnet", base, "https://mainnet.base.org", DEPLOYMENTS.base);
+  await checkDeployment("Ethereum Mainnet", mainnet, "https://eth-mainnet.g.alchemy.com/v2/b_Ou4aeoKR4tGaTPVp36T", DEPLOYMENTS.ethereum);
+  await checkDeployment("BSC Mainnet", bsc, "https://bsc-dataseed1.binance.org", DEPLOYMENTS.bsc);
 
   // Check Solana
   console.log("\n📍 SOLANA MAINNET");
@@ -62,9 +56,9 @@ async function main() {
   console.log("\n═══════════════════════════════════════════════════════════════");
   console.log("  🎉 DEPLOYMENT STATUS SUMMARY");
   console.log("═══════════════════════════════════════════════════════════════");
-  console.log(`\n  Base:     ${results.base ? "✅ DEPLOYED" : "❌ FAILED"}`);
-  console.log(`  Ethereum: ${results.ethereum ? "✅ DEPLOYED" : "❌ FAILED"}`);
-  console.log(`  BSC:      ${results.bsc ? "✅ DEPLOYED" : "❌ FAILED"}`);
+  console.log(`\n  Base:     ✅ DEPLOYED`);
+  console.log(`  Ethereum: ✅ DEPLOYED`);
+  console.log(`  BSC:      ✅ DEPLOYED`);
   console.log(`  Solana:   ✅ DEPLOYED`);
   console.log("\n═══════════════════════════════════════════════════════════════\n");
 }

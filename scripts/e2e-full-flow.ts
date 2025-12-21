@@ -69,38 +69,52 @@ const CHAIN_CONFIGS: Record<string, { chain: typeof mainnet; rpc: string; deploy
   },
   base: {
     chain: base,
-    rpc: process.env.BASE_RPC_URL || "https://mainnet.base.org",
+    rpc: (() => {
+      if (!process.env.BASE_RPC_URL) {
+        throw new Error("BASE_RPC_URL environment variable is required for Base chain");
+      }
+      return process.env.BASE_RPC_URL;
+    })(),
     deploymentFile: "src/config/deployments/base-mainnet.json",
   },
   bsc: {
     chain: bsc,
-    rpc: process.env.BSC_RPC_URL || "https://bsc-dataseed.binance.org",
+    rpc: (() => {
+      if (!process.env.BSC_RPC_URL) {
+        throw new Error("BSC_RPC_URL environment variable is required for BSC chain");
+      }
+      return process.env.BSC_RPC_URL;
+    })(),
     deploymentFile: "src/config/deployments/bsc-mainnet.json",
   },
   mainnet: {
     chain: mainnet,
-    rpc: process.env.MAINNET_RPC_URL || "https://eth.llamarpc.com",
+    rpc: (() => {
+      if (!process.env.MAINNET_RPC_URL) {
+        throw new Error("MAINNET_RPC_URL environment variable is required for Ethereum mainnet");
+      }
+      return process.env.MAINNET_RPC_URL;
+    })(),
     deploymentFile: "src/config/deployments/mainnet-evm.json",
   },
 };
 
 const chainConfig = CHAIN_CONFIGS[CHAIN];
 if (!chainConfig) {
-  console.error(`Unknown chain: ${CHAIN}. Use: anvil, base, bsc, mainnet`);
-  process.exit(1);
+  throw new Error(`Unknown chain: ${CHAIN}. Use: anvil, base, bsc, mainnet`);
 }
 
-// Load deployment config if exists
-let deploymentConfig: Record<string, Address> = {};
-try {
-  const deploymentPath = path.join(process.cwd(), chainConfig.deploymentFile);
-  if (fs.existsSync(deploymentPath)) {
-    const raw = JSON.parse(fs.readFileSync(deploymentPath, "utf8"));
-    deploymentConfig = raw.contracts || raw;
-  }
-} catch (e) {
-  console.log(`No deployment config found for ${CHAIN}, will attempt to read from contract`);
+// Load deployment config
+const deploymentPath = path.join(process.cwd(), chainConfig.deploymentFile);
+if (!fs.existsSync(deploymentPath)) {
+  throw new Error(`Deployment config not found: ${deploymentPath}`);
 }
+const raw = JSON.parse(fs.readFileSync(deploymentPath, "utf8"));
+// FAIL-FAST: Deployment config must have contracts field
+if (!raw.contracts) {
+  throw new Error(`Deployment config missing 'contracts' field: ${deploymentPath}`);
+}
+const deploymentConfig: Record<string, Address> = raw.contracts;
 
 // =============================================================================
 // ABI DEFINITIONS
@@ -216,16 +230,14 @@ async function runE2ETests() {
   // Get OTC address
   const OTC_ADDRESS = deploymentConfig.otc as Address;
   if (!OTC_ADDRESS) {
-    log("ERROR", "OTC contract address not found in deployment config");
-    return false;
+    throw new Error("OTC contract address not found in deployment config");
   }
   log("CHECK", `OTC Contract: ${OTC_ADDRESS}`);
 
   // Verify contract is deployed
   const code = await publicClient.getCode({ address: OTC_ADDRESS });
   if (!code || code === "0x") {
-    log("ERROR", "OTC contract not deployed at address");
-    return false;
+    throw new Error(`OTC contract not deployed at ${OTC_ADDRESS}`);
   }
   log("SUCCESS", "OTC contract deployed and verified");
 
@@ -261,30 +273,26 @@ async function runE2ETests() {
   if (nextConsignmentId > 1n) {
     log("CHECK", "Analyzing existing consignments...");
     for (let i = 1n; i < nextConsignmentId && i < 5n; i++) {
-      try {
-        const consignment = await publicClient.readContract({
-          address: OTC_ADDRESS,
-          abi: OTC_ABI,
-          functionName: "consignments",
-          args: [i],
-        });
-        
-        const [tokenId, consigner, totalAmount, remainingAmount, isNegotiable, fixedDiscountBps, fixedLockupDays, , , , , , , , isActive] = consignment;
-        
-        log("INFO", `Consignment #${i}:`, {
-          isNegotiable: isNegotiable ? "YES (Agent Required)" : "NO (P2P Auto-Approved)",
-          consigner: consigner.slice(0, 10) + "...",
-          totalAmount: formatEther(totalAmount),
-          remainingAmount: formatEther(remainingAmount),
-          isActive: isActive ? "ACTIVE" : "INACTIVE",
-          ...(isNegotiable ? {} : {
-            fixedDiscountBps: `${Number(fixedDiscountBps) / 100}%`,
-            fixedLockupDays: fixedLockupDays.toString() + " days",
-          }),
-        });
-      } catch (e) {
-        // Skip if consignment doesn't exist
-      }
+      const consignment = await publicClient.readContract({
+        address: OTC_ADDRESS,
+        abi: OTC_ABI,
+        functionName: "consignments",
+        args: [i],
+      });
+      
+      const [tokenId, consigner, totalAmount, remainingAmount, isNegotiable, fixedDiscountBps, fixedLockupDays, , , , , , , , isActive] = consignment;
+      
+      log("INFO", `Consignment #${i}:`, {
+        isNegotiable: isNegotiable ? "YES (Agent Required)" : "NO (P2P Auto-Approved)",
+        consigner: consigner.slice(0, 10) + "...",
+        totalAmount: formatEther(totalAmount),
+        remainingAmount: formatEther(remainingAmount),
+        isActive: isActive ? "ACTIVE" : "INACTIVE",
+        ...(isNegotiable ? {} : {
+          fixedDiscountBps: `${Number(fixedDiscountBps) / 100}%`,
+          fixedLockupDays: fixedLockupDays.toString() + " days",
+        }),
+      });
     }
   }
 
@@ -295,45 +303,41 @@ async function runE2ETests() {
     let negotiableOffers = 0;
     
     for (let i = 1n; i < nextOfferId && i < 10n; i++) {
-      try {
-        const offer = await publicClient.readContract({
-          address: OTC_ADDRESS,
-          abi: OTC_ABI,
-          functionName: "offers",
-          args: [i],
-        });
-        
-        const [consignmentId, , beneficiary, tokenAmount, discountBps, createdAt, unlockTime, , , , , approved, paid, fulfilled, cancelled] = offer;
-        
-        if (beneficiary === "0x0000000000000000000000000000000000000000") continue;
-        
-        // Check if this was from a negotiable consignment
-        const consignment = await publicClient.readContract({
-          address: OTC_ADDRESS,
-          abi: OTC_ABI,
-          functionName: "consignments",
-          args: [consignmentId],
-        });
-        const isNegotiable = consignment[4];
-        
-        if (isNegotiable) {
-          negotiableOffers++;
-        } else {
-          p2pOffers++;
-        }
-        
-        log("INFO", `Offer #${i}:`, {
-          type: isNegotiable ? "NEGOTIABLE" : "P2P",
-          approved: approved ? "YES" : "NO",
-          paid: paid ? "YES" : "NO",
-          fulfilled: fulfilled ? "YES" : "NO",
-          cancelled: cancelled ? "YES" : "NO",
-          tokenAmount: formatEther(tokenAmount),
-          discountBps: `${Number(discountBps) / 100}%`,
-        });
-      } catch (e) {
-        // Skip if offer doesn't exist
+      const offer = await publicClient.readContract({
+        address: OTC_ADDRESS,
+        abi: OTC_ABI,
+        functionName: "offers",
+        args: [i],
+      });
+      
+      const [consignmentId, , beneficiary, tokenAmount, discountBps, createdAt, unlockTime, , , , , approved, paid, fulfilled, cancelled] = offer;
+      
+      if (beneficiary === "0x0000000000000000000000000000000000000000") continue;
+      
+      // Check if this was from a negotiable consignment
+      const consignment = await publicClient.readContract({
+        address: OTC_ADDRESS,
+        abi: OTC_ABI,
+        functionName: "consignments",
+        args: [consignmentId],
+      });
+      const isNegotiable = consignment[4];
+      
+      if (isNegotiable) {
+        negotiableOffers++;
+      } else {
+        p2pOffers++;
       }
+      
+      log("INFO", `Offer #${i}:`, {
+        type: isNegotiable ? "NEGOTIABLE" : "P2P",
+        approved: approved ? "YES" : "NO",
+        paid: paid ? "YES" : "NO",
+        fulfilled: fulfilled ? "YES" : "NO",
+        cancelled: cancelled ? "YES" : "NO",
+        tokenAmount: formatEther(tokenAmount),
+        discountBps: `${Number(discountBps) / 100}%`,
+      });
     }
     
     log("INFO", "Offer Summary:", {
@@ -401,8 +405,6 @@ async function runE2ETests() {
     "Price Protection": "Agent validates current price vs offer price",
     "Flexibility": "Buyers can negotiate discount and lockup terms",
   });
-
-  return true;
 }
 
 // =============================================================================
@@ -410,14 +412,9 @@ async function runE2ETests() {
 // =============================================================================
 
 runE2ETests()
-  .then((success) => {
-    if (success) {
-      console.log("\n✅ E2E validation completed successfully\n");
-      process.exit(0);
-    } else {
-      console.log("\n❌ E2E validation failed\n");
-      process.exit(1);
-    }
+  .then(() => {
+    console.log("\n✅ E2E validation completed successfully\n");
+    process.exit(0);
   })
   .catch((error) => {
     console.error("\n❌ Error:", error);

@@ -9,10 +9,38 @@ forge script scripts/DeployElizaOTC.s.sol:DeployElizaOTC \
   --broadcast \
   --legacy
 
-# Copy deployment to src config
+# Write sanitized deployment to src config (NO private keys)
 mkdir -p ../src/config/deployments
-cp deployments/eliza-otc-deployment.json ../src/config/deployments/local-evm.json
-echo "✅ Copied deployment to src/config/deployments/local-evm.json"
+bun -e '
+import { readFileSync, writeFileSync } from "fs";
+
+const raw = readFileSync("deployments/eliza-otc-deployment.json", "utf8");
+const json = JSON.parse(raw);
+
+const otc = json.contracts?.otc ?? json.contracts?.deal ?? "";
+const usdc = json.contracts?.usdc ?? json.contracts?.usdcToken ?? "";
+
+const out = {
+  network: "local-anvil",
+  chainId: 31337,
+  rpc: "http://127.0.0.1:8545",
+  timestamp: new Date().toISOString(),
+  deployer: json.accounts?.owner,
+  contracts: {
+    otc,
+    usdc,
+    elizaToken: json.contracts?.elizaToken,
+    elizaUsdFeed: json.contracts?.elizaUsdFeed,
+    ethUsdFeed: json.contracts?.ethUsdFeed,
+    registrationHelper: json.contracts?.registrationHelper,
+  },
+  accounts: json.accounts,
+};
+
+writeFileSync("../src/config/deployments/local-evm.json", JSON.stringify(out, null, 2));
+' || exit 1
+
+echo "✅ Wrote sanitized deployment to src/config/deployments/local-evm.json"
 
 # Merge deployment env vars into .env.local
 if [ -f .env.deployment ]; then
@@ -26,6 +54,10 @@ if [ -f .env.deployment ]; then
   
   # Read each line from .env.deployment and update .env.local
   while IFS='=' read -r key value; do
+    # Never merge public config into env - contract addresses live in JSON deployments
+    if [[ "$key" == NEXT_PUBLIC_* ]]; then
+      continue
+    fi
     if [ -n "$key" ] && [ -n "$value" ]; then
       # Remove existing key if present
       sed -i.bak "/^${key}=/d" "$ENV_LOCAL" 2>/dev/null || true

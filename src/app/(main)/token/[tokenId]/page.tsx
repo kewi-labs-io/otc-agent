@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import { useTokenCache, useMarketDataRefresh } from "@/hooks/useTokenCache";
+import { PageLoading } from "@/components/ui/loading-spinner";
 
 const Chat = dynamicImport(() => import("@/components/chat"), { ssr: false });
 
@@ -21,14 +22,10 @@ export default function TokenPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <div className="text-xl text-zinc-600 dark:text-zinc-400">
-            Loading token data...
-          </div>
-        </div>
-      </div>
+      <PageLoading
+        message="Loading token data..."
+        colorClass="border-blue-600"
+      />
     );
   }
 

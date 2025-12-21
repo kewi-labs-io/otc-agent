@@ -1,0 +1,16 @@
+{
+  "network": "bsc-mainnet",
+  "chainId": 56,
+  "rpc": "https://bsc-dataseed.binance.org",
+  "deployer": "0xA92d27A9d94949Ed471Da6aD5f72f82135fCbE3E",
+  "contracts": {
+    "otc": "0x5a1C9911E104F18267505918894fd7d343739657",
+    "usdc": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+    "ethUsdFeed": "0x9ef1B8c0E4F7dc8bF5719Ea496883DC6401d5b2e"
+  },
+  "accounts": {
+    "owner": "0xA92d27A9d94949Ed471Da6aD5f72f82135fCbE3E",
+    "agent": "0xA92d27A9d94949Ed471Da6aD5f72f82135fCbE3E",
+    "approver": "0xA92d27A9d94949Ed471Da6aD5f72f82135fCbE3E"
+  }
+}

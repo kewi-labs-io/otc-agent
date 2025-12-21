@@ -1,46 +1,34 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { DealFromAPI, DealsResponse } from "@/types";
+import { parseOrThrow } from "@/lib/validation/helpers";
+import { AddressSchema } from "@/types/validation/schemas";
+import { DealsResponseSchema } from "@/types/validation/hook-schemas";
 
-interface DealFromAPI {
-  offerId: string;
-  beneficiary: string;
-  tokenAmount: string;
-  discountBps: number;
-  paymentCurrency: string;
-  paymentAmount: string;
-  payer: string;
-  createdAt: string;
-  lockupMonths?: number;
-  lockupDays?: number;
-  quoteId?: string;
-  status?: string;
-  tokenSymbol?: string;
-  tokenName?: string;
-  tokenLogoUrl?: string;
-  tokenId?: string;
-  chain?: string;
-  priceUsdPerToken?: number;
-  ethUsdPrice?: number;
-  totalUsd?: number;
-  discountedUsd?: number;
-}
-
-interface DealsResponse {
-  success: boolean;
-  deals: DealFromAPI[];
-  error?: string;
-}
+// Re-export for consumers
+export type { DealFromAPI, DealsResponse } from "@/types";
 
 async function fetchDeals(walletAddress: string): Promise<DealFromAPI[]> {
+  // Validate wallet address
+  parseOrThrow(AddressSchema, walletAddress);
+
   const response = await fetch(
     `/api/deal-completion?wallet=${encodeURIComponent(walletAddress)}`,
   );
-  const data: DealsResponse = await response.json();
+  const rawData = await response.json();
+
+  // Validate response structure
+  const data = parseOrThrow(DealsResponseSchema, rawData);
 
   if (!data.success) {
-    throw new Error(data.error ?? "Failed to fetch deals");
+    // Error message is optional in error response - provide fallback
+    const errorMessage =
+      typeof data.error === "string" && data.error.trim() !== ""
+        ? data.error
+        : "Failed to fetch deals";
+    throw new Error(errorMessage);
   }
 
-  return data.deals;
+  return data.deals as DealFromAPI[];
 }
 
 /**
@@ -105,6 +93,3 @@ export function usePrefetchDeals() {
     });
   };
 }
-
-export type { DealFromAPI };
-

@@ -1,6 +1,8 @@
 import { MarketDataDB } from "./database";
 import type { Chain } from "@/config/chains";
 import { MarketDataService } from "./marketDataService";
+import { parseOrThrow } from "@/lib/validation/helpers";
+import { ValidateQuotePriceInputSchema } from "@/types/validation/service-schemas";
 
 export interface ValidationResult {
   isValid: boolean;
@@ -26,6 +28,13 @@ export class PriceProtectionService {
     priceAtQuote: number,
     maxDeviationBps: number,
   ): Promise<ValidationResult> {
+    parseOrThrow(ValidateQuotePriceInputSchema, {
+      tokenId,
+      tokenAddress,
+      chain,
+      priceAtQuote,
+      maxDeviationBps,
+    });
     const marketData = await MarketDataDB.getMarketData(tokenId);
 
     let currentPrice: number;

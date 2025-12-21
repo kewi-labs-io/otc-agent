@@ -22,6 +22,14 @@ import {
 } from "@solana/spl-token";
 import { assert, expect } from "chai";
 
+// Helper to assert promise rejects with specific error message
+async function expectRejectedWith(promise: Promise<unknown>, expectedError: string): Promise<void> {
+  await expect(promise).to.be.rejected;
+  const error = await promise.catch((e: unknown) => e);
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  assert.include(errorMessage, expectedError);
+}
+
 describe("OTC Security Audit Tests", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
@@ -288,21 +296,17 @@ describe("OTC Security Audit Tests", () => {
         .rpc();
 
       // ATTACK: Try to approve using attacker's desk (where attacker is approver)
-      try {
-        await program.methods
-          .approveOffer(new anchor.BN(1))
-          .accounts({
-            desk: attackerDesk.publicKey, // Wrong desk
-            offer: offer.publicKey,
-            approver: attacker.publicKey,
-          })
-          .signers([attacker])
-          .rpc();
+      const promise = program.methods
+        .approveOffer(new anchor.BN(1))
+        .accounts({
+          desk: attackerDesk.publicKey, // Wrong desk
+          offer: offer.publicKey,
+          approver: attacker.publicKey,
+        })
+        .signers([attacker])
+        .rpc();
 
-        assert.fail("Should have rejected offer from different desk");
-      } catch (error: any) {
-        assert.include(error.toString(), "BadState");
-      }
+      await expectRejectedWith(promise, "BadState");
     });
 
     it("should REJECT fulfilling offer from different desk", async () => {
@@ -361,24 +365,20 @@ describe("OTC Security Audit Tests", () => {
       );
 
       // ATTACK: Try to fulfill using wrong desk
-      try {
-        await program.methods
-          .fulfillOfferUsdc(new anchor.BN(1))
-          .accounts({
-            desk: attackerDesk.publicKey, // Wrong desk
-            offer: offer.publicKey,
-            deskTokenTreasury: attackerDeskTokenTreasury,
-            deskUsdcTreasury: attackerDeskUsdcTreasury,
-            payerUsdcAta: attackerUsdcAta.address,
-            payer: attacker.publicKey,
-          })
-          .signers([attacker])
-          .rpc();
+      const promise = program.methods
+        .fulfillOfferUsdc(new anchor.BN(1))
+        .accounts({
+          desk: attackerDesk.publicKey, // Wrong desk
+          offer: offer.publicKey,
+          deskTokenTreasury: attackerDeskTokenTreasury,
+          deskUsdcTreasury: attackerDeskUsdcTreasury,
+          payerUsdcAta: attackerUsdcAta.address,
+          payer: attacker.publicKey,
+        })
+        .signers([attacker])
+        .rpc();
 
-        assert.fail("Should have rejected fulfill with wrong desk");
-      } catch (error: any) {
-        assert.include(error.toString(), "BadState");
-      }
+      await expectRejectedWith(promise, "BadState");
     });
 
     it("should ALLOW approving offer from correct desk", async () => {
@@ -421,23 +421,19 @@ describe("OTC Security Audit Tests", () => {
       await airdrop(buyer.publicKey, 2 * LAMPORTS_PER_SOL);
 
       // ATTACK: Try to create offer on victim desk but using attacker's cheap price registry
-      try {
-        await program.methods
-          .createOffer(new anchor.BN(100 * 1e9), 0, 1, new anchor.BN(0))
-          .accounts({
-            desk: victimDesk.publicKey,
-            tokenRegistry: attackerRegistry, // WRONG REGISTRY from different desk
-            deskTokenTreasury: victimDeskTokenTreasury,
-            beneficiary: buyer.publicKey,
-            offer: offer.publicKey,
-          })
-          .signers([buyer, offer])
-          .rpc();
+      const promise = program.methods
+        .createOffer(new anchor.BN(100 * 1e9), 0, 1, new anchor.BN(0))
+        .accounts({
+          desk: victimDesk.publicKey,
+          tokenRegistry: attackerRegistry, // WRONG REGISTRY from different desk
+          deskTokenTreasury: victimDeskTokenTreasury,
+          beneficiary: buyer.publicKey,
+          offer: offer.publicKey,
+        })
+        .signers([buyer, offer])
+        .rpc();
 
-        assert.fail("Should have rejected TokenRegistry from different desk");
-      } catch (error: any) {
-        assert.include(error.toString(), "BadState");
-      }
+      await expectRejectedWith(promise, "BadState");
     });
 
     it("should REJECT depositing with TokenRegistry from different desk", async () => {
@@ -448,23 +444,19 @@ describe("OTC Security Audit Tests", () => {
         victim.publicKey
       );
 
-      try {
-        await program.methods
-          .depositTokens(new anchor.BN(1000 * 1e9))
-          .accounts({
-            desk: victimDesk.publicKey,
-            tokenRegistry: attackerRegistry, // Wrong registry
-            owner: victim.publicKey,
-            ownerTokenAta: depositorTokenAta.address,
-            deskTokenTreasury: victimDeskTokenTreasury,
-          })
-          .signers([victim])
-          .rpc();
+      const promise = program.methods
+        .depositTokens(new anchor.BN(1000 * 1e9))
+        .accounts({
+          desk: victimDesk.publicKey,
+          tokenRegistry: attackerRegistry, // Wrong registry
+          owner: victim.publicKey,
+          ownerTokenAta: depositorTokenAta.address,
+          deskTokenTreasury: victimDeskTokenTreasury,
+        })
+        .signers([victim])
+        .rpc();
 
-        assert.fail("Should have rejected deposit with wrong registry");
-      } catch (error: any) {
-        assert.include(error.toString(), "BadState");
-      }
+      await expectRejectedWith(promise, "BadState");
     });
 
     it("should ALLOW using TokenRegistry from correct desk", async () => {
@@ -491,23 +483,19 @@ describe("OTC Security Audit Tests", () => {
 
   describe("HIGH: Minimum Quote Expiry (FIX-3)", () => {
     it("should REJECT quote expiry less than 60 seconds", async () => {
-      try {
-        await program.methods
-          .setLimits(
-            new anchor.BN(5 * 1e8),
-            new anchor.BN(10000 * 1e9),
-            new anchor.BN(30), // Only 30 seconds - should fail
-            new anchor.BN(0),
-            new anchor.BN(365 * 86400)
-          )
-          .accounts({ desk: victimDesk.publicKey })
-          .signers([victim])
-          .rpc();
+      const promise = program.methods
+        .setLimits(
+          new anchor.BN(5 * 1e8),
+          new anchor.BN(10000 * 1e9),
+          new anchor.BN(30), // Only 30 seconds - should fail
+          new anchor.BN(0),
+          new anchor.BN(365 * 86400)
+        )
+        .accounts({ desk: victimDesk.publicKey })
+        .signers([victim])
+        .rpc();
 
-        assert.fail("Should have rejected quote expiry < 60 seconds");
-      } catch (error: any) {
-        assert.include(error.toString(), "AmountRange");
-      }
+      await expectRejectedWith(promise, "AmountRange");
     });
 
     it("should ALLOW quote expiry >= 60 seconds", async () => {
@@ -617,24 +605,20 @@ describe("OTC Security Audit Tests", () => {
       );
 
       // ATTACK: Try to claim tokens to attacker's ATA
-      try {
-        await program.methods
-          .claim(new anchor.BN(1))
-          .accounts({
-            desk: victimDesk.publicKey,
-            deskSigner: victimDesk.publicKey,
-            offer: offer.publicKey,
-            deskTokenTreasury: victimDeskTokenTreasury,
-            beneficiaryTokenAta: attackerTokenAta.address, // WRONG ATA
-            beneficiary: buyer.publicKey,
-          })
-          .signers([victimDesk])
-          .rpc();
+      const promise = program.methods
+        .claim(new anchor.BN(1))
+        .accounts({
+          desk: victimDesk.publicKey,
+          deskSigner: victimDesk.publicKey,
+          offer: offer.publicKey,
+          deskTokenTreasury: victimDeskTokenTreasury,
+          beneficiaryTokenAta: attackerTokenAta.address, // WRONG ATA
+          beneficiary: buyer.publicKey,
+        })
+        .signers([victimDesk])
+        .rpc();
 
-        assert.fail("Should have rejected claim to wrong beneficiary ATA");
-      } catch (error: any) {
-        assert.include(error.toString(), "BadState");
-      }
+      await expectRejectedWith(promise, "BadState");
 
       // Claim correctly - should work
       await program.methods
@@ -657,63 +641,57 @@ describe("OTC Security Audit Tests", () => {
 
   describe("HIGH: SetManualTokenPrice Registry Validation (FIX-5)", () => {
     it("should REJECT setting price on registry from different desk", async () => {
-      try {
-        // Attacker tries to set price on victim's registry
-        await program.methods
-          .setManualTokenPrice(new anchor.BN(1 * 1e8))
-          .accounts({
-            tokenRegistry: victimRegistry, // Victim's registry
-            desk: attackerDesk.publicKey, // Attacker's desk
-            owner: attacker.publicKey,
-          })
-          .signers([attacker])
-          .rpc();
+      // Attacker tries to set price on victim's registry
+      const promise = program.methods
+        .setManualTokenPrice(new anchor.BN(1 * 1e8))
+        .accounts({
+          tokenRegistry: victimRegistry, // Victim's registry
+          desk: attackerDesk.publicKey, // Attacker's desk
+          owner: attacker.publicKey,
+        })
+        .signers([attacker])
+        .rpc();
 
-        assert.fail("Should have rejected setting price on wrong desk's registry");
-      } catch (error: any) {
-        assert.include(error.toString(), "BadState");
-      }
+      await expectRejectedWith(promise, "BadState");
     });
   });
 
   describe("Access Control Tests", () => {
     it("should REJECT non-owner setting prices", async () => {
-      try {
-        await program.methods
-          .setPrices(
-            new anchor.BN(1 * 1e8),
-            new anchor.BN(100 * 1e8),
-            new anchor.BN(0),
-            new anchor.BN(3600)
-          )
-          .accounts({ desk: victimDesk.publicKey })
-          .signers([attacker])
-          .rpc();
+      const promise = program.methods
+        .setPrices(
+          new anchor.BN(1 * 1e8),
+          new anchor.BN(100 * 1e8),
+          new anchor.BN(0),
+          new anchor.BN(3600)
+        )
+        .accounts({ desk: victimDesk.publicKey })
+        .signers([attacker])
+        .rpc();
 
-        assert.fail("Should have rejected non-owner");
-      } catch (error: any) {
-        assert.include(error.toString().toLowerCase(), "constraint");
-      }
+      await expect(promise).to.be.rejected;
+      const error = await promise.catch((e: unknown) => e);
+      const errorMessage = String(error).toLowerCase();
+      assert.include(errorMessage, "constraint");
     });
 
     it("should REJECT non-owner setting limits", async () => {
-      try {
-        await program.methods
-          .setLimits(
-            new anchor.BN(1 * 1e8),
-            new anchor.BN(10000 * 1e9),
-            new anchor.BN(60),
-            new anchor.BN(0),
-            new anchor.BN(365 * 86400)
-          )
-          .accounts({ desk: victimDesk.publicKey })
-          .signers([attacker])
-          .rpc();
+      const promise = program.methods
+        .setLimits(
+          new anchor.BN(1 * 1e8),
+          new anchor.BN(10000 * 1e9),
+          new anchor.BN(60),
+          new anchor.BN(0),
+          new anchor.BN(365 * 86400)
+        )
+        .accounts({ desk: victimDesk.publicKey })
+        .signers([attacker])
+        .rpc();
 
-        assert.fail("Should have rejected non-owner");
-      } catch (error: any) {
-        assert.include(error.toString().toLowerCase(), "constraint");
-      }
+      await expect(promise).to.be.rejected;
+      const error = await promise.catch((e: unknown) => e);
+      const errorMessage = String(error).toLowerCase();
+      assert.include(errorMessage, "constraint");
     });
 
     it("should REJECT non-approver approving offer", async () => {
@@ -735,21 +713,17 @@ describe("OTC Security Audit Tests", () => {
         .signers([buyer, offer])
         .rpc();
 
-      try {
-        await program.methods
-          .approveOffer(new anchor.BN(1))
-          .accounts({
-            desk: victimDesk.publicKey,
-            offer: offer.publicKey,
-            approver: nonApprover.publicKey,
-          })
-          .signers([nonApprover])
-          .rpc();
+      const promise = program.methods
+        .approveOffer(new anchor.BN(1))
+        .accounts({
+          desk: victimDesk.publicKey,
+          offer: offer.publicKey,
+          approver: nonApprover.publicKey,
+        })
+        .signers([nonApprover])
+        .rpc();
 
-        assert.fail("Should have rejected non-approver");
-      } catch (error: any) {
-        assert.include(error.toString(), "NotApprover");
-      }
+      await expectRejectedWith(promise, "NotApprover");
     });
   });
 
@@ -787,23 +761,19 @@ describe("OTC Security Audit Tests", () => {
       const buyer = Keypair.generate();
       await airdrop(buyer.publicKey, 2 * LAMPORTS_PER_SOL);
 
-      try {
-        await program.methods
-          .createOffer(new anchor.BN(100 * 1e9), 0, 1, new anchor.BN(0))
-          .accounts({
-            desk: victimDesk.publicKey,
-            tokenRegistry: victimRegistry,
-            deskTokenTreasury: victimDeskTokenTreasury,
-            beneficiary: buyer.publicKey,
-            offer: offer.publicKey,
-          })
-          .signers([buyer, offer])
-          .rpc();
+      const promise = program.methods
+        .createOffer(new anchor.BN(100 * 1e9), 0, 1, new anchor.BN(0))
+        .accounts({
+          desk: victimDesk.publicKey,
+          tokenRegistry: victimRegistry,
+          deskTokenTreasury: victimDeskTokenTreasury,
+          beneficiary: buyer.publicKey,
+          offer: offer.publicKey,
+        })
+        .signers([buyer, offer])
+        .rpc();
 
-        assert.fail("Should have rejected when paused");
-      } catch (error: any) {
-        assert.include(error.toString(), "Paused");
-      }
+      await expectRejectedWith(promise, "Paused");
 
       // Unpause for other tests
       await program.methods

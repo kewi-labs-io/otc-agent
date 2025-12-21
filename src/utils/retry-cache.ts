@@ -120,7 +120,7 @@ export async function withRetryAndCache<T>(
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
-      // Don't retry on non-retryable errors
+      // FAIL-FAST: Don't retry on non-retryable errors - throw immediately
       if (!isRetryableError(error)) {
         throw lastError;
       }
@@ -137,7 +137,11 @@ export async function withRetryAndCache<T>(
     }
   }
 
-  throw lastError || new Error("All retry attempts failed");
+  // FAIL-FAST: All retries exhausted - throw the last error
+  if (!lastError) {
+    throw new Error("All retry attempts failed - no error captured");
+  }
+  throw lastError;
 }
 
 /**
@@ -153,7 +157,7 @@ export async function fetchWithRetry(
     cacheKey?: string;
   },
 ): Promise<Response> {
-  const cacheKey = retryOptions?.cacheKey || `fetch:${url}`;
+  const cacheKey = retryOptions?.cacheKey ?? `fetch:${url}`;
 
   return withRetryAndCache(
     cacheKey,
@@ -189,7 +193,7 @@ export async function fetchJsonWithRetryAndCache<T>(
     cacheKey?: string;
   },
 ): Promise<T> {
-  const cacheKey = retryOptions?.cacheKey || `json:${url}`;
+  const cacheKey = retryOptions?.cacheKey ?? `json:${url}`;
 
   // Check cache first
   const cached = getCached<T>(cacheKey);
@@ -198,7 +202,8 @@ export async function fetchJsonWithRetryAndCache<T>(
   }
 
   const response = await fetchWithRetry(url, options, {
-    ...retryOptions,
+    maxRetries: retryOptions?.maxRetries,
+    cacheTtlMs: retryOptions?.cacheTtlMs,
     cacheKey: `fetch:${url}`, // Separate cache key for fetch
   });
 
@@ -209,7 +214,8 @@ export async function fetchJsonWithRetryAndCache<T>(
   const data = await response.json();
 
   // Cache the parsed JSON
-  setCache(cacheKey, data, retryOptions?.cacheTtlMs);
+  const cacheTtl = retryOptions?.cacheTtlMs;
+  setCache(cacheKey, data, cacheTtl);
 
   return data as T;
 }

@@ -13,36 +13,35 @@ import { Connection } from "@solana/web3.js";
 import { getChain, getRpcUrl } from "@/lib/getChain";
 import { getContractAddress } from "@/lib/getContractAddress";
 import { getHeliusRpcUrl, getNetwork } from "@/config/env";
-
-// Type-safe wrapper for readContract with dynamic ABIs
-interface ReadContractParams {
-  address: Address;
-  abi: Abi;
-  functionName: string;
-  args?: readonly unknown[];
-}
-
-// Use type assertion to bypass viem's strict authorizationList requirement
-async function readContractSafe<T>(
-  client: { readContract: (params: unknown) => Promise<unknown> },
-  params: ReadContractParams,
-): Promise<T> {
-  const result = await client.readContract(params);
-  return result as T;
-}
+import {
+  parseOrThrow,
+  validationErrorResponse,
+} from "@/lib/validation/helpers";
+import {
+  DealCompletionRequestSchema,
+  DealCompletionResponseSchema,
+} from "@/types/validation/api-schemas";
+import { z } from "zod";
+import { safeReadContract } from "@/lib/viem-utils";
 
 export async function POST(request: NextRequest) {
   await agentRuntime.getRuntime();
 
-  const body = await request.json();
-  const { quoteId, action, tokenId, consignmentId } = body;
-
-  if (!quoteId) {
-    return NextResponse.json(
-      { error: "Quote ID is required" },
-      { status: 400 },
-    );
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
+
+  // Validate request body - return 400 on invalid params
+  const parseResult = DealCompletionRequestSchema.safeParse(body);
+  if (!parseResult.success) {
+    return validationErrorResponse(parseResult.error, 400);
+  }
+  const data = parseResult.data;
+
+  const { quoteId, action, tokenId, consignmentId } = data;
 
   if (action === "complete") {
     if (consignmentId && tokenId) {
@@ -58,13 +57,23 @@ export async function POST(request: NextRequest) {
       const consignmentService = new ConsignmentService();
       const token = await TokenDB.getToken(tokenId);
 
-      const priceAtQuote = body.priceAtQuote || 1.0;
+      if (typeof body.priceAtQuote !== "number") {
+        throw new Error(
+          `priceAtQuote is required, got: ${typeof body.priceAtQuote}`,
+        );
+      }
+      const priceAtQuote = body.priceAtQuote;
+      if (typeof body.maxPriceDeviationBps !== "number") {
+        throw new Error(
+          `maxPriceDeviationBps is required, got: ${typeof body.maxPriceDeviationBps}`,
+        );
+      }
       const validationResult = await priceProtection.validateQuotePrice(
         tokenId,
         token.contractAddress,
         token.chain,
         priceAtQuote,
-        body.maxPriceDeviationBps || 1000,
+        body.maxPriceDeviationBps,
       );
 
       if (!validationResult.isValid) {
@@ -78,14 +87,23 @@ export async function POST(request: NextRequest) {
       }
 
       await consignmentService.reserveAmount(consignmentId, body.tokenAmount);
+      if (!body.beneficiary || typeof body.beneficiary !== "string") {
+        throw new Error("beneficiary is required and must be a string");
+      }
+      if (typeof body.discountBps !== "number") {
+        throw new Error("discountBps is required and must be a number");
+      }
+      if (typeof body.lockupDays !== "number") {
+        throw new Error("lockupDays is required and must be a number");
+      }
       await consignmentService.recordDeal({
         consignmentId,
         quoteId,
         tokenId,
-        buyerAddress: body.beneficiary || "",
+        buyerAddress: body.beneficiary,
         amount: body.tokenAmount,
-        discountBps: body.discountBps || 1000,
-        lockupDays: body.lockupDays || 150,
+        discountBps: body.discountBps,
+        lockupDays: body.lockupDays,
         offerId: body.offerId,
       });
     }
@@ -99,15 +117,25 @@ export async function POST(request: NextRequest) {
       offerId: body.offerId,
     });
 
-    // Map SOL to ETH internally since database schema uses ETH/USDC
+    // Map SOL/BNB to ETH internally since database schema uses ETH/USDC
     const paymentCurrency: PaymentCurrency =
-      body.paymentCurrency === "ETH" || body.paymentCurrency === "SOL"
+      body.paymentCurrency === "ETH" ||
+      body.paymentCurrency === "SOL" ||
+      body.paymentCurrency === "BNB"
         ? "ETH"
         : "USDC";
-    const offerId = String(body.offerId || "");
-    const transactionHash = String(body.transactionHash || "");
-    const blockNumber = Number(body.blockNumber || 0);
-    const chainType = body.chain || "evm";
+    // Optional fields - validate when required for specific paths
+    const offerId = body.offerId ? String(body.offerId) : undefined;
+    const transactionHash = body.transactionHash
+      ? String(body.transactionHash)
+      : undefined;
+    const blockNumber =
+      body.blockNumber !== undefined ? Number(body.blockNumber) : undefined;
+    // FAIL-FAST: chain must be specified for deal completion
+    if (!body.chain) {
+      throw new Error("chain field is required for deal completion");
+    }
+    const chainType = body.chain;
     const offerAddress = body.offerAddress;
     const beneficiaryOverride = body.beneficiary; // Solana wallet address
 
@@ -170,53 +198,44 @@ export async function POST(request: NextRequest) {
 
       // Verify transaction on-chain
       if (!transactionHash) {
-        return NextResponse.json(
-          { error: "Transaction hash required for Solana verification" },
-          { status: 400 },
-        );
+        throw new Error("Transaction hash required for Solana verification");
       }
 
-      try {
-        const network = getNetwork();
-        const rpcUrl = network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
-        console.log(`[Deal Completion] Using Helius RPC for Solana`);
-        const connection = new Connection(rpcUrl, "confirmed");
+      const network = getNetwork();
+      const rpcUrl =
+        network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
+      console.log(`[Deal Completion] Using Helius RPC for Solana`);
+      const connection = new Connection(rpcUrl, "confirmed");
 
-        console.log(
-          `[DealCompletion] Verifying Solana tx: ${transactionHash} on ${rpcUrl}`,
-        );
+      console.log(
+        `[DealCompletion] Verifying Solana tx: ${transactionHash} on ${rpcUrl}`,
+      );
 
-        // Fetch transaction
-        const tx = await connection.getTransaction(transactionHash, {
-          commitment: "confirmed",
-          maxSupportedTransactionVersion: 0,
-        });
+      // Fetch transaction
+      const tx = await connection.getTransaction(transactionHash, {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: 0,
+      });
 
-        if (!tx) {
-          throw new Error("Transaction not found or not confirmed");
-        }
-
-        if (tx.meta?.err) {
-          throw new Error(`Transaction failed: ${JSON.stringify(tx.meta.err)}`);
-        }
-
-        console.log("[DealCompletion] ✅ Solana transaction verified on-chain");
-      } catch (error) {
-        console.error("[DealCompletion] Solana verification failed:", error);
-        // If localnet, maybe allow skip? No, always enforce.
-        // Unless we are in a mock environment where RPC fails?
-        // For now, strict enforcement.
-        return NextResponse.json(
-          {
-            error: "Solana transaction verification failed",
-            details: error instanceof Error ? error.message : String(error),
-          },
-          { status: 400 },
-        );
+      if (!tx) {
+        throw new Error("Transaction not found or not confirmed");
       }
+
+      // FAIL-FAST: Transaction must have succeeded
+      if (!tx.meta) {
+        throw new Error("Transaction missing metadata - cannot verify success");
+      }
+      if (tx.meta.err) {
+        throw new Error(`Transaction failed: ${JSON.stringify(tx.meta.err)}`);
+      }
+
+      console.log("[DealCompletion] ✅ Solana transaction verified on-chain");
 
       const tokenAmount = BigInt(tokenAmountStr);
-      const discountBps = quote.discountBps || 1000;
+      if (quote.discountBps === undefined) {
+        throw new Error("quote.discountBps is required");
+      }
+      const discountBps = quote.discountBps;
 
       // Fetch real prices from market data and price feeds
       let tokenPrice = 0;
@@ -224,20 +243,23 @@ export async function POST(request: NextRequest) {
 
       // Try to get actual token price from market data
       if (quote.tokenId) {
-        try {
-          const { MarketDataDB } = await import("@/services/database");
-          const marketData = await MarketDataDB.getMarketData(quote.tokenId);
-          if (marketData?.priceUsd && marketData.priceUsd > 0) {
-            tokenPrice = marketData.priceUsd;
-            console.log(
-              "[DealCompletion] Using market data token price:",
-              tokenPrice,
+        const { MarketDataDB } = await import("@/services/database");
+        const marketData = await MarketDataDB.getMarketData(quote.tokenId);
+        // MarketData is optional - may not exist yet
+        if (marketData) {
+          // FAIL-FAST: If marketData exists, priceUsd should be valid
+          if (
+            typeof marketData.priceUsd !== "number" ||
+            marketData.priceUsd <= 0
+          ) {
+            throw new Error(
+              `MarketData exists for ${quote.tokenId} but has invalid priceUsd: ${marketData.priceUsd}`,
             );
           }
-        } catch (err) {
-          console.warn(
-            "[DealCompletion] Failed to fetch token market data:",
-            err,
+          tokenPrice = marketData.priceUsd;
+          console.log(
+            "[DealCompletion] Using market data token price:",
+            tokenPrice,
           );
         }
       }
@@ -256,35 +278,11 @@ export async function POST(request: NextRequest) {
       }
 
       // Get SOL price from price feed API
-      try {
-        const { getSolPriceUsd } = await import(
-          "@/lib/plugin-otc-desk/services/priceFeed"
-        );
-        solPrice = await getSolPriceUsd();
-        console.log("[DealCompletion] Using SOL price from API:", solPrice);
-      } catch (err) {
-        console.warn(
-          "[DealCompletion] Failed to fetch SOL price from API:",
-          err,
-        );
-        // Try market data as fallback
-        try {
-          const { MarketDataDB } = await import("@/services/database");
-          const solMarketData = await MarketDataDB.getMarketData(
-            "token-solana-So11111111111111111111111111111111111111112",
-          );
-          if (solMarketData?.priceUsd && solMarketData.priceUsd > 0) {
-            solPrice = solMarketData.priceUsd;
-          }
-        } catch {
-          // Last resort: env variable
-          const solPriceEnv = process.env.SOL_USD_PRICE;
-          if (solPriceEnv) {
-            solPrice = parseFloat(solPriceEnv);
-          }
-        }
-        console.log("[DealCompletion] Using fallback SOL price:", solPrice);
-      }
+      const { getSolPriceUsd } = await import(
+        "@/lib/plugin-otc-desk/services/priceFeed"
+      );
+      solPrice = await getSolPriceUsd();
+      console.log("[DealCompletion] Using SOL price from API:", solPrice);
 
       // Validate we have real prices
       if (tokenPrice === 0) {
@@ -341,7 +339,8 @@ export async function POST(request: NextRequest) {
         offerId,
         OTC_ADDRESS,
         RPC_URL,
-        network: process.env.NETWORK || "localnet",
+        // NETWORK env var is optional - default to "localnet" if not set
+        network: process.env.NETWORK ?? "localnet",
       });
 
       const publicClient = createPublicClient({
@@ -369,7 +368,7 @@ export async function POST(request: NextRequest) {
         Address, // payer
         bigint, // amountPaid
       ];
-      const offerData = await readContractSafe<OfferData>(publicClient, {
+      const offerData = await safeReadContract<OfferData>(publicClient, {
         address: OTC_ADDRESS,
         abi,
         functionName: "offers",
@@ -377,6 +376,12 @@ export async function POST(request: NextRequest) {
       });
 
       // Contract returns array matching struct order
+      // FAIL-FAST: Validate array has expected length
+      if (offerData.length < 17) {
+        throw new Error(
+          `Invalid offer data structure: expected 17 fields, got ${offerData.length}`,
+        );
+      }
       const [
         ,
         ,
@@ -404,11 +409,25 @@ export async function POST(request: NextRequest) {
         amountPaid,
       ] = offerData;
 
+      // FAIL-FAST: Required fields must exist
+      if (tokenAmount == null) {
+        throw new Error("Offer data missing tokenAmount");
+      }
+      if (priceUsdPerToken == null) {
+        throw new Error("Offer data missing priceUsdPerToken");
+      }
+      if (discountBps == null) {
+        throw new Error("Offer data missing discountBps");
+      }
+      if (amountPaid == null) {
+        throw new Error("Offer data missing amountPaid");
+      }
+
       console.log("[DealCompletion] Offer data from contract:", {
-        tokenAmount: tokenAmount?.toString(),
-        priceUsdPerToken: priceUsdPerToken?.toString(),
-        discountBps: discountBps?.toString(),
-        amountPaid: amountPaid?.toString(),
+        tokenAmount: tokenAmount.toString(),
+        priceUsdPerToken: priceUsdPerToken.toString(),
+        discountBps: discountBps.toString(),
+        amountPaid: amountPaid.toString(),
         currency,
         paid,
       });
@@ -448,12 +467,33 @@ export async function POST(request: NextRequest) {
         actualPaymentAmount,
       });
     } else {
-      // No offerId, use quote values (fallback)
+      // No offerId, use quote values
+      if (typeof quote.discountBps !== "number") {
+        throw new Error("Quote missing discountBps");
+      }
       const discountBps = quote.discountBps;
-      totalUsd = quote.totalUsd || 0;
-      discountUsd = quote.discountUsd || totalUsd * (discountBps / 10000);
-      discountedUsd = quote.discountedUsd || totalUsd - discountUsd;
-      actualPaymentAmount = quote.paymentAmount || "0";
+      if (typeof quote.totalUsd !== "number") {
+        throw new Error(
+          "Quote missing totalUsd - cannot complete deal without offerId",
+        );
+      }
+      totalUsd = quote.totalUsd;
+      if (typeof quote.discountUsd === "number") {
+        discountUsd = quote.discountUsd;
+      } else {
+        discountUsd = totalUsd * (discountBps / 10000);
+      }
+      if (typeof quote.discountedUsd === "number") {
+        discountedUsd = quote.discountedUsd;
+      } else {
+        discountedUsd = totalUsd - discountUsd;
+      }
+      if (!quote.paymentAmount || typeof quote.paymentAmount !== "string") {
+        throw new Error(
+          "Quote missing paymentAmount - cannot complete deal without offerId",
+        );
+      }
+      actualPaymentAmount = quote.paymentAmount;
     }
 
     // VALIDATE before saving
@@ -466,7 +506,14 @@ export async function POST(request: NextRequest) {
         console.log(
           "[DealCompletion] Quote already executed, returning current state",
         );
-        return NextResponse.json({ success: true, quote });
+        const alreadyExecutedResponse = {
+          success: true,
+          quoteId: quote.quoteId,
+        };
+        const validatedAlreadyExecuted = DealCompletionResponseSchema.parse(
+          alreadyExecutedResponse,
+        );
+        return NextResponse.json(validatedAlreadyExecuted);
       }
       throw new Error(
         `CRITICAL: tokenAmount is ${tokenAmountStr} - must be > 0`,
@@ -480,7 +527,14 @@ export async function POST(request: NextRequest) {
         console.log(
           "[DealCompletion] Quote already executed, returning current state",
         );
-        return NextResponse.json({ success: true, quote });
+        const alreadyExecutedResponse = {
+          success: true,
+          quoteId: quote.quoteId,
+        };
+        const validatedAlreadyExecuted = DealCompletionResponseSchema.parse(
+          alreadyExecutedResponse,
+        );
+        return NextResponse.json(validatedAlreadyExecuted);
       }
       throw new Error("CRITICAL: Solana deal has $0 value");
     }
@@ -501,6 +555,17 @@ export async function POST(request: NextRequest) {
       priceUsdPerToken,
       lockupDays: body.lockupDays,
     });
+
+    // FAIL-FAST: Required fields for updateQuoteExecution
+    if (!offerId) {
+      throw new Error("offerId is required for updateQuoteExecution");
+    }
+    if (!transactionHash) {
+      throw new Error("transactionHash is required for updateQuoteExecution");
+    }
+    if (blockNumber == null) {
+      throw new Error("blockNumber is required for updateQuoteExecution");
+    }
 
     const updated = await quoteService.updateQuoteExecution(quoteId, {
       tokenAmount: tokenAmountStr,
@@ -531,9 +596,13 @@ export async function POST(request: NextRequest) {
     await runtime.setCache(`quote:${quoteId}`, updatedWithChain);
 
     // VERIFY quote is in entity's list, and fix index if missing
-    const entityQuotes =
-      (await runtime.getCache<string[]>(`entity_quotes:${updated.entityId}`)) ||
-      [];
+    const entityQuotesCache = await runtime.getCache<string[]>(
+      `entity_quotes:${updated.entityId}`,
+    );
+    // entityQuotes is optional - default to empty array if not present
+    const entityQuotes = Array.isArray(entityQuotesCache)
+      ? entityQuotesCache
+      : [];
     if (!entityQuotes.includes(quoteId)) {
       console.warn(
         `[Deal Completion] Quote ${quoteId} not in entity ${updated.entityId} list - fixing index`,
@@ -542,7 +611,8 @@ export async function POST(request: NextRequest) {
       await runtime.setCache(`entity_quotes:${updated.entityId}`, entityQuotes);
 
       // Also ensure it's in the all_quotes index
-      const allQuotes = (await runtime.getCache<string[]>("all_quotes")) || [];
+      const allQuotesCache = await runtime.getCache<string[]>("all_quotes");
+      const allQuotes = Array.isArray(allQuotesCache) ? allQuotesCache : [];
       if (!allQuotes.includes(quoteId)) {
         allQuotes.push(quoteId);
         await runtime.setCache("all_quotes", allQuotes);
@@ -560,7 +630,10 @@ export async function POST(request: NextRequest) {
       finalPrice: discountedUsd,
     });
 
-    return NextResponse.json({ success: true, quote: updated });
+    const completeResponse = { success: true, quoteId: updated.quoteId };
+    const validatedComplete =
+      DealCompletionResponseSchema.parse(completeResponse);
+    return NextResponse.json(validatedComplete);
   }
 
   if (action === "share") {
@@ -585,12 +658,16 @@ export async function POST(request: NextRequest) {
     }
     const shareData = await DealCompletionService.generateShareData(quoteId);
 
+    // platform is optional - default to "general" if not provided
+    const platform = body.platform?.trim() || "general";
     console.log("[Deal Completion] Deal shared", {
       quoteId,
-      platform: body.platform || "general",
+      platform,
     });
 
-    return NextResponse.json({ success: true, shareData });
+    const shareResponse = { success: true, quoteId, shareData };
+    const validatedShare = DealCompletionResponseSchema.parse(shareResponse);
+    return NextResponse.json(validatedShare);
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
@@ -655,9 +732,9 @@ export async function GET(request: NextRequest) {
     }
   } else {
     // Slow path fallback: parallel search (limited to 50 for performance)
-    const allQuoteIds =
-      (await getRuntime.getCache<string[]>("all_quotes")) ?? [];
-    const idsToCheck = allQuoteIds
+    const allQuoteIds = await getRuntime.getCache<string[]>("all_quotes");
+    // allQuoteIds is optional - default to empty array if not present
+    const idsToCheck = (Array.isArray(allQuoteIds) ? allQuoteIds : [])
       .filter((id) => !quotesSet.has(id))
       .slice(0, 50);
 
@@ -700,8 +777,17 @@ export async function GET(request: NextRequest) {
     if (!quoteData.tokenId && quoteData.consignmentId) {
       consignmentIdsToFetch.add(quoteData.consignmentId);
     }
-    if (quoteData.tokenId && (!quoteData.tokenSymbol || !quoteData.tokenName)) {
-      tokenIdsToFetch.add(quoteData.tokenId);
+    // FAIL-FAST: If tokenId exists, both symbol and name should exist
+    if (quoteData.tokenId) {
+      const hasSymbol =
+        typeof quoteData.tokenSymbol === "string" &&
+        quoteData.tokenSymbol.trim() !== "";
+      const hasName =
+        typeof quoteData.tokenName === "string" &&
+        quoteData.tokenName.trim() !== "";
+      if (!hasSymbol || !hasName) {
+        tokenIdsToFetch.add(quoteData.tokenId);
+      }
     }
   }
 
@@ -709,22 +795,14 @@ export async function GET(request: NextRequest) {
   const [consignmentResults, tokenResults] = await Promise.all([
     Promise.all(
       [...consignmentIdsToFetch].map(async (id) => {
-        try {
-          const consignment = await ConsignmentDB.getConsignment(id);
-          return { id, data: consignment };
-        } catch {
-          return { id, data: null };
-        }
+        const consignment = await ConsignmentDB.getConsignment(id);
+        return { id, data: consignment };
       }),
     ),
     Promise.all(
       [...tokenIdsToFetch].map(async (id) => {
-        try {
-          const token = await TokenDB.getToken(id);
-          return { id, data: token };
-        } catch {
-          return { id, data: null };
-        }
+        const token = await TokenDB.getToken(id);
+        return { id, data: token };
       }),
     ),
   ]);
@@ -735,7 +813,11 @@ export async function GET(request: NextRequest) {
 
   // Also add tokens found via consignments
   for (const result of consignmentResults) {
-    if (result.data?.tokenId && !tokenMap.has(result.data.tokenId)) {
+    if (
+      result.data &&
+      result.data.tokenId &&
+      !tokenMap.has(result.data.tokenId)
+    ) {
       tokenIdsToFetch.add(result.data.tokenId);
     }
   }
@@ -747,12 +829,8 @@ export async function GET(request: NextRequest) {
     );
     const additionalTokens = await Promise.all(
       additionalTokenIds.map(async (id) => {
-        try {
-          const token = await TokenDB.getToken(id);
-          return { id, data: token };
-        } catch {
-          return { id, data: null };
-        }
+        const token = await TokenDB.getToken(id);
+        return { id, data: token };
       }),
     );
     for (const { id, data } of additionalTokens) {
@@ -780,13 +858,38 @@ export async function GET(request: NextRequest) {
     }
 
     // Look up token by tokenId if we still need metadata
-    if (tokenId && (!tokenSymbol || !tokenName)) {
-      const token = tokenMap.get(tokenId);
-      if (token) {
-        tokenSymbol = tokenSymbol || token.symbol;
-        tokenName = tokenName || token.name;
-        tokenLogoUrl = tokenLogoUrl || token.logoUrl;
+    if (tokenId) {
+      const hasSymbol =
+        typeof tokenSymbol === "string" && tokenSymbol.trim() !== "";
+      const hasName = typeof tokenName === "string" && tokenName.trim() !== "";
+      if (!hasSymbol || !hasName) {
+        const token = tokenMap.get(tokenId);
+        if (token) {
+          // FAIL-FAST: Token metadata must exist if token is found
+          if (!token.symbol) {
+            throw new Error(`Token ${tokenId} missing symbol in database`);
+          }
+          if (!token.name) {
+            throw new Error(`Token ${tokenId} missing name in database`);
+          }
+          // Use token data as fallback if not already set
+          // token.symbol and token.name are guaranteed to exist (validated above)
+          tokenSymbol = tokenSymbol?.trim() || token.symbol;
+          tokenName = tokenName?.trim() || token.name;
+          // logoUrl is optional - use existing or token's logoUrl (can be empty string)
+          tokenLogoUrl = tokenLogoUrl?.trim() || token.logoUrl || "";
+        }
       }
+    }
+
+    // FAIL-FAST: tokenSymbol and tokenName are required for display
+    // QuoteMemory schema requires these fields, and deal-completion enriches them
+    const dealId = deal.quoteId ?? deal.id ?? "unknown";
+    if (!tokenSymbol) {
+      throw new Error(`Deal ${dealId} missing tokenSymbol - cannot display`);
+    }
+    if (!tokenName) {
+      throw new Error(`Deal ${dealId} missing tokenName - cannot display`);
     }
 
     return {

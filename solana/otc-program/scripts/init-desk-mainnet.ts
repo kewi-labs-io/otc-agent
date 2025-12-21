@@ -1,5 +1,57 @@
+// Type assertions needed: Anchor workspace types are dynamically generated at build time
+// These casts bypass type checking for workspace access which isn't available in scripts
 import pkg from "@coral-xyz/anchor";
-const anchor: any = pkg as any;
+
+// Method builder interface for initDesk
+interface InitDeskMethodBuilder {
+  accounts(accounts: {
+    payer: { publicKey: { toString(): string } };
+    owner: { publicKey: { toString(): string } };
+    agent: { publicKey: { toString(): string } };
+    usdcMint: { toString(): string };
+    desk: { publicKey: { toString(): string } };
+    systemProgram: { toString(): string };
+  }): {
+    signers(signers: unknown[]): {
+      rpc(options?: { skipPreflight?: boolean }): Promise<string>;
+    };
+  };
+}
+
+interface AnchorWorkspace {
+  Otc: {
+    programId: { toString(): string };
+    methods: {
+      initDesk: (
+        minUsdAmount: { toString(): string },
+        quoteExpirySeconds: { toString(): string },
+      ) => InitDeskMethodBuilder;
+    };
+    account: Record<string, unknown>;
+  };
+}
+
+interface AnchorProvider {
+  connection: {
+    getBalance(publicKey: { toString(): string }): Promise<number>;
+  };
+  wallet: {
+    publicKey: { toString(): string };
+  };
+}
+
+interface AnchorPackage {
+  AnchorProvider: {
+    env(): AnchorProvider;
+  };
+  setProvider(provider: AnchorProvider): void;
+  workspace: AnchorWorkspace;
+  BN: {
+    new (value: string | number): { toString(): string; toNumber(): number };
+  };
+}
+
+const anchor = pkg as AnchorPackage;
 const { BN } = anchor;
 import { PublicKey, SystemProgram, Keypair } from "@solana/web3.js";
 import {
@@ -34,8 +86,8 @@ async function main() {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  // Use workspace program
-  const program = anchor.workspace.Otc as any;
+  // Use workspace program with properly typed interface
+  const program = anchor.workspace.Otc;
 
   // Load owner from wallet
   const walletPath = process.env.ANCHOR_WALLET;
@@ -112,25 +164,27 @@ async function main() {
   fs.writeFileSync(deskKeypairPath, JSON.stringify(Array.from(desk.secretKey)));
   console.log(`\n✅ Desk keypair saved to ${deskKeypairPath}`);
 
-  // Save config
+  // Save deployment config for the app
   const configData = {
-    NEXT_PUBLIC_SOLANA_RPC: "https://api.mainnet-beta.solana.com",
-    NEXT_PUBLIC_SOLANA_PROGRAM_ID: program.programId.toString(),
-    NEXT_PUBLIC_SOLANA_DESK: desk.publicKey.toString(),
-    NEXT_PUBLIC_SOLANA_DESK_OWNER: owner.publicKey.toString(),
-    NEXT_PUBLIC_SOLANA_USDC_MINT: usdcMint.toString(),
+    network: "solana-mainnet",
+    rpc: "/api/rpc/solana",
+    deployer: owner.publicKey.toString(),
+    programId: program.programId.toString(),
+    desk: desk.publicKey.toString(),
+    deskOwner: owner.publicKey.toString(),
+    usdcMint: usdcMint.toString(),
+    features: {
+      p2pAutoApproval: true,
+      version: "2.0.0",
+    },
+    registeredTokens: {},
   };
 
   const deploymentPath = path.join(__dirname, "../../../src/config/deployments/mainnet-solana.json");
   fs.writeFileSync(deploymentPath, JSON.stringify(configData, null, 2));
   console.log(`✅ Config saved to ${deploymentPath}`);
 
-  // Output for .env
-  console.log("\n" + "=".repeat(80));
-  console.log("🎉 SUCCESS. Update your .env with:");
-  console.log("=".repeat(80));
-  console.log(`NEXT_PUBLIC_SOLANA_DESK=${desk.publicKey.toString()}`);
-  console.log("=".repeat(80));
+  console.log("\n✅ Done. Next.js uses src/config/deployments/mainnet-solana.json");
 }
 
 main()

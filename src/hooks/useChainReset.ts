@@ -4,12 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { usePublicClient, useAccount, useDisconnect } from "wagmi";
 import { usePrivy } from "@privy-io/react-auth";
 import { toast } from "sonner";
-
-type ChainResetState = {
-  resetDetected: boolean;
-  lastBlockNumber: bigint | null;
-  checksEnabled: boolean;
-};
+import type { ChainResetState } from "@/types";
 
 export function useChainReset() {
   const [mounted, setMounted] = useState(false);
@@ -89,20 +84,16 @@ export function useChainReset() {
     if (!mounted || !state.checksEnabled || !publicClient) return;
 
     const checkInterval = setInterval(async () => {
-      try {
-        const currentBlock = await publicClient.getBlockNumber();
+      const currentBlock = await publicClient.getBlockNumber();
 
-        if (
-          state.lastBlockNumber !== null &&
-          currentBlock < state.lastBlockNumber
-        ) {
-          await handleChainReset();
-        }
-
-        setState((prev) => ({ ...prev, lastBlockNumber: currentBlock }));
-      } catch (error) {
-        console.warn("[ChainReset] Error checking block number:", error);
+      if (
+        state.lastBlockNumber !== null &&
+        currentBlock < state.lastBlockNumber
+      ) {
+        await handleChainReset();
       }
+
+      setState((prev) => ({ ...prev, lastBlockNumber: currentBlock }));
     }, 3000);
 
     return () => clearInterval(checkInterval);

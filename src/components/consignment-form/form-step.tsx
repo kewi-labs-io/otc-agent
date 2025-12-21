@@ -20,21 +20,7 @@ import {
   Info,
   Loader2,
 } from "lucide-react";
-
-interface PoolCheckResult {
-  success: boolean;
-  isRegistered: boolean;
-  hasPool: boolean;
-  pool?: {
-    address: string;
-    protocol: string;
-    tvlUsd: number;
-    priceUsd?: number;
-    baseToken: "USDC" | "WETH";
-  };
-  warning?: string;
-  error?: string;
-}
+import type { PoolCheckPool, PoolCheckResult, Chain } from "@/types";
 
 interface FormStepProps {
   formData: {
@@ -53,6 +39,7 @@ interface FormStepProps {
     isPrivate: boolean;
     maxPriceVolatilityBps: number;
     maxTimeToExecuteSeconds: number;
+    selectedPoolAddress?: string;
   };
   updateFormData: (updates: Partial<FormStepProps["formData"]>) => void;
   onNext: () => void;
@@ -171,10 +158,25 @@ function SingleSlider({
 }
 
 // Extract chain and address from tokenId (format: token-{chain}-{address})
-function getTokenInfo(tokenId: string) {
-  const parts = tokenId?.split("-") || [];
-  const chain = parts[1] || "";
-  const address = parts.slice(2).join("-") || "";
+function getTokenInfo(tokenId: string): { chain: Chain; address: string } {
+  if (!tokenId) {
+    throw new Error("tokenId is required");
+  }
+  const parts = tokenId.split("-");
+  if (parts.length < 3) {
+    throw new Error(`Invalid tokenId format: ${tokenId}`);
+  }
+  const chainStr = parts[1];
+  // FAIL-FAST: Validate chain is a valid Chain type
+  const validChains: Chain[] = ["ethereum", "base", "bsc", "solana"];
+  if (!validChains.includes(chainStr as Chain)) {
+    throw new Error(`Invalid chain in tokenId: ${chainStr}`);
+  }
+  const chain = chainStr as Chain;
+  const address = parts.slice(2).join("-");
+  if (!address) {
+    throw new Error(`Missing address in tokenId: ${tokenId}`);
+  }
   return { chain, address };
 }
 
@@ -192,8 +194,12 @@ export function FormStep({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [poolCheck, setPoolCheck] = useState<PoolCheckResult | null>(null);
   const [isCheckingPool, setIsCheckingPool] = useState(false);
+  const [selectedPoolIndex, setSelectedPoolIndex] = useState(0);
+  const [showPoolSelector, setShowPoolSelector] = useState(false);
 
-  const { chain: tokenChain, address: rawTokenAddress } = getTokenInfo(formData.tokenId);
+  const { chain: tokenChain, address: rawTokenAddress } = getTokenInfo(
+    formData.tokenId,
+  );
 
   // Check pool status for EVM tokens
   useEffect(() => {
@@ -204,35 +210,84 @@ export function FormStep({
 
     const checkPool = async () => {
       setIsCheckingPool(true);
-      try {
-        const res = await fetch(
-          `/api/token-pool-check?address=${encodeURIComponent(rawTokenAddress)}&chain=${tokenChain}`,
+      const res = await fetch(
+        `/api/token-pool-check?address=${encodeURIComponent(rawTokenAddress)}&chain=${tokenChain}`,
+      );
+      // FAIL-FAST: Check response status
+      if (!res.ok) {
+        throw new Error(
+          `Pool check API failed: ${res.status} ${res.statusText}`,
         );
-        const data = await res.json();
-        setPoolCheck(data);
-      } catch (err) {
-        console.error("[FormStep] Pool check error:", err);
-        setPoolCheck({
-          success: false,
-          isRegistered: false,
-          hasPool: false,
-          error: "Failed to check token pool status",
-        });
-      } finally {
-        setIsCheckingPool(false);
       }
+      const data = await res.json();
+      // FAIL-FAST: Validate response structure
+      if (typeof data !== "object" || data === null) {
+        throw new Error("Invalid pool check response: expected object");
+      }
+      setPoolCheck(data);
+      setIsCheckingPool(false);
     };
 
     checkPool();
   }, [tokenChain, rawTokenAddress]);
 
+  // Reset pool selection when pool check changes and set initial selected pool
+  useEffect(() => {
+    setSelectedPoolIndex(0);
+    setShowPoolSelector(false);
+    // Set the default pool address in form data
+    if (!poolCheck) return;
+
+    // FAIL-FAST: If poolCheck exists, it should have either allPools or pool
+    const defaultPool =
+      poolCheck.allPools && poolCheck.allPools.length > 0
+        ? poolCheck.allPools[0]
+        : poolCheck.pool;
+
+    if (defaultPool) {
+      // FAIL-FAST: Pool must have address
+      if (!defaultPool.address) {
+        throw new Error("Pool object missing required address field");
+      }
+      updateFormData({ selectedPoolAddress: defaultPool.address });
+    }
+  }, [poolCheck, updateFormData]);
+
+  // Get currently selected pool from allPools or fall back to default pool
+  const selectedPool = useMemo(() => {
+    if (!poolCheck) return null;
+    if (poolCheck.allPools && poolCheck.allPools.length > 0) {
+      // FAIL-FAST: Validate index is within bounds
+      if (
+        selectedPoolIndex < 0 ||
+        selectedPoolIndex >= poolCheck.allPools.length
+      ) {
+        throw new Error(
+          `Invalid pool index: ${selectedPoolIndex} (available: ${poolCheck.allPools.length})`,
+        );
+      }
+      const selected = poolCheck.allPools[selectedPoolIndex];
+      // FAIL-FAST: Selected pool must exist (index validated above)
+      if (!selected) {
+        throw new Error(
+          `Pool at index ${selectedPoolIndex} is null or undefined`,
+        );
+      }
+      return selected;
+    }
+    return poolCheck.pool ?? null;
+  }, [poolCheck, selectedPoolIndex]);
+
   const maxBalance = useMemo(() => {
-    const raw = BigInt(selectedTokenBalance || "0");
+    // FAIL-FAST: Balance should be provided, but default to "0" if missing (user hasn't loaded balance yet)
+    const balanceStr = selectedTokenBalance || "0";
+    const raw = BigInt(balanceStr);
     return Number(raw) / Math.pow(10, selectedTokenDecimals);
   }, [selectedTokenBalance, selectedTokenDecimals]);
 
   const currentAmount = useMemo(() => {
-    return parseFloat(formData.amount) || 0;
+    const parsed = parseFloat(formData.amount);
+    return isNaN(parsed) ? 0 : parsed;
   }, [formData.amount]);
 
   const validationErrors = useMemo(() => {
@@ -253,21 +308,30 @@ export function FormStep({
       if (formData.minLockupDays > formData.maxLockupDays) {
         errors.push("Min lockup must be less than max lockup");
       }
+      // Ensure fixed values are within negotiable range for consistency
+      if (formData.fixedLockupDays > formData.maxLockupDays) {
+        errors.push(
+          `Fixed lockup (${formData.fixedLockupDays}d) exceeds max lockup (${formData.maxLockupDays}d)`,
+        );
+      }
     } else {
       if (!formData.fixedDiscountBps || formData.fixedDiscountBps <= 0) {
         errors.push("Set a discount percentage");
       }
-      if (!formData.fixedLockupDays || formData.fixedLockupDays <= 0) {
-        errors.push("Set a lockup duration");
-      }
+      // Lockup can be 0 days (immediate claim) depending on listing terms.
     }
 
     return errors;
   }, [formData, currentAmount, maxBalance, selectedTokenSymbol]);
 
   // For EVM tokens, also require a valid pool
-  const poolValid = tokenChain === "solana" || !isCheckingPool && poolCheck?.hasPool;
-  const isValid = validationErrors.length === 0 && currentAmount > 0 && poolValid;
+  const poolValid =
+    tokenChain === "solana" ||
+    (!isCheckingPool &&
+      poolCheck &&
+      (poolCheck.hasPool || poolCheck.isRegistered));
+  const isValid =
+    validationErrors.length === 0 && currentAmount > 0 && poolValid;
 
   const setAmountPercentage = useCallback(
     (pct: number) => {
@@ -340,6 +404,7 @@ export function FormStep({
                 updateFormData({ amount: val });
               }}
               placeholder="0"
+              data-testid="consign-amount-input"
               className={`w-full px-4 py-3 text-2xl font-bold rounded-xl border bg-white dark:bg-zinc-800/50 focus:ring-2 transition-all ${
                 currentAmount > maxBalance
                   ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
@@ -406,9 +471,7 @@ export function FormStep({
             <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
               Negotiable Pricing
             </h3>
-            <p className="text-xs text-zinc-500">
-              Allow buyers to negotiate
-            </p>
+            <p className="text-xs text-zinc-500">Allow buyers to negotiate</p>
           </div>
         </div>
         <button
@@ -447,7 +510,7 @@ export function FormStep({
         </div>
 
         {formData.isNegotiable ? (
-          <div className="space-y-4">
+          <div className="space-y-4" data-testid="consign-discount-range">
             <DualRangeSlider
               min={1}
               max={50}
@@ -482,9 +545,7 @@ export function FormStep({
             min={1}
             max={50}
             value={formData.fixedDiscountBps / 100}
-            onChange={(val) =>
-              updateFormData({ fixedDiscountBps: val * 100 })
-            }
+            onChange={(val) => updateFormData({ fixedDiscountBps: val * 100 })}
             formatValue={(v) => `${v}%`}
           />
         )}
@@ -507,18 +568,26 @@ export function FormStep({
         </div>
 
         {formData.isNegotiable ? (
-          <div className="space-y-4">
+          <div className="space-y-4" data-testid="consign-lockup-range">
             <DualRangeSlider
-              min={1}
+              min={0}
               max={365}
               minValue={formData.minLockupDays}
               maxValue={formData.maxLockupDays}
-              onChange={(minVal, maxVal) =>
-                updateFormData({
+              onChange={(minVal, maxVal) => {
+                // Auto-adjust fixedLockupDays to stay within range
+                const updates: Partial<typeof formData> = {
                   minLockupDays: minVal,
                   maxLockupDays: maxVal,
-                })
-              }
+                };
+                if (formData.fixedLockupDays > maxVal) {
+                  updates.fixedLockupDays = maxVal;
+                }
+                if (formData.fixedLockupDays < minVal) {
+                  updates.fixedLockupDays = minVal;
+                }
+                updateFormData(updates);
+              }}
               formatValue={(v) => `${v}d`}
               accentColor="blue"
             />
@@ -539,7 +608,7 @@ export function FormStep({
           </div>
         ) : (
           <SingleSlider
-            min={1}
+            min={0}
             max={365}
             value={formData.fixedLockupDays}
             onChange={(val) => updateFormData({ fixedLockupDays: val })}
@@ -551,9 +620,23 @@ export function FormStep({
       {/* Pool Status Section - EVM only */}
       {tokenChain !== "solana" && (
         <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/30 space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            <Info className="w-4 h-4" />
-            Price Oracle
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              <Info className="w-4 h-4" />
+              Price Oracle
+            </div>
+            {poolCheck &&
+              poolCheck.allPools &&
+              poolCheck.allPools.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setShowPoolSelector(!showPoolSelector)}
+                  className="text-xs text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
+                >
+                  {showPoolSelector ? "Hide" : "Change"} (
+                  {poolCheck.allPools.length} available)
+                </button>
+              )}
           </div>
 
           {isCheckingPool ? (
@@ -563,37 +646,100 @@ export function FormStep({
             </div>
           ) : poolCheck ? (
             <div className="space-y-2">
-              {/* Pool Info */}
-              {poolCheck.hasPool && poolCheck.pool && (
+              {/* Pool Selector */}
+              {showPoolSelector &&
+                poolCheck.allPools &&
+                poolCheck.allPools.length > 1 && (
+                  <div className="space-y-1 p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800/50 max-h-48 overflow-y-auto">
+                    {poolCheck.allPools.map((pool, idx) => (
+                      <button
+                        key={pool.address}
+                        type="button"
+                        onClick={() => {
+                          setSelectedPoolIndex(idx);
+                          setShowPoolSelector(false);
+                          updateFormData({ selectedPoolAddress: pool.address });
+                        }}
+                        className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors ${
+                          idx === selectedPoolIndex
+                            ? "bg-orange-500/20 text-orange-700 dark:text-orange-300"
+                            : "hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium">
+                            {pool.protocol} ({pool.baseToken})
+                          </span>
+                          <span
+                            className={
+                              pool.tvlUsd < 10000
+                                ? "text-amber-600"
+                                : "text-green-600"
+                            }
+                          >
+                            $
+                            {pool.tvlUsd.toLocaleString(undefined, {
+                              maximumFractionDigits: 0,
+                            })}
+                          </span>
+                        </div>
+                        <div className="text-zinc-500 dark:text-zinc-400 truncate">
+                          {pool.address.slice(0, 10)}...{pool.address.slice(-8)}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+              {/* Selected Pool Info */}
+              {poolCheck.hasPool && selectedPool && (
                 <>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-zinc-600 dark:text-zinc-400">Source:</span>
+                    <span className="text-zinc-600 dark:text-zinc-400">
+                      Source:
+                    </span>
                     <span className="text-zinc-900 dark:text-zinc-100">
-                      {poolCheck.pool.protocol} ({poolCheck.pool.baseToken})
+                      {selectedPool.protocol} ({selectedPool.baseToken})
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-zinc-600 dark:text-zinc-400">Pool Liquidity:</span>
-                    <span className={`${poolCheck.pool.tvlUsd < 10000 ? "text-amber-600" : "text-green-600"}`}>
-                      ${poolCheck.pool.tvlUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    <span className="text-zinc-600 dark:text-zinc-400">
+                      Pool Liquidity:
+                    </span>
+                    <span
+                      className={`${selectedPool.tvlUsd < 10000 ? "text-amber-600" : "text-green-600"}`}
+                    >
+                      $
+                      {selectedPool.tvlUsd.toLocaleString(undefined, {
+                        maximumFractionDigits: 0,
+                      })}
                     </span>
                   </div>
-                  {poolCheck.pool.priceUsd && (
+                  {selectedPool.priceUsd && (
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-zinc-600 dark:text-zinc-400">Current Price:</span>
+                      <span className="text-zinc-600 dark:text-zinc-400">
+                        Current Price:
+                      </span>
                       <span className="text-zinc-900 dark:text-zinc-100">
-                        ${poolCheck.pool.priceUsd.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                        $
+                        {selectedPool.priceUsd.toLocaleString(undefined, {
+                          maximumFractionDigits: 6,
+                        })}
                       </span>
                     </div>
                   )}
                 </>
               )}
 
-              {/* Warning */}
-              {poolCheck.warning && (
+              {/* Warning - show based on selected pool */}
+              {selectedPool && selectedPool.tvlUsd < 10000 && (
                 <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-amber-700 dark:text-amber-400">{poolCheck.warning}</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    {selectedPool.tvlUsd < 1000
+                      ? `Low liquidity detected ($${selectedPool.tvlUsd.toFixed(0)}). Price accuracy may be affected.`
+                      : `Moderate liquidity ($${selectedPool.tvlUsd.toFixed(0)}). Consider waiting for more liquidity for better price accuracy.`}
+                  </p>
                 </div>
               )}
 
@@ -602,7 +748,8 @@ export function FormStep({
                 <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-red-600 dark:text-red-400">
-                    No liquidity pool found. This token needs a Uniswap V3/V4, Aerodrome, or Pancakeswap pool to be listed.
+                    No liquidity pool found. This token needs a Uniswap V3/V4,
+                    Aerodrome, or Pancakeswap pool to be listed.
                   </p>
                 </div>
               )}
@@ -646,9 +793,7 @@ export function FormStep({
             </div>
             <button
               type="button"
-              onClick={() =>
-                updateFormData({ isPrivate: !formData.isPrivate })
-              }
+              onClick={() => updateFormData({ isPrivate: !formData.isPrivate })}
               className={`relative w-11 h-6 rounded-full transition-colors ${
                 formData.isPrivate
                   ? "bg-brand-500"
@@ -746,9 +891,12 @@ export function FormStep({
           onClick={onNext}
           disabled={!isValid}
           color="brand"
+          data-testid="consign-review-button"
           className="flex-1 px-6 py-3"
         >
-          {tokenChain !== "solana" && isCheckingPool ? "Checking pool..." : "Review Listing"}
+          {tokenChain !== "solana" && isCheckingPool
+            ? "Checking pool..."
+            : "Review Listing"}
         </Button>
       </div>
     </div>

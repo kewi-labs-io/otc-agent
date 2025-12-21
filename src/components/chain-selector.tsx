@@ -10,7 +10,20 @@ interface ChainSelectorProps {
   onChange: (chains: Chain[]) => void;
 }
 
-const allChains = Object.keys(SUPPORTED_CHAINS) as Chain[];
+// FAIL-FAST: Validate that all keys are valid Chain types
+const allChains: Chain[] = (() => {
+  const keys = Object.keys(SUPPORTED_CHAINS);
+  const validChains: Chain[] = ["ethereum", "base", "bsc", "solana"];
+  const chains = keys.filter((key): key is Chain =>
+    validChains.includes(key as Chain),
+  );
+  if (chains.length !== validChains.length) {
+    throw new Error(
+      `Mismatch between SUPPORTED_CHAINS keys and Chain type: expected ${validChains.length}, got ${chains.length}`,
+    );
+  }
+  return chains;
+})();
 
 export const ChainSelector = memo(function ChainSelector({
   selected,
@@ -24,6 +37,11 @@ export const ChainSelector = memo(function ChainSelector({
       if (value === "all") {
         onChange(allChains);
       } else {
+        // FAIL-FAST: Validate chain is valid before using
+        const validChains: Chain[] = ["ethereum", "base", "bsc", "solana"];
+        if (!validChains.includes(value as Chain)) {
+          throw new Error(`Invalid chain value: ${value}`);
+        }
         onChange([value as Chain]);
       }
     },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runReconciliationTask } from "@/services/reconciliation";
 import { agentRuntime } from "@/lib/agent-runtime";
+import { CronReconcileResponseSchema } from "@/types/validation/api-schemas";
 
 /**
  * Automated Reconciliation Cron Job
@@ -13,8 +14,9 @@ import { agentRuntime } from "@/lib/agent-runtime";
  * - External: Use cron-job.org or similar
  */
 
+// FAIL-FAST: At least one cron secret must be configured
 const CRON_SECRET =
-  process.env.CRON_SECRET || process.env.RECONCILIATION_SECRET;
+  process.env.CRON_SECRET || process.env.RECONCILIATION_SECRET || undefined;
 
 export async function GET(request: NextRequest) {
   // Verify authorization
@@ -25,10 +27,13 @@ export async function GET(request: NextRequest) {
     console.error(
       "[Reconciliation Cron] No CRON_SECRET configured in production",
     );
-    return NextResponse.json(
-      { error: "Server configuration error" },
-      { status: 500 },
-    );
+    const configErrorResponse = {
+      success: false,
+      error: "Server configuration error",
+    };
+    const validatedConfigError =
+      CronReconcileResponseSchema.parse(configErrorResponse);
+    return NextResponse.json(validatedConfigError, { status: 500 });
   }
 
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
@@ -38,7 +43,10 @@ export async function GET(request: NextRequest) {
         request.headers.get("x-real-ip"),
       timestamp: new Date().toISOString(),
     });
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const unauthorizedResponse = { success: false, error: "Unauthorized" };
+    const validatedUnauthorized =
+      CronReconcileResponseSchema.parse(unauthorizedResponse);
+    return NextResponse.json(validatedUnauthorized, { status: 401 });
   }
 
   console.log("[Reconciliation Cron] Starting reconciliation task...");
@@ -77,12 +85,15 @@ export async function GET(request: NextRequest) {
 
   console.log(`[Reconciliation Cron] Completed in ${duration}ms`);
 
-  return NextResponse.json({
+  const reconcileResponse = {
     success: true,
     action: "reconcile_all",
     duration,
     timestamp: new Date().toISOString(),
-  });
+  };
+  const validatedReconcile =
+    CronReconcileResponseSchema.parse(reconcileResponse);
+  return NextResponse.json(validatedReconcile);
 }
 
 // Support POST for some cron services

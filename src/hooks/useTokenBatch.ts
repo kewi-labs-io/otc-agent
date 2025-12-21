@@ -1,32 +1,38 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Token, TokenMarketData } from "@/types";
+import type { Token, TokenMarketData, TokenWithMarketData } from "@/types";
+import { parseOrThrow } from "@/lib/validation/helpers";
+import { z } from "zod";
+import { TokenBatchResponseSchema } from "@/types/validation/hook-schemas";
 
-interface TokenWithMarketData {
-  token: Token;
-  marketData: TokenMarketData | null;
-}
-
-interface BatchResponse {
-  success: boolean;
-  tokens: Record<string, TokenWithMarketData | null>;
-  error?: string;
-}
+// Token IDs array validation
+const TokenIdsArraySchema = z.array(z.string().min(1));
 
 async function fetchTokenBatch(
   tokenIds: string[],
 ): Promise<Record<string, TokenWithMarketData | null>> {
   if (tokenIds.length === 0) return {};
 
+  // Validate token IDs
+  parseOrThrow(TokenIdsArraySchema, tokenIds);
+
   const response = await fetch(
     `/api/tokens/batch?ids=${encodeURIComponent(tokenIds.join(","))}`,
   );
-  const data: BatchResponse = await response.json();
+  const rawData = await response.json();
+
+  // Validate response structure
+  const data = parseOrThrow(TokenBatchResponseSchema, rawData);
 
   if (!data.success) {
-    throw new Error(data.error ?? "Failed to fetch tokens");
+    // Error message is optional in error response - provide fallback
+    const errorMessage =
+      typeof data.error === "string" && data.error.trim() !== ""
+        ? data.error
+        : "Failed to fetch tokens";
+    throw new Error(errorMessage);
   }
 
-  return data.tokens;
+  return data.tokens as Record<string, TokenWithMarketData | null>;
 }
 
 /**
@@ -35,7 +41,8 @@ async function fetchTokenBatch(
 export const tokenKeys = {
   all: ["tokens"] as const,
   batches: () => [...tokenKeys.all, "batch"] as const,
-  batch: (ids: string[]) => [...tokenKeys.batches(), ids.sort().join(",")] as const,
+  batch: (ids: string[]) =>
+    [...tokenKeys.batches(), ids.sort().join(",")] as const,
   single: (id: string) => [...tokenKeys.all, "single", id] as const,
 };
 
@@ -93,4 +100,3 @@ export function useTokenFromBatch(
   if (!batchData || !tokenId) return null;
   return batchData[tokenId] ?? null;
 }
-

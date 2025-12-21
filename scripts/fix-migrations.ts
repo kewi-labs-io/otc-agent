@@ -17,20 +17,30 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 dotenv.config({ path: ".env" });
 
-const DEFAULT_PORT = process.env.POSTGRES_DEV_PORT || process.env.VENDOR_OTC_DESK_DB_PORT || 5439;
-const DEFAULT_POSTGRES_URL = `postgres://eliza:password@localhost:${DEFAULT_PORT}/eliza`;
+const port = process.env.POSTGRES_DEV_PORT || process.env.VENDOR_OTC_DESK_DB_PORT || 5439;
+const DEFAULT_POSTGRES_URL = `postgres://eliza:password@localhost:${port}/eliza`;
 
-const postgresUrl = 
-  process.env.DATABASE_POSTGRES_URL ||
-  process.env.DATABASE_URL_UNPOOLED ||
-  process.env.POSTGRES_URL ||
-  process.env.POSTGRES_DATABASE_URL ||
-  DEFAULT_POSTGRES_URL;
+let postgresUrl: string;
+if (process.env.DATABASE_POSTGRES_URL) {
+  postgresUrl = process.env.DATABASE_POSTGRES_URL;
+} else if (process.env.DATABASE_URL_UNPOOLED) {
+  postgresUrl = process.env.DATABASE_URL_UNPOOLED;
+} else if (process.env.POSTGRES_URL) {
+  postgresUrl = process.env.POSTGRES_URL;
+} else if (process.env.POSTGRES_DATABASE_URL) {
+  postgresUrl = process.env.POSTGRES_DATABASE_URL;
+} else {
+  postgresUrl = DEFAULT_POSTGRES_URL;
+}
+
+if (!postgresUrl) {
+  throw new Error("Database URL is required. Set one of: DATABASE_POSTGRES_URL, DATABASE_URL_UNPOOLED, POSTGRES_URL, or POSTGRES_DATABASE_URL");
+}
 
 const isRemote = !postgresUrl.includes("localhost") && !postgresUrl.includes("127.0.0.1");
 
 console.log(`🔧 Migration Fix Script`);
-console.log(`📍 Database: ${isRemote ? "Remote (Vercel/Neon)" : `Local (port ${DEFAULT_PORT})`}`);
+console.log(`📍 Database: ${isRemote ? "Remote (Vercel/Neon)" : `Local (port ${port})`}`);
 console.log("");
 
 async function main() {
@@ -42,8 +52,7 @@ async function main() {
   
   const client = await pool.connect();
 
-  try {
-    // Step 1: Check for the conflicting constraint
+  // Step 1: Check for the conflicting constraint
     console.log("1️⃣  Checking for conflicting constraints...");
     
     const constraintsResult = await client.query(`
@@ -208,16 +217,11 @@ async function main() {
       console.log("   channels table does not exist or has no columns");
     }
 
-    console.log("\nMigration fix complete");
-    console.log("   Run your development server again to apply migrations cleanly.");
-    
-  } catch (error) {
-    console.error("\nError:", error);
-    process.exit(1);
-  } finally {
-    client.release();
-    await pool.end();
-  }
+  console.log("\nMigration fix complete");
+  console.log("   Run your development server again to apply migrations cleanly.");
+  
+  client.release();
+  await pool.end();
 }
 
 main();

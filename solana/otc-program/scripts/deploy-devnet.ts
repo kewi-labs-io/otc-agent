@@ -53,35 +53,31 @@ async function main() {
   console.log("✅ USDC Mock Mint:", usdcMint.toString());
 
   // 3. Initialize Desk (no token_mint required - all tokens are equal)
-  try {
-    console.log("\n⚙️  Initializing desk...");
+  console.log("\n⚙️  Initializing desk...");
+  
+  const tx = await program.methods
+    .initDesk(new BN(500_000_000), new BN(1800))
+    .accountsPartial({
+      payer: provider.wallet.publicKey,
+      owner: provider.wallet.publicKey,
+      agent: provider.wallet.publicKey, 
+      usdcMint: usdcMint,
+      desk: desk.publicKey,
+    })
+    .signers([desk])
+    .rpc();
     
-    const tx = await program.methods
-      .initDesk(new BN(500_000_000), new BN(1800))
-      .accountsPartial({
-        payer: provider.wallet.publicKey,
-        owner: provider.wallet.publicKey,
-        agent: provider.wallet.publicKey, 
-        usdcMint: usdcMint,
-        desk: desk.publicKey,
-      })
-      .signers([desk])
-      .rpc();
-      
-    console.log("✅ Desk initialized. Tx:", tx);
-  } catch (e: unknown) {
-    const error = e as Error & { logs?: string[] };
-    console.log("⚠️  Desk init error (might be already initialized):", error.message);
-    if (error.logs) console.log("Logs:", error.logs);
-  }
+  console.log("✅ Desk initialized. Tx:", tx);
 
-  // 4. Config Output (no TOKEN_MINT - all tokens are equal)
-  const envData = {
-    NEXT_PUBLIC_SOLANA_RPC: "https://api.devnet.solana.com",
-    NEXT_PUBLIC_SOLANA_PROGRAM_ID: program.programId.toString(),
-    NEXT_PUBLIC_SOLANA_DESK: desk.publicKey.toString(),
-    NEXT_PUBLIC_SOLANA_DESK_OWNER: provider.wallet.publicKey.toString(),
-    NEXT_PUBLIC_SOLANA_USDC_MINT: usdcMint.toString(),
+  // 4. Write deployment config for the app
+  const deploymentData = {
+    network: "solana-devnet",
+    rpc: "https://api.devnet.solana.com",
+    deployer: provider.wallet.publicKey.toString(),
+    programId: program.programId.toString(),
+    desk: desk.publicKey.toString(),
+    deskOwner: provider.wallet.publicKey.toString(),
+    usdcMint: usdcMint.toString(),
   };
 
   // Ensure dir exists
@@ -91,7 +87,7 @@ async function main() {
     fs.mkdirSync(deploymentDir, { recursive: true });
   }
 
-  fs.writeFileSync(deploymentPath, JSON.stringify(envData, null, 2));
+  fs.writeFileSync(deploymentPath, JSON.stringify(deploymentData, null, 2));
   console.log(`\n✅ Config saved to ${deploymentPath}`);
 }
 

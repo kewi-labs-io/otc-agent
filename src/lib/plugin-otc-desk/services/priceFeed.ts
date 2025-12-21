@@ -14,7 +14,7 @@ const CACHE_TTL = 60 * 1000; // 60 seconds
 async function getCachedPrice(key: string): Promise<PriceCache | null> {
   const { agentRuntime } = await import("../../agent-runtime");
   const runtime = await agentRuntime.getRuntime();
-  return (await runtime.getCache<PriceCache>(`price:${key}`)) ?? null;
+  return (await runtime.getCache<PriceCache>(`price:${key}`)) || null;
 }
 
 /**
@@ -42,26 +42,68 @@ export async function getEthPriceUsd(): Promise<number> {
   const response = await fetch(
     "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
     {
-      headers: {
-        Accept: "application/json",
-      },
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(5000),
     },
   );
 
-  if (response.ok) {
-    const data = await response.json();
-    const price = data.ethereum?.usd;
-
-    if (typeof price === "number") {
-      await setCachedPrice(cacheKey, {
-        price,
-        timestamp: Date.now(),
-      });
-      return price;
-    }
+  if (!response.ok) {
+    throw new Error(`CoinGecko ETH fetch failed: HTTP ${response.status}`);
   }
 
-  throw new Error("Failed to fetch ETH price");
+  const data = await response.json();
+  if (!data.ethereum || typeof data.ethereum.usd !== "number") {
+    throw new Error(
+      `Invalid ETH price response from CoinGecko: ${JSON.stringify(data)}`,
+    );
+  }
+  const price = data.ethereum.usd;
+
+  if (price <= 0) {
+    throw new Error(`Invalid ETH price from CoinGecko: ${price}`);
+  }
+
+  await setCachedPrice(cacheKey, { price, timestamp: Date.now() });
+  return price;
+}
+
+/**
+ * Get BNB price in USD
+ */
+export async function getBnbPriceUsd(): Promise<number> {
+  const cacheKey = "BNB";
+
+  const cached = await getCachedPrice(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.price;
+  }
+
+  const response = await fetch(
+    "https://api.coingecko.com/api/v3/simple/price?ids=binancecoin&vs_currencies=usd",
+    {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`CoinGecko BNB fetch failed: HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (!data.binancecoin || typeof data.binancecoin.usd !== "number") {
+    throw new Error(
+      `Invalid BNB price response from CoinGecko: ${JSON.stringify(data)}`,
+    );
+  }
+  const price = data.binancecoin.usd;
+
+  if (price <= 0) {
+    throw new Error(`Invalid BNB price from CoinGecko: ${price}`);
+  }
+
+  await setCachedPrice(cacheKey, { price, timestamp: Date.now() });
+  return price;
 }
 
 /**
@@ -83,23 +125,31 @@ export async function getSolPriceUsd(): Promise<number> {
       headers: {
         Accept: "application/json",
       },
+      signal: AbortSignal.timeout(5000),
     },
   );
 
-  if (response.ok) {
-    const data = await response.json();
-    const price = data.solana?.usd;
-
-    if (typeof price === "number") {
-      await setCachedPrice(cacheKey, {
-        price,
-        timestamp: Date.now(),
-      });
-      return price;
-    }
+  if (!response.ok) {
+    throw new Error(`CoinGecko SOL fetch failed: HTTP ${response.status}`);
   }
 
-  throw new Error("Failed to fetch SOL price");
+  const data = await response.json();
+  if (!data.solana || typeof data.solana.usd !== "number") {
+    throw new Error(
+      `Invalid SOL price response from CoinGecko: ${JSON.stringify(data)}`,
+    );
+  }
+  const price = data.solana.usd;
+
+  if (price <= 0) {
+    throw new Error(`Invalid SOL price from CoinGecko: ${price}`);
+  }
+
+  await setCachedPrice(cacheKey, {
+    price,
+    timestamp: Date.now(),
+  });
+  return price;
 }
 
 /**

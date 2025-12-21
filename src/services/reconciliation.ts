@@ -3,6 +3,7 @@
  *
  * Ensures database state matches blockchain contract state.
  * Critical for maintaining data integrity across the system.
+ * Uses Zod validation at all boundaries.
  */
 
 import { createPublicClient, http, type Address, type Abi } from "viem";
@@ -10,17 +11,14 @@ import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 import { QuoteDB } from "./database";
 import { getChain, getRpcUrl } from "@/lib/getChain";
 import { getContractAddress } from "@/lib/getContractAddress";
-
-// Minimal client interface to avoid viem's "excessively deep" type issues
-interface SimplePublicClient {
-  readContract: (params: {
-    address: Address;
-    abi: Abi;
-    functionName: string;
-    args: readonly unknown[];
-  }) => Promise<unknown>;
-  getBlockNumber: () => Promise<bigint>;
-}
+import type { MinimalPublicClient } from "@/lib/viem-utils";
+import { parseOrThrow } from "@/lib/validation/helpers";
+import { z } from "zod";
+import {
+  ReconciliationResultSchema,
+  ReconciliationSummarySchema,
+  HealthCheckOutputSchema,
+} from "@/types/validation/service-schemas";
 
 // OnChainOffer matches the struct returned by the OTC contract
 interface OnChainOffer {
@@ -41,7 +39,7 @@ interface OnChainOffer {
 }
 
 export class ReconciliationService {
-  private client: SimplePublicClient;
+  private client: MinimalPublicClient;
   private otcAddress: Address | undefined;
   private abi: Abi;
 
@@ -50,25 +48,20 @@ export class ReconciliationService {
     const chain = getChain();
     const rpcUrl = getRpcUrl();
 
-    // Create public client (cast to simple interface to avoid deep type issues)
+    // Create public client (cast to minimal interface to avoid deep type issues)
+    // viem's PublicClient has deep generic types causing TS performance issues
+    // MinimalPublicClient is a simplified interface that preserves needed functionality
     this.client = createPublicClient({
       chain,
       transport: http(rpcUrl),
-    }) as unknown as SimplePublicClient;
+    }) as MinimalPublicClient;
 
     // Use chain-specific contract address based on NETWORK env var
-    try {
-      this.otcAddress = getContractAddress();
-      console.log(
-        `[ReconciliationService] Using contract address: ${this.otcAddress} for network: ${process.env.NETWORK || "localnet"}`,
-      );
-    } catch (error) {
-      console.error(
-        "[ReconciliationService] Failed to get contract address:",
-        error,
-      );
-      throw error;
-    }
+    // FAIL-FAST: Contract address must be configured
+    this.otcAddress = getContractAddress();
+    console.log(
+      `[ReconciliationService] Using contract address: ${this.otcAddress} for network: ${process.env.NETWORK || "localnet"}`,
+    );
     this.abi = otcArtifact.abi as Abi;
   }
 
@@ -136,13 +129,20 @@ export class ReconciliationService {
     oldStatus: string;
     newStatus: string;
   }> {
+    // FAIL-FAST: Validate quoteId
+    if (!quoteId || quoteId.trim() === "") {
+      throw new Error("reconcileQuote: quoteId is required");
+    }
+
     const dbQuote = await QuoteDB.getQuoteByQuoteId(quoteId);
     if (!dbQuote.offerId) {
-      return {
+      const result = {
         updated: false,
         oldStatus: dbQuote.status,
         newStatus: dbQuote.status,
       };
+      // Validate output
+      return parseOrThrow(ReconciliationResultSchema, result);
     }
 
     const contractOffer = await this.readContractOffer(dbQuote.offerId);
@@ -156,29 +156,34 @@ export class ReconciliationService {
           : "active";
 
     if (dbQuote.status === contractStatus) {
-      return {
+      const result = {
         updated: false,
         oldStatus: dbQuote.status,
         newStatus: contractStatus,
       };
+      return parseOrThrow(ReconciliationResultSchema, result);
     }
 
     console.log(
       `[Reconciliation] ${quoteId}: ${dbQuote.status} → ${contractStatus}`,
     );
+    // FAIL-FAST: offerId should exist if quote has been executed/approved
+    // Empty string is acceptable for quotes that haven't been executed yet
+    const offerId = dbQuote.offerId || "";
     await QuoteDB.updateQuoteStatus(quoteId, contractStatus, {
-      offerId: dbQuote.offerId || "",
+      offerId,
       transactionHash: "",
       blockNumber: 0,
       rejectionReason: "",
       approvalNote: "",
     });
 
-    return {
+    const result = {
       updated: true,
       oldStatus: dbQuote.status,
       newStatus: contractStatus,
     };
+    return parseOrThrow(ReconciliationResultSchema, result);
   }
 
   async reconcileAllActive(): Promise<{
@@ -198,10 +203,16 @@ export class ReconciliationService {
       `[Reconciliation] Complete: ${updated}/${results.length} updated`,
     );
 
-    return { total: results.length, updated };
+    const result = { total: results.length, updated };
+    return parseOrThrow(ReconciliationSummarySchema, result);
   }
 
   async verifyQuoteState(quoteId: string): Promise<{ syncNeeded: boolean }> {
+    // FAIL-FAST: Validate quoteId
+    if (!quoteId || quoteId.trim() === "") {
+      throw new Error("verifyQuoteState: quoteId is required");
+    }
+
     const result = await this.reconcileQuote(quoteId);
     return { syncNeeded: result.updated };
   }
@@ -211,18 +222,23 @@ export class ReconciliationService {
     contractAddress: string;
   }> {
     if (!this.otcAddress) throw new Error("OTC address not configured");
+    const getBlockNumber = this.client.getBlockNumber;
+    if (!getBlockNumber) {
+      throw new Error("getBlockNumber not available on client");
+    }
 
-    const blockNumber = await this.client.getBlockNumber();
+    const blockNumber = await getBlockNumber();
     await this.client.readContract({
       address: this.otcAddress,
       abi: this.abi,
       functionName: "nextOfferId",
       args: [],
     });
-    return {
+    const result = {
       blockNumber: Number(blockNumber),
       contractAddress: this.otcAddress,
     };
+    return parseOrThrow(HealthCheckOutputSchema, result);
   }
 }
 

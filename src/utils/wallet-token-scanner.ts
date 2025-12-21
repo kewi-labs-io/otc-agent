@@ -31,32 +31,51 @@ async function scanEvmTokens(
   chain: Chain,
   forceRefresh = false,
 ): Promise<ScannedToken[]> {
-  try {
-    const url = `/api/evm-balances?address=${address}&chain=${chain}${forceRefresh ? "&refresh=true" : ""}`;
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(60000), // 60s timeout for initial load
-    });
-    const data = await response.json();
+  const url = `/api/evm-balances?address=${address}&chain=${chain}${forceRefresh ? "&refresh=true" : ""}`;
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(60000), // 60s timeout for initial load
+  });
 
-    if (data.error) {
-      console.error("[WalletScanner] EVM balances error:", data.error);
-      // Return empty but don't throw - let UI show "no tokens" state
+  if (!response.ok) {
+    throw new Error(`EVM balances API returned ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  if (data.error) {
+    throw new Error(`EVM balances error: ${data.error}`);
+  }
+
+  interface EvmToken {
+    contractAddress: string;
+    symbol: string;
+    name: string;
+    decimals: number;
+    balance: string;
+    logoUrl?: string;
+    priceUsd?: number;
+    balanceUsd?: number;
+  }
+
+  if (!data.tokens || !Array.isArray(data.tokens)) {
+    throw new Error("EVM balances API returned invalid tokens array");
+  }
+  const tokens = data.tokens as EvmToken[];
+
+  return tokens.map((t) => {
+    if (!t.contractAddress) {
+      throw new Error("Token missing contractAddress");
     }
-
-    interface EvmToken {
-      contractAddress: string;
-      symbol: string;
-      name: string;
-      decimals: number;
-      balance: string;
-      logoUrl?: string;
-      priceUsd?: number;
-      balanceUsd?: number;
+    if (!t.symbol) {
+      throw new Error(`Token ${t.contractAddress} missing symbol`);
     }
-
-    const tokens = (data.tokens as EvmToken[]) || [];
-
-    return tokens.map((t) => ({
+    if (!t.name) {
+      throw new Error(`Token ${t.contractAddress} missing name`);
+    }
+    if (typeof t.decimals !== "number") {
+      throw new Error(`Token ${t.contractAddress} missing or invalid decimals`);
+    }
+    return {
       address: t.contractAddress,
       symbol: t.symbol,
       name: t.name,
@@ -67,11 +86,8 @@ async function scanEvmTokens(
       isRegistered: false,
       priceUsd: t.priceUsd,
       balanceUsd: t.balanceUsd,
-    }));
-  } catch (error) {
-    console.error("[WalletScanner] EVM scan error:", error);
-    return [];
-  }
+    };
+  });
 }
 
 /**
@@ -82,49 +98,60 @@ async function scanSolanaTokens(
   address: string,
   forceRefresh = false,
 ): Promise<ScannedToken[]> {
-  try {
-    // Backend API does everything: balances, metadata, prices in optimized calls
-    const url = `/api/solana-balances?address=${address}${forceRefresh ? "&refresh=true" : ""}`;
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(30000), // 30s timeout
-    });
+  // Backend API does everything: balances, metadata, prices in optimized calls
+  const url = `/api/solana-balances?address=${address}${forceRefresh ? "&refresh=true" : ""}`;
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(30000), // 30s timeout
+  });
 
-    if (!response.ok) {
-      console.error("[WalletScanner] Solana API error:", response.status);
-      return [];
+  if (!response.ok) {
+    throw new Error(`Solana balances API returned ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  interface SolanaToken {
+    mint: string;
+    amount: number;
+    decimals: number;
+    symbol?: string;
+    name?: string;
+    logoURI?: string | null;
+    priceUsd?: number;
+    balanceUsd?: number;
+  }
+
+  // FAIL-FAST: tokens array must exist
+  if (!data.tokens || !Array.isArray(data.tokens)) {
+    throw new Error(
+      "Invalid response: tokens array is missing or not an array",
+    );
+  }
+  const tokens = data.tokens as SolanaToken[];
+
+  return tokens.map((t) => {
+    // FAIL-FAST: Symbol and name are required - if missing, this indicates a data quality issue
+    if (!t.symbol || typeof t.symbol !== "string") {
+      throw new Error(`Solana token missing symbol for mint: ${t.mint}`);
+    }
+    if (!t.name || typeof t.name !== "string") {
+      throw new Error(`Solana token missing name for mint: ${t.mint}`);
     }
 
-    const data = await response.json();
-
-    interface SolanaToken {
-      mint: string;
-      amount: number;
-      decimals: number;
-      symbol?: string;
-      name?: string;
-      logoURI?: string | null;
-      priceUsd?: number;
-      balanceUsd?: number;
-    }
-
-    const tokens = (data.tokens || []) as SolanaToken[];
-
-    return tokens.map((t) => ({
+    return {
       address: t.mint,
-      symbol: t.symbol || "SPL",
-      name: t.name || "SPL Token",
+      symbol: t.symbol,
+      name: t.name,
       balance: t.amount.toString(),
       decimals: t.decimals,
-      logoUrl: t.logoURI || undefined,
+      // logoUrl is optional - use undefined if not present
+      logoUrl: t.logoURI ?? undefined,
       chain: "solana" as const,
       isRegistered: false,
-      priceUsd: t.priceUsd || 0,
-      balanceUsd: t.balanceUsd || 0,
-    }));
-  } catch (error) {
-    console.error("[WalletScanner] Solana scan error:", error);
-    return [];
-  }
+      priceUsd: t.priceUsd ?? 0, // priceUsd can legitimately be 0
+      balanceUsd: t.balanceUsd ?? 0, // balanceUsd can legitimately be 0
+    };
+  });
 }
 
 /**
@@ -133,26 +160,26 @@ async function scanSolanaTokens(
  * Returns empty set on failure to allow scanner to continue
  */
 async function getRegisteredAddresses(chain: Chain): Promise<Set<string>> {
-  try {
-    // Use lightweight addresses endpoint (smaller payload)
-    const response = await fetch(`/api/tokens/addresses?chain=${chain}`);
-    const data = await response.json();
+  // Use lightweight addresses endpoint (smaller payload)
+  const response = await fetch(`/api/tokens/addresses?chain=${chain}`);
 
-    if (!data.success || !data.addresses) {
-      return new Set();
-    }
-
-    const registeredAddresses: Array<{ address: string }> = data.addresses;
-    return new Set(
-      registeredAddresses.map((t) =>
-        // EVM addresses are case-insensitive, Solana addresses are case-sensitive
-        chain === "solana" ? t.address : t.address.toLowerCase(),
-      ),
-    );
-  } catch {
-    // Graceful degradation: return empty set if API fails
-    return new Set();
+  if (!response.ok) {
+    throw new Error(`Token addresses API returned ${response.status}`);
   }
+
+  const data = await response.json();
+
+  if (!data.success || !data.addresses) {
+    throw new Error("Token addresses API returned invalid response");
+  }
+
+  const registeredAddresses: Array<{ address: string }> = data.addresses;
+  return new Set(
+    registeredAddresses.map((t) =>
+      // EVM addresses are case-insensitive, Solana addresses are case-sensitive
+      chain === "solana" ? t.address : t.address.toLowerCase(),
+    ),
+  );
 }
 
 /**

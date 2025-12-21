@@ -32,24 +32,20 @@ async function main() {
 
   for (const token of TOKENS) {
     const tokenId = keccak256(encodePacked(["address"], [token.address as `0x${string}`]));
-    try {
-      const [tokenAddress, decimals, isActive, oracle] = await client.readContract({
-        address: OTC_ADDRESS,
-        abi: OTC_ABI,
-        functionName: "tokens",
-        args: [tokenId],
-      });
-      
-      if (tokenAddress !== "0x0000000000000000000000000000000000000000") {
-        console.log(`✅ ${token.symbol}: REGISTERED`);
-        console.log(`   Address: ${tokenAddress}`);
-        console.log(`   Active: ${isActive}`);
-        console.log(`   Oracle: ${oracle}`);
-      } else {
-        console.log(`❌ ${token.symbol}: Not registered`);
-      }
-    } catch (e) {
-      console.log(`⚠️ ${token.symbol}: Error checking`);
+    const [tokenAddress, decimals, isActive, oracle] = await client.readContract({
+      address: OTC_ADDRESS,
+      abi: OTC_ABI,
+      functionName: "tokens",
+      args: [tokenId],
+    });
+    
+    if (tokenAddress !== "0x0000000000000000000000000000000000000000") {
+      console.log(`✅ ${token.symbol}: REGISTERED`);
+      console.log(`   Address: ${tokenAddress}`);
+      console.log(`   Active: ${isActive}`);
+      console.log(`   Oracle: ${oracle}`);
+    } else {
+      console.log(`❌ ${token.symbol}: Not registered`);
     }
   }
 

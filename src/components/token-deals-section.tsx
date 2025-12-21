@@ -4,38 +4,44 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import type { OTCConsignment, Token } from "@/services/database";
+import type { ConsignmentWithDisplay } from "@/types";
 
 interface TokenDealsSectionProps {
   token: Token;
   consignments: OTCConsignment[];
 }
 
-// Extended type to handle sanitized consignments with display fields
-type ConsignmentWithDisplay = OTCConsignment & {
-  displayDiscountBps?: number;
-  displayLockupDays?: number;
-  termsType?: "negotiable" | "fixed";
-};
-
-function getDealTerms(c: ConsignmentWithDisplay) {
-  // Use display fields if available (sanitized response)
-  if (c.displayDiscountBps !== undefined && c.displayLockupDays !== undefined) {
+function getDealTerms(c: OTCConsignment): {
+  discountBps: number;
+  lockupDays: number;
+} {
+  // For negotiable deals, show the "starting at" terms (worst for buyer)
+  // For fixed deals, show the fixed terms
+  if (c.isNegotiable) {
     return {
-      discountBps: c.displayDiscountBps,
-      lockupDays: c.displayLockupDays,
+      discountBps: c.minDiscountBps,
+      lockupDays: c.maxLockupDays,
     };
   }
-
-  // Fallback to raw fields (owner view)
-  return c.isNegotiable
-    ? { discountBps: c.maxDiscountBps ?? 0, lockupDays: c.maxLockupDays ?? 0 }
-    : {
-        discountBps: c.fixedDiscountBps ?? 0,
-        lockupDays: c.fixedLockupDays ?? 0,
-      };
+  // FAIL-FAST: Fixed consignments MUST have fixedDiscountBps and fixedLockupDays
+  // These values determine the exact terms shown to users - wrong values would be misleading
+  if (c.fixedDiscountBps === undefined || c.fixedDiscountBps === null) {
+    throw new Error(
+      `Fixed consignment ${c.id} missing fixedDiscountBps - cannot display terms`,
+    );
+  }
+  if (c.fixedLockupDays === undefined || c.fixedLockupDays === null) {
+    throw new Error(
+      `Fixed consignment ${c.id} missing fixedLockupDays - cannot display terms`,
+    );
+  }
+  return {
+    discountBps: c.fixedDiscountBps,
+    lockupDays: c.fixedLockupDays,
+  };
 }
 
-function getDealScore(c: ConsignmentWithDisplay) {
+function getDealScore(c: OTCConsignment) {
   const { discountBps, lockupDays } = getDealTerms(c);
   return discountBps - lockupDays; // higher discount, shorter lockup = better
 }
@@ -126,7 +132,9 @@ export function TokenDealsSection({
                   <span className="font-medium">
                     {formatAmount(totalAvailable.toString())} {token.symbol}
                   </span>
-                  <span className="text-zinc-500 dark:text-zinc-400 ml-2">available</span>
+                  <span className="text-zinc-500 dark:text-zinc-400 ml-2">
+                    available
+                  </span>
                 </div>
               </div>
             </div>
@@ -152,10 +160,10 @@ export function TokenDealsSection({
       {isExpanded && (
         <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
           {sortedConsignments.map((consignment) => {
-            const { discountBps, lockupDays } = getDealTerms(consignment as ConsignmentWithDisplay);
+            const { discountBps, lockupDays } = getDealTerms(consignment);
             const discountPct = (discountBps / 100).toFixed(1);
             const isNegotiable = consignment.isNegotiable;
-            
+
             return (
               <div
                 key={consignment.id}
@@ -169,9 +177,13 @@ export function TokenDealsSection({
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-zinc-500 dark:text-zinc-400">
                       {isNegotiable ? (
-                        <>Starting at {discountPct}% off · {lockupDays}d</>
+                        <>
+                          Starting at {discountPct}% off · {lockupDays}d
+                        </>
                       ) : (
-                        <>{discountPct}% off · {lockupDays}d</>
+                        <>
+                          {discountPct}% off · {lockupDays}d
+                        </>
                       )}
                     </span>
                     {isNegotiable && (

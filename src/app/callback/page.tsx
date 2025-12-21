@@ -1,33 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { OAuthResponse, StoredCredentials } from "@/types";
 
 const STORAGE_KEY = "twitter-oauth-token";
 const OAUTH_REDIRECT_ORIGIN_KEY = "OAUTH_REDIRECT_ORIGIN";
-
-type OAuthResponse = {
-  access_token?: string;
-  refresh_token?: string;
-  expires_in?: number;
-  entityId?: string;
-  username?: string;
-  profileImageUrl?: string;
-  oauth1_token?: string;
-  oauth1_token_secret?: string;
-  user_id?: string;
-  screen_name?: string;
-};
-
-// Credentials stored in localStorage for OAuth
-interface StoredCredentials {
-  entityId: string;
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
-  username?: string;
-  oauth1Token?: string;
-  oauth1TokenSecret?: string;
-}
 
 export default function CallbackPage() {
   const [error, setError] = useState<string | null>(null);
@@ -69,12 +46,48 @@ export default function CallbackPage() {
         if (!data.oauth1_token || !data.oauth1_token_secret) {
           throw new Error("Missing oauth1 tokens in response");
         }
+        // FAIL-FAST: Required OAuth fields must be present
+        if (!data.access_token) {
+          throw new Error("OAuth response missing access_token");
+        }
+        if (!data.refresh_token) {
+          throw new Error("OAuth response missing refresh_token");
+        }
+        if (!data.user_id && !data.entityId) {
+          throw new Error("OAuth response missing user_id or entityId");
+        }
+
+        // entityId is required - we already validated that one exists above
+        const entityId =
+          data.user_id !== undefined &&
+          data.user_id !== null &&
+          data.user_id !== ""
+            ? data.user_id
+            : data.entityId !== undefined &&
+                data.entityId !== null &&
+                data.entityId !== ""
+              ? data.entityId
+              : undefined;
+        if (!entityId) {
+          throw new Error("OAuth response missing both user_id and entityId");
+        }
+        // username is optional - use undefined if not present
+        const username =
+          data.screen_name !== undefined &&
+          data.screen_name !== null &&
+          data.screen_name !== ""
+            ? data.screen_name
+            : data.username !== undefined &&
+                data.username !== null &&
+                data.username !== ""
+              ? data.username
+              : undefined;
         const credentials: StoredCredentials = {
-          entityId: data.user_id || data.entityId || "default_user",
-          accessToken: data.access_token || "",
-          refreshToken: data.refresh_token || "",
+          entityId,
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token,
           expiresAt: Date.now() + 86400000,
-          username: data.screen_name || data.username,
+          username,
           oauth1Token: data.oauth1_token,
           oauth1TokenSecret: data.oauth1_token_secret,
         };

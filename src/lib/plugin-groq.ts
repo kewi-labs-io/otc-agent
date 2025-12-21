@@ -18,7 +18,9 @@ import { getGroqApiKey, getGroqModels } from "@/config/env";
  *
  * @returns The resolved Groq API base URL.
  */
-function getBaseURL(runtime: any): string {
+function getBaseURL(runtime: {
+  getSetting: (key: string) => string | undefined;
+}): string {
   return (
     runtime.getSetting("GROQ_BASE_URL") || "https://api.groq.com/openai/v1"
   );
@@ -146,15 +148,21 @@ export const groqPlugin: Plugin = {
       const presence_penalty = 0.7;
       const max_response_length = 8000;
       const baseURL = getBaseURL(runtime);
+
+      const apiKey = runtime.getSetting("GROQ_API_KEY");
+      if (!apiKey) {
+        throw new Error("GROQ_API_KEY must be configured");
+      }
+
       const groq = createGroq({
-        apiKey: runtime.getSetting("GROQ_API_KEY"),
+        apiKey,
         fetch: runtime.fetch,
         baseURL,
       });
 
       const model =
-        runtime.getSetting("GROQ_SMALL_MODEL") ??
-        runtime.getSetting("SMALL_MODEL") ??
+        runtime.getSetting("GROQ_SMALL_MODEL") ||
+        runtime.getSetting("SMALL_MODEL") ||
         "llama-3.1-8b-instant";
 
       logger.log("generating text");
@@ -162,7 +170,7 @@ export const groqPlugin: Plugin = {
 
       return await generateGroqText(groq, model, {
         prompt,
-        system: runtime.character.system ?? undefined,
+        system: runtime.character.system,
         temperature,
         maxTokens: max_response_length,
         frequencyPenalty: frequency_penalty,
@@ -182,19 +190,25 @@ export const groqPlugin: Plugin = {
       }: GenerateTextParams,
     ) => {
       const model =
-        runtime.getSetting("GROQ_LARGE_MODEL") ??
-        runtime.getSetting("LARGE_MODEL") ??
+        runtime.getSetting("GROQ_LARGE_MODEL") ||
+        runtime.getSetting("LARGE_MODEL") ||
         "meta-llama/llama-4-maverick-17b-128e-instruct";
       const baseURL = getBaseURL(runtime);
+
+      const apiKey = runtime.getSetting("GROQ_API_KEY");
+      if (!apiKey) {
+        throw new Error("GROQ_API_KEY must be configured");
+      }
+
       const groq = createGroq({
-        apiKey: runtime.getSetting("GROQ_API_KEY"),
+        apiKey,
         fetch: runtime.fetch,
         baseURL,
       });
 
       return await generateGroqText(groq, model, {
         prompt,
-        system: runtime.character.system ?? undefined,
+        system: runtime.character.system,
         temperature,
         maxTokens,
         frequencyPenalty,
@@ -257,10 +271,22 @@ export const groqPlugin: Plugin = {
                 Authorization: `Bearer ${runtime.getSetting("GROQ_API_KEY")}`,
               },
             });
-            const data = await response.json();
-            logger.log(
-              `Models Available: ${(data as { data: unknown[] })?.data?.length}`,
-            );
+            // Groq API model object structure
+            interface GroqModel {
+              id: string;
+              object: string;
+              created: number;
+              owned_by: string;
+              active: boolean;
+              context_window: number;
+            }
+            interface GroqModelsResponse {
+              data?: GroqModel[];
+              object?: string;
+            }
+
+            const data = (await response.json()) as GroqModelsResponse;
+            logger.log(`Models Available: ${data.data?.length}`);
             if (!response.ok) {
               throw new Error(
                 `Failed to validate Groq API key: ${response.statusText}`,

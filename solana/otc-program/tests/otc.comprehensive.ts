@@ -15,8 +15,16 @@ import {
   TOKEN_PROGRAM_ID,
   getAccount
 } from "@solana/spl-token";
-import { assert } from "chai";
+import { assert, expect } from "chai";
 import * as fs from "fs";
+
+// Helper to assert promise rejects with specific error message
+async function expectRejectedWith(promise: Promise<unknown>, expectedError: string): Promise<void> {
+  await expect(promise).to.be.rejected;
+  const error = await promise.catch((e: unknown) => e);
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  assert.include(errorMessage, expectedError);
+}
 
 describe("OTC Comprehensive Tests", () => {
   const provider = anchor.AnchorProvider.env();
@@ -33,7 +41,7 @@ describe("OTC Comprehensive Tests", () => {
   
   let tokenMint: PublicKey;
   let usdcMint: PublicKey;
-  let tokenRegistry: PublicKey = PublicKey.default;
+  let tokenRegistry: PublicKey;
   let consignment: Keypair;
   let offer: Keypair;
   
@@ -55,7 +63,6 @@ describe("OTC Comprehensive Tests", () => {
     // tokenRegistry = Keypair.generate(); // Removed
     consignment = Keypair.generate();
     offer = Keypair.generate();
-    tokenRegistry = PublicKey.default;
 
     // Airdrop SOL to accounts
     const airdropAmount = 10 * LAMPORTS_PER_SOL;
@@ -84,6 +91,12 @@ describe("OTC Comprehensive Tests", () => {
       owner.publicKey,
       null,
       6
+    );
+
+    // Derive tokenRegistry PDA - will be created when token is registered
+    [tokenRegistry] = PublicKey.findProgramAddressSync(
+      [Buffer.from("registry"), desk.publicKey.toBuffer(), tokenMint.toBuffer()],
+      program.programId
     );
 
     // Create token accounts
@@ -199,12 +212,6 @@ describe("OTC Comprehensive Tests", () => {
         [Buffer.from("registry"), desk.publicKey.toBuffer(), tokenMint.toBuffer()],
         program.programId
       );
-      // Update the variable to use PDA instead of Keypair
-      // We need to cast it to any because typescript expects Keypair but we are replacing it with PDA PublicKey
-      // Actually we should just change how we use it.
-      // Let's store it in a new variable and update usages or just override the let.
-      // But tokenRegistry is defined as Keypair in `let tokenRegistry: Keypair;`
-      // We should change definition of tokenRegistry to PublicKey.
       
       await program.methods
         .registerToken([...priceFeedId], PublicKey.default, 0) // Use default for pool_address, 0=PoolType::None
@@ -212,11 +219,14 @@ describe("OTC Comprehensive Tests", () => {
           desk: desk.publicKey,
           payer: owner.publicKey,
           tokenMint,
-          // tokenRegistry: registryPda,
-          // systemProgram: SystemProgram.programId,
         })
         .signers([owner])
         .rpc();
+
+      // Verify tokenRegistry matches the PDA (should already be set in before hook)
+      if (!tokenRegistry.equals(registryPda)) {
+        throw new Error(`TokenRegistry mismatch: expected ${registryPda.toBase58()}, got ${tokenRegistry.toBase58()}`);
+      }
 
       const registryAccount = await program.account.tokenRegistry.fetch(registryPda);
       assert.equal(registryAccount.tokenMint.toBase58(), tokenMint.toBase58());
@@ -274,19 +284,16 @@ describe("OTC Comprehensive Tests", () => {
       const tokenPriceTooHigh = new anchor.BN(10001 * 10 ** 8); // $10,001
       const solPrice = new anchor.BN(150 * 10 ** 8);
       
-      try {
-        await program.methods
-          .setPrices(tokenPriceTooHigh, solPrice, new anchor.BN(0), new anchor.BN(3600))
+      const promise = program.methods
+        .setPrices(tokenPriceTooHigh, solPrice, new anchor.BN(0), new anchor.BN(3600))
         .accounts({
           // owner: owner.publicKey,
           desk: desk.publicKey,
         })
-          .signers([owner])
-          .rpc();
-        assert.fail("Should have rejected high price");
-      } catch (error: any) {
-        assert.include(error.toString(), "BadPrice");
-      }
+        .signers([owner])
+        .rpc();
+      
+      await expectRejectedWith(promise, "BadPrice");
     });
 
     it("should set limits", async () => {
@@ -570,20 +577,17 @@ describe("OTC Comprehensive Tests", () => {
     });
 
     it("should reject double approval", async () => {
-      try {
-        await program.methods
-          .approveOffer(new anchor.BN(1))
-          .accounts({
-            desk: desk.publicKey,
-            offer: offer.publicKey,
-            approver: approver.publicKey,
-          })
-          .signers([approver])
-          .rpc();
-        assert.fail("Should have rejected double approval");
-      } catch (error: any) {
-        assert.include(error.toString(), "AlreadyApproved");
-      }
+      const promise = program.methods
+        .approveOffer(new anchor.BN(1))
+        .accounts({
+          desk: desk.publicKey,
+          offer: offer.publicKey,
+          approver: approver.publicKey,
+        })
+        .signers([approver])
+        .rpc();
+      
+      await expectRejectedWith(promise, "AlreadyApproved");
     });
 
     it("should fulfill offer with USDC", async () => {
@@ -727,27 +731,24 @@ describe("OTC Comprehensive Tests", () => {
       );
       await program.methods.setManualTokenPrice(tokenPrice).accounts({ tokenRegistry: registryPda, desk: desk.publicKey, owner: owner.publicKey }).signers([owner]).rpc();
 
-      try {
-        await program.methods
-          .createOfferFromConsignment(
-            new anchor.BN(1),
-            new anchor.BN(50 * 10 ** 9),
-            1000, 1, new anchor.BN(0)
-          )
-          .accounts({
-            desk: desk.publicKey,
-            consignment: consignment.publicKey,
-            tokenRegistry: registryPda,
-            beneficiary: buyer.publicKey,
-            offer: offer3.publicKey,
-            // systemProgram: SystemProgram.programId,
-          })
-          .signers([buyer, offer3])
-          .rpc();
-        assert.fail("Should have rejected when paused");
-      } catch (error: any) {
-        assert.include(error.toString(), "Paused");
-      }
+      const promise = program.methods
+        .createOfferFromConsignment(
+          new anchor.BN(1),
+          new anchor.BN(50 * 10 ** 9),
+          1000, 1, new anchor.BN(0)
+        )
+        .accounts({
+          desk: desk.publicKey,
+          consignment: consignment.publicKey,
+          tokenRegistry: registryPda,
+          beneficiary: buyer.publicKey,
+          offer: offer3.publicKey,
+          // systemProgram: SystemProgram.programId,
+        })
+        .signers([buyer, offer3])
+        .rpc();
+      
+      await expectRejectedWith(promise, "Paused");
 
       // Unpause
       await program.methods
@@ -786,27 +787,24 @@ describe("OTC Comprehensive Tests", () => {
       );
       await program.methods.setManualTokenPrice(new anchor.BN(10 * 10 ** 8)).accounts({ tokenRegistry: registryPda, desk: desk.publicKey, owner: owner.publicKey }).signers([owner]).rpc();
 
-      try {
-        await program.methods
-          .createOfferFromConsignment(
-            new anchor.BN(1),
-            new anchor.BN(1 * 10 ** 9), // Very small amount
-            1000, 1, new anchor.BN(0)
-          )
-          .accounts({
-            desk: desk.publicKey,
-            consignment: consignment.publicKey,
-            tokenRegistry: tokenRegistry,
-            beneficiary: buyer.publicKey,
-            offer: offer4.publicKey,
-            // systemProgram: SystemProgram.programId,
-          })
-          .signers([buyer, offer4])
-          .rpc();
-        assert.fail("Should have rejected low USD amount");
-      } catch (error: any) {
-        assert.include(error.toString(), "MinUsd");
-      }
+      const promise = program.methods
+        .createOfferFromConsignment(
+          new anchor.BN(1),
+          new anchor.BN(1 * 10 ** 9), // Very small amount
+          1000, 1, new anchor.BN(0)
+        )
+        .accounts({
+          desk: desk.publicKey,
+          consignment: consignment.publicKey,
+          tokenRegistry: tokenRegistry,
+          beneficiary: buyer.publicKey,
+          offer: offer4.publicKey,
+          // systemProgram: SystemProgram.programId,
+        })
+        .signers([buyer, offer4])
+        .rpc();
+      
+      await expectRejectedWith(promise, "MinUsd");
     });
 
     it("should enforce consignment deal limits", async () => {
@@ -819,28 +817,24 @@ describe("OTC Comprehensive Tests", () => {
       );
       await program.methods.setManualTokenPrice(new anchor.BN(10 * 10 ** 8)).accounts({ tokenRegistry: registryPda, desk: desk.publicKey, owner: owner.publicKey }).signers([owner]).rpc();
 
-      try {
-        // Try to create offer exceeding max deal amount
-        await program.methods
-          .createOfferFromConsignment(
-            new anchor.BN(1),
-            new anchor.BN(600 * 10 ** 9), // Exceeds max of 500
-            1000, 1, new anchor.BN(0)
-          )
-          .accounts({
-            desk: desk.publicKey,
-            consignment: consignment.publicKey,
-            tokenRegistry: registryPda,
-            beneficiary: buyer.publicKey,
-            offer: offer5.publicKey,
-            // systemProgram: SystemProgram.programId,
-          })
-          .signers([buyer, offer5])
-          .rpc();
-        assert.fail("Should have rejected amount out of range");
-      } catch (error: any) {
-        assert.include(error.toString(), "AmountRange");
-      }
+      const promise = program.methods
+        .createOfferFromConsignment(
+          new anchor.BN(1),
+          new anchor.BN(600 * 10 ** 9), // Exceeds max of 500
+          1000, 1, new anchor.BN(0)
+        )
+        .accounts({
+          desk: desk.publicKey,
+          consignment: consignment.publicKey,
+          tokenRegistry: registryPda,
+          beneficiary: buyer.publicKey,
+          offer: offer5.publicKey,
+          // systemProgram: SystemProgram.programId,
+        })
+        .signers([buyer, offer5])
+        .rpc();
+      
+      await expectRejectedWith(promise, "AmountRange");
     });
 
     it("should handle inventory calculations correctly", async () => {

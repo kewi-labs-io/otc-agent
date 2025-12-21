@@ -3,23 +3,56 @@ import { MarketDataDB, TokenDB, type Chain } from "@/services/database";
 import { TokenRegistryService } from "@/services/tokenRegistry";
 import { MarketDataService } from "@/services/marketDataService";
 import { agentRuntime } from "@/lib/agent-runtime";
-import { getCachedTokens, getCachedMarketData, invalidateTokenCache } from "@/lib/cache";
+import {
+  getCachedTokens,
+  getCachedMarketData,
+  invalidateTokenCache,
+} from "@/lib/cache";
+import {
+  validateQueryParams,
+  parseOrThrow,
+  validationErrorResponse,
+} from "@/lib/validation/helpers";
+import {
+  GetTokensQuerySchema,
+  CreateTokenRequestSchema,
+  TokensResponseSchema,
+  CreateTokenResponseSchema,
+  UpdateTokenResponseSchema,
+  DeleteTokenResponseSchema,
+} from "@/types/validation/api-schemas";
+import { z } from "zod";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const chain = searchParams.get("chain") as Chain | null;
-  const minMarketCap = searchParams.get("minMarketCap");
-  const maxMarketCap = searchParams.get("maxMarketCap");
-  const isActive = searchParams.get("isActive");
+  const query = validateQueryParams(GetTokensQuerySchema, searchParams);
+
+  const { chain, symbol, address, minMarketCap, maxMarketCap, isActive } =
+    query;
 
   // Use serverless-optimized cache for token list
   const filters: { chain?: Chain; isActive?: boolean } = {};
   if (chain) filters.chain = chain;
-  if (isActive !== null) filters.isActive = isActive === "true";
+  if (isActive !== undefined) filters.isActive = isActive;
 
   let tokens = await getCachedTokens(filters);
 
-  // Apply market cap filters (client-side since they require market data)
+  // Filter by symbol or address if provided
+  if (symbol) {
+    tokens = tokens.filter(
+      (t) => t.symbol.toLowerCase() === symbol.toLowerCase(),
+    );
+  }
+  if (address) {
+    tokens = tokens.filter((t) => {
+      if (t.chain === "solana") {
+        return t.contractAddress === address;
+      }
+      return t.contractAddress.toLowerCase() === address.toLowerCase();
+    });
+  }
+
+  // Apply market cap filters if provided
   if (minMarketCap || maxMarketCap) {
     const service = new TokenRegistryService();
     tokens = await service.getAllTokens({
@@ -29,9 +62,28 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // Filter out tokens with invalid chain values before validation
+  // Supported chains are: ethereum, base, bsc, solana
+  const VALID_CHAINS = new Set(["ethereum", "base", "bsc", "solana"]);
+  const validTokens = tokens.filter((token) => {
+    // Filter out tokens with invalid chain
+    if (!VALID_CHAINS.has(token.chain)) {
+      return false;
+    }
+    // Filter out tokens with invalid contract addresses
+    const isEvmAddress = /^0x[a-fA-F0-9]{40}$/.test(token.contractAddress);
+    const isSolanaAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(
+      token.contractAddress,
+    );
+    if (!isEvmAddress && !isSolanaAddress) {
+      return false;
+    }
+    return true;
+  });
+
   // Batch fetch market data with cache
   const tokensWithMarketData = await Promise.all(
-    tokens.map(async (token) => {
+    validTokens.map(async (token) => {
       const marketData = await getCachedMarketData(token.id);
       return {
         ...token,
@@ -40,19 +92,21 @@ export async function GET(request: NextRequest) {
     }),
   );
 
+  const response = { success: true as const, tokens: tokensWithMarketData };
+  const validatedResponse = TokensResponseSchema.parse(response);
+
   // Cache for 5 minutes - token metadata rarely changes
-  return NextResponse.json(
-    { success: true, tokens: tokensWithMarketData },
-    {
-      headers: {
-        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
-      },
+  return NextResponse.json(validatedResponse, {
+    headers: {
+      "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
     },
-  );
+  });
 }
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
+  const data = parseOrThrow(CreateTokenRequestSchema, body);
+
   const {
     symbol,
     name,
@@ -61,22 +115,11 @@ export async function POST(request: NextRequest) {
     decimals,
     logoUrl,
     description,
-    website,
-    twitter,
-  } = body;
+  } = data;
 
-  if (
-    !symbol ||
-    !name ||
-    !contractAddress ||
-    !chain ||
-    decimals === undefined
-  ) {
-    return NextResponse.json(
-      { error: "Missing required fields" },
-      { status: 400 },
-    );
-  }
+  // logoUrl and description are optional fields - use empty string as default
+  const logoUrlValue = logoUrl ?? "";
+  const descriptionValue = description ?? "";
 
   const service = new TokenRegistryService();
   const token = await service.registerToken({
@@ -85,10 +128,8 @@ export async function POST(request: NextRequest) {
     contractAddress,
     chain,
     decimals,
-    logoUrl,
-    description,
-    website,
-    twitter,
+    logoUrl: logoUrlValue,
+    description: descriptionValue,
   });
 
   const isLocalTestnet =
@@ -116,10 +157,9 @@ export async function POST(request: NextRequest) {
   // Invalidate token cache so next request gets fresh data
   invalidateTokenCache();
 
-  return NextResponse.json({
-    success: true,
-    token,
-  });
+  const postResponse = { success: true, token };
+  const validatedPost = CreateTokenResponseSchema.parse(postResponse);
+  return NextResponse.json(validatedPost);
 }
 
 /**
@@ -137,17 +177,12 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  try {
-    const updated = await TokenDB.updateToken(tokenId, updates);
-    // Invalidate cache after update
-    invalidateTokenCache();
-    return NextResponse.json({ success: true, token: updated });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Update failed" },
-      { status: 404 },
-    );
-  }
+  const updated = await TokenDB.updateToken(tokenId, updates);
+  // Invalidate cache after update
+  invalidateTokenCache();
+  const patchResponse = { success: true, token: updated };
+  const validatedPatch = UpdateTokenResponseSchema.parse(patchResponse);
+  return NextResponse.json(validatedPatch);
 }
 
 /**
@@ -172,48 +207,62 @@ export async function DELETE(request: NextRequest) {
   if (tokenId) {
     // Delete a specific token
     const token = await runtime.getCache(`token:${tokenId}`);
+    // FAIL-FAST: Token must exist to delete
     if (!token) {
-      return NextResponse.json({ error: "Token not found" }, { status: 404 });
+      throw new Error(`Token ${tokenId} not found`);
     }
 
     await runtime.deleteCache(`token:${tokenId}`);
     await runtime.deleteCache(`market_data:${tokenId}`);
 
     // Remove from all_tokens index
-    const allTokens = (await runtime.getCache<string[]>("all_tokens")) ?? [];
-    const updated = allTokens.filter((id) => id !== tokenId);
+    const allTokens = await runtime.getCache<string[]>("all_tokens");
+    // allTokens is optional - default to empty array if not present
+    const allTokensArray =
+      allTokens !== undefined && allTokens !== null && Array.isArray(allTokens)
+        ? allTokens
+        : [];
+    const updated = allTokensArray.filter((id) => id !== tokenId);
     await runtime.setCache("all_tokens", updated);
 
-    return NextResponse.json({
+    const deleteOneResponse = {
       success: true,
       message: `Deleted token: ${tokenId}`,
-    });
+    };
+    const validatedDeleteOne =
+      DeleteTokenResponseSchema.parse(deleteOneResponse);
+    return NextResponse.json(validatedDeleteOne);
   }
 
   // Delete ALL tokens
-  const allTokens = (await runtime.getCache<string[]>("all_tokens")) ?? [];
+  const allTokens = await runtime.getCache<string[]>("all_tokens");
   const deleted: string[] = [];
 
-  for (const id of allTokens) {
-    await runtime.deleteCache(`token:${id}`);
-    await runtime.deleteCache(`market_data:${id}`);
-    deleted.push(id);
+  if (allTokens) {
+    for (const id of allTokens) {
+      await runtime.deleteCache(`token:${id}`);
+      await runtime.deleteCache(`market_data:${id}`);
+      deleted.push(id);
+    }
   }
 
   // Clear the index
   await runtime.setCache("all_tokens", []);
 
   // Also clear consignments since they reference tokens
-  const allConsignments =
-    (await runtime.getCache<string[]>("all_consignments")) ?? [];
-  for (const id of allConsignments) {
-    await runtime.deleteCache(`consignment:${id}`);
+  const allConsignments = await runtime.getCache<string[]>("all_consignments");
+  if (allConsignments) {
+    for (const id of allConsignments) {
+      await runtime.deleteCache(`consignment:${id}`);
+    }
   }
   await runtime.setCache("all_consignments", []);
 
-  return NextResponse.json({
+  const deleteAllResponse = {
     success: true,
     message: `Deleted ${deleted.length} tokens and all consignments`,
     deletedTokens: deleted,
-  });
+  };
+  const validatedDeleteAll = DeleteTokenResponseSchema.parse(deleteAllResponse);
+  return NextResponse.json(validatedDeleteAll);
 }

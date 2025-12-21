@@ -1,0 +1,16 @@
+{
+  "network": "ethereum-mainnet",
+  "chainId": 1,
+  "rpc": "https://eth.llamarpc.com",
+  "deployer": "0xA92d27A9d94949Ed471Da6aD5f72f82135fCbE3E",
+  "contracts": {
+    "otc": "0x5a1C9911E104F18267505918894fd7d343739657",
+    "usdc": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "ethUsdFeed": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"
+  },
+  "accounts": {
+    "owner": "0xA92d27A9d94949Ed471Da6aD5f72f82135fCbE3E",
+    "agent": "0xA92d27A9d94949Ed471Da6aD5f72f82135fCbE3E",
+    "approver": "0xA92d27A9d94949Ed471Da6aD5f72f82135fCbE3E"
+  }
+}

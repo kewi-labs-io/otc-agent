@@ -11,6 +11,7 @@ import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 import { getChain, getRpcUrl } from "@/lib/getChain";
 import { getContractAddress } from "@/lib/getContractAddress";
 import type { RawOfferData } from "@/lib/otc-helpers";
+import { CronCheckMaturedOtcResponseSchema } from "@/types/validation/api-schemas";
 
 // This should be called daily via a cron job (e.g., Vercel Cron or external scheduler)
 // It checks for matured OTC and claims them on behalf of users
@@ -28,10 +29,13 @@ export async function GET(request: NextRequest) {
   // Always require authentication in production
   if (!cronSecret && process.env.NODE_ENV === "production") {
     console.error("[Cron API] No CRON_SECRET configured in production");
-    return NextResponse.json(
-      { error: "Server configuration error" },
-      { status: 500 },
-    );
+    const configErrorResponse = {
+      success: false,
+      error: "Server configuration error",
+    };
+    const validatedConfigError =
+      CronCheckMaturedOtcResponseSchema.parse(configErrorResponse);
+    return NextResponse.json(validatedConfigError, { status: 500 });
   }
 
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
@@ -41,26 +45,17 @@ export async function GET(request: NextRequest) {
         request.headers.get("x-real-ip"),
       timestamp: new Date().toISOString(),
     });
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const unauthorizedResponse = { success: false, error: "Unauthorized" };
+    const validatedUnauthorized =
+      CronCheckMaturedOtcResponseSchema.parse(unauthorizedResponse);
+    return NextResponse.json(validatedUnauthorized, { status: 401 });
   }
 
-  // Get chain-specific contract address based on NETWORK env var
-  let OTC_ADDRESS: Address;
-  try {
-    OTC_ADDRESS = getContractAddress();
-    console.log(
-      `[Check Matured OTC] Using contract address: ${OTC_ADDRESS} for network: ${process.env.NETWORK || "localnet"}`,
-    );
-  } catch (error) {
-    console.error("[Check Matured OTC] Failed to get contract address:", error);
-    return NextResponse.json(
-      {
-        error: "Missing contract address configuration",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    );
-  }
+  // FAIL-FAST: Contract address must be configured
+  const OTC_ADDRESS = getContractAddress();
+  console.log(
+    `[Check Matured OTC] Using contract address: ${OTC_ADDRESS} for network: ${process.env.NETWORK || "localnet"}`,
+  );
 
   const chain = getChain();
   const rpcUrl = getRpcUrl();
@@ -68,26 +63,25 @@ export async function GET(request: NextRequest) {
   const abi = otcArtifact.abi as Abi;
 
   // Enumerate all offers via nextOfferId
-  // Use type assertion to work around viem's strict generics with dynamic ABIs
-  const nextOfferId = (await publicClient.readContract({
+  const { safeReadContract } = await import("@/lib/viem-utils");
+  const nextOfferId = await safeReadContract<bigint>(publicClient, {
     address: OTC_ADDRESS,
     abi,
     functionName: "nextOfferId",
     args: [],
-  } as unknown as Parameters<typeof publicClient.readContract>[0])) as bigint;
+  });
 
   const now = Math.floor(Date.now() / 1000);
   const maturedOffers: bigint[] = [];
 
+  // RawOfferData is already imported as a type at the top of the file
   for (let i = BigInt(1); i < nextOfferId; i++) {
-    const offerData = (await publicClient.readContract({
+    const offerData = await safeReadContract<RawOfferData>(publicClient, {
       address: OTC_ADDRESS,
       abi,
       functionName: "offers",
       args: [i],
-    } as unknown as Parameters<
-      typeof publicClient.readContract
-    >[0])) as RawOfferData;
+    });
 
     // Offer struct indices (from OTC.sol):
     // 0: consignmentId, 1: tokenId, 2: beneficiary, 3: tokenAmount, 4: discountBps,
@@ -152,15 +146,15 @@ export async function GET(request: NextRequest) {
   // Execute autoClaim as approver if configured and there are matured offers
   if (maturedOffers.length > 0) {
     if (!EVM_PRIVATE_KEY) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Missing EVM_PRIVATE_KEY",
-          maturedOffers: result.maturedOffers,
-          message: "Found matured offers but cannot claim without approver key",
-        },
-        { status: 500 },
-      );
+      const noKeyResponse = {
+        success: false,
+        error: "Missing EVM_PRIVATE_KEY",
+        maturedOffers: result.maturedOffers,
+        message: "Found matured offers but cannot claim without approver key",
+      };
+      const validatedNoKey =
+        CronCheckMaturedOtcResponseSchema.parse(noKeyResponse);
+      return NextResponse.json(validatedNoKey, { status: 500 });
     }
 
     const account = privateKeyToAccount(EVM_PRIVATE_KEY);
@@ -193,11 +187,13 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({
+  const cronResponse = {
     success: true,
     timestamp: new Date().toISOString(),
     ...result,
-  });
+  };
+  const validatedCron = CronCheckMaturedOtcResponseSchema.parse(cronResponse);
+  return NextResponse.json(validatedCron);
 }
 
 // Also support POST for some cron services

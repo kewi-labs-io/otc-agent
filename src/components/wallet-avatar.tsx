@@ -25,7 +25,12 @@ export function WalletAvatar({
   return (
     <div
       className={className}
-      style={{ width: size, height: size, borderRadius: "50%", overflow: "hidden" }}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        overflow: "hidden",
+      }}
     >
       <Avatar
         size={size}
@@ -36,6 +41,3 @@ export function WalletAvatar({
     </div>
   );
 }
-
-
-

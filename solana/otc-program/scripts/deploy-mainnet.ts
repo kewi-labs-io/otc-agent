@@ -43,32 +43,34 @@ async function main() {
   console.log("✅ USDC Mint:", usdcMint.toString());
 
   // 3. Initialize Desk (no token_mint required - all tokens registered via TokenRegistry)
-  try {
-    console.log("\n⚙️  Initializing desk...");
-    await program.methods
-      .initDesk(new BN(500_000_000), new BN(1800)) // $5 min, 30 min expiry
-      .accountsPartial({
-        payer: provider.wallet.publicKey,
-        owner: provider.wallet.publicKey,
-        agent: provider.wallet.publicKey, 
-        usdcMint: usdcMint,
-        desk: desk.publicKey,
-      })
-      .signers([desk])
-      .rpc();
-    console.log("✅ Desk initialized");
-  } catch (e: unknown) {
-    const error = e as Error;
-    console.log("⚠️  Desk init error (might be already initialized):", error.message);
-  }
+  console.log("\n⚙️  Initializing desk...");
+  await program.methods
+    .initDesk(new BN(500_000_000), new BN(1800)) // $5 min, 30 min expiry
+    .accountsPartial({
+      payer: provider.wallet.publicKey,
+      owner: provider.wallet.publicKey,
+      agent: provider.wallet.publicKey, 
+      usdcMint: usdcMint,
+      desk: desk.publicKey,
+    })
+    .signers([desk])
+    .rpc();
+  console.log("✅ Desk initialized");
 
-  // 4. Config Output (no TOKEN_MINT - all tokens are equal)
-  const envData = {
-    NEXT_PUBLIC_SOLANA_RPC: "https://api.mainnet-beta.solana.com",
-    NEXT_PUBLIC_SOLANA_PROGRAM_ID: program.programId.toString(),
-    NEXT_PUBLIC_SOLANA_DESK: desk.publicKey.toString(),
-    NEXT_PUBLIC_SOLANA_DESK_OWNER: provider.wallet.publicKey.toString(),
-    NEXT_PUBLIC_SOLANA_USDC_MINT: usdcMint.toString(),
+  // 4. Write deployment config for the app
+  const deploymentData = {
+    network: "solana-mainnet",
+    rpc: "/api/rpc/solana",
+    deployer: provider.wallet.publicKey.toString(),
+    programId: program.programId.toString(),
+    desk: desk.publicKey.toString(),
+    deskOwner: provider.wallet.publicKey.toString(),
+    usdcMint: usdcMint.toString(),
+    features: {
+      p2pAutoApproval: true,
+      version: "2.0.0",
+    },
+    registeredTokens: {},
   };
 
   // Ensure dir exists
@@ -78,7 +80,7 @@ async function main() {
     fs.mkdirSync(deploymentDir, { recursive: true });
   }
 
-  fs.writeFileSync(deploymentPath, JSON.stringify(envData, null, 2));
+  fs.writeFileSync(deploymentPath, JSON.stringify(deploymentData, null, 2));
   console.log(`\n✅ Config saved to ${deploymentPath}`);
 }
 

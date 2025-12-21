@@ -10,9 +10,9 @@ contract ReentrantToken is MockERC20 {
 
     constructor() MockERC20("Reentrant", "RE", 18, 1000000e18) {}
 
-    function setAttack(address _target, bytes memory _callData) external {
-        target = _target;
-        callData = _callData;
+    function setAttack(address attackTarget, bytes memory attackCallData) external {
+        target = attackTarget;
+        callData = attackCallData;
         attack = true;
     }
 

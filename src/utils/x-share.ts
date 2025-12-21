@@ -1,22 +1,7 @@
 "use client";
 
 // Client-side helpers for X (Twitter) sharing via our backend endpoints
-
-export type XCredentials = {
-  entityId?: string;
-  username?: string;
-  screen_name?: string;
-  oauth1Token?: string;
-  oauth1TokenSecret?: string;
-  accessToken?: string;
-  refreshToken?: string;
-  expiresAt?: number;
-};
-
-export type PendingShare = {
-  text: string;
-  dataUrl: string;
-};
+import type { XCredentials, PendingShare } from "@/types";
 
 const STORAGE_KEY = "twitter-oauth-token";
 const OAUTH_REDIRECT_ORIGIN_KEY = "OAUTH_REDIRECT_ORIGIN";
@@ -72,8 +57,14 @@ export async function shareOnX(
 ): Promise<{ success: boolean; tweetId?: string; tweetUrl?: string }> {
   const apiUrl = getApiUrl();
   const c = creds ?? getXCreds();
-  if (!c?.oauth1Token || !c?.oauth1TokenSecret) {
-    throw new Error("Missing X OAuth credentials");
+  if (!c) {
+    throw new Error("Missing X OAuth credentials (no credentials provided)");
+  }
+  if (!c.oauth1Token) {
+    throw new Error("Missing X OAuth token");
+  }
+  if (!c.oauth1TokenSecret) {
+    throw new Error("Missing X OAuth token secret");
   }
 
   // 1) Upload media
@@ -90,7 +81,11 @@ export async function shareOnX(
     const err = await safeText(uploadResp);
     throw new Error(err || "Failed to upload media to X");
   }
-  const uploadJson = (await uploadResp.json()) as { media_id_string?: string };
+  interface XUploadResponse {
+    media_id_string?: string;
+  }
+
+  const uploadJson = (await uploadResp.json()) as XUploadResponse;
   const mediaId = uploadJson.media_id_string;
   if (!mediaId) throw new Error("No media_id returned from upload");
 
@@ -108,10 +103,22 @@ export async function shareOnX(
     const err = await safeText(tweetResp);
     throw new Error(err || "Failed to create tweet");
   }
-  const posted = (await tweetResp.json()) as {
-    tweet?: { data?: { id?: string } };
-  };
-  const id = posted?.tweet?.data?.id;
+  interface XTweetResponse {
+    tweet?: {
+      data?: {
+        id?: string;
+      };
+    };
+  }
+
+  const posted = (await tweetResp.json()) as XTweetResponse;
+  if (!posted.tweet) {
+    throw new Error("X API response missing tweet field");
+  }
+  if (!posted.tweet.data) {
+    throw new Error("X API response missing tweet.data field");
+  }
+  const id = posted.tweet.data.id;
   const username = c.screen_name || c.username;
   const tweetUrl =
     id && username ? `https://twitter.com/${username}/status/${id}` : undefined;
@@ -130,11 +137,25 @@ export async function resumeFreshAuth(): Promise<
 
   const pending = JSON.parse(pendingRaw) as PendingShare;
   const creds = getXCreds();
-  if (!creds?.oauth1Token || !creds?.oauth1TokenSecret) {
+  if (!creds) {
     return {
       resumed: true,
       success: false,
-      error: "Missing credentials after auth.",
+      error: "Missing credentials after auth (no credentials found)",
+    };
+  }
+  if (!creds.oauth1Token) {
+    return {
+      resumed: true,
+      success: false,
+      error: "Missing credentials after auth (no oauth1Token)",
+    };
+  }
+  if (!creds.oauth1TokenSecret) {
+    return {
+      resumed: true,
+      success: false,
+      error: "Missing credentials after auth (no oauth1TokenSecret)",
     };
   }
   const result = await shareOnX(pending.text, pending.dataUrl, creds);

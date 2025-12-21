@@ -48,7 +48,7 @@ async function seedTokens() {
   }
 
   // === SAFETY CHECK 4: Block if DATABASE_URL looks like production ===
-  const dbUrl = process.env.DATABASE_URL || "";
+  const dbUrl = process.env.DATABASE_URL ?? "";
   const looksLikeProduction = 
     dbUrl.includes("neon.tech") || 
     dbUrl.includes("supabase") || 
@@ -79,30 +79,22 @@ async function seedTokens() {
     process.exit(0);
   }
 
-  // Wait for local frontend
-  let retries = 5;
-  while (retries > 0) {
-    const healthCheck = await fetch("http://localhost:4444/api/tokens").catch(() => null);
-    if (healthCheck && healthCheck.ok) {
-      console.log("✅ Local frontend is ready");
-      break;
-    }
-    console.log(`⏳ Waiting for local frontend... (${retries} retries left)`);
-    await new Promise(r => setTimeout(r, 2000));
-    retries--;
+  // Check local frontend is ready
+  const healthCheck = await fetch("http://localhost:4444/api/tokens");
+  if (!healthCheck.ok) {
+    throw new Error(`Local frontend health check failed: ${healthCheck.status} ${healthCheck.statusText}`);
   }
-
-  if (retries === 0) {
-    console.log("⚠️  Local frontend not ready, skipping seed\n");
-    process.exit(0);
-  }
+  console.log("✅ Local frontend is ready");
 
   // --- EVM Local Seeding (Anvil only) ---
   const localEvmPath = "./src/config/deployments/local-evm.json";
   if (fs.existsSync(localEvmPath)) {
-    const evmDeployment = JSON.parse(fs.readFileSync(localEvmPath, "utf8"));
+    const evmDeployment = JSON.parse(fs.readFileSync(localEvmPath, "utf8")) as { contracts?: { elizaToken?: string } };
     
-    if (!evmDeployment.contracts?.elizaToken) {
+    if (!evmDeployment.contracts) {
+      throw new Error("EVM deployment config missing 'contracts' field");
+    }
+    if (!evmDeployment.contracts.elizaToken) {
       console.log("⚠️  No local EVM token deployed, skipping EVM seed");
     } else {
       const testTokenAddress = evmDeployment.contracts.elizaToken;
@@ -111,7 +103,7 @@ async function seedTokens() {
       console.log(`\n[Local EVM] Test token: ${testTokenAddress}`);
       
       // Register local test token
-      await fetch("http://localhost:4444/api/tokens", {
+      const tokenRes = await fetch("http://localhost:4444/api/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -123,14 +115,18 @@ async function seedTokens() {
           logoUrl: "/tokens/eliza.svg",
           description: "LOCAL DEV ONLY - Not a real token",
         }),
-      }).catch(() => console.log("   Token may already exist"));
+      });
+      
+      if (!tokenRes.ok && tokenRes.status !== 409) {
+        throw new Error(`Failed to register token: ${tokenRes.status} ${tokenRes.statusText}`);
+      }
 
       console.log("✅ [Local EVM] Test token registered");
 
       // Create test consignment
       const tokenId = `token-base-${testTokenAddress.toLowerCase()}`;
       
-      await fetch("http://localhost:4444/api/consignments", {
+      const consignRes = await fetch("http://localhost:4444/api/consignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -150,7 +146,11 @@ async function seedTokens() {
           maxTimeToExecuteSeconds: 1800,
           chain: "base",
         }),
-      }).catch(() => console.log("   Consignment may already exist"));
+      });
+      
+      if (!consignRes.ok && consignRes.status !== 409) {
+        throw new Error(`Failed to create consignment: ${consignRes.status} ${consignRes.statusText}`);
+      }
 
       console.log("✅ [Local EVM] Test consignment created");
     }

@@ -1,4 +1,5 @@
 import { IAgentRuntime, Memory, Provider } from "@elizaos/core";
+import type { OTCConsignment } from "@/types";
 
 export const otcDeskProvider: Provider = {
   name: "OTC_DESK",
@@ -8,9 +9,13 @@ export const otcDeskProvider: Provider = {
   get: async (runtime: IAgentRuntime, message: Memory) => {
     const agentName = runtime.character.name;
 
-    const messageText = message?.content?.text || "";
+    // FAIL-FAST: message content is required
+    if (!message.content || typeof message.content.text !== "string") {
+      throw new Error("OTC_DESK provider requires message.content.text");
+    }
+    const messageText = message.content.text;
     const tokenMatch = messageText.match(/\b([A-Z]{2,6})\b/);
-    let currentConsignments: any[] = [];
+    let currentConsignments: OTCConsignment[] = [];
 
     if (tokenMatch) {
       const { TokenDB, ConsignmentDB } = await import("@/services/database");
@@ -35,15 +40,31 @@ General guidelines:
 - Terms are validated server-side; focus on finding mutually acceptable deals`;
 
     if (currentConsignments.length > 0) {
-      const negotiable = currentConsignments.filter((c: any) => c.isNegotiable);
+      const negotiable = currentConsignments.filter((c) => c.isNegotiable);
 
       if (negotiable.length === 0) {
         const fixed = currentConsignments[0];
+        if (!fixed) {
+          throw new Error(
+            "OTC_DESK: currentConsignments not empty but no first element",
+          );
+        }
         // For fixed-price deals, the terms are public since they're non-negotiable
+        // FAIL-FAST: Fixed consignments must have fixedDiscountBps and fixedLockupDays
+        if (
+          fixed.fixedDiscountBps === undefined ||
+          fixed.fixedLockupDays === undefined
+        ) {
+          throw new Error(
+            `Fixed consignment ${fixed.id} missing fixedDiscountBps or fixedLockupDays`,
+          );
+        }
+        const discountPct = (fixed.fixedDiscountBps / 100).toFixed(2);
+        const lockupDays = fixed.fixedLockupDays;
         constraintsText = `
 This token has fixed-price deals only:
-- Discount: ${fixed.fixedDiscountBps / 100}% (FIXED)
-- Lockup: ${fixed.fixedLockupDays} days (FIXED)
+- Discount: ${discountPct}% (FIXED)
+- Lockup: ${lockupDays} days (FIXED)
 Do not negotiate. Present these exact terms.`;
       } else {
         // For negotiable deals: DO NOT reveal the actual min/max bounds

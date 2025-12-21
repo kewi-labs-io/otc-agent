@@ -17,12 +17,14 @@ import {
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import * as bs58 from "bs58";
 
-const PROGRAM_ID = new PublicKey("q9MhHpeydqTdtPaNpzDoWvP1qY5s3sFHTF1uYcXjdsc");
+const PROGRAM_ID = new PublicKey("3uTdWzoAcBFKTVYRd2z2jDKAcuyW64rQLxa9wMreDJKo");
 const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 const RPC_URL = "https://api.mainnet-beta.solana.com";
 
-// Deployer key (from user)
-const DEPLOYER_KEY = "5j9LAUP56hf5Ny45gDzFU1xe1jUjcuJpKUxBtmHuVvDfZuMPXa7GNUNxCfqn2Pmfra3AtJqykbNdmBdW5dbbhi8R";
+// Load deployer from file (never hardcode keys)
+import * as fs from "fs";
+const deployerKeyFile = "./solana/otc-program/mainnet-deployer.json";
+const deployerSecretKey = Uint8Array.from(JSON.parse(fs.readFileSync(deployerKeyFile, "utf-8")));
 
 // Anchor discriminator for init_desk (sha256("global:init_desk")[0..8])
 const INIT_DESK_DISCRIMINATOR = Buffer.from([
@@ -62,9 +64,8 @@ async function main() {
   console.log("═".repeat(70));
   console.log();
 
-  // Parse keypair
-  const decoded = bs58.decode(DEPLOYER_KEY);
-  const keypair = Keypair.fromSecretKey(decoded);
+  // Load keypair from file
+  const keypair = Keypair.fromSecretKey(deployerSecretKey);
   console.log(`Owner/Agent/Payer: ${keypair.publicKey.toBase58()}`);
   console.log(`Program ID: ${PROGRAM_ID.toBase58()}`);
   console.log(`USDC Mint: ${USDC_MINT.toBase58()}`);

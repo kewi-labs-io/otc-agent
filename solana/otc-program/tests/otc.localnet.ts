@@ -62,7 +62,7 @@ describe("otc localnet smoke", () => {
     await getOrCreateAssociatedTokenAccount(provider.connection, owner, tokenMint, owner.publicKey);
     await mintTo(provider.connection, owner, tokenMint, ownerTokenAta, owner, 1_000_000_000000000n);
 
-    await program.methods.depositTokens(new BN("500000000000000")).accounts({ desk: desk.publicKey, tokenRegistry, owner: owner.publicKey, ownerTokenAta, deskTokenTreasury }).signers([owner]).rpc();
+    await program.methods.depositTokens(new BN("500000000000000")).accounts({ desk: desk.publicKey, tokenRegistry, owner: owner.publicKey, ownerTokenAta, deskTokenTreasury, tokenMint, tokenProgram: TOKEN_PROGRAM_ID }).signers([owner]).rpc();
 
     expect(true).to.eq(true);
   });

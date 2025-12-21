@@ -85,16 +85,6 @@ function section(title: string) {
 
 async function startAnvil(): Promise<() => void> {
   return new Promise((resolve, reject) => {
-    // Check if anvil is already running
-    try {
-      execSync("lsof -i :8545", { stdio: "pipe" });
-      log("✅", "Anvil already running on port 8545");
-      resolve(() => {});
-      return;
-    } catch {
-      // Not running, start it
-    }
-
     const anvil = spawn("anvil", ["--host", "127.0.0.1", "--port", "8545"], {
       stdio: ["pipe", "pipe", "pipe"],
       detached: true,
@@ -102,7 +92,16 @@ async function startAnvil(): Promise<() => void> {
 
     let started = false;
 
-    anvil.stdout?.on("data", (data) => {
+    if (!anvil.stdout) {
+      reject(new Error("Anvil stdout stream not available"));
+      return;
+    }
+    if (!anvil.stderr) {
+      reject(new Error("Anvil stderr stream not available"));
+      return;
+    }
+
+    anvil.stdout.on("data", (data) => {
       const output = data.toString();
       if (output.includes("Listening on") && !started) {
         started = true;
@@ -113,7 +112,7 @@ async function startAnvil(): Promise<() => void> {
       }
     });
 
-    anvil.stderr?.on("data", (data) => {
+    anvil.stderr.on("data", (data) => {
       console.error("Anvil error:", data.toString());
     });
 
@@ -146,21 +145,13 @@ async function deployContracts(
   // Run forge deploy script
   const contractsDir = path.join(process.cwd(), "contracts");
 
-  try {
-    execSync(
-      "forge script scripts/DeployElizaOTC.s.sol --rpc-url http://127.0.0.1:8545 --broadcast --skip-simulation",
-      {
-        cwd: contractsDir,
-        stdio: "pipe",
-      }
-    );
-  } catch (e: unknown) {
-    const error = e as Error & { stdout?: Buffer };
-    if (error.stdout) {
-      console.log(error.stdout.toString());
+  execSync(
+    "forge script scripts/DeployElizaOTC.s.sol --rpc-url http://127.0.0.1:8545 --broadcast --skip-simulation",
+    {
+      cwd: contractsDir,
+      stdio: "pipe",
     }
-    throw new Error("Contract deployment failed");
-  }
+  );
 
   // Read deployment addresses
   const deploymentPath = path.join(contractsDir, "deployments/eliza-otc-deployment.json");
@@ -222,13 +213,7 @@ async function runBuyFlowTest() {
   section("ON-CHAIN BUY FLOW E2E TEST");
 
   // Start Anvil if needed
-  let stopAnvil: () => void;
-  try {
-    stopAnvil = await startAnvil();
-  } catch (e) {
-    log("❌", "Failed to start Anvil - is Foundry installed?");
-    throw e;
-  }
+  const stopAnvil = await startAnvil();
 
   // Create clients
   const publicClient = createPublicClient({
@@ -697,8 +682,6 @@ async function runBuyFlowTest() {
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 `);
-
-  return true;
 }
 
 // =============================================================================
@@ -706,14 +689,9 @@ async function runBuyFlowTest() {
 // =============================================================================
 
 runBuyFlowTest()
-  .then((success) => {
-    if (success) {
-      console.log("\n✅ All buy flow tests passed and verified on-chain!\n");
-      process.exit(0);
-    } else {
-      console.log("\n❌ Buy flow tests failed\n");
-      process.exit(1);
-    }
+  .then(() => {
+    console.log("\n✅ All buy flow tests passed and verified on-chain!\n");
+    process.exit(0);
   })
   .catch((error) => {
     console.error("\n❌ Error:", error);

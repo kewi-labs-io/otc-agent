@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 
 describe("wagmi-client chain availability", () => {
   const originalEnv = process.env;
@@ -6,7 +6,7 @@ describe("wagmi-client chain availability", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv } as typeof process.env;
-    console.warn = vi.fn();
+    console.warn = mock();
   });
 
   afterEach(() => {
@@ -31,14 +31,16 @@ describe("wagmi-client chain availability", () => {
     });
 
     it("should not warn in production when chains are missing", () => {
-      (process.env as { NODE_ENV?: string }).NODE_ENV = "production";
+      interface ProcessEnv {
+        NODE_ENV?: string;
+      }
+
+      (process.env as ProcessEnv).NODE_ENV = "production";
       delete process.env.NEXT_PUBLIC_BASE_RPC_URL;
       delete process.env.NEXT_PUBLIC_BSC_RPC_URL;
 
       // Production should not log warnings about missing chains
-      expect((process.env as { NODE_ENV?: string }).NODE_ENV).toBe(
-        "production",
-      );
+      expect((process.env as ProcessEnv).NODE_ENV).toBe("production");
     });
   });
 

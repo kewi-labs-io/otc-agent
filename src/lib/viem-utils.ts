@@ -6,16 +6,67 @@
  * this causes type errors. This module provides type-safe wrappers.
  */
 
-import { type PublicClient, type Address, type Abi } from "viem";
+import {
+  type PublicClient,
+  type Address,
+  type Abi,
+  type AbiEvent,
+  type Log,
+} from "viem";
 
 /**
  * Parameters for reading a contract with a dynamic ABI
+ *
+ * Note: Both abi and args use flexible types for viem compatibility:
+ * - abi: `Abi | readonly unknown[]` because viem sometimes infers unknown[] from JSON
+ * - args: `readonly unknown[]` because Solidity supports complex nested types
  */
 export interface ReadContractParams {
   address: Address;
-  abi: Abi;
+  abi: Abi | readonly unknown[];
   functionName: string;
   args?: readonly unknown[];
+}
+
+/**
+ * Transaction log with decoded args (matches viem's Log type structure)
+ */
+interface TransactionLog {
+  address: Address;
+  blockHash: `0x${string}`;
+  blockNumber: bigint;
+  data: `0x${string}`;
+  logIndex: number;
+  transactionHash: `0x${string}`;
+  transactionIndex: number;
+  removed: boolean;
+  topics: readonly `0x${string}`[];
+  // Decoded args if ABI was provided - uses primitive types common in events
+  args?: Record<string, string | number | bigint | boolean | Address>;
+  eventName?: string;
+}
+
+/**
+ * Minimal public client interface to avoid viem's "excessively deep" type issues.
+ * Use this instead of PublicClient when you only need these methods.
+ *
+ * Return types use `unknown` for viem compatibility - callers should cast results
+ * to expected types using safeReadContract<T>().
+ */
+export interface MinimalPublicClient {
+  readContract: (params: ReadContractParams) => Promise<unknown>;
+  getBlockNumber?: () => Promise<bigint>;
+  getLogs?: (params: {
+    address: Address;
+    event: AbiEvent;
+    fromBlock: bigint;
+    toBlock: bigint | "latest";
+  }) => Promise<Log[]>;
+  getTransactionReceipt?: (params: { hash: `0x${string}` }) => Promise<{
+    status: "success" | "reverted";
+    logs: TransactionLog[];
+    blockNumber: bigint;
+  }>;
 }
 
 /**
@@ -35,7 +86,10 @@ export interface ReadContractParams {
  * ```
  */
 export async function safeReadContract<T>(
-  client: PublicClient,
+  client:
+    | PublicClient
+    | MinimalPublicClient
+    | { readContract: (params: ReadContractParams) => Promise<unknown> },
   params: ReadContractParams,
 ): Promise<T> {
   // The cast is necessary because viem's readContract has strict generics
@@ -123,17 +177,17 @@ export async function readERC20Info(
   const [symbol, name, decimals] = await Promise.all([
     safeReadContract<string>(client, {
       address: tokenAddress,
-      abi: ERC20_ABI as unknown as Abi,
+      abi: ERC20_ABI as Abi,
       functionName: "symbol",
     }),
     safeReadContract<string>(client, {
       address: tokenAddress,
-      abi: ERC20_ABI as unknown as Abi,
+      abi: ERC20_ABI as Abi,
       functionName: "name",
     }),
     safeReadContract<number>(client, {
       address: tokenAddress,
-      abi: ERC20_ABI as unknown as Abi,
+      abi: ERC20_ABI as Abi,
       functionName: "decimals",
     }),
   ]);
@@ -150,7 +204,7 @@ export async function readERC20Balance(
 ): Promise<bigint> {
   return safeReadContract<bigint>(client, {
     address: tokenAddress,
-    abi: ERC20_ABI as unknown as Abi,
+    abi: ERC20_ABI as Abi,
     functionName: "balanceOf",
     args: [account],
   });

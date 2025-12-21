@@ -30,6 +30,14 @@ import {
 } from "@solana/spl-token";
 import { assert, expect } from "chai";
 
+// Helper to assert promise rejects with specific error message
+async function expectRejectedWith(promise: Promise<unknown>, expectedError: string): Promise<void> {
+  await expect(promise).to.be.rejected;
+  const error = await promise.catch((e: unknown) => e);
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  assert.include(errorMessage, expectedError);
+}
+
 describe("Rigorous Pool Oracle Security Tests", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
@@ -215,39 +223,31 @@ describe("Rigorous Pool Oracle Security Tests", () => {
     });
 
     it("should validate price bounds (reject $0)", async () => {
-      try {
-        await program.methods
-          .setManualTokenPrice(new anchor.BN(0))
-          .accounts({
-            tokenRegistry,
-            desk: desk.publicKey,
-            owner: owner.publicKey,
-          })
-          .signers([owner])
-          .rpc();
+      const promise = program.methods
+        .setManualTokenPrice(new anchor.BN(0))
+        .accounts({
+          tokenRegistry,
+          desk: desk.publicKey,
+          owner: owner.publicKey,
+        })
+        .signers([owner])
+        .rpc();
 
-        assert.fail("Should reject zero price");
-      } catch (error: any) {
-        assert.include(error.toString(), "BadPrice");
-      }
+      await expectRejectedWith(promise, "BadPrice");
     });
 
     it("should validate price bounds (reject > $10,000)", async () => {
-      try {
-        await program.methods
-          .setManualTokenPrice(new anchor.BN(10001 * 1e8)) // $10,001
-          .accounts({
-            tokenRegistry,
-            desk: desk.publicKey,
-            owner: owner.publicKey,
-          })
-          .signers([owner])
-          .rpc();
+      const promise = program.methods
+        .setManualTokenPrice(new anchor.BN(10001 * 1e8)) // $10,001
+        .accounts({
+          tokenRegistry,
+          desk: desk.publicKey,
+          owner: owner.publicKey,
+        })
+        .signers([owner])
+        .rpc();
 
-        assert.fail("Should reject price over $10,000");
-      } catch (error: any) {
-        assert.include(error.toString(), "BadPrice");
-      }
+      await expectRejectedWith(promise, "BadPrice");
     });
 
     it("should accept price at upper bound ($10,000)", async () => {
@@ -375,25 +375,21 @@ describe("Rigorous Pool Oracle Security Tests", () => {
 
   describe("Rate Limiting Enforcement", () => {
     it("should enforce minimum 30 second interval", async () => {
-      try {
-        await program.methods
-          .configurePoolOracle(
-            new anchor.BN(0),
-            0,
-            new anchor.BN(29) // 29 seconds - should fail
-          )
-          .accounts({
-            tokenRegistry,
-            desk: desk.publicKey,
-            owner: owner.publicKey,
-          })
-          .signers([owner])
-          .rpc();
+      const promise = program.methods
+        .configurePoolOracle(
+          new anchor.BN(0),
+          0,
+          new anchor.BN(29) // 29 seconds - should fail
+        )
+        .accounts({
+          tokenRegistry,
+          desk: desk.publicKey,
+          owner: owner.publicKey,
+        })
+        .signers([owner])
+        .rpc();
 
-        assert.fail("Should reject interval < 30 seconds");
-      } catch (error: any) {
-        assert.include(error.toString(), "AmountRange");
-      }
+      await expectRejectedWith(promise, "AmountRange");
     });
 
     it("should accept exactly 30 second interval", async () => {
@@ -456,25 +452,21 @@ describe("Rigorous Pool Oracle Security Tests", () => {
 
   describe("TWAP Deviation Bounds", () => {
     it("should reject TWAP deviation > 50%", async () => {
-      try {
-        await program.methods
-          .configurePoolOracle(
-            new anchor.BN(0),
-            5001, // 50.01% - should fail
-            new anchor.BN(30)
-          )
-          .accounts({
-            tokenRegistry,
-            desk: desk.publicKey,
-            owner: owner.publicKey,
-          })
-          .signers([owner])
-          .rpc();
+      const promise = program.methods
+        .configurePoolOracle(
+          new anchor.BN(0),
+          5001, // 50.01% - should fail
+          new anchor.BN(30)
+        )
+        .accounts({
+          tokenRegistry,
+          desk: desk.publicKey,
+          owner: owner.publicKey,
+        })
+        .signers([owner])
+        .rpc();
 
-        assert.fail("Should reject deviation > 50%");
-      } catch (error: any) {
-        assert.include(error.toString(), "AmountRange");
-      }
+      await expectRejectedWith(promise, "AmountRange");
     });
 
     it("should accept exactly 50% deviation", async () => {
@@ -556,51 +548,47 @@ describe("Rigorous Pool Oracle Security Tests", () => {
 
   describe("Access Control", () => {
     it("should reject non-owner from configuring oracle", async () => {
-      try {
-        await program.methods
-          .configurePoolOracle(
-            new anchor.BN(0),
-            500,
-            new anchor.BN(60)
-          )
-          .accounts({
-            tokenRegistry,
-            desk: desk.publicKey,
-            owner: attacker.publicKey,
-          })
-          .signers([attacker])
-          .rpc();
+      const promise = program.methods
+        .configurePoolOracle(
+          new anchor.BN(0),
+          500,
+          new anchor.BN(60)
+        )
+        .accounts({
+          tokenRegistry,
+          desk: desk.publicKey,
+          owner: attacker.publicKey,
+        })
+        .signers([attacker])
+        .rpc();
 
-        assert.fail("Should reject non-owner");
-      } catch (error: any) {
-        const errStr = error.toString().toLowerCase();
-        assert.isTrue(
-          errStr.includes("constraint") || errStr.includes("owner"),
-          `Unexpected error: ${error}`
-        );
-      }
+      await expect(promise).to.be.rejected;
+      const error = await promise.catch((e: unknown) => e);
+      const errStr = String(error).toLowerCase();
+      assert.isTrue(
+        errStr.includes("constraint") || errStr.includes("owner"),
+        `Unexpected error: ${String(error)}`
+      );
     });
 
     it("should reject non-owner from setting manual price", async () => {
-      try {
-        await program.methods
-          .setManualTokenPrice(new anchor.BN(1 * 1e8))
-          .accounts({
-            tokenRegistry,
-            desk: desk.publicKey,
-            owner: attacker.publicKey,
-          })
-          .signers([attacker])
-          .rpc();
+      const promise = program.methods
+        .setManualTokenPrice(new anchor.BN(1 * 1e8))
+        .accounts({
+          tokenRegistry,
+          desk: desk.publicKey,
+          owner: attacker.publicKey,
+        })
+        .signers([attacker])
+        .rpc();
 
-        assert.fail("Should reject non-owner");
-      } catch (error: any) {
-        const errStr = error.toString().toLowerCase();
-        assert.isTrue(
-          errStr.includes("constraint") || errStr.includes("owner"),
-          `Unexpected error: ${error}`
-        );
-      }
+      await expect(promise).to.be.rejected;
+      const error = await promise.catch((e: unknown) => e);
+      const errStr = String(error).toLowerCase();
+      assert.isTrue(
+        errStr.includes("constraint") || errStr.includes("owner"),
+        `Unexpected error: ${String(error)}`
+      );
     });
 
     it("should reject registry from different desk", async () => {
@@ -621,25 +609,21 @@ describe("Rigorous Pool Oracle Security Tests", () => {
         .rpc();
 
       // Try to configure registry from original desk with other desk
-      try {
-        await program.methods
-          .configurePoolOracle(
-            new anchor.BN(0),
-            500,
-            new anchor.BN(60)
-          )
-          .accounts({
-            tokenRegistry, // From original desk
-            desk: otherDesk.publicKey, // Different desk
-            owner: owner.publicKey,
-          })
-          .signers([owner])
-          .rpc();
+      const promise = program.methods
+        .configurePoolOracle(
+          new anchor.BN(0),
+          500,
+          new anchor.BN(60)
+        )
+        .accounts({
+          tokenRegistry, // From original desk
+          desk: otherDesk.publicKey, // Different desk
+          owner: owner.publicKey,
+        })
+        .signers([owner])
+        .rpc();
 
-        assert.fail("Should reject registry from different desk");
-      } catch (error: any) {
-        assert.include(error.toString(), "BadState");
-      }
+      await expectRejectedWith(promise, "BadState");
     });
   });
 

@@ -17,29 +17,23 @@ export function MiniappProvider({ children }: { children: React.ReactNode }) {
     initStartedRef.current = true;
 
     const initMiniapp = async () => {
-      try {
-        const context = await miniappSdk.context;
+      const context = await miniappSdk.context;
 
-        if (!context) {
-          setIsInitialized(true);
-          return;
-        }
-
-        // Signal ready
-        await miniappSdk.actions.ready();
-
-        // Send welcome notification on first load
-        // Note: Neynar handles deduplication
-        const userFid = context.user?.fid;
-        if (userFid) {
-          await sendWelcomeNotification(userFid);
-        }
-
+      if (!context) {
         setIsInitialized(true);
-      } catch (error) {
-        console.error("Error initializing miniapp:", error);
-        setIsInitialized(true);
+        return;
       }
+
+      // Signal ready
+      await miniappSdk.actions.ready();
+
+      // Send welcome notification on first load
+      // Note: Neynar handles deduplication
+      if (context.user && context.user.fid) {
+        await sendWelcomeNotification(context.user.fid);
+      }
+
+      setIsInitialized(true);
     };
 
     initMiniapp();

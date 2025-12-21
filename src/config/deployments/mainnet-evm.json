@@ -4,8 +4,8 @@
   "rpc": "/api/rpc/base",
   "deployer": "0x1b324Bfc7A0b93D621d8A85F3fF6375528bFae8D",
   "contracts": {
-    "otc": "0x23eD9EC8deb2F88Ec44a2dbbe1bbE7Be7EFc02b9",
-    "registrationHelper": "0x30E2Fc66C19a999b8E8112eF5A78E84AeeF441E0",
+    "otc": "0x5a1C9911E104F18267505918894fd7d343739657",
+    "registrationHelper": "0x4316f0c25174B71dA4C0e494d6E1e20fc31eA28E",
     "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     "ethUsdFeed": "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70"
   },
@@ -21,8 +21,8 @@
   "networks": {
     "base": {
       "chainId": 8453,
-      "otc": "0x23eD9EC8deb2F88Ec44a2dbbe1bbE7Be7EFc02b9",
-      "registrationHelper": "0x30E2Fc66C19a999b8E8112eF5A78E84AeeF441E0",
+      "otc": "0x5a1C9911E104F18267505918894fd7d343739657",
+      "registrationHelper": "0x4316f0c25174B71dA4C0e494d6E1e20fc31eA28E",
       "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
       "ethUsdFeed": "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70"
     },

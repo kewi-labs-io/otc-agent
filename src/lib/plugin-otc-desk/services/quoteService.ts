@@ -15,7 +15,7 @@ const BENEFICIARY_QUOTES_KEY = (beneficiary: string) =>
 const ALL_QUOTES_KEY = "all_quotes";
 
 export class QuoteService extends Service {
-  static serviceType = "QuoteService" as any;
+  static serviceType: string = "QuoteService";
   static serviceName = "QuoteService";
 
   get serviceType(): string {
@@ -53,26 +53,25 @@ export class QuoteService extends Service {
     beneficiary?: string,
   ): Promise<void> {
     const allQuotes =
-      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) ?? [];
+      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
     if (!allQuotes.includes(quoteId)) {
       allQuotes.push(quoteId);
       await this.runtime.setCache(ALL_QUOTES_KEY, allQuotes);
     }
 
     const entityQuotes =
-      (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(entityId))) ??
+      (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(entityId))) ||
       [];
     if (!entityQuotes.includes(quoteId)) {
       entityQuotes.push(quoteId);
       await this.runtime.setCache(ENTITY_QUOTES_KEY(entityId), entityQuotes);
     }
 
-    // Also index by beneficiary for faster lookups
     if (beneficiary) {
       const beneficiaryQuotes =
         (await this.runtime.getCache<string[]>(
           BENEFICIARY_QUOTES_KEY(beneficiary),
-        )) ?? [];
+        )) || [];
       if (!beneficiaryQuotes.includes(quoteId)) {
         beneficiaryQuotes.push(quoteId);
         await this.runtime.setCache(
@@ -106,7 +105,9 @@ export class QuoteService extends Service {
   }): string {
     const secret = process.env.WORKER_AUTH_TOKEN;
     if (!secret) {
-      throw new Error("WORKER_AUTH_TOKEN must be set for quote signature generation");
+      throw new Error(
+        "WORKER_AUTH_TOKEN must be set for quote signature generation",
+      );
     }
     const payload = JSON.stringify(data);
     return crypto.createHmac("sha256", secret).update(payload).digest("hex");
@@ -125,13 +126,17 @@ export class QuoteService extends Service {
     discountUsd: number;
     discountedUsd: number;
     paymentAmount: string;
-    // Token metadata (optional but recommended)
-    tokenId?: string;
-    tokenSymbol?: string;
-    tokenName?: string;
-    tokenLogoUrl?: string;
-    chain?: "evm" | "solana";
-    consignmentId?: string;
+    // Token metadata - required for display and lookups
+    tokenId: string;
+    tokenSymbol: string;
+    tokenName: string;
+    tokenLogoUrl: string;
+    // Chain context - required as quotes always operate on a specific chain
+    chain: "evm" | "solana" | "base" | "bsc" | "ethereum";
+    // Consignment reference - quotes are always created from consignments
+    consignmentId: string;
+    // Agent commission - required (0 for P2P, 25-150 for negotiated)
+    agentCommissionBps: number;
   }): Promise<QuoteMemory> {
     const quoteId = this.generateQuoteId(data.entityId);
     const lockupDays = data.lockupMonths * 30;
@@ -157,7 +162,7 @@ export class QuoteService extends Service {
     const normalizedBeneficiary = data.beneficiary.toLowerCase();
 
     const quoteData: QuoteMemory = {
-      id: existing?.id || uuidv4(), // Keep same internal ID if updating
+      id: existing ? existing.id : uuidv4(), // Keep same internal ID if updating
       quoteId,
       entityId: data.entityId,
       beneficiary: normalizedBeneficiary,
@@ -167,14 +172,15 @@ export class QuoteService extends Service {
       lockupMonths: data.lockupMonths,
       lockupDays,
       paymentCurrency: data.paymentCurrency,
-      priceUsdPerToken: data.priceUsdPerToken || 0,
+      priceUsdPerToken:
+        data.priceUsdPerToken !== undefined ? data.priceUsdPerToken : 0, // 0 is valid for quotes with dynamic pricing
       totalUsd: data.totalUsd,
       discountUsd: data.discountUsd,
       discountedUsd: data.discountedUsd,
       paymentAmount: data.paymentAmount,
       signature,
       status: "active",
-      createdAt: existing?.createdAt || now, // Keep original creation time if updating
+      createdAt: existing ? existing.createdAt : now, // Keep original creation time if updating
       executedAt: 0,
       rejectedAt: 0,
       approvedAt: 0,
@@ -183,29 +189,34 @@ export class QuoteService extends Service {
       blockNumber: 0,
       rejectionReason: "",
       approvalNote: "",
-      // Token metadata
+      // Token metadata - required fields
       tokenId: data.tokenId,
       tokenSymbol: data.tokenSymbol,
       tokenName: data.tokenName,
       tokenLogoUrl: data.tokenLogoUrl,
       chain: data.chain,
       consignmentId: data.consignmentId,
+      agentCommissionBps: data.agentCommissionBps,
     };
 
     await this.runtime.setCache(QUOTE_KEY(quoteId), quoteData);
     await this.addToIndex(quoteId, data.entityId, normalizedBeneficiary);
 
+    // FAIL-FAST: tokenSymbol is required in function signature
+    if (!data.tokenSymbol) {
+      throw new Error(`Quote ${quoteId} missing required tokenSymbol`);
+    }
+
     console.log(
-      `[QuoteService] ✅ Quote stored: ${quoteId} - ${data.discountBps}bps/${data.lockupMonths}mo - token: ${data.tokenSymbol || "unknown"}`,
+      `[QuoteService] ✅ Quote stored: ${quoteId} - ${data.discountBps}bps/${data.lockupMonths}mo - token: ${data.tokenSymbol}`,
     );
     return quoteData;
   }
 
   async getActiveQuotes(): Promise<QuoteMemory[]> {
     const allQuoteIds =
-      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) ?? [];
+      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
 
-    // Fetch all quotes in parallel for better performance
     const allQuotes = await Promise.all(
       allQuoteIds.map((quoteId) =>
         this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId)),
@@ -223,13 +234,11 @@ export class QuoteService extends Service {
   async getQuoteByBeneficiary(beneficiary: string): Promise<QuoteMemory> {
     const normalized = beneficiary.toLowerCase();
 
-    // First try the beneficiary index (fast path)
     const beneficiaryQuoteIds = await this.runtime.getCache<string[]>(
       BENEFICIARY_QUOTES_KEY(normalized),
     );
 
     if (beneficiaryQuoteIds && beneficiaryQuoteIds.length > 0) {
-      // Fetch indexed quotes in parallel
       const indexedQuotes = await Promise.all(
         beneficiaryQuoteIds.map((quoteId) =>
           this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId)),
@@ -242,9 +251,8 @@ export class QuoteService extends Service {
       if (activeQuote) return activeQuote;
     }
 
-    // Fallback: search all quotes in parallel (slower but complete)
     const allQuoteIds =
-      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) ?? [];
+      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
 
     const allQuotes = await Promise.all(
       allQuoteIds.map((quoteId) =>
@@ -270,14 +278,13 @@ export class QuoteService extends Service {
     console.log("[QuoteService] getUserQuoteHistory:", { entityId, limit });
 
     const entityQuoteIds =
-      (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(entityId))) ??
+      (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(entityId))) ||
       [];
     console.log(
       "[QuoteService] Found quote IDs from index:",
       entityQuoteIds.length,
     );
 
-    // Fetch entity quotes in parallel
     const entityQuotes = await Promise.all(
       entityQuoteIds.map((quoteId) =>
         this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId)),
@@ -287,9 +294,8 @@ export class QuoteService extends Service {
     const quotes = entityQuotes.filter((q): q is QuoteMemory => q != null);
     const processedIds = new Set(entityQuoteIds);
 
-    // Search for unindexed quotes (in parallel)
     const allQuoteIds =
-      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) ?? [];
+      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
     const uncheckedIds = allQuoteIds.filter((id) => !processedIds.has(id));
 
     if (uncheckedIds.length > 0) {
@@ -338,19 +344,18 @@ export class QuoteService extends Service {
 
   async getQuoteByOfferId(offerId: string): Promise<QuoteMemory | null> {
     const allQuoteIds =
-      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) ?? [];
+      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
 
-    // Fetch all quotes in parallel
     const allQuotes = await Promise.all(
       allQuoteIds.map((quoteId) =>
         this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId)),
       ),
     );
 
-    return (
-      allQuotes.find((quote) => quote != null && quote.offerId === offerId) ??
-      null
+    const quote = allQuotes.find(
+      (quote) => quote != null && quote.offerId === offerId,
     );
+    return quote || null;
   }
 
   async updateQuoteStatus(
@@ -367,14 +372,23 @@ export class QuoteService extends Service {
     const quote = await this.getQuoteByQuoteId(quoteId);
     const now = Date.now();
 
+    // Status update fields: prefer new data if provided (non-empty), else keep existing
     const updatedQuote: QuoteMemory = {
       ...quote,
       status,
-      offerId: data.offerId || quote.offerId,
-      transactionHash: data.transactionHash || quote.transactionHash,
-      blockNumber: data.blockNumber || quote.blockNumber,
-      rejectionReason: data.rejectionReason || quote.rejectionReason,
-      approvalNote: data.approvalNote || quote.approvalNote,
+      offerId: data.offerId !== "" ? data.offerId : quote.offerId,
+      transactionHash:
+        data.transactionHash !== ""
+          ? data.transactionHash
+          : quote.transactionHash,
+      blockNumber:
+        data.blockNumber !== 0 ? data.blockNumber : quote.blockNumber,
+      rejectionReason:
+        data.rejectionReason !== ""
+          ? data.rejectionReason
+          : quote.rejectionReason,
+      approvalNote:
+        data.approvalNote !== "" ? data.approvalNote : quote.approvalNote,
       executedAt: status === "executed" ? now : quote.executedAt,
       rejectedAt: status === "rejected" ? now : quote.rejectedAt,
       approvedAt: status === "approved" ? now : quote.approvedAt,
@@ -422,8 +436,12 @@ export class QuoteService extends Service {
       offerId: data.offerId,
       transactionHash: data.transactionHash,
       blockNumber: data.blockNumber,
-      priceUsdPerToken: data.priceUsdPerToken ?? quote.priceUsdPerToken,
-      lockupDays: data.lockupDays ?? quote.lockupDays,
+      priceUsdPerToken:
+        data.priceUsdPerToken !== undefined
+          ? data.priceUsdPerToken
+          : quote.priceUsdPerToken,
+      lockupDays:
+        data.lockupDays !== undefined ? data.lockupDays : quote.lockupDays,
       status: "executed",
       executedAt: Date.now(),
     };
@@ -459,7 +477,6 @@ export class QuoteService extends Service {
       newEntityId,
     });
 
-    // Remove from old entity's quote list
     const oldEntityQuotes =
       (await this.runtime.getCache<string[]>(
         ENTITY_QUOTES_KEY(quote.entityId),
@@ -476,7 +493,6 @@ export class QuoteService extends Service {
       filteredOld.length,
     );
 
-    // Remove from old beneficiary's index
     if (quote.beneficiary) {
       const oldBeneficiaryQuotes =
         (await this.runtime.getCache<string[]>(
@@ -491,7 +507,6 @@ export class QuoteService extends Service {
       );
     }
 
-    // Add to new entity's quote list
     const newEntityQuotes =
       (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(newEntityId))) ||
       [];
@@ -512,7 +527,6 @@ export class QuoteService extends Service {
       );
     }
 
-    // Add to new beneficiary's index
     const newBeneficiaryQuotes =
       (await this.runtime.getCache<string[]>(
         BENEFICIARY_QUOTES_KEY(normalized),
@@ -564,14 +578,13 @@ export class QuoteService extends Service {
     return quote.signature === expectedSignature;
   }
 
-  // Helper: Get latest active quote by wallet address
-  async getQuoteByWallet(
-    walletAddress: string,
-  ): Promise<QuoteMemory | undefined> {
+  async getQuoteByWallet(walletAddress: string): Promise<QuoteMemory | null> {
     const entityId = walletToEntityId(walletAddress);
     const quotes = await this.getUserQuoteHistory(entityId, 100);
-    // Return the most recent ACTIVE quote only
-    return quotes.find((q) => q.entityId === entityId && q.status === "active");
+    const activeQuote = quotes.find(
+      (q) => q.entityId === entityId && q.status === "active",
+    );
+    return activeQuote || null;
   }
 
   // Helper: Expire all active quotes for a user (called before creating new one)

@@ -11,7 +11,11 @@ import {
 } from "lucide-react";
 import { Button } from "../button";
 
-interface StepState {
+/**
+ * Submission step progress tracking (local to this component)
+ * Note: Different from StepState in types/shared.ts which is for modal state
+ */
+interface SubmissionStepStatus {
   id: string;
   label: string;
   status: "pending" | "processing" | "complete" | "error";
@@ -81,7 +85,7 @@ export function SubmissionStepComponent({
   const [, forceUpdate] = useState(0);
 
   // Define steps - use ref so it's stable and doesn't cause stale closure issues
-  const stepsRef = useRef<StepState[]>([
+  const stepsRef = useRef<SubmissionStepStatus[]>([
     // Solana: Token transfer is part of the createConsignment instruction (no separate approval)
     // EVM: Needs separate approval step
     ...(activeFamily !== "solana"
@@ -109,7 +113,7 @@ export function SubmissionStepComponent({
   ]);
 
   const updateStepStatus = useCallback(
-    (stepId: string, updates: Partial<StepState>) => {
+    (stepId: string, updates: Partial<SubmissionStepStatus>) => {
       const step = stepsRef.current.find((s) => s.id === stepId);
       if (step) {
         Object.assign(step, updates);
@@ -159,50 +163,92 @@ export function SubmissionStepComponent({
   );
 
   const saveToDatabase = useCallback(async () => {
+    // FAIL-FAST: Validate required fields before API call
+    if (!selectedTokenSymbol) {
+      throw new Error("Token symbol is required");
+    }
+    if (!selectedTokenAddress) {
+      throw new Error("Token address is required");
+    }
+    if (activeFamily === "solana" && !contractConsignmentIdRef.current) {
+      throw new Error(
+        "On-chain consignment ID is required for Solana. Create the on-chain consignment first.",
+      );
+    }
+
     // Convert human-readable amounts to raw amounts with decimals
     const toRawAmount = (humanAmount: string): string => {
-      const parsed = parseFloat(humanAmount) || 0;
+      // FAIL-FAST: Validate input is a valid number
+      const parsed = parseFloat(humanAmount);
+      if (isNaN(parsed) || parsed <= 0) {
+        throw new Error(
+          `Invalid amount: ${humanAmount}. Must be a positive number.`,
+        );
+      }
       const raw = BigInt(
         Math.floor(parsed * Math.pow(10, selectedTokenDecimals)),
       );
       return raw.toString();
     };
 
+    // FAIL-FAST: Token name should be provided, fallback to symbol if missing (acceptable)
+    const tokenName = selectedTokenName || selectedTokenSymbol;
+
+    const consignmentData = {
+      ...formData,
+      amount: toRawAmount(formData.amount),
+      minDealAmount: toRawAmount(formData.minDealAmount),
+      maxDealAmount: toRawAmount(formData.maxDealAmount),
+      consignerAddress,
+      chain,
+      contractConsignmentId: contractConsignmentIdRef.current,
+      // Token metadata - saved to DB so we don't need to fetch from chain later
+      tokenSymbol: selectedTokenSymbol,
+      tokenName,
+      tokenDecimals: selectedTokenDecimals,
+      tokenAddress: selectedTokenAddress,
+      tokenLogoUrl: selectedTokenLogoUrl,
+    };
+
+    console.log("[SubmissionStep] Saving to database:", {
+      tokenSymbol: selectedTokenSymbol,
+      tokenAddress: selectedTokenAddress,
+      tokenDecimals: selectedTokenDecimals,
+      chain,
+      contractConsignmentId: contractConsignmentIdRef.current,
+    });
+
     const response = await fetch("/api/consignments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...formData,
-        amount: toRawAmount(formData.amount),
-        minDealAmount: toRawAmount(formData.minDealAmount),
-        maxDealAmount: toRawAmount(formData.maxDealAmount),
-        consignerAddress,
-        chain,
-        contractConsignmentId: contractConsignmentIdRef.current,
-        // Token metadata - saved to DB so we don't need to fetch from chain later
-        tokenSymbol: selectedTokenSymbol,
-        tokenName: selectedTokenName || selectedTokenSymbol,
-        tokenDecimals: selectedTokenDecimals,
-        tokenAddress: selectedTokenAddress,
-        tokenLogoUrl: selectedTokenLogoUrl,
-      }),
+      body: JSON.stringify(consignmentData),
     });
 
     if (!response.ok) {
-      const data = await response
-        .json()
-        .catch(() => ({ error: "Unknown error" }));
+      const data = await response.json();
       if (contractConsignmentIdRef.current) {
         throw new Error(
           `Your consignment is on-chain (ID: ${contractConsignmentIdRef.current}) but failed to save to our database. Click retry to try saving again.`,
         );
       }
-      throw new Error(data.error || "Failed to save to database");
+      // FAIL-FAST: API should return error message
+      // FAIL-FAST: Error response must have error message
+      if (typeof data.error !== "string" || data.error.trim() === "") {
+        throw new Error(
+          `API returned status ${response.status} but no error message`,
+        );
+      }
+      throw new Error(data.error);
     }
 
     const data = await response.json();
+    // FAIL-FAST: API should return success flag
     if (!data.success) {
-      throw new Error(data.error || "Failed to save to database");
+      // FAIL-FAST: Error response must have error message
+      if (typeof data.error !== "string" || data.error.trim() === "") {
+        throw new Error("API returned success=false but no error message");
+      }
+      throw new Error(data.error);
     }
   }, [
     formData,
@@ -242,119 +288,51 @@ export function SubmissionStepComponent({
         statusMessage: "Please confirm in your wallet...",
       });
 
-      try {
-        // Execute the step
-        if (currentStep.id === "approve") {
-          const txHash = await executeWithRetry(
-            () => onApproveToken(),
-            "approve",
-          );
-          updateStepStatus("approve", { txHash, statusMessage: "Confirmed" });
-        } else if (currentStep.id === "create-onchain") {
-          const result = await executeWithRetry(
-            () =>
-              onCreateConsignment((txHash) => {
-                updateStepStatus("create-onchain", {
-                  txHash,
-                  statusMessage: "Confirming...",
-                });
-              }),
-            "create-onchain",
-          );
-          contractConsignmentIdRef.current = result.consignmentId;
-          updateStepStatus("create-onchain", {
-            txHash: result.txHash,
-            statusMessage: "Confirmed",
-          });
-        } else if (currentStep.id === "save-db") {
-          updateStepStatus("save-db", { statusMessage: "Saving..." });
-          await executeWithRetry(() => saveToDatabase(), "save-db");
-        }
-
-        // Mark complete
-        updateStepStatus(currentStep.id, {
-          status: "complete",
-          statusMessage: undefined,
-        });
-
-        // Process next step
-        const nextIndex = stepIndex + 1;
-        if (nextIndex < steps.length) {
-          console.log("[SubmissionStep] Moving to next step:", nextIndex);
-          // Small delay for UI feedback, then process next
-          await new Promise((resolve) => setTimeout(resolve, 300));
-          await processStep(nextIndex);
-        } else {
-          console.log("[SubmissionStep] All steps complete");
-          isProcessingRef.current = false;
-          setIsComplete(true);
-        }
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        console.error(
-          "[SubmissionStep] Step failed:",
-          currentStep.id,
-          errorMessage,
+      // Execute the step (executeWithRetry handles retries and throws on failure)
+      if (currentStep.id === "approve") {
+        const txHash = await executeWithRetry(
+          () => onApproveToken(),
+          "approve",
         );
-        isProcessingRef.current = false;
-
-        // Map error messages to user-friendly versions
-        let displayError = errorMessage;
-        const lowerError = errorMessage.toLowerCase();
-        
-        // User rejection errors
-        if (lowerError.includes("rejected") || lowerError.includes("denied") || lowerError.includes("cancelled")) {
-          if (currentStep.id === "approve") {
-            displayError = "Token approval was rejected. Click retry to try again.";
-          } else if (currentStep.id === "create-onchain") {
-            displayError = "Consignment creation was rejected. Your token approval is still active. Click retry to try again.";
-          } else {
-            displayError = "Transaction was rejected. Click retry to try again.";
-          }
-        }
-        // Insufficient funds errors
-        else if (lowerError.includes("insufficient funds") || lowerError.includes("insufficient balance")) {
-          displayError = "Insufficient funds in your wallet. Please ensure you have enough tokens and ETH/SOL for gas fees.";
-        }
-        // Chain/network errors
-        else if (lowerError.includes("switch") || lowerError.includes("chain")) {
-          displayError = `Network switch required. Please switch your wallet to the correct network and try again.`;
-        }
-        // Pool/registration errors
-        else if (lowerError.includes("no liquidity pool") || lowerError.includes("cannot auto-register")) {
-          displayError = "This token needs a liquidity pool (Uniswap V3 or compatible) to be listed. Please create a pool first.";
-        }
-        // Registration fee errors
-        else if (lowerError.includes("registration fee") || lowerError.includes("registration failed")) {
-          displayError = "Token registration failed. Please ensure you have enough ETH to cover the registration fee.";
-        }
-        // RPC/Network errors
-        else if (lowerError.includes("timeout") || lowerError.includes("network") || lowerError.includes("connection")) {
-          displayError = "Network error occurred. Please check your connection and try again.";
-        }
-        // Contract errors
-        else if (lowerError.includes("execution reverted") || lowerError.includes("revert")) {
-          displayError = "Transaction failed on-chain. This could be due to token restrictions or contract conditions.";
-        }
-        // Wallet not connected
-        else if (lowerError.includes("wallet") || lowerError.includes("connect")) {
-          displayError = "Wallet connection issue. Please ensure your wallet is connected and try again.";
-        }
-        // Solana specific errors
-        else if (lowerError.includes("solana") && lowerError.includes("sign")) {
-          displayError = "Solana wallet signing failed. Please ensure your Solana wallet is connected and unlocked.";
-        }
-        // ATA creation errors
-        else if (lowerError.includes("ata") || lowerError.includes("associated token")) {
-          displayError = "Failed to create token account. Please try again.";
-        }
-
-        updateStepStatus(currentStep.id, {
-          status: "error",
-          statusMessage: undefined,
-          errorMessage: displayError,
+        updateStepStatus("approve", { txHash, statusMessage: "Confirmed" });
+      } else if (currentStep.id === "create-onchain") {
+        const result = await executeWithRetry(
+          () =>
+            onCreateConsignment((txHash) => {
+              updateStepStatus("create-onchain", {
+                txHash,
+                statusMessage: "Confirming...",
+              });
+            }),
+          "create-onchain",
+        );
+        contractConsignmentIdRef.current = result.consignmentId;
+        updateStepStatus("create-onchain", {
+          txHash: result.txHash,
+          statusMessage: "Confirmed",
         });
+      } else if (currentStep.id === "save-db") {
+        updateStepStatus("save-db", { statusMessage: "Saving..." });
+        await executeWithRetry(() => saveToDatabase(), "save-db");
+      }
+
+      // Mark complete
+      updateStepStatus(currentStep.id, {
+        status: "complete",
+        statusMessage: undefined,
+      });
+
+      // Process next step
+      const nextIndex = stepIndex + 1;
+      if (nextIndex < steps.length) {
+        console.log("[SubmissionStep] Moving to next step:", nextIndex);
+        // Small delay for UI feedback, then process next
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        await processStep(nextIndex);
+      } else {
+        console.log("[SubmissionStep] All steps complete");
+        isProcessingRef.current = false;
+        setIsComplete(true);
       }
     },
     [
@@ -372,9 +350,25 @@ export function SubmissionStepComponent({
       hasStartedRef.current = true;
       isProcessingRef.current = true;
       console.log("[SubmissionStep] Starting submission process...");
-      processStep(0);
+      processStep(0).catch((error) => {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        console.error("[SubmissionStep] Process failed:", errorMessage);
+        isProcessingRef.current = false;
+        // Find the failed step and update its status
+        const failedStep = stepsRef.current.find(
+          (s) => s.status === "processing",
+        );
+        if (failedStep) {
+          updateStepStatus(failedStep.id, {
+            status: "error",
+            statusMessage: undefined,
+            errorMessage: errorMessage,
+          });
+        }
+      });
     }
-  }, [processStep]);
+  }, [processStep, updateStepStatus]);
 
   const retryStep = useCallback(
     (stepId: string) => {
@@ -393,7 +387,17 @@ export function SubmissionStepComponent({
         errorMessage: undefined,
         statusMessage: undefined,
       });
-      processStep(stepIndex);
+      processStep(stepIndex).catch((error) => {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        console.error("[SubmissionStep] Retry failed:", errorMessage);
+        isProcessingRef.current = false;
+        updateStepStatus(stepId, {
+          status: "error",
+          statusMessage: undefined,
+          errorMessage: errorMessage,
+        });
+      });
     },
     [processStep, updateStepStatus],
   );
@@ -403,7 +407,12 @@ export function SubmissionStepComponent({
   };
 
   const formatAmount = (amount: string) => {
-    const num = parseFloat(amount) || 0;
+    // FAIL-FAST: Amount should be a valid number for display
+    const num = parseFloat(amount);
+    if (isNaN(num)) {
+      // For display purposes, return "0" if invalid (better UX than throwing)
+      return "0";
+    }
     return num.toLocaleString();
   };
 

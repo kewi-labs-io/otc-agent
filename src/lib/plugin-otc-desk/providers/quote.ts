@@ -11,7 +11,11 @@ export const quoteProvider: Provider = {
     runtime: IAgentRuntime,
     message: Memory,
   ): Promise<ProviderResult> => {
-    const messageText = message.content?.text || "";
+    // FAIL-FAST: message content is required
+    if (!message.content || typeof message.content.text !== "string") {
+      throw new Error("ElizaQuote provider requires message.content.text");
+    }
+    const messageText = message.content.text;
 
     // Only provide quote context if user is asking about quotes/terms/pricing
     const isQuoteRelated =
@@ -27,7 +31,11 @@ export const quoteProvider: Provider = {
       return { text: "" }; // Return empty to not pollute context
     }
 
-    const walletAddress = message.entityId || message.roomId || "default";
+    // FAIL-FAST: entityId is required for quote lookup
+    if (!message.entityId) {
+      throw new Error("ElizaQuote provider requires message.entityId");
+    }
+    const walletAddress = message.entityId;
 
     console.log("[QuoteProvider] get() called for wallet:", walletAddress);
 
@@ -92,14 +100,14 @@ You'll automatically receive your tokens when the lockup period ends.`.trim(),
 
 export async function getUserQuote(
   walletAddress: string,
-): Promise<QuoteMemory | undefined> {
+): Promise<QuoteMemory | null> {
   const { agentRuntime } = await import("../../agent-runtime");
   const runtime = await agentRuntime.getRuntime();
 
   // Use QuoteService to get quote (it has the correct ID generation logic)
-  const quoteService = runtime.getService<any>("QuoteService");
+  const quoteService = runtime.getService<QuoteService>("QuoteService");
   if (!quoteService) {
-    return undefined;
+    return null;
   }
 
   const quote = await quoteService.getQuoteByWallet(walletAddress);
@@ -120,15 +128,17 @@ export async function setUserQuote(
     apr: number;
     lockupMonths: number;
     paymentAmount: string;
-    // Token metadata (optional)
-    tokenId?: string;
-    tokenSymbol?: string;
-    tokenName?: string;
-    tokenLogoUrl?: string;
-    chain?: "evm" | "solana";
-    consignmentId?: string;
-    // Agent commission (optional - 0 for P2P, 25-150 for negotiated)
-    agentCommissionBps?: number;
+    // Token metadata - required for display and lookups
+    tokenId: string;
+    tokenSymbol: string;
+    tokenName: string;
+    tokenLogoUrl: string;
+    // Chain context - required as quotes always operate on a specific chain
+    chain: "evm" | "solana" | "base" | "bsc" | "ethereum";
+    // Consignment reference - required (can be empty string for initial quotes)
+    consignmentId: string;
+    // Agent commission - required (0 for P2P, 25-150 for negotiated)
+    agentCommissionBps: number;
   },
 ): Promise<QuoteMemory> {
   const normalized = walletAddress.toLowerCase();
@@ -161,7 +171,9 @@ export async function setUserQuote(
   // Generate signature using same method as QuoteService
   const secret = process.env.WORKER_AUTH_TOKEN;
   if (!secret) {
-    throw new Error("WORKER_AUTH_TOKEN must be set for quote signature generation");
+    throw new Error(
+      "WORKER_AUTH_TOKEN must be set for quote signature generation",
+    );
   }
   const signatureData = {
     quoteId,
@@ -188,7 +200,8 @@ export async function setUserQuote(
     lockupMonths: quote.lockupMonths,
     lockupDays,
     paymentCurrency: quote.paymentCurrency,
-    priceUsdPerToken: quote.priceUsdPerToken || 0,
+    priceUsdPerToken:
+      quote.priceUsdPerToken !== undefined ? quote.priceUsdPerToken : 0,
     totalUsd: quote.totalUsd,
     discountUsd: quote.totalUsd - quote.discountedUsd,
     discountedUsd: quote.discountedUsd,
@@ -217,23 +230,21 @@ export async function setUserQuote(
 
   await runtime.setCache(`quote:${quoteId}`, quoteData);
 
-  // Add to indexes
-  const allQuotes = (await runtime.getCache<string[]>("all_quotes")) ?? [];
+  const allQuotes = (await runtime.getCache<string[]>("all_quotes")) || [];
   if (!allQuotes.includes(quoteId)) {
     allQuotes.push(quoteId);
     await runtime.setCache("all_quotes", allQuotes);
   }
 
   const entityQuoteIds =
-    (await runtime.getCache<string[]>(`entity_quotes:${entityId}`)) ?? [];
+    (await runtime.getCache<string[]>(`entity_quotes:${entityId}`)) || [];
   if (!entityQuoteIds.includes(quoteId)) {
     entityQuoteIds.push(quoteId);
     await runtime.setCache(`entity_quotes:${entityId}`, entityQuoteIds);
   }
 
-  // Add to beneficiary index for faster lookups
   const beneficiaryQuoteIds =
-    (await runtime.getCache<string[]>(`beneficiary_quotes:${normalized}`)) ??
+    (await runtime.getCache<string[]>(`beneficiary_quotes:${normalized}`)) ||
     [];
   if (!beneficiaryQuoteIds.includes(quoteId)) {
     beneficiaryQuoteIds.push(quoteId);
@@ -259,7 +270,7 @@ export async function deleteUserQuote(walletAddress: string): Promise<void> {
   console.log("[deleteUserQuote] Deleting quote for wallet:", normalized);
 
   const runtime = await agentRuntime.getRuntime();
-  const quote = await getUserQuote(walletAddress);
+  const quote = await getUserQuote(walletAddress); // Returns null if no quote exists
 
   if (!quote) {
     console.log("[deleteUserQuote] No quote found to delete");
@@ -269,15 +280,14 @@ export async function deleteUserQuote(walletAddress: string): Promise<void> {
   await runtime.deleteCache(`quote:${quote.quoteId}`);
 
   const entityQuoteIds =
-    (await runtime.getCache<string[]>(`entity_quotes:${entityId}`)) ?? [];
+    (await runtime.getCache<string[]>(`entity_quotes:${entityId}`)) || [];
   const updatedEntityQuoteIds = entityQuoteIds.filter(
     (id) => id !== quote.quoteId,
   );
   await runtime.setCache(`entity_quotes:${entityId}`, updatedEntityQuoteIds);
 
-  // Also remove from beneficiary index
   const beneficiaryQuoteIds =
-    (await runtime.getCache<string[]>(`beneficiary_quotes:${normalized}`)) ??
+    (await runtime.getCache<string[]>(`beneficiary_quotes:${normalized}`)) ||
     [];
   const updatedBeneficiaryQuoteIds = beneficiaryQuoteIds.filter(
     (id) => id !== quote.quoteId,
@@ -287,7 +297,7 @@ export async function deleteUserQuote(walletAddress: string): Promise<void> {
     updatedBeneficiaryQuoteIds,
   );
 
-  const allQuotes = (await runtime.getCache<string[]>("all_quotes")) ?? [];
+  const allQuotes = (await runtime.getCache<string[]>("all_quotes")) || [];
   const updatedAllQuotes = allQuotes.filter((id) => id !== quote.quoteId);
   await runtime.setCache("all_quotes", updatedAllQuotes);
 

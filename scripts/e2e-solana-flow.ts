@@ -41,57 +41,51 @@ const EXECUTE_TX = process.env.EXECUTE_TX === "true";
 const CLUSTER = process.env.CLUSTER || "localnet"; // localnet, devnet, mainnet
 
 // Cluster configuration
-const CLUSTER_CONFIGS: Record<string, { rpc: string; deploymentFile: string }> = {
+const CLUSTER_CONFIGS: Record<string, { deploymentFile: string }> = {
   localnet: {
-    rpc: "http://127.0.0.1:8899",
-    deploymentFile: "src/config/deployments/localnet-solana.json",
+    deploymentFile: "src/config/deployments/local-solana.json",
   },
   devnet: {
-    rpc: process.env.SOLANA_DEVNET_RPC || "https://api.devnet.solana.com",
-    deploymentFile: "src/config/deployments/devnet-solana.json",
+    deploymentFile: "src/config/deployments/testnet-solana.json",
   },
   mainnet: {
-    rpc: process.env.SOLANA_MAINNET_RPC || "https://api.mainnet-beta.solana.com",
     deploymentFile: "src/config/deployments/mainnet-solana.json",
   },
 };
 
 const clusterConfig = CLUSTER_CONFIGS[CLUSTER];
 if (!clusterConfig) {
-  console.error(`Unknown cluster: ${CLUSTER}. Use: localnet, devnet, mainnet`);
-  process.exit(1);
+  throw new Error(`Unknown cluster: ${CLUSTER}. Use: localnet, devnet, mainnet`);
 }
 
-// Load deployment config if exists
-let deploymentConfig: Record<string, string> = {};
-try {
-  const deploymentPath = path.join(process.cwd(), clusterConfig.deploymentFile);
-  if (fs.existsSync(deploymentPath)) {
-    deploymentConfig = JSON.parse(fs.readFileSync(deploymentPath, "utf8"));
-  }
-} catch (e) {
-  console.log(`No deployment config found for ${CLUSTER}`);
+// Load deployment config
+const deploymentPath = path.join(process.cwd(), clusterConfig.deploymentFile);
+if (!fs.existsSync(deploymentPath)) {
+  throw new Error(`Deployment config not found: ${deploymentPath}`);
 }
+const deploymentConfig: Record<string, string> = JSON.parse(fs.readFileSync(deploymentPath, "utf8"));
 
 // =============================================================================
 // IDL (Interface Definition Language)
 // =============================================================================
 
 // Load IDL from build artifacts
-let idl: anchor.Idl;
-try {
-  const idlPath = path.join(process.cwd(), "solana/otc-program/target/idl/otc.json");
-  idl = JSON.parse(fs.readFileSync(idlPath, "utf8"));
-} catch (e) {
+const idlPath = path.join(process.cwd(), "solana/otc-program/target/idl/otc.json");
+if (!fs.existsSync(idlPath)) {
   console.error("Failed to load IDL. Run 'anchor build' first.");
   process.exit(1);
 }
+const idl: anchor.Idl = JSON.parse(fs.readFileSync(idlPath, "utf8"));
 
 // =============================================================================
 // UTILITIES
 // =============================================================================
 
-function log(category: string, message: string, data?: Record<string, unknown>) {
+function log(
+  category: string,
+  message: string,
+  data?: Record<string, string | number | boolean | null | undefined>,
+) {
   const prefix: Record<string, string> = {
     INFO: "ℹ️ ",
     SUCCESS: "✅",
@@ -131,25 +125,34 @@ async function runSolanaE2ETests() {
   section(`Solana E2E OTC Flow Validation - ${CLUSTER.toUpperCase()}`);
   
   log("INFO", `Mode: ${EXECUTE_TX ? "EXECUTE TRANSACTIONS" : "DRY RUN (read-only)"}`);
-  log("INFO", `RPC: ${clusterConfig.rpc}`);
+  
+  let rpcUrl: string;
+  if (process.env.SOLANA_RPC) {
+    rpcUrl = process.env.SOLANA_RPC;
+  } else if (deploymentConfig.rpc) {
+    rpcUrl = deploymentConfig.rpc;
+  } else if (CLUSTER === "localnet") {
+    rpcUrl = "http://127.0.0.1:8899";
+  } else if (CLUSTER === "devnet") {
+    rpcUrl = "https://api.devnet.solana.com";
+  } else if (CLUSTER === "mainnet") {
+    throw new Error("SOLANA_RPC environment variable or deploymentConfig.rpc is required for mainnet");
+  } else {
+    throw new Error(`Unknown cluster: ${CLUSTER}`);
+  }
+  log("INFO", `RPC: ${rpcUrl}`);
 
   // Create connection
-  const connection = new Connection(clusterConfig.rpc, "confirmed");
+  const connection = new Connection(rpcUrl, "confirmed");
 
   // Check connection
-  try {
-    const version = await connection.getVersion();
-    log("SUCCESS", `Connected to Solana ${version["solana-core"]}`);
-  } catch (e) {
-    log("ERROR", "Failed to connect to Solana cluster");
-    return false;
-  }
+  const version = await connection.getVersion();
+  log("SUCCESS", `Connected to Solana ${version["solana-core"]}`);
 
   // Get program ID
-  const programIdStr = deploymentConfig.NEXT_PUBLIC_SOLANA_PROGRAM_ID || deploymentConfig.programId;
+  const programIdStr = deploymentConfig.programId;
   if (!programIdStr) {
-    log("ERROR", "Program ID not found in deployment config");
-    return false;
+    throw new Error("Program ID not found in deployment config");
   }
   
   const programId = new PublicKey(programIdStr);
@@ -158,32 +161,29 @@ async function runSolanaE2ETests() {
   // Check if program is deployed
   const programInfo = await connection.getAccountInfo(programId);
   if (!programInfo) {
-    log("ERROR", "Program not deployed at address");
-    return false;
+    throw new Error(`Program not deployed at ${programId.toBase58()}`);
   }
   log("SUCCESS", "Program deployed and verified");
 
   // Get desk address
-  const deskStr = deploymentConfig.NEXT_PUBLIC_SOLANA_DESK || deploymentConfig.desk;
+  const deskStr = deploymentConfig.desk;
   if (!deskStr) {
-    log("WARNING", "Desk address not found in deployment config - searching...");
-    // We would need to search for desk PDAs here
-  } else {
-    const deskPubkey = new PublicKey(deskStr);
-    log("CHECK", `Desk: ${deskPubkey.toBase58()}`);
-
-    // Try to read desk data
-    const deskInfo = await connection.getAccountInfo(deskPubkey);
-    if (deskInfo) {
-      log("SUCCESS", "Desk account exists", {
-        size: deskInfo.data.length,
-        owner: deskInfo.owner.toBase58(),
-      });
-      
-      // Decode desk data (basic structure)
-      // The actual decoding would require the full anchor program context
-    }
+    throw new Error("Desk address not found in deployment config");
   }
+  
+  const deskPubkey = new PublicKey(deskStr);
+  log("CHECK", `Desk: ${deskPubkey.toBase58()}`);
+
+  // Read desk data
+  const deskInfo = await connection.getAccountInfo(deskPubkey);
+  if (!deskInfo) {
+    throw new Error(`Desk account not found at ${deskPubkey.toBase58()}`);
+  }
+  
+  log("SUCCESS", "Desk account exists", {
+    size: deskInfo.data.length,
+    owner: deskInfo.owner.toBase58(),
+  });
 
   // =============================================================================
   // P2P FLOW DEMONSTRATION (Non-Negotiable)
@@ -217,8 +217,7 @@ async function runSolanaE2ETests() {
     // Load wallet
     const walletPath = process.env.SOLANA_WALLET_PATH || path.join(process.cwd(), "solana/otc-program/id.json");
     if (!fs.existsSync(walletPath)) {
-      log("ERROR", "Wallet keypair not found at " + walletPath);
-      return false;
+      throw new Error(`Wallet keypair not found at ${walletPath}`);
     }
     
     const walletKeypair = Keypair.fromSecretKey(
@@ -268,8 +267,6 @@ async function runSolanaE2ETests() {
     "Validation": "approve_offer checks consignment.is_negotiable (must be true)",
     "Error": "NonNegotiableP2P error if trying to approve P2P offer",
   });
-
-  return true;
 }
 
 // =============================================================================
@@ -277,14 +274,9 @@ async function runSolanaE2ETests() {
 // =============================================================================
 
 runSolanaE2ETests()
-  .then((success) => {
-    if (success) {
-      console.log("\n✅ Solana E2E validation completed successfully\n");
-      process.exit(0);
-    } else {
-      console.log("\n❌ Solana E2E validation failed\n");
-      process.exit(1);
-    }
+  .then(() => {
+    console.log("\n✅ Solana E2E validation completed successfully\n");
+    process.exit(0);
   })
   .catch((error) => {
     console.error("\n❌ Error:", error);

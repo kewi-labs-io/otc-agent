@@ -1,24 +1,22 @@
 import { defineWalletSetup } from '@synthetixio/synpress';
 import { Phantom } from '@synthetixio/synpress/playwright';
+import { phantomTrader } from '../synpress/utils/wallets';
 
 /**
  * Phantom wallet setup using Synpress's built-in Phantom class
  */
 
-const SEED_PHRASE = process.env.PHANTOM_SEED_PHRASE || 'test test test test test test test test test test test junk';
-const PASSWORD = process.env.PHANTOM_PASSWORD || 'Tester@1234';
-
-const setupPhantomWallet = defineWalletSetup(PASSWORD, async (context, walletPage) => {
+const setupPhantomWallet = defineWalletSetup(phantomTrader.password, async (context, walletPage) => {
   // Use Synpress's built-in Phantom class
-  const phantom = new Phantom(context, walletPage, PASSWORD);
+  const phantom = new Phantom(context, walletPage, phantomTrader.password);
   
   // Import wallet using Synpress's built-in method
-  await phantom.importWallet(SEED_PHRASE);
+  await phantom.importWallet(phantomTrader.seedPhrase);
   
   console.log('✅ Phantom wallet imported');
 });
 
-export const phantomPassword = PASSWORD;
-export const phantomSeedPhrase = SEED_PHRASE;
+export const phantomPassword = phantomTrader.password;
+export const phantomSeedPhrase = phantomTrader.seedPhrase;
 
 export default setupPhantomWallet;

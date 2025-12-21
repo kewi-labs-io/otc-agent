@@ -6,16 +6,18 @@ import { useTradingDeskConsignments } from "@/hooks/useConsignments";
 import { useTokenBatch } from "@/hooks/useTokenBatch";
 import { useRenderTracker } from "@/utils/render-tracker";
 import { Button } from "./button";
-import type { OTCConsignment, Token, TokenMarketData } from "@/types";
+import type { OTCConsignment, Token, TokenMarketData, Chain } from "@/types";
 
 const PAGE_SIZE = 10;
 
+type NegotiableType = "negotiable" | "fixed";
+
 interface DealsGridProps {
   filters: {
-    chains: string[];
+    chains: Chain[];
     minMarketCap: number;
     maxMarketCap: number;
-    negotiableTypes: string[];
+    negotiableTypes: NegotiableType[];
   };
   searchQuery?: string;
 }
@@ -76,9 +78,17 @@ const TokenGroupWithData = memo(function TokenGroupWithData({
 }: TokenGroupWithDataProps) {
   useRenderTracker("TokenGroupWithData", { tokenId: tokenGroup.tokenId });
 
-  // If token failed to load, hide the group
-  if (!tokenData?.token) {
-    return null;
+  // FAIL-FAST: If there are consignments for a tokenId, that token must exist
+  // If tokenData is null/undefined after loading, that's a data integrity issue
+  if (!tokenData) {
+    throw new Error(
+      `Token data missing for tokenId: ${tokenGroup.tokenId} - consignments exist but token not found`,
+    );
+  }
+  if (!tokenData.token) {
+    throw new Error(
+      `Token missing in tokenData for tokenId: ${tokenGroup.tokenId} - data integrity issue`,
+    );
   }
 
   return (
@@ -130,8 +140,8 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
       // Search by tokenId
       if (group.tokenId.toLowerCase().includes(query)) return true;
       // Search by token symbol/name if available
-      const tokenData = tokensData?.[group.tokenId];
-      if (tokenData?.token) {
+      const tokenData = tokensData && tokensData[group.tokenId];
+      if (tokenData && tokenData.token) {
         if (tokenData.token.symbol.toLowerCase().includes(query)) return true;
         if (tokenData.token.name.toLowerCase().includes(query)) return true;
       }
@@ -142,7 +152,11 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
   // Reset to page 1 when filters or search changes
   useMemo(() => {
     setCurrentPage(1);
-  }, [filters.chains.join(","), filters.negotiableTypes.join(","), searchQuery]);
+  }, [
+    filters.chains.join(","),
+    filters.negotiableTypes.join(","),
+    searchQuery,
+  ]);
 
   // Pagination
   const totalPages = Math.ceil(filteredGroups.length / PAGE_SIZE);
@@ -159,7 +173,8 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
     [totalPages],
   );
 
-  const isLoading = isLoadingConsignments || (tokenIds.length > 0 && isLoadingTokens);
+  const isLoading =
+    isLoadingConsignments || (tokenIds.length > 0 && isLoadingTokens);
 
   if (isLoading) {
     return (
@@ -237,13 +252,28 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
   return (
     <div className="space-y-6 pb-6">
       {/* Token groups */}
-      {paginatedGroups.map((group) => (
-        <TokenGroupWithData
-          key={group.tokenId}
-          tokenGroup={group}
-          tokenData={tokensData?.[group.tokenId] ?? null}
-        />
-      ))}
+      {paginatedGroups.map((group) => {
+        // FAIL-FAST: If there are consignments for a tokenId, that token must exist after loading
+        // tokensData should contain all tokens for the groups we're rendering
+        if (!tokensData) {
+          throw new Error(
+            `Tokens data missing - should be loaded before rendering groups`,
+          );
+        }
+        const tokenData = tokensData[group.tokenId];
+        if (!tokenData) {
+          throw new Error(
+            `Token data missing for tokenId: ${group.tokenId} - consignments exist but token not found in batch`,
+          );
+        }
+        return (
+          <TokenGroupWithData
+            key={group.tokenId}
+            tokenGroup={group}
+            tokenData={tokenData}
+          />
+        );
+      })}
 
       {/* Pagination controls */}
       {totalPages > 1 && (

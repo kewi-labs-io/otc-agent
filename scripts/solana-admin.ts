@@ -33,16 +33,33 @@ import {
 import bs58 from "bs58";
 import * as fs from "fs";
 import * as path from "path";
+import { getSolanaConfig } from "../src/config/contracts";
+import { getAppUrl } from "../src/config/env";
 
-const SOLANA_RPC = process.env.SOLANA_MAINNET_RPC || "https://api.mainnet-beta.solana.com";
-const PROGRAM_ID = new PublicKey(
-  process.env.NEXT_PUBLIC_SOLANA_PROGRAM_ID || "6qn8ELVXd957oRjLaomCpKpcVZshUjNvSzw1nc7QVyXc"
-);
-const DESK = new PublicKey(
-  process.env.NEXT_PUBLIC_SOLANA_DESK_MAINNET || 
-  process.env.NEXT_PUBLIC_SOLANA_DESK || 
-  "G89QsVcKN1MZe6d8eKyzv93u7TEeXSsXbsDsBPbuTMUU"
-);
+const solanaDeployment = getSolanaConfig("mainnet");
+
+let SOLANA_RPC: string;
+if (process.env.SOLANA_MAINNET_RPC) {
+  SOLANA_RPC = process.env.SOLANA_MAINNET_RPC;
+} else if (solanaDeployment.rpc.startsWith("/")) {
+  SOLANA_RPC = `${getAppUrl()}${solanaDeployment.rpc}`;
+} else if (solanaDeployment.rpc) {
+  SOLANA_RPC = solanaDeployment.rpc;
+} else {
+  throw new Error("SOLANA_MAINNET_RPC environment variable or solanaDeployment.rpc config is required");
+}
+
+const programIdStr = process.env.SOLANA_PROGRAM_ID || solanaDeployment.programId;
+if (!programIdStr) {
+  throw new Error("SOLANA_PROGRAM_ID environment variable or solanaDeployment.programId config is required");
+}
+const PROGRAM_ID = new PublicKey(programIdStr);
+
+const deskStr = process.env.SOLANA_DESK || solanaDeployment.desk;
+if (!deskStr) {
+  throw new Error("SOLANA_DESK environment variable or solanaDeployment.desk config is required");
+}
+const DESK = new PublicKey(deskStr);
 
 const POOL_TYPE_NONE = 0;
 const EMPTY_PYTH_FEED = Buffer.alloc(32, 0);
@@ -153,11 +170,12 @@ async function registerToken(tokenMintStr: string, priceUsd?: number): Promise<v
   
   console.log("\nRegistering token...");
   
-  const tx = await (program.methods as anchor.Program["methods"]).registerToken(
-    Array.from(EMPTY_PYTH_FEED),
-    SystemProgram.programId,
-    POOL_TYPE_NONE
-  )
+  const tx = await program.methods
+    .registerToken(
+      Array.from(EMPTY_PYTH_FEED),
+      SystemProgram.programId,
+      POOL_TYPE_NONE
+    )
     .accountsStrict({
       desk: DESK,
       payer: wallet.publicKey,
@@ -201,7 +219,7 @@ async function setPrice(tokenMintStr: string, priceUsd: number): Promise<void> {
   console.log("Token Registry:", tokenRegistryPda.toBase58());
   console.log("\nSetting price...");
   
-  const tx = await (program as anchor.Program).methods
+  const tx = await program.methods
     .setManualTokenPrice(price8d)
     .accounts({
       tokenRegistry: tokenRegistryPda,
@@ -212,6 +230,51 @@ async function setPrice(tokenMintStr: string, priceUsd: number): Promise<void> {
     .rpc();
   
   console.log("✅ Price set");
+  console.log("Transaction:", tx);
+  console.log("View on Solscan: https://solscan.io/tx/" + tx);
+}
+
+async function setLimits(
+  minUsdAmount: number,
+  maxTokenPerOrder: number = 1000000000, // Default 1B tokens
+  quoteExpirySecs: number = 3600, // Default 1 hour
+  defaultUnlockDelaySecs: number = 0, // Default no minimum lockup
+  maxLockupSecs: number = 31536000 // Default 1 year
+): Promise<void> {
+  console.log("=== SET DESK LIMITS ===\n");
+  
+  const connection = await getConnection();
+  const wallet = await getWallet();
+  const program = await getProgram(connection, wallet);
+  
+  // Convert to 8 decimal fixed point
+  const minUsd8d = new anchor.BN(Math.floor(minUsdAmount * 1e8));
+  const maxToken = new anchor.BN(maxTokenPerOrder);
+  const quoteExpiry = new anchor.BN(quoteExpirySecs);
+  const defaultUnlock = new anchor.BN(defaultUnlockDelaySecs);
+  const maxLockup = new anchor.BN(maxLockupSecs);
+  
+  console.log("Desk:", DESK.toBase58());
+  console.log("Wallet:", wallet.publicKey.toBase58());
+  console.log("\nNew Limits:");
+  console.log("  Min USD: $" + minUsdAmount + " (" + minUsd8d.toString() + " in 8d format)");
+  console.log("  Max Token Per Order:", maxTokenPerOrder);
+  console.log("  Quote Expiry:", quoteExpirySecs + " seconds");
+  console.log("  Default Unlock Delay:", defaultUnlockDelaySecs + " seconds");
+  console.log("  Max Lockup:", maxLockupSecs + " seconds");
+  
+  console.log("\nSetting limits...");
+  
+  const tx = await program.methods
+    .setLimits(minUsd8d, maxToken, quoteExpiry, defaultUnlock, maxLockup)
+    .accounts({
+      desk: DESK,
+      owner: wallet.publicKey,
+    })
+    .signers([wallet])
+    .rpc();
+  
+  console.log("✅ Limits set");
   console.log("Transaction:", tx);
   console.log("View on Solscan: https://solscan.io/tx/" + tx);
 }
@@ -244,28 +307,32 @@ async function showStatus(): Promise<void> {
     const provider = new anchor.AnchorProvider(connection, dummyWallet, { commitment: "confirmed" });
     const program = new anchor.Program(idl, provider);
     
-    type DeskAccount = {
+    interface DeskAccount {
       owner: PublicKey;
       agent: PublicKey;
       nextConsignmentId: anchor.BN;
       nextOfferId: anchor.BN;
-      minUsdAmount8d: anchor.BN;
-      maxUsdAmount8d: anchor.BN;
-      isPaused: boolean;
-    };
+      minUsdAmount8D: anchor.BN;  // Note: capital D - Anchor converts min_usd_amount_8d to minUsdAmount8D
+      maxTokenPerOrder: anchor.BN;
+      paused: boolean;
+    }
     
-    const deskAccount = await (
-      program.account as { desk: { fetch: (addr: PublicKey) => Promise<DeskAccount> } }
-    ).desk.fetch(DESK);
+    interface ProgramAccounts {
+      desk: {
+        fetch: (addr: PublicKey) => Promise<DeskAccount>;
+      };
+    }
+    
+    const deskAccount = await (program.account as ProgramAccounts).desk.fetch(DESK);
     
     console.log("\n📊 Desk State:");
     console.log("   Owner:", deskAccount.owner.toBase58());
     console.log("   Agent:", deskAccount.agent.toBase58());
     console.log("   Consignments:", deskAccount.nextConsignmentId.toNumber() - 1);
     console.log("   Offers:", deskAccount.nextOfferId.toNumber() - 1);
-    console.log("   Min USD: $" + (deskAccount.minUsdAmount8d.toNumber() / 1e8));
-    console.log("   Max USD: $" + (deskAccount.maxUsdAmount8d.toNumber() / 1e8));
-    console.log("   Paused:", deskAccount.isPaused);
+    console.log("   Min USD: $" + (deskAccount.minUsdAmount8D.toNumber() / 1e8));
+    console.log("   Max Token Per Order:", deskAccount.maxTokenPerOrder.toString());
+    console.log("   Paused:", deskAccount.paused);
   }
   
   // Check wallet balance
@@ -294,6 +361,7 @@ Commands:
   create-treasury <TOKEN_MINT>           Create desk token treasury (ATA)
   register-token <TOKEN_MINT> [PRICE]    Register token on desk with optional price
   set-price <TOKEN_MINT> <PRICE_USD>     Set manual token price
+  set-limits <MIN_USD>                   Set desk minimum USD (e.g., 0.01 for $0.01)
   status                                 Show desk status
 
 Examples:
@@ -301,12 +369,13 @@ Examples:
   bun scripts/solana-admin.ts create-treasury JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN
   bun scripts/solana-admin.ts register-token JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN 0.50
   bun scripts/solana-admin.ts set-price JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN 0.55
+  bun scripts/solana-admin.ts set-limits 0.01   # Set minimum to $0.01
 
 Environment Variables:
   SOLANA_MAINNET_PRIVATE_KEY   Admin wallet private key (bs58 encoded)
   SOLANA_MAINNET_RPC           RPC endpoint (default: mainnet-beta)
-  NEXT_PUBLIC_SOLANA_DESK      Desk address override
-  NEXT_PUBLIC_SOLANA_PROGRAM_ID Program ID override
+  SOLANA_DESK                  Desk address override
+  SOLANA_PROGRAM_ID            Program ID override
 `);
 }
 
@@ -345,6 +414,15 @@ async function main(): Promise<void> {
         process.exit(1);
       }
       await setPrice(args[1], parseFloat(args[2]));
+      break;
+      
+    case "set-limits":
+      if (!args[1]) {
+        console.error("Error: MIN_USD required (e.g., 0.01 for $0.01)");
+        printUsage();
+        process.exit(1);
+      }
+      await setLimits(parseFloat(args[1]));
       break;
       
     case "status":

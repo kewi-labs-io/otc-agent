@@ -45,13 +45,10 @@ async function main() {
     throw new Error("Insufficient SOL. Need at least 0.01 SOL for initialization.");
   }
 
-  // Check if desk account already exists (should not for fresh keypair)
+  // FAIL-FAST: Desk account must not exist for fresh keypair
   const deskInfo = await connection.getAccountInfo(desk.publicKey);
-  if (deskInfo && deskInfo.data.length > 0) {
-    console.log("\n⚠️  Desk account already exists at this address.");
-    console.log("    Size:", deskInfo.data.length, "bytes");
-    console.log("    Owner program:", deskInfo.owner.toString());
-    throw new Error("Desk account already exists. Cannot reinitialize.");
+  if (deskInfo) {
+    throw new Error(`Desk account already exists at ${desk.publicKey.toString()}. Size: ${deskInfo.data.length} bytes, Owner: ${deskInfo.owner.toString()}`);
   }
   console.log("✅ Desk address is available (no existing account)")
 
@@ -80,7 +77,12 @@ async function main() {
   });
   anchor.setProvider(provider);
 
-  const programId = new PublicKey(idl.address || idl.metadata?.address);
+  // FAIL-FAST: IDL must have program address in one of the expected locations
+  const programAddress = idl.address ?? idl.metadata?.address;
+  if (!programAddress) {
+    throw new Error("IDL missing program address (both 'address' and 'metadata.address' are undefined)");
+  }
+  const programId = new PublicKey(programAddress);
   console.log("📋 Program ID:", programId.toString());
 
   const program = new anchor.Program(idl, provider);
@@ -101,18 +103,14 @@ async function main() {
     true // allowOwnerOffCurve
   );
 
-  try {
-    await getOrCreateAssociatedTokenAccount(
-      connection,
-      owner,
-      usdcMint,
-      desk.publicKey,
-      true // allowOwnerOffCurve
-    );
-    console.log("✅ Desk USDC ATA:", deskUsdcAta.toString());
-  } catch (err) {
-    console.log("ℹ️  Desk USDC ATA may already exist or will be created during init");
-  }
+  await getOrCreateAssociatedTokenAccount(
+    connection,
+    owner,
+    usdcMint,
+    desk.publicKey,
+    true // allowOwnerOffCurve
+  );
+  console.log("✅ Desk USDC ATA:", deskUsdcAta.toString());
 
   // Initialize desk
   console.log("\n⚙️  Initializing desk...");

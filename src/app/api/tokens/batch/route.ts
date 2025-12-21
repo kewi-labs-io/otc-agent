@@ -1,26 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCachedTokenBatch } from "@/lib/cache";
+import {
+  validateQueryParams,
+  validationErrorResponse,
+} from "@/lib/validation/helpers";
+import {
+  GetTokenBatchQuerySchema,
+  TokenBatchResponseSchema,
+} from "@/types/validation/api-schemas";
+import { z } from "zod";
 
 /**
  * GET /api/tokens/batch?ids=token-base-0x1,token-base-0x2
  *
  * Batch fetch tokens by their IDs. Much more efficient than
  * individual requests when loading multiple tokens.
- * 
+ *
  * Uses serverless-optimized caching via unstable_cache.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const idsParam = searchParams.get("ids");
 
-  if (!idsParam) {
-    return NextResponse.json(
-      { success: false, error: "ids parameter required" },
-      { status: 400 },
-    );
+  // Validate query params - return 400 on invalid params
+  const parseResult = GetTokenBatchQuerySchema.safeParse(
+    Object.fromEntries(searchParams.entries()),
+  );
+  if (!parseResult.success) {
+    return validationErrorResponse(parseResult.error, 400);
   }
+  const query = parseResult.data;
 
-  const tokenIds = idsParam.split(",").filter(Boolean);
+  const tokenIds = query.ids;
 
   if (tokenIds.length === 0) {
     return NextResponse.json({ success: true, tokens: {} });
@@ -37,14 +47,13 @@ export async function GET(request: NextRequest) {
   // Use serverless-optimized batch cache
   const tokensMap = await getCachedTokenBatch(tokenIds);
 
-  // Cache for 2 minutes - token metadata rarely changes
-  return NextResponse.json(
-    { success: true, tokens: tokensMap },
-    {
-      headers: {
-        "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
-      },
-    },
-  );
-}
+  const batchResponse = { success: true, tokens: tokensMap };
+  const validatedBatch = TokenBatchResponseSchema.parse(batchResponse);
 
+  // Cache for 2 minutes - token metadata rarely changes
+  return NextResponse.json(validatedBatch, {
+    headers: {
+      "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
+    },
+  });
+}

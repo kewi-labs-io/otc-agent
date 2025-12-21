@@ -3,24 +3,10 @@
 import type { IAgentRuntime } from "@elizaos/core";
 import { Service } from "@elizaos/core";
 import { v4 as uuidv4 } from "uuid";
+import type { UserQuoteStats } from "../types";
 
-export interface UserSessionMemory {
-  id: string;
-  entityId: string;
-  walletAddress: string;
-
-  quotesCreated: number;
-  lastQuoteAt: number;
-  dailyQuoteCount: number;
-  dailyResetAt: number;
-
-  totalDeals: number;
-  totalVolumeUsd: number;
-  totalSavedUsd: number;
-
-  createdAt: number;
-  updatedAt: number;
-}
+// Re-export for consumers
+export type { UserQuoteStats } from "../types";
 
 const SESSION_KEY = (entityId: string) => `user_session:${entityId}`;
 const MAX_DAILY_QUOTES = 25;
@@ -53,8 +39,8 @@ export class UserSessionStorageService extends Service {
   async getOrCreateSession(
     entityId: string,
     walletAddress: string,
-  ): Promise<UserSessionMemory> {
-    const existing = await this.runtime.getCache<UserSessionMemory>(
+  ): Promise<UserQuoteStats> {
+    const existing = await this.runtime.getCache<UserQuoteStats>(
       SESSION_KEY(entityId),
     );
 
@@ -63,7 +49,7 @@ export class UserSessionStorageService extends Service {
       const needsReset = now > existing.dailyResetAt + 24 * 60 * 60 * 1000;
 
       if (needsReset) {
-        const updated: UserSessionMemory = {
+        const updated: UserQuoteStats = {
           ...existing,
           dailyQuoteCount: 0,
           dailyResetAt: now,
@@ -76,7 +62,7 @@ export class UserSessionStorageService extends Service {
     }
 
     const now = Date.now();
-    const newSession: UserSessionMemory = {
+    const newSession: UserQuoteStats = {
       id: uuidv4(),
       entityId,
       walletAddress,
@@ -111,7 +97,7 @@ export class UserSessionStorageService extends Service {
     const session = await this.getOrCreateSession(entityId, walletAddress);
     const now = Date.now();
 
-    const updated: UserSessionMemory = {
+    const updated: UserQuoteStats = {
       ...session,
       quotesCreated: session.quotesCreated + 1,
       dailyQuoteCount: session.dailyQuoteCount + 1,
@@ -130,7 +116,7 @@ export class UserSessionStorageService extends Service {
   ): Promise<void> {
     const session = await this.getOrCreateSession(entityId, walletAddress);
 
-    const updated: UserSessionMemory = {
+    const updated: UserQuoteStats = {
       ...session,
       totalDeals: session.totalDeals + 1,
       totalVolumeUsd: session.totalVolumeUsd + volumeUsd,

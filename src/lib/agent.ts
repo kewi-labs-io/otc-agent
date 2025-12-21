@@ -910,8 +910,9 @@ const agent = {
     /* openaiPlugin, */
     otcDeskPlugin,
   ],
-  providers: [otcDeskPlugin.providers].flat(),
-  actions: [otcDeskPlugin.actions].flat(),
+  // Filter out undefined providers/actions to ensure clean arrays
+  providers: [otcDeskPlugin.providers].flat().filter(Boolean),
+  actions: [otcDeskPlugin.actions].flat().filter(Boolean),
 };
 
 export default agent;

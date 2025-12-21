@@ -31,7 +31,7 @@ const FAIL_CLOSED = process.env.NODE_ENV === "production";
 
 /**
  * Check if the pool price diverges significantly (>10%) from the aggregated off-chain price.
- * 
+ *
  * SECURITY: In production, this fails-closed - if we cannot verify the price,
  * the transaction is blocked. This prevents manipulation attacks.
  */
@@ -52,73 +52,65 @@ export async function checkPriceDivergence(
   if (!platformId) {
     // Unsupported chain - allow but log
     console.warn(`[PriceValidator] Unsupported chain: ${chain}`);
-    return { valid: true, warning: `Price validation not available for chain: ${chain}` };
-  }
-
-  try {
-    const url = `https://api.coingecko.com/api/v3/simple/token_price/${platformId}?contract_addresses=${tokenAddress}&vs_currencies=usd`;
-    const cacheKey = `coingecko:${platformId}:${tokenAddress.toLowerCase()}`;
-
-    const data = await fetchJsonWithRetryAndCache<CoinGeckoPriceResponse>(
-      url,
-      { headers: { Accept: "application/json" } },
-      {
-        cacheTtlMs: COINGECKO_CACHE_TTL_MS,
-        cacheKey,
-        maxRetries: 3,
-      },
-    );
-
-    const tokenData = data[tokenAddress.toLowerCase()];
-
-    if (!tokenData || !tokenData.usd) {
-      // Token not found on CoinGecko - this might be a new/unlisted token
-      // Allow with warning (can't verify, but not necessarily malicious)
-      return {
-        valid: true,
-        warning: "Token not found on price aggregator - price unverified",
-      };
-    }
-
-    const aggregatedPrice = tokenData.usd;
-    const diff = Math.abs(poolPriceUsd - aggregatedPrice);
-    const divergence = diff / aggregatedPrice;
-    const divergencePercent = divergence * 100;
-
-    if (divergencePercent > 10) {
-      return {
-        valid: false,
-        warning: `Price diverges ${divergencePercent.toFixed(1)}% from market ($${poolPriceUsd.toFixed(4)} vs $${aggregatedPrice.toFixed(4)})`,
-        aggregatedPrice,
-        poolPrice: poolPriceUsd,
-        divergencePercent,
-      };
-    }
-
     return {
       valid: true,
+      warning: `Price validation not available for chain: ${chain}`,
+    };
+  }
+
+  // FAIL-FAST: Fetch price data - throws on network/API errors
+  const url = `https://api.coingecko.com/api/v3/simple/token_price/${platformId}?contract_addresses=${tokenAddress}&vs_currencies=usd`;
+  const cacheKey = `coingecko:${platformId}:${tokenAddress.toLowerCase()}`;
+
+  const data = await fetchJsonWithRetryAndCache<CoinGeckoPriceResponse>(
+    url,
+    { headers: { Accept: "application/json" } },
+    {
+      cacheTtlMs: COINGECKO_CACHE_TTL_MS,
+      cacheKey,
+      maxRetries: 3,
+    },
+  );
+
+  const tokenData = data[tokenAddress.toLowerCase()];
+
+  if (!tokenData || !tokenData.usd) {
+    // Token not found on CoinGecko - this might be a new/unlisted token
+    // In production (FAIL_CLOSED), this is a validation failure
+    if (FAIL_CLOSED) {
+      return {
+        valid: false,
+        error: "Token not found on price aggregator - cannot verify price",
+        warning:
+          "Price verification unavailable - transaction blocked for safety",
+      };
+    }
+    // Development: allow with warning
+    return {
+      valid: true,
+      warning: "Token not found on price aggregator - price unverified",
+    };
+  }
+
+  const aggregatedPrice = tokenData.usd;
+  const diff = Math.abs(poolPriceUsd - aggregatedPrice);
+  const divergence = diff / aggregatedPrice;
+  const divergencePercent = divergence * 100;
+
+  if (divergencePercent > 10) {
+    return {
+      valid: false,
+      warning: `Price diverges ${divergencePercent.toFixed(1)}% from market ($${poolPriceUsd.toFixed(4)} vs $${aggregatedPrice.toFixed(4)})`,
       aggregatedPrice,
       poolPrice: poolPriceUsd,
       divergencePercent,
     };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    console.error("[PriceValidator] API error:", errorMessage);
-
-    if (FAIL_CLOSED) {
-      // Production: fail-closed to prevent manipulation
-      return {
-        valid: false,
-        error: `Price verification failed: ${errorMessage}`,
-        warning: "Cannot verify price - transaction blocked for safety",
-      };
-    }
-
-    // Development: fail-open with warning
-    console.warn("[PriceValidator] Failing open in development mode");
-    return {
-      valid: true,
-      warning: `Price verification unavailable: ${errorMessage}`,
-    };
   }
+
+  return {
+    valid: true,
+    aggregatedPrice,
+    poolPrice: poolPriceUsd,
+    divergencePercent,
+  };
 }

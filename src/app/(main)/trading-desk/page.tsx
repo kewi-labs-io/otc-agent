@@ -4,6 +4,7 @@ import "@/app/globals.css";
 import { Suspense, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useRenderTracker } from "@/utils/render-tracker";
+import { PageLoading } from "@/components/ui/loading-spinner";
 
 const DealsGrid = dynamic(
   () => import("@/components/deals-grid").then((m) => m.DealsGrid),
@@ -66,19 +67,13 @@ export default function Page() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <div className="text-xl text-zinc-600 dark:text-zinc-400">
-              Loading OTC Marketplace...
-            </div>
-          </div>
-        </div>
+        <PageLoading
+          message="Loading OTC Marketplace..."
+          colorClass="border-blue-600"
+        />
       }
     >
       <MarketplaceContent />
     </Suspense>
   );
 }
-
-

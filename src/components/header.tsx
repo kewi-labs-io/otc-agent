@@ -158,7 +158,9 @@ export const Header = memo(function Header() {
                       : "text-zinc-600 dark:text-zinc-400",
                   )}
                   onClick={() => setMobileMenuOpen(false)}
-                  aria-current={pathname === "/trading-desk" ? "page" : undefined}
+                  aria-current={
+                    pathname === "/trading-desk" ? "page" : undefined
+                  }
                 >
                   AI Trading Desk
                 </Link>

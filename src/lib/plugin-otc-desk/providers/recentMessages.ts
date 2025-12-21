@@ -11,12 +11,7 @@ import {
   type Provider,
   type UUID,
 } from "@elizaos/core";
-
-// Helper type for entity metadata from various sources
-interface EntitySourceMetadata {
-  username?: string;
-  name?: string;
-}
+import type { EntitySourceMetadata } from "../types";
 
 // Helper function to safely get entity metadata
 function getEntityUsername(entity: Entity | undefined): string {
@@ -233,11 +228,17 @@ const sanitizeMemoryIfUser = (
 ): Memory => {
   const isSelf = memory.entityId === runtime.agentId;
   if (isSelf) return memory;
+  // FAIL-FAST: Memory.content should exist (Memory type requires it)
+  if (!memory.content) {
+    throw new Error("Memory missing content field");
+  }
+  // text is optional in Memory.content, but sanitizeText handles undefined
+  const text = memory.content.text;
   return {
     ...memory,
     content: {
       ...memory.content,
-      text: sanitizeText(memory.content?.text as string | undefined),
+      text: sanitizeText(text),
     },
   } as Memory;
 };
@@ -313,7 +314,8 @@ export const recentMessagesProvider: Provider = {
         : "";
 
     const metaData = message.metadata as CustomMetadata;
-    const senderName = metaData?.entityName || "unknown";
+    // entityName is optional in metadata - use "unknown" as fallback for display
+    const senderName = metaData?.entityName ?? "unknown";
     const receivedMessageContent = sanitizeText(message.content.text);
 
     const receivedMessageHeader = addHeader(

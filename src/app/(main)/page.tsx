@@ -56,12 +56,14 @@ export default function HomePage() {
       {/* Content */}
       <div className="relative flex flex-col items-start justify-start lg:justify-center flex-1 lg:pb-32">
         <div className="flex flex-col items-start">
-          <h1 
+          <h1
             className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-white leading-tight tracking-tight"
             role="heading"
             aria-level={1}
           >
-            Sell Your Tokens<br />Over-the-Counter
+            Sell Your Tokens
+            <br />
+            Over-the-Counter
           </h1>
           <p className="mt-2 lg:mt-6 text-lg sm:text-xl text-zinc-300 max-w-2xl leading-relaxed">
             Permissionless, peer-to-peer over-the-counter deals.
@@ -73,21 +75,21 @@ export default function HomePage() {
           <Card
             number="1"
             title="List A Token"
-            description="Consign your tokens at a discount with a lockup period."
+            description="Consign your tokens at a discount with lockup."
             button="Create Listing"
             onClick={handleOpenConsignmentForm}
           />
           <Card
             number="2"
             title="Negotiate"
-            description="Make an offer, choose a discount and lockup."
+            description="Make an offer with AI-negotiated deals."
             button="Open Trading Desk"
             onClick={handleOpenTradingDesk}
           />
           <Card
             number="3"
-            title="Buy and hold"
-            description="Your tokens are available after the lockup period ends."
+            title="Private Deals"
+            description="Fixed price and private deals available."
             button="View My Deals"
             onClick={handleViewDeals}
           />

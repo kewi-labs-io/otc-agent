@@ -94,12 +94,9 @@ describe("otc adversarial", () => {
 
     // Attempt to withdraw below reserved should fail
     const withdrawAmount = new BN("500000000000000");
-    try {
-      await program.methods.withdrawTokens(withdrawAmount).accounts({ desk: desk.publicKey, tokenRegistry, deskSigner: desk.publicKey, deskTokenTreasury, ownerTokenAta: getAssociatedTokenAddressSync(tokenMint, owner.publicKey) }).signers([owner, desk]).rpc();
-      expect.fail("withdrawTokens should fail due to reserved balance");
-    } catch (e) {
-      // ok
-    }
+    await expect(
+      program.methods.withdrawTokens(withdrawAmount).accounts({ desk: desk.publicKey, tokenRegistry, deskSigner: desk.publicKey, deskTokenTreasury, ownerTokenAta: getAssociatedTokenAddressSync(tokenMint, owner.publicKey) }).signers([owner, desk]).rpc()
+    ).to.be.rejected;
   });
 
   it("rejects fulfill when expired (checked add)", async () => {
@@ -115,10 +112,9 @@ describe("otc adversarial", () => {
     // artificially set quote_expiry_secs very small by owner
     await program.methods.setLimits(new BN(500000000), new BN("1000000000000000"), new BN(1), new BN(0), new BN(365*24*3600)).accounts({ desk: desk.publicKey }).signers([owner]).rpc();
     await new Promise(r => setTimeout(r, 1500));
-    try {
-      await program.methods.fulfillOfferUsdc(id).accounts({ desk: desk.publicKey, offer: offer.publicKey, deskTokenTreasury, deskUsdcTreasury, payerUsdcAta: getAssociatedTokenAddressSync(usdcMint, user.publicKey), payer: user.publicKey }).signers([user]).rpc();
-      expect.fail("fulfill should fail due to expiry");
-    } catch (e) {}
+    await expect(
+      program.methods.fulfillOfferUsdc(id).accounts({ desk: desk.publicKey, offer: offer.publicKey, deskTokenTreasury, deskUsdcTreasury, payerUsdcAta: getAssociatedTokenAddressSync(usdcMint, user.publicKey), payer: user.publicKey }).signers([user]).rpc()
+    ).to.be.rejected;
   });
 
   it("enforces desk ownership of treasuries in fulfill", async () => {
@@ -135,9 +131,8 @@ describe("otc adversarial", () => {
     // Craft a fake treasury owned by user
     const fakeTreasury = getAssociatedTokenAddressSync(tokenMint, user.publicKey);
     await getOrCreateAssociatedTokenAccount(provider.connection, owner, tokenMint, user.publicKey);
-    try {
-      await program.methods.fulfillOfferSol(id).accounts({ desk: desk.publicKey, offer: offer.publicKey, deskTokenTreasury: fakeTreasury, payer: user.publicKey }).signers([user]).rpc();
-      expect.fail("fulfill should fail due to treasury owner constraint");
-    } catch (e) {}
+    await expect(
+      program.methods.fulfillOfferSol(id).accounts({ desk: desk.publicKey, offer: offer.publicKey, deskTokenTreasury: fakeTreasury, payer: user.publicKey }).signers([user]).rpc()
+    ).to.be.rejected;
   });
 });

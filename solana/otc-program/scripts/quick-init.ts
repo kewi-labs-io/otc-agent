@@ -231,71 +231,69 @@ async function main() {
   fs.writeFileSync(deskKeypairPath, JSON.stringify(Array.from(desk.secretKey)));
   console.log("\n💾 Saved desk keypair to:", deskKeypairPath);
 
-  // Output for .env (no TOKEN_MINT - all tokens are equal)
+  // Output for config
   console.log("\n" + "=".repeat(80));
-  console.log("🎉 SUCCESS. Update your .env.local with these values:");
+  console.log("🎉 SUCCESS. Your local Solana deployment is ready.");
   console.log("=".repeat(80));
-  console.log(`NEXT_PUBLIC_SOLANA_RPC=http://127.0.0.1:8899`);
-  console.log(`NEXT_PUBLIC_SOLANA_PROGRAM_ID=${program.programId.toString()}`);
-  console.log(`NEXT_PUBLIC_SOLANA_DESK=${desk.publicKey.toString()}`);
-  console.log(`NEXT_PUBLIC_SOLANA_DESK_OWNER=${owner.publicKey.toString()}`);
-  console.log(`NEXT_PUBLIC_SOLANA_USDC_MINT=${usdcMint.toString()}`);
+  console.log(`rpc=http://127.0.0.1:8899`);
+  console.log(`programId=${program.programId.toString()}`);
+  console.log(`desk=${desk.publicKey.toString()}`);
+  console.log(`deskOwner=${owner.publicKey.toString()}`);
+  console.log(`usdcMint=${usdcMint.toString()}`);
   console.log("=".repeat(80));
   console.log("\nNote: Test token mint for local testing:", tokenMint.toString());
   console.log("=".repeat(80));
 
-  // Write to src config (no TOKEN_MINT)
+  // Write to src config (source of truth for app)
   const deploymentPath = path.join(__dirname, "../../../src/config/deployments/local-solana.json");
   const deploymentDir = path.dirname(deploymentPath);
   if (!fs.existsSync(deploymentDir)) {
     fs.mkdirSync(deploymentDir, { recursive: true });
   }
 
-  const envData = {
-    NEXT_PUBLIC_SOLANA_RPC: "http://127.0.0.1:8899",
-    NEXT_PUBLIC_SOLANA_PROGRAM_ID: program.programId.toString(),
-    NEXT_PUBLIC_SOLANA_DESK: desk.publicKey.toString(),
-    NEXT_PUBLIC_SOLANA_DESK_OWNER: owner.publicKey.toString(),
-    NEXT_PUBLIC_SOLANA_USDC_MINT: usdcMint.toString(),
+  const deploymentData = {
+    network: "solana-local",
+    rpc: "http://127.0.0.1:8899",
+    programId: program.programId.toString(),
+    desk: desk.publicKey.toString(),
+    deskOwner: owner.publicKey.toString(),
+    usdcMint: usdcMint.toString(),
   };
   
   fs.writeFileSync(
     deploymentPath,
-    JSON.stringify(envData, null, 2)
+    JSON.stringify(deploymentData, null, 2)
   );
   console.log(`\n✅ Config saved to ${deploymentPath}`);
 
-  // Update .env.local
-  const envLocalPath = path.join(__dirname, "../../../.env.local");
-  let envContent = "";
-  if (fs.existsSync(envLocalPath)) {
-    envContent = fs.readFileSync(envLocalPath, "utf8");
-  }
-
-  // Update or add each env var (no TOKEN_MINT)
-  const envVars = {
-    NEXT_PUBLIC_SOLANA_RPC: "http://127.0.0.1:8899",
-    NEXT_PUBLIC_SOLANA_PROGRAM_ID: program.programId.toString(),
-    NEXT_PUBLIC_SOLANA_DESK: desk.publicKey.toString(),
-    NEXT_PUBLIC_SOLANA_DESK_OWNER: owner.publicKey.toString(),
-    NEXT_PUBLIC_SOLANA_USDC_MINT: usdcMint.toString(),
-  };
-
-  for (const [key, value] of Object.entries(envVars)) {
-    const regex = new RegExp(`^${key}=.*$`, "m");
-    if (regex.test(envContent)) {
-      envContent = envContent.replace(regex, `${key}=${value}`);
-    } else {
-      envContent += `\n${key}=${value}`;
+  // Optional: update .env.local (disabled by default to avoid restarting Next.js during E2E)
+  if (process.env.UPDATE_ENV_LOCAL === "true") {
+    const envLocalPath = path.join(__dirname, "../../../.env.local");
+    let envContent = "";
+    if (fs.existsSync(envLocalPath)) {
+      envContent = fs.readFileSync(envLocalPath, "utf8");
     }
+
+    const testMintKey = "SOLANA_TEST_TOKEN_MINT";
+    const testMintRegex = new RegExp(`^${testMintKey}=.*$`, "m");
+    if (testMintRegex.test(envContent)) {
+      envContent = envContent.replace(
+        testMintRegex,
+        `${testMintKey}=${tokenMint.toString()}`,
+      );
+    } else {
+      envContent += `\n${testMintKey}=${tokenMint.toString()}`;
+    }
+
+    envContent = envContent.replace(/\n\n+/g, "\n\n"); // Clean up extra newlines
+
+    fs.writeFileSync(envLocalPath, envContent.trim() + "\n");
+    console.log(`✅ Updated ${envLocalPath}`);
+  } else {
+    console.log(
+      "Skipping .env.local update (set UPDATE_ENV_LOCAL=true to write SOLANA_TEST_TOKEN_MINT)",
+    );
   }
-
-  // Remove old TOKEN_MINT if present
-  envContent = envContent.replace(/^NEXT_PUBLIC_SOLANA_TOKEN_MINT=.*$/m, "");
-  envContent = envContent.replace(/\n\n+/g, "\n\n"); // Clean up extra newlines
-
-  fs.writeFileSync(envLocalPath, envContent.trim() + "\n");
-  console.log(`✅ Updated ${envLocalPath}`);
 }
 
 main()

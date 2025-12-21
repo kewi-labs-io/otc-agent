@@ -20,4 +20,4 @@ description: Fix problems properly; never remove functionality as a workaround
 - Preserve all existing features
 - Enhance error handling rather than removing the feature
 
-If it's broken, fix it. If it's complex, that complexity serves a purpose.
+If it's broken, fix it. If it's complex, that complexity serves a purpose, so lean into it and get it to production ready. Try to keep things clean, concise and semantically meaningfully, don't remove capability or simplify actual functionality.

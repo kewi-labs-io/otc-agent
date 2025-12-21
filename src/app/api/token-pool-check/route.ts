@@ -1,9 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findBestPool, type PoolInfo } from "@/utils/pool-finder-base";
-import { createPublicClient, http, keccak256, encodePacked, type Address } from "viem";
+import {
+  findBestPool,
+  findAllPools,
+  type PoolInfo,
+} from "@/utils/pool-finder-base";
+import {
+  createPublicClient,
+  http,
+  keccak256,
+  encodePacked,
+  type Address,
+  type Abi,
+} from "viem";
 import { base, mainnet, bsc } from "viem/chains";
 import { SUPPORTED_CHAINS, type Chain } from "@/config/chains";
 import { getCurrentNetwork } from "@/config/contracts";
+import type { PoolCheckPool, PoolCheckResult } from "@/types";
+import {
+  validateQueryParams,
+  validationErrorResponse,
+} from "@/lib/validation/helpers";
+import {
+  TokenPoolCheckQuerySchema,
+  TokenPoolCheckResponseSchema,
+} from "@/types/validation/api-schemas";
+import { z } from "zod";
+import { safeReadContract, type ReadContractParams } from "@/lib/viem-utils";
 
 // ABI for reading token registration status from OTC
 const tokensAbi = [
@@ -32,29 +54,10 @@ const registrationHelperAbi = [
   },
 ] as const;
 
-interface PoolCheckResult {
-  success: boolean;
-  tokenAddress: string;
-  chain: Chain;
-  isRegistered: boolean;
-  hasPool: boolean;
-  pool?: {
-    address: string;
-    protocol: string;
-    tvlUsd: number;
-    priceUsd?: number;
-    baseToken: "USDC" | "WETH";
-  };
-  registrationFee?: string; // In wei
-  registrationFeeEth?: string; // Human readable
-  warning?: string;
-  error?: string;
-}
-
 function getViemChain(chain: Chain) {
   const network = getCurrentNetwork();
   const isMainnet = network === "mainnet";
-  
+
   switch (chain) {
     case "ethereum":
       return isMainnet ? mainnet : mainnet; // Use mainnet for now
@@ -68,154 +71,180 @@ function getViemChain(chain: Chain) {
 }
 
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const tokenAddress = searchParams.get("address");
-    const chain = (searchParams.get("chain") || "base") as Chain;
+  const { searchParams } = new URL(request.url);
 
-    if (!tokenAddress) {
-      return NextResponse.json(
-        { success: false, error: "Token address required" },
-        { status: 400 },
-      );
-    }
+  // Validate query params - return 400 on missing/invalid params
+  const parseResult = TokenPoolCheckQuerySchema.safeParse({
+    chain: searchParams.get("chain"),
+    tokenAddress:
+      searchParams.get("address") ?? searchParams.get("tokenAddress"),
+  });
 
-    // Only EVM chains have pool-based registration
-    if (chain === "solana") {
-      return NextResponse.json({
-        success: true,
-        tokenAddress,
-        chain,
-        isRegistered: false, // Would need Solana-specific check
-        hasPool: true, // Solana uses different pricing mechanism
-        warning: "Solana token registration is handled separately",
-      });
-    }
+  if (!parseResult.success) {
+    return validationErrorResponse(parseResult.error, 400);
+  }
 
-    const chainConfig = SUPPORTED_CHAINS[chain];
-    const otcAddress = chainConfig?.contracts?.otc;
-    const registrationHelperAddress = chainConfig?.contracts?.registrationHelper;
-    const chainId = chainConfig?.chainId;
+  const { tokenAddress, chain } = parseResult.data;
 
-    if (!otcAddress || !chainId) {
-      return NextResponse.json({
-        success: false,
-        tokenAddress,
-        chain,
-        isRegistered: false,
-        hasPool: false,
-        error: `OTC contract not deployed on ${chain}`,
-      });
-    }
-
-    const viemChain = getViemChain(chain);
-    const rpcUrl = chainConfig.rpcUrl.startsWith("/")
-      ? `http://localhost:${process.env.PORT || "4444"}${chainConfig.rpcUrl}`
-      : chainConfig.rpcUrl;
-
-    const client = createPublicClient({
-      chain: viemChain,
-      transport: http(rpcUrl),
-    });
-
-    // Check if token is registered
-    const tokenIdBytes32 = keccak256(encodePacked(["address"], [tokenAddress as Address]));
-    
-    let isRegistered = false;
-    try {
-      const read = client.readContract as (params: unknown) => Promise<[Address, number, boolean, Address]>;
-      const result = await read({
-        address: otcAddress as Address,
-        abi: tokensAbi,
-        functionName: "tokens",
-        args: [tokenIdBytes32],
-      });
-      
-      const [registeredAddress, , isActive] = result;
-      isRegistered = isActive && registeredAddress !== "0x0000000000000000000000000000000000000000";
-    } catch (err) {
-      console.error("[PoolCheck] Error checking registration:", err);
-    }
-
-    // Find best pool
-    let pool: PoolInfo | null = null;
-    let poolError: string | undefined;
-    
-    try {
-      pool = await findBestPool(tokenAddress, chainId);
-    } catch (err) {
-      poolError = err instanceof Error ? err.message : "Failed to find pool";
-    }
-
-    // Get registration fee if helper is configured and token is not registered
-    let registrationFee: string | undefined;
-    let registrationFeeEth: string | undefined;
-    
-    if (!isRegistered && registrationHelperAddress) {
-      try {
-        const read = client.readContract as (params: unknown) => Promise<bigint>;
-        const fee = await read({
-          address: registrationHelperAddress as Address,
-          abi: registrationHelperAbi,
-          functionName: "registrationFee",
-        });
-        registrationFee = fee.toString();
-        registrationFeeEth = (Number(fee) / 1e18).toFixed(6);
-      } catch (err) {
-        console.error("[PoolCheck] Error fetching registration fee:", err);
-      }
-    }
-
-    // Build warning message
-    let warning: string | undefined;
-    
-    if (!pool) {
-      warning = "No liquidity pool found. Requires Uniswap V3/V4, Aerodrome, or Pancakeswap pool.";
-    } else if (pool.tvlUsd < 1000) {
-      warning = `Low liquidity detected ($${pool.tvlUsd.toFixed(0)}). Price accuracy may be affected.`;
-    } else if (pool.tvlUsd < 10000) {
-      warning = `Moderate liquidity ($${pool.tvlUsd.toFixed(0)}). Consider waiting for more liquidity for better price accuracy.`;
-    }
-
-    const result: PoolCheckResult = {
+  // Only EVM chains have pool-based registration
+  if (chain === "solana") {
+    return NextResponse.json({
       success: true,
       tokenAddress,
       chain,
-      isRegistered,
-      hasPool: !!pool,
-      warning,
-      error: poolError,
-    };
-
-    if (pool) {
-      result.pool = {
-        address: pool.address,
-        protocol: pool.protocol,
-        tvlUsd: pool.tvlUsd,
-        priceUsd: pool.priceUsd,
-        baseToken: pool.baseToken,
-      };
-    }
-
-    if (registrationFee) {
-      result.registrationFee = registrationFee;
-      result.registrationFeeEth = registrationFeeEth;
-    }
-
-    return NextResponse.json(result, {
-      headers: {
-        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
-      },
+      isRegistered: false, // Would need Solana-specific check
+      hasPool: true, // Solana uses different pricing mechanism
+      warning: "Solana token registration is handled separately",
     });
-  } catch (error) {
-    console.error("[PoolCheck] Error:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Failed to check token pool",
-      },
-      { status: 500 },
+  }
+
+  // FAIL-FAST: chain must be valid Chain type, SUPPORTED_CHAINS guarantees ChainConfig exists
+  if (!(chain in SUPPORTED_CHAINS)) {
+    throw new Error(`Unsupported chain: ${chain}`);
+  }
+  const chainConfig = SUPPORTED_CHAINS[chain];
+
+  // FAIL-FAST: ChainConfig requires contracts field - if missing, config is invalid
+  if (!chainConfig.contracts) {
+    throw new Error(
+      `Chain config for ${chain} missing contracts - invalid ChainConfig`,
     );
   }
-}
 
+  // FAIL-FAST: ChainConfig requires rpcUrl field - if missing, config is invalid
+  if (!chainConfig.rpcUrl) {
+    throw new Error(
+      `Chain config for ${chain} missing rpcUrl - invalid ChainConfig`,
+    );
+  }
+
+  // FAIL-FAST: EVM chains require chainId
+  if (chainConfig.chainId === undefined) {
+    throw new Error(`Chain config missing chainId for: ${chain}`);
+  }
+
+  const otcAddress = chainConfig.contracts.otc;
+  const registrationHelperAddress = chainConfig.contracts.registrationHelper;
+  const chainId = chainConfig.chainId;
+
+  // FAIL-FAST: EVM chains require OTC address
+  if (!otcAddress) {
+    throw new Error(`OTC contract not deployed on ${chain}`);
+  }
+
+  const viemChain = getViemChain(chain);
+  const rpcUrl = chainConfig.rpcUrl.startsWith("/")
+    ? (() => {
+        if (!process.env.PORT) {
+          throw new Error(
+            "PORT environment variable not set for local RPC URL",
+          );
+        }
+        return `http://localhost:${process.env.PORT}${chainConfig.rpcUrl}`;
+      })()
+    : chainConfig.rpcUrl;
+
+  const client = createPublicClient({
+    chain: viemChain,
+    transport: http(rpcUrl),
+  });
+
+  // Check if token is registered
+  const tokenIdBytes32 = keccak256(
+    encodePacked(["address"], [tokenAddress as Address]),
+  );
+
+  let isRegistered = false;
+  const tokenResult = await safeReadContract<
+    [Address, number, boolean, Address]
+  >(client, {
+    address: otcAddress as Address,
+    abi: tokensAbi as Abi,
+    functionName: "tokens",
+    args: [tokenIdBytes32],
+  });
+
+  const [registeredAddress, , isActive] = tokenResult;
+  isRegistered =
+    isActive &&
+    registeredAddress !== "0x0000000000000000000000000000000000000000";
+
+  // Find all pools
+  let allPoolsRaw: PoolInfo[] = [];
+  let pool: PoolInfo | null = null;
+  let poolError: string | undefined;
+
+  allPoolsRaw = await findAllPools(tokenAddress, chainId);
+  // Best pool is the first one (highest TVL)
+  pool = allPoolsRaw.length > 0 ? allPoolsRaw[0] : null;
+
+  // Get registration fee if helper is configured and token is not registered
+  let registrationFee: string | undefined;
+  let registrationFeeEth: string | undefined;
+
+  if (!isRegistered && registrationHelperAddress) {
+    const fee = await safeReadContract<bigint>(client, {
+      address: registrationHelperAddress as Address,
+      abi: registrationHelperAbi as Abi,
+      functionName: "registrationFee",
+    });
+    registrationFee = fee.toString();
+    registrationFeeEth = (Number(fee) / 1e18).toFixed(6);
+  }
+
+  // Build warning message
+  let warning: string | undefined;
+
+  if (!pool) {
+    warning =
+      "No liquidity pool found. Requires Uniswap V3/V4, Aerodrome, or Pancakeswap pool.";
+  } else if (pool.tvlUsd < 1000) {
+    warning = `Low liquidity detected ($${pool.tvlUsd.toFixed(0)}). Price accuracy may be affected.`;
+  } else if (pool.tvlUsd < 10000) {
+    warning = `Moderate liquidity ($${pool.tvlUsd.toFixed(0)}). Consider waiting for more liquidity for better price accuracy.`;
+  }
+
+  const result: PoolCheckResult = {
+    success: true,
+    tokenAddress,
+    chain,
+    isRegistered,
+    hasPool: !!pool,
+    warning,
+    error: poolError,
+  };
+
+  if (pool) {
+    result.pool = {
+      address: pool.address,
+      protocol: pool.protocol,
+      tvlUsd: pool.tvlUsd,
+      priceUsd: pool.priceUsd,
+      baseToken: pool.baseToken,
+    };
+  }
+
+  // Include all pools for user selection (sorted by TVL)
+  if (allPoolsRaw.length > 0) {
+    result.allPools = allPoolsRaw.map((p) => ({
+      address: p.address,
+      protocol: p.protocol,
+      tvlUsd: p.tvlUsd,
+      priceUsd: p.priceUsd,
+      baseToken: p.baseToken,
+    }));
+  }
+
+  // Only show registration fee if non-zero (we've removed the fee)
+  if (registrationFee && registrationFee !== "0") {
+    result.registrationFee = registrationFee;
+    result.registrationFeeEth = registrationFeeEth;
+  }
+
+  const validatedResponse = TokenPoolCheckResponseSchema.parse(result);
+  return NextResponse.json(validatedResponse, {
+    headers: {
+      "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+    },
+  });
+}

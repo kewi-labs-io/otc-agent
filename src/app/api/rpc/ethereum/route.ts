@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAlchemyApiKey } from "@/config/env";
+import {
+  parseOrThrow,
+  validationErrorResponse,
+} from "@/lib/validation/helpers";
+import {
+  RpcRequestSchema,
+  RpcProxyErrorResponseSchema,
+} from "@/types/validation/api-schemas";
+import { z } from "zod";
 
 // Proxy RPC requests to Alchemy to keep API key server-side
 // This prevents the Alchemy API key from being exposed in the browser
@@ -9,42 +18,35 @@ export async function POST(request: NextRequest) {
   const alchemyKey = getAlchemyApiKey();
   if (!alchemyKey) {
     console.error("[RPC Proxy] ALCHEMY_API_KEY not configured");
-    return NextResponse.json(
-      { error: "RPC not configured" },
-      { status: 500 },
-    );
+    const errorResponse = { error: "RPC not configured" };
+    const validatedError = RpcProxyErrorResponseSchema.parse(errorResponse);
+    return NextResponse.json(validatedError, { status: 500 });
   }
-  
+
   const ALCHEMY_ETH_URL = `https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`;
 
-  try {
-    const body = await request.json();
+  const body = await request.json();
+  const data = parseOrThrow(RpcRequestSchema, body);
 
-    const response = await fetch(ALCHEMY_ETH_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+  const response = await fetch(ALCHEMY_ETH_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
 
-    if (!response.ok) {
-      console.error(
-        "[RPC Proxy] Alchemy error:",
-        response.status,
-        response.statusText,
-      );
-      return NextResponse.json(
-        { error: "RPC request failed" },
-        { status: response.status },
-      );
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error("[RPC Proxy] Error:", error);
-    return NextResponse.json({ error: "RPC proxy error" }, { status: 500 });
+  if (!response.ok) {
+    console.error(
+      "[RPC Proxy] Alchemy error:",
+      response.status,
+      response.statusText,
+    );
+    const errorResponse = { error: "RPC request failed" };
+    const validatedError = RpcProxyErrorResponseSchema.parse(errorResponse);
+    return NextResponse.json(validatedError, { status: response.status });
   }
-}
 
+  const result = await response.json();
+  return NextResponse.json(result);
+}

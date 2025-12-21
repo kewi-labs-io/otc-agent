@@ -55,7 +55,7 @@ const NETWORKS: NetworkConfig[] = [
 
 const SOLANA_CONFIG = {
   rpc: "https://api.mainnet-beta.solana.com",
-  programId: "q9MhHpeydqTdtPaNpzDoWvP1qY5s3sFHTF1uYcXjdsc",
+  programId: "3uTdWzoAcBFKTVYRd2z2jDKAcuyW64rQLxa9wMreDJKo",
   desk: "6CBcxFR6dSMJJ7Y4dQZTshJT2KxuwnSXioXEABxNVZPW",
 };
 
@@ -74,8 +74,7 @@ async function verifyEvmNetwork(config: NetworkConfig): Promise<boolean> {
   // Check contract exists
   const code = await client.getCode({ address: config.otc });
   if (!code || code === "0x") {
-    console.log("  ❌ Contract NOT deployed");
-    return false;
+    throw new Error(`Contract NOT deployed at ${config.otc} on ${config.name}`);
   }
   console.log(`  ✅ Contract deployed: ${config.otc}`);
 
@@ -100,11 +99,9 @@ async function verifyEvmNetwork(config: NetworkConfig): Promise<boolean> {
   console.log(`  ✅ Quote Expiry: ${Number(quoteExpiry)}s (${Number(quoteExpiry) / 60} min)`);
   console.log(`  ✅ Consignments: ${Number(nextConsignment) - 1}`);
   console.log(`  ✅ Offers: ${Number(nextOffer) - 1}`);
-
-  return true;
 }
 
-async function verifySolana(): Promise<boolean> {
+async function verifySolana() {
   console.log(`\n${"─".repeat(60)}`);
   console.log(`  Solana Mainnet`);
   console.log(`${"─".repeat(60)}`);
@@ -116,8 +113,7 @@ async function verifySolana(): Promise<boolean> {
   const programInfo = await connection.getAccountInfo(programId);
 
   if (!programInfo) {
-    console.log("  ❌ Program NOT deployed");
-    return false;
+    throw new Error(`Program NOT deployed at ${SOLANA_CONFIG.programId}`);
   }
   console.log(`  ✅ Program deployed: ${SOLANA_CONFIG.programId}`);
 
@@ -126,8 +122,7 @@ async function verifySolana(): Promise<boolean> {
   const deskInfo = await connection.getAccountInfo(deskPubkey);
 
   if (!deskInfo) {
-    console.log("  ❌ Desk NOT initialized");
-    return false;
+    throw new Error(`Desk NOT initialized at ${SOLANA_CONFIG.desk}`);
   }
   console.log(`  ✅ Desk initialized: ${SOLANA_CONFIG.desk}`);
   console.log(`  ✅ Desk Size: ${deskInfo.data.length} bytes`);
@@ -140,8 +135,6 @@ async function verifySolana(): Promise<boolean> {
     console.log(`  ✅ Owner: ${owner.toBase58()}`);
     console.log(`  ✅ Agent: ${agent.toBase58()}`);
   }
-
-  return true;
 }
 
 async function main() {
@@ -225,11 +218,7 @@ async function main() {
   ✅ Security exploit tests - All attack vectors blocked
 `);
 
-  if (allPassed) {
-    console.log("\n🎉 All networks verified successfully!");
-  } else {
-    console.log("\n⚠️  Some networks need attention");
-  }
+  console.log("\n🎉 All networks verified successfully!");
 }
 
 main().catch(console.error);

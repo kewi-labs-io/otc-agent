@@ -22,6 +22,22 @@ import {
 } from "@solana/spl-token";
 import { assert, expect } from "chai";
 
+// Helper to assert promise rejects with specific error message
+async function expectRejectedWith(promise: Promise<unknown>, expectedError: string): Promise<void> {
+  await expect(promise).to.be.rejected;
+  const error = await promise.catch((e: unknown) => e);
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  assert.include(errorMessage, expectedError);
+}
+
+// Helper to assert promise rejects with specific error message
+async function expectRejectedWith(promise: Promise<unknown>, expectedError: string): Promise<void> {
+  await expect(promise).to.be.rejected;
+  const error = await promise.catch((e: unknown) => e);
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  assert.include(errorMessage, expectedError);
+}
+
 describe("Pool Oracle Security Tests", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
@@ -203,79 +219,68 @@ describe("Pool Oracle Security Tests", () => {
     });
 
     it("should reject min update interval less than 30 seconds", async () => {
-      try {
-        await program.methods
-          .configurePoolOracle(
-            new anchor.BN(0),
-            0,
-            new anchor.BN(10) // Too short
-          )
-          .accounts({
-            tokenRegistry,
-            desk: desk.publicKey,
-            owner: owner.publicKey,
-          })
-          .signers([owner])
-          .rpc();
+      const promise = program.methods
+        .configurePoolOracle(
+          new anchor.BN(0),
+          0,
+          new anchor.BN(10) // Too short
+        )
+        .accounts({
+          tokenRegistry,
+          desk: desk.publicKey,
+          owner: owner.publicKey,
+        })
+        .signers([owner])
+        .rpc();
 
-        assert.fail("Should have rejected short interval");
-      } catch (error: any) {
-        assert.include(error.toString(), "AmountRange");
-      }
+      await expectRejectedWith(promise, "AmountRange");
     });
 
     it("should reject max TWAP deviation over 50%", async () => {
-      try {
-        await program.methods
-          .configurePoolOracle(
-            new anchor.BN(0),
-            6000, // 60% - too high
-            new anchor.BN(60)
-          )
-          .accounts({
-            tokenRegistry,
-            desk: desk.publicKey,
-            owner: owner.publicKey,
-          })
-          .signers([owner])
-          .rpc();
+      const promise = program.methods
+        .configurePoolOracle(
+          new anchor.BN(0),
+          6000, // 60% - too high
+          new anchor.BN(60)
+        )
+        .accounts({
+          tokenRegistry,
+          desk: desk.publicKey,
+          owner: owner.publicKey,
+        })
+        .signers([owner])
+        .rpc();
 
-        assert.fail("Should have rejected high deviation");
-      } catch (error: any) {
-        assert.include(error.toString(), "AmountRange");
-      }
+      await expectRejectedWith(promise, "AmountRange");
     });
 
     it("should reject non-owner configuring oracle", async () => {
       const nonOwner = Keypair.generate();
       await airdrop(nonOwner.publicKey, 1 * LAMPORTS_PER_SOL);
 
-      try {
-        await program.methods
-          .configurePoolOracle(
-            new anchor.BN(0),
-            500,
-            new anchor.BN(60)
-          )
-          .accounts({
-            tokenRegistry,
-            desk: desk.publicKey,
-            owner: nonOwner.publicKey,
-          })
-          .signers([nonOwner])
-          .rpc();
+      const promise = program.methods
+        .configurePoolOracle(
+          new anchor.BN(0),
+          500,
+          new anchor.BN(60)
+        )
+        .accounts({
+          tokenRegistry,
+          desk: desk.publicKey,
+          owner: nonOwner.publicKey,
+        })
+        .signers([nonOwner])
+        .rpc();
 
-        assert.fail("Should have rejected non-owner");
-      } catch (error: any) {
-        // Can be "constraint" or "owner" or "NotOwner" depending on Anchor version
-        const errorStr = error.toString().toLowerCase();
-        assert.isTrue(
-          errorStr.includes("constraint") || 
-          errorStr.includes("owner") ||
-          errorStr.includes("notowner"),
-          `Expected ownership error but got: ${error.toString()}`
-        );
-      }
+      await expect(promise).to.be.rejected;
+      const error = await promise.catch((e: unknown) => e);
+      const errorStr = String(error).toLowerCase();
+      assert.isTrue(
+        errorStr.includes("constraint") || 
+        errorStr.includes("owner") ||
+        errorStr.includes("notowner"),
+        `Expected ownership error but got: ${String(error)}`
+      );
     });
   });
 

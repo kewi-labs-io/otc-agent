@@ -2,7 +2,7 @@
  * Development-only render tracking utility.
  * Tracks component renders and throws if a component renders too many times
  * in a short time window, indicating a render loop or performance issue.
- * 
+ *
  * TEMPORARILY DISABLED: Set to true to enable render tracking
  */
 const RENDER_TRACKING_ENABLED = false;

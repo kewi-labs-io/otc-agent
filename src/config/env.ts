@@ -1,12 +1,12 @@
 /**
  * Environment Variables Configuration
- * 
+ *
  * This file is the SINGLE SOURCE OF TRUTH for all environment variables.
  * It categorizes them into:
  * - SECRETS: Private keys, API keys that must never be exposed
  * - DATABASE: Database connection strings (vary by environment)
  * - CONFIG: Non-secret configuration that could be in code but we keep in env for flexibility
- * 
+ *
  * All contract addresses, RPC URLs, and other deployment-specific values
  * should come from src/config/deployments/*.json files, NOT environment variables.
  */
@@ -87,7 +87,9 @@ export function getCronSecret(): string | undefined {
 export function getWorkerAuthToken(): string {
   const token = process.env.WORKER_AUTH_TOKEN;
   if (!token) {
-    throw new Error("WORKER_AUTH_TOKEN must be set for quote signature generation");
+    throw new Error(
+      "WORKER_AUTH_TOKEN must be set for quote signature generation",
+    );
   }
   return token;
 }
@@ -135,7 +137,7 @@ export function getSolanaMainnetRpcUrl(): string {
   if (typeof window === "undefined") {
     return getHeliusRpcUrl();
   }
-  
+
   // Client-side: use proxy endpoint with full URL
   return getSolanaRpcProxyUrl();
 }
@@ -156,14 +158,14 @@ export function getBlobToken(): string | undefined {
  * Checks multiple env var names for compatibility with different hosting providers
  */
 export function getDatabaseUrl(): string {
-  const url = 
-    process.env.DATABASE_POSTGRES_URL ||  // Vercel Neon Storage (pooled)
-    process.env.DATABASE_URL_UNPOOLED ||  // Vercel Neon Storage (unpooled)
-    process.env.POSTGRES_URL ||           // Standard
-    process.env.POSTGRES_DATABASE_URL;    // Alternative
-  
+  const url =
+    process.env.DATABASE_POSTGRES_URL || // Vercel Neon Storage (pooled)
+    process.env.DATABASE_URL_UNPOOLED || // Vercel Neon Storage (unpooled)
+    process.env.POSTGRES_URL || // Standard
+    process.env.POSTGRES_DATABASE_URL; // Alternative
+
   if (url) return url;
-  
+
   // Local development default
   const port = process.env.POSTGRES_DEV_PORT || "5439";
   return `postgres://eliza:password@localhost:${port}/eliza`;
@@ -187,14 +189,15 @@ export function isProductionDatabase(): boolean {
  */
 export function getNetwork(): NetworkEnvironment {
   const explicit = process.env.NEXT_PUBLIC_NETWORK || process.env.NETWORK;
-  
+
   if (explicit === "mainnet") return "mainnet";
   if (explicit === "testnet" || explicit === "sepolia") return "testnet";
-  if (explicit === "local" || explicit === "localnet" || explicit === "anvil") return "local";
-  
+  if (explicit === "local" || explicit === "localnet" || explicit === "anvil")
+    return "local";
+
   // Legacy flag support
   if (process.env.NEXT_PUBLIC_USE_MAINNET === "true") return "mainnet";
-  
+
   // Default to mainnet for production
   return "mainnet";
 }
@@ -217,9 +220,11 @@ export function isDevelopment(): boolean {
  * Get app URL for redirects and metadata
  */
 export function getAppUrl(): string {
-  return process.env.NEXT_PUBLIC_URL || 
-         process.env.NEXT_PUBLIC_APP_URL || 
-         "http://localhost:4444";
+  return (
+    process.env.NEXT_PUBLIC_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:4444"
+  );
 }
 
 /**
@@ -261,7 +266,10 @@ export function getTunnelDomain(): string | undefined {
 export function getAllowedDevOrigins(): string[] {
   const origins = process.env.ALLOWED_DEV_ORIGINS;
   if (!origins) return [];
-  return origins.split(",").map(o => o.trim()).filter(Boolean);
+  return origins
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
 }
 
 // =============================================================================
@@ -283,21 +291,31 @@ export const LOCAL_DEFAULTS = {
  * Validate that required secrets are configured for production
  * Call this on server startup
  */
-export function validateProductionSecrets(): { valid: boolean; missing: string[] } {
+export function validateProductionSecrets(): {
+  valid: boolean;
+  missing: string[];
+} {
   if (!isProduction()) {
     return { valid: true, missing: [] };
   }
-  
+
   const missing: string[] = [];
-  
-  // Required in production
+
+  // Required in production - EVM
   if (!getAlchemyApiKey()) missing.push("ALCHEMY_API_KEY");
   if (!getEvmPrivateKey()) missing.push("EVM_PRIVATE_KEY");
+
+  // Required in production - Solana
+  if (!getHeliusApiKey()) missing.push("HELIUS_API_KEY");
+  if (!getBirdeyeApiKey()) missing.push("BIRDEYE_API_KEY");
+
+  // Required in production - Services
   if (!getGroqApiKey()) missing.push("GROQ_API_KEY");
   if (!getCronSecret()) missing.push("CRON_SECRET");
   if (!process.env.WORKER_AUTH_TOKEN) missing.push("WORKER_AUTH_TOKEN");
-  if (getDatabaseUrl().includes("localhost")) missing.push("DATABASE_POSTGRES_URL");
-  
+  if (getDatabaseUrl().includes("localhost"))
+    missing.push("DATABASE_POSTGRES_URL");
+
   return { valid: missing.length === 0, missing };
 }
 
@@ -322,4 +340,3 @@ export function logEnvironmentConfig(): void {
     databaseConfigured: isProductionDatabase(),
   });
 }
-

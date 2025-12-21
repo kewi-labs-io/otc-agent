@@ -5,6 +5,8 @@ import {
   type TokenMarketData,
 } from "./database";
 import type { Chain } from "@/config/chains";
+import { parseOrThrow } from "@/lib/validation/helpers";
+import { RegisterTokenInputSchema } from "@/types/validation/service-schemas";
 
 export class TokenRegistryService {
   async registerToken(params: {
@@ -17,7 +19,13 @@ export class TokenRegistryService {
     description?: string;
     website?: string;
     twitter?: string;
+    // Pool address for price feeds - stored at registration to avoid re-searching
+    poolAddress?: string;
+    // For Solana PumpSwap pools, store vault addresses
+    solVault?: string;
+    tokenVault?: string;
   }): Promise<Token> {
+    parseOrThrow(RegisterTokenInputSchema, params);
     // EVM addresses can be lowercased (case-insensitive)
     // Solana addresses are Base58 encoded and MUST preserve case
     const normalizedAddress =
@@ -36,6 +44,10 @@ export class TokenRegistryService {
       website: params.website,
       twitter: params.twitter,
       isActive: true,
+      // Store pool info for price updates
+      poolAddress: params.poolAddress,
+      solVault: params.solVault,
+      tokenVault: params.tokenVault,
     });
     return token;
   }
@@ -55,7 +67,7 @@ export class TokenRegistryService {
       isActive: filters?.isActive,
     });
 
-    if (filters?.minMarketCap || filters?.maxMarketCap) {
+    if (filters && (filters.minMarketCap || filters.maxMarketCap)) {
       const tokensWithMarketData = await Promise.all(
         tokens.map(async (token) => {
           const marketData = await MarketDataDB.getMarketData(token.id);

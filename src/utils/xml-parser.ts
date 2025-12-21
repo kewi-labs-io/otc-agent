@@ -2,61 +2,10 @@
  * Utility to parse XML from agent messages
  */
 
-export interface OTCQuote {
-  quoteId: string;
-  beneficiary?: string;
-  tokenAmount: string;
-  tokenAmountFormatted?: string;
-  tokenSymbol: string;
-  tokenChain?: "ethereum" | "base" | "bsc" | "solana";
-  // Token contract address (for direct lookup without DB query)
-  tokenAddress?: string;
-  apr?: number;
-  lockupMonths: number;
-  lockupDays: number;
-  pricePerToken?: number;
-  priceUsd?: number;
-  totalValueUsd?: number;
-  totalUsd?: number;
-  discountBps: number;
-  discountPercent: number;
-  discountUsd?: number;
-  finalPriceUsd?: number;
-  paymentCurrency: string;
-  paymentAmount?: string;
-  paymentSymbol?: string;
-  ethPrice?: number;
-  createdAt?: string;
-  status?: string;
-  message?: string;
-  consignmentId?: string;
-  isFixedPrice?: boolean;
-  // Whether the listing allows partial purchases
-  isFractionalized?: boolean;
-  // Whether the listing terms are negotiable
-  isNegotiable?: boolean;
-  // Agent commission in basis points (0 for P2P, 25-150 for negotiated)
-  agentCommissionBps?: number;
-}
+import type { OTCQuote, QuoteAccepted, Chain } from "@/types";
 
-export interface QuoteAccepted {
-  quoteId: string;
-  offerId: string;
-  transactionHash: string;
-  tokenAmount: string;
-  tokenAmountFormatted: string;
-  tokenSymbol: string;
-  tokenName: string;
-  paidAmount: string;
-  paymentCurrency: string;
-  discountBps: number;
-  discountPercent: number;
-  totalSaved: string;
-  finalPrice: string;
-  status: string;
-  timestamp: string;
-  message: string;
-}
+// Re-export types for consumers
+export type { OTCQuote, QuoteAccepted } from "@/types";
 
 /**
  * Extract XML from message text
@@ -121,36 +70,126 @@ export function parseOTCQuoteXML(xmlString: string): OTCQuote | null {
     return null;
   }
 
-  const tokenChain = getElementText("tokenChain") || getElementText("chain");
+  const tokenChainRaw = getElementText("tokenChain") || getElementText("chain");
+  // Default to "base" if no chain specified - quotes require a chain
+  const tokenChain: Chain = (
+    tokenChainRaw &&
+    ["ethereum", "base", "bsc", "solana"].includes(tokenChainRaw)
+      ? tokenChainRaw
+      : "base"
+  ) as Chain;
+
+  // FAIL-FAST: Required fields must be present
+  const quoteId = getElementText("quoteId");
+  const tokenAmount = getElementText("tokenAmount");
+  const tokenSymbol = getElementText("tokenSymbol");
+
+  if (!quoteId) {
+    throw new Error("Quote XML missing required quoteId field");
+  }
+  if (!tokenAmount) {
+    throw new Error("Quote XML missing required tokenAmount field");
+  }
+  if (!tokenSymbol) {
+    throw new Error("Quote XML missing required tokenSymbol field");
+  }
 
   return {
-    quoteId: getElementText("quoteId"),
-    tokenAmount: getElementText("tokenAmount"),
+    quoteId,
+    tokenAmount,
     tokenAmountFormatted: getElementText("tokenAmountFormatted"),
-    tokenSymbol: getElementText("tokenSymbol"),
-    tokenChain: tokenChain
-      ? (tokenChain as "ethereum" | "base" | "bsc" | "solana")
-      : undefined,
+    tokenSymbol,
+    tokenChain,
+    // Optional field - return undefined if empty string
+    tokenAddress: (() => {
+      const addr = getElementText("tokenAddress");
+      return addr !== "" ? addr : undefined;
+    })(),
     apr: getElementNumber("apr"),
     lockupMonths: getElementNumber("lockupMonths"),
     lockupDays: getElementNumber("lockupDays"),
-    pricePerToken:
-      getElementNumber("pricePerToken") || getElementNumber("priceUsdPerToken"),
+    // pricePerToken can come from either field name (LLM may use either)
+    pricePerToken: (() => {
+      const pricePerToken = getElementNumber("pricePerToken");
+      const priceUsdPerToken = getElementNumber("priceUsdPerToken");
+      // Return first available value, or undefined if neither exists (optional field)
+      return pricePerToken !== 0
+        ? pricePerToken
+        : priceUsdPerToken !== 0
+          ? priceUsdPerToken
+          : undefined;
+    })(),
     totalValueUsd: getElementNumber("totalValueUsd"),
-    discountBps: getElementNumber("discountBps"),
+    // FAIL-FAST: discountBps is required
+    discountBps: (() => {
+      const text = getElementText("discountBps");
+      if (text === "") {
+        throw new Error("Quote XML missing required discountBps field");
+      }
+      const value = parseFloat(text);
+      if (isNaN(value)) {
+        throw new Error(`Quote XML has invalid discountBps value: ${text}`);
+      }
+      return value;
+    })(),
     discountPercent: getElementNumber("discountPercent"),
     discountUsd: getElementNumber("discountUsd"),
-    finalPriceUsd:
-      getElementNumber("finalPriceUsd") || getElementNumber("discountedUsd"),
-    paymentCurrency: getElementText("paymentCurrency"),
-    paymentAmount: getElementText("paymentAmount"),
-    paymentSymbol: getElementText("paymentSymbol"),
-    ethPrice: getElementNumber("ethPrice") || undefined,
+    finalPriceUsd: (() => {
+      const finalPriceUsd = getElementNumber("finalPriceUsd");
+      const discountedUsd = getElementNumber("discountedUsd");
+      // Return first available value, or undefined if neither exists (optional field)
+      return finalPriceUsd !== 0
+        ? finalPriceUsd
+        : discountedUsd !== 0
+          ? discountedUsd
+          : undefined;
+    })(),
+    // FAIL-FAST: paymentCurrency is required
+    paymentCurrency: (() => {
+      const currency = getElementText("paymentCurrency");
+      if (!currency) {
+        throw new Error("Quote XML missing required paymentCurrency field");
+      }
+      return currency;
+    })(),
+    paymentAmount: getElementText("paymentAmount"), // Optional
+    paymentSymbol: getElementText("paymentSymbol"), // Optional
+    // Optional fields - return undefined if 0 (not set)
+    ethPrice: (() => {
+      const price = getElementNumber("ethPrice");
+      return price !== 0 ? price : undefined;
+    })(),
+    bnbPrice: (() => {
+      const price = getElementNumber("bnbPrice");
+      return price !== 0 ? price : undefined;
+    })(),
+    // nativePrice can come from multiple field names (LLM may use any)
+    // Return first available non-zero value, or undefined if none exist (optional field)
+    nativePrice: (() => {
+      const nativePrice = getElementNumber("nativePrice");
+      const ethPrice = getElementNumber("ethPrice");
+      const bnbPrice = getElementNumber("bnbPrice");
+      // Return first non-zero value (0 means field was missing)
+      if (nativePrice !== 0) return nativePrice;
+      if (ethPrice !== 0) return ethPrice;
+      if (bnbPrice !== 0) return bnbPrice;
+      return undefined;
+    })(),
     createdAt: getElementText("createdAt"),
-    status: getElementText("status") || undefined,
+    // Optional fields - return undefined if empty/0
+    status: (() => {
+      const s = getElementText("status");
+      return s !== "" ? s : undefined;
+    })(),
     message: getElementText("message"),
-    consignmentId: getElementText("consignmentId") || undefined,
-    agentCommissionBps: getElementNumber("agentCommissionBps") || undefined,
+    consignmentId: (() => {
+      const id = getElementText("consignmentId");
+      return id !== "" ? id : undefined;
+    })(),
+    agentCommissionBps: (() => {
+      const bps = getElementNumber("agentCommissionBps");
+      return bps !== 0 ? bps : undefined;
+    })(),
   };
 }
 

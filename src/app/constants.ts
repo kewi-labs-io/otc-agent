@@ -1,13 +1,13 @@
 export const siteConfig = {
-  name: "AI Eliza",
+  name: "AI Trading Desk",
   url:
     process.env.NEXT_PUBLIC_APP_URL ||
-    "https://ai.eliza.how/" ||
-    "http://localhost:5005",
+    "https://tradingdesk.ai/" ||
+    "http://localhost:4444",
   description:
-    "Eliza is a powerful multi-agent simulation framework designed to create, deploy, and manage autonomous AI agents.",
+    "AI Trading Desk is an autonomous OTC trading platform powered by AI agents for seamless token deals.",
   ogImage: "/og.png",
-  creator: "Eliza Labs",
+  creator: "Trading Desk",
   icons: [
     {
       rel: "icon",

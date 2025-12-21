@@ -5,23 +5,7 @@ import Image from "next/image";
 import { useMultiWallet } from "../multiwallet";
 import { Button } from "../button";
 import { Copy, Check, ArrowLeft, AlertCircle } from "lucide-react";
-
-interface PoolCheckResult {
-  success: boolean;
-  isRegistered: boolean;
-  hasPool: boolean;
-  pool?: {
-    address: string;
-    protocol: string;
-    tvlUsd: number;
-    priceUsd?: number;
-    baseToken: "USDC" | "WETH";
-  };
-  registrationFee?: string;
-  registrationFeeEth?: string;
-  warning?: string;
-  error?: string;
-}
+import type { PoolCheckResult, Chain } from "@/types";
 
 interface ReviewStepProps {
   formData: {
@@ -71,10 +55,25 @@ export function ReviewStep({
   const [isCheckingPool, setIsCheckingPool] = useState(false);
 
   // Extract chain and address from tokenId (format: token-{chain}-{address})
-  const getTokenInfo = (tokenId: string) => {
-    const parts = tokenId?.split("-") || [];
-    const chain = parts[1] || "";
-    const address = parts.slice(2).join("-") || "";
+  const getTokenInfo = (tokenId: string): { chain: Chain; address: string } => {
+    if (!tokenId) {
+      throw new Error("tokenId is required");
+    }
+    const parts = tokenId.split("-");
+    if (parts.length < 3) {
+      throw new Error(`Invalid tokenId format: ${tokenId}`);
+    }
+    const chainStr = parts[1];
+    // FAIL-FAST: Validate chain is a valid Chain type
+    const validChains: Chain[] = ["ethereum", "base", "bsc", "solana"];
+    if (!validChains.includes(chainStr as Chain)) {
+      throw new Error(`Invalid chain in tokenId: ${chainStr}`);
+    }
+    const chain = chainStr as Chain;
+    const address = parts.slice(2).join("-");
+    if (!address) {
+      throw new Error(`Missing address in tokenId: ${tokenId}`);
+    }
     return { chain, address };
   };
 
@@ -91,23 +90,22 @@ export function ReviewStep({
 
     const checkPool = async () => {
       setIsCheckingPool(true);
-      try {
-        const res = await fetch(
-          `/api/token-pool-check?address=${encodeURIComponent(rawTokenAddress)}&chain=${tokenChain}`,
+      const res = await fetch(
+        `/api/token-pool-check?address=${encodeURIComponent(rawTokenAddress)}&chain=${tokenChain}`,
+      );
+      // FAIL-FAST: Check response status
+      if (!res.ok) {
+        throw new Error(
+          `Pool check API failed: ${res.status} ${res.statusText}`,
         );
-        const data = await res.json();
-        setPoolCheck(data);
-      } catch (err) {
-        console.error("[ReviewStep] Pool check error:", err);
-        setPoolCheck({
-          success: false,
-          isRegistered: false,
-          hasPool: false,
-          error: "Failed to check token pool status",
-        });
-      } finally {
-        setIsCheckingPool(false);
       }
+      const data = await res.json();
+      // FAIL-FAST: Validate response structure
+      if (typeof data !== "object" || data === null) {
+        throw new Error("Invalid pool check response: expected object");
+      }
+      setPoolCheck(data);
+      setIsCheckingPool(false);
     };
 
     checkPool();
@@ -144,19 +142,22 @@ export function ReviewStep({
       return;
     }
 
-      // For EVM tokens, require a valid pool (blocking handled by button disabled state)
-      if (tokenChain !== "solana" && poolCheck && !poolCheck.hasPool) {
-        setError("No liquidity pool found. This token needs a Uniswap V3/V4, Aerodrome, or Pancakeswap pool to be listed.");
-        return;
-      }
+    // For EVM tokens, require a valid pool (blocking handled by button disabled state)
+    if (tokenChain !== "solana" && poolCheck && !poolCheck.hasPool) {
+      setError(
+        "No liquidity pool found. This token needs a Uniswap V3/V4, Aerodrome, or Pancakeswap pool to be listed.",
+      );
+      return;
+    }
 
     // Proceed to submission step
     onNext();
   };
 
   const formatAmount = (amount: string) => {
-    const num = parseFloat(amount) || 0;
-    return num.toLocaleString();
+    const num = parseFloat(amount);
+    const validNum = isNaN(num) ? 0 : num;
+    return validNum.toLocaleString();
   };
 
   return (
@@ -214,7 +215,6 @@ export function ReviewStep({
           {tokenChain}
         </div>
       </div>
-
 
       {/* Details Grid */}
       <div className="grid gap-2">
@@ -306,7 +306,9 @@ export function ReviewStep({
         ) : (
           <Button
             onClick={handleProceed}
-            disabled={tokenChain !== "solana" && (isCheckingPool || (poolCheck && !poolCheck.hasPool))}
+            disabled={
+              tokenChain !== "solana" && (isCheckingPool || !poolCheck?.hasPool)
+            }
             color="brand"
             className="flex-1 py-3"
           >

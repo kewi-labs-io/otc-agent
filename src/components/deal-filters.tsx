@@ -4,21 +4,12 @@ import { memo, useCallback } from "react";
 import { ChainSelector } from "./chain-selector";
 import { useRenderTracker } from "@/utils/render-tracker";
 import type { Chain } from "@/config/chains";
-
-interface FiltersState {
-  chains: Chain[];
-  minMarketCap: number;
-  maxMarketCap: number;
-  negotiableTypes: ("negotiable" | "fixed")[];
-  searchQuery: string;
-}
+import type { FiltersState, DealType } from "@/types";
 
 interface DealFiltersProps {
   filters: FiltersState;
   onFiltersChange: (filters: FiltersState) => void;
 }
-
-type DealType = "all" | "negotiable" | "fixed";
 
 export const DealFilters = memo(function DealFilters({
   filters,
@@ -163,7 +154,10 @@ export const DealFilters = memo(function DealFilters({
                 const isOn = filters.negotiableTypes.includes("negotiable");
                 const newTypes = isOn
                   ? filters.negotiableTypes.filter((t) => t !== "negotiable")
-                  : [...filters.negotiableTypes, "negotiable"] as ("negotiable" | "fixed")[];
+                  : ([...filters.negotiableTypes, "negotiable"] as (
+                      | "negotiable"
+                      | "fixed"
+                    )[]);
                 onFiltersChange({ ...filters, negotiableTypes: newTypes });
               }}
               className={`
@@ -182,7 +176,10 @@ export const DealFilters = memo(function DealFilters({
                 const isOn = filters.negotiableTypes.includes("fixed");
                 const newTypes = isOn
                   ? filters.negotiableTypes.filter((t) => t !== "fixed")
-                  : [...filters.negotiableTypes, "fixed"] as ("negotiable" | "fixed")[];
+                  : ([...filters.negotiableTypes, "fixed"] as (
+                      | "negotiable"
+                      | "fixed"
+                    )[]);
                 onFiltersChange({ ...filters, negotiableTypes: newTypes });
               }}
               className={`

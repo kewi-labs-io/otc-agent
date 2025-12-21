@@ -1,6 +1,14 @@
 import { createConfig, http } from "wagmi";
 import type { Config } from "wagmi";
-import { mainnet, sepolia, localhost, base, baseSepolia, bsc, bscTestnet } from "wagmi/chains";
+import {
+  mainnet,
+  sepolia,
+  localhost,
+  base,
+  baseSepolia,
+  bsc,
+  bscTestnet,
+} from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector";
 import { getNetwork, getAppUrl, LOCAL_DEFAULTS } from "@/config/env";
@@ -61,7 +69,9 @@ function getTransports() {
 
   // Add BSC transports - public RPC
   transports[bsc.id] = http("https://bsc-dataseed1.binance.org");
-  transports[bscTestnet.id] = http("https://data-seed-prebsc-1-s1.binance.org:8545");
+  transports[bscTestnet.id] = http(
+    "https://data-seed-prebsc-1-s1.binance.org:8545",
+  );
 
   return transports;
 }

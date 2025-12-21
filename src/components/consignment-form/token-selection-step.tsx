@@ -1,17 +1,19 @@
 "use client";
 
-import {
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-  useRef,
-} from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Image from "next/image";
 import { useMultiWallet } from "../multiwallet";
 import { Button } from "../button";
+import { InlineLoading } from "@/components/ui/loading-spinner";
 import { useChainId } from "wagmi";
-import { mainnet, sepolia, base, baseSepolia, bsc, bscTestnet } from "wagmi/chains";
+import {
+  mainnet,
+  sepolia,
+  base,
+  baseSepolia,
+  bsc,
+  bscTestnet,
+} from "wagmi/chains";
 import type { Chain } from "@/config/chains";
 import { usePrivy } from "@privy-io/react-auth";
 import { Search, X, RefreshCw, ExternalLink, Loader2 } from "lucide-react";
@@ -46,10 +48,7 @@ function TokenAvatar({
         className={`rounded-full bg-gradient-to-br from-brand-400 to-brand-500 flex items-center justify-center`}
         style={{ width: size, height: size }}
       >
-        <span
-          className="text-white font-bold"
-          style={{ fontSize: size * 0.4 }}
-        >
+        <span className="text-white font-bold" style={{ fontSize: size * 0.4 }}>
           {symbol.charAt(0)}
         </span>
       </div>
@@ -106,7 +105,6 @@ function formatUsd(usd: number): string {
   return `$${usd.toFixed(2)}`;
 }
 
-
 export function TokenSelectionStep({
   formData,
   updateFormData,
@@ -140,15 +138,28 @@ export function TokenSelectionStep({
   const [selectedChain, setSelectedChain] = useState<Chain>(getInitialChain);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Sync activeFamily when selectedChain changes
-  const handleChainSelect = useCallback((chain: Chain) => {
-    setSelectedChain(chain);
-    if (chain === "solana") {
-      setActiveFamily("solana");
-    } else {
-      setActiveFamily("evm");
+  // Sync selectedChain when activeFamily changes (e.g., when user connects a Solana wallet)
+  useEffect(() => {
+    if (activeFamily === "solana" && selectedChain !== "solana") {
+      setSelectedChain("solana");
+    } else if (activeFamily === "evm" && selectedChain === "solana") {
+      // If user switches to EVM wallet, default to base
+      setSelectedChain("base");
     }
-  }, [setActiveFamily]);
+  }, [activeFamily, selectedChain]);
+
+  // Sync activeFamily when selectedChain changes
+  const handleChainSelect = useCallback(
+    (chain: Chain) => {
+      setSelectedChain(chain);
+      if (chain === "solana") {
+        setActiveFamily("solana");
+      } else {
+        setActiveFamily("evm");
+      }
+    },
+    [setActiveFamily],
+  );
 
   // Determine which chains are available based on connected wallets
   const availableChains = useMemo(() => {
@@ -237,7 +248,11 @@ export function TokenSelectionStep({
     if (addressSearchRef.current === trimmed) return;
 
     // Detect chain from address format - use selected chain for EVM addresses
-    const lookupChain: Chain = isSolanaAddress(trimmed) ? "solana" : selectedChain === "solana" ? "base" : selectedChain;
+    const lookupChain: Chain = isSolanaAddress(trimmed)
+      ? "solana"
+      : selectedChain === "solana"
+        ? "base"
+        : selectedChain;
 
     // Debounce the lookup
     const timeoutId = setTimeout(async () => {
@@ -245,67 +260,80 @@ export function TokenSelectionStep({
       setIsSearchingAddress(true);
       setAddressSearchError(null);
 
-      try {
-        const response = await fetch(
-          `/api/token-lookup?address=${encodeURIComponent(trimmed)}&chain=${lookupChain}`,
+      const response = await fetch(
+        `/api/token-lookup?address=${encodeURIComponent(trimmed)}&chain=${lookupChain}`,
+      );
+      // FAIL-FAST: Check response status
+      if (!response.ok) {
+        throw new Error(
+          `Token lookup API failed: ${response.status} ${response.statusText}`,
         );
-        const data = await response.json();
-
-        if (data.success && data.token) {
-          const token = data.token;
-          setSearchedToken({
-            id: `token-${token.chain}-${token.address}`,
-            symbol: token.symbol,
-            name: token.name,
-            contractAddress: token.address,
-            chain: token.chain as Chain,
-            decimals: token.decimals,
-            logoUrl: token.logoUrl || "",
-            description: "",
-            isActive: true,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            balance: "0", // User doesn't have this token
-            balanceUsd: 0,
-            priceUsd: token.priceUsd || 0,
-          });
-          setAddressSearchError(null);
-        } else {
-          setSearchedToken(null);
-          setAddressSearchError(data.error || "Token not found");
-        }
-      } catch (error) {
-        console.error("[TokenSelection] Address lookup error:", error);
-        setSearchedToken(null);
-        setAddressSearchError("Failed to look up token");
-      } finally {
-        setIsSearchingAddress(false);
       }
+      const data = await response.json();
+      // FAIL-FAST: Validate response structure
+      if (typeof data !== "object" || data === null) {
+        throw new Error("Invalid token lookup response: expected object");
+      }
+
+      if (data.success && data.token) {
+        const token = data.token;
+        // FAIL-FAST: Validate chain is a valid Chain type
+        const validChains: Chain[] = ["ethereum", "base", "bsc", "solana"];
+        if (!validChains.includes(token.chain as Chain)) {
+          throw new Error(`Invalid chain from API: ${token.chain}`);
+        }
+        // logoUrl is optional - use empty string if not provided
+        const logoUrlValue = token.logoUrl ?? "";
+        // priceUsd is optional - use 0 if not provided
+        const priceUsdValue =
+          typeof token.priceUsd === "number" ? token.priceUsd : 0;
+
+        setSearchedToken({
+          id: `token-${token.chain}-${token.address}`,
+          symbol: token.symbol,
+          name: token.name,
+          contractAddress: token.address,
+          chain: token.chain as Chain,
+          decimals: token.decimals,
+          logoUrl: logoUrlValue,
+          description: "",
+          isActive: true,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          balance: "0", // User doesn't have this token
+          balanceUsd: 0,
+          priceUsd: priceUsdValue,
+        });
+        setAddressSearchError(null);
+      } else {
+        setSearchedToken(null);
+        // Error message is optional in error response - provide fallback
+        const errorMessage =
+          typeof data.error === "string" && data.error.trim() !== ""
+            ? data.error
+            : "Token not found";
+        setAddressSearchError(errorMessage);
+      }
+      setIsSearchingAddress(false);
     }, 500); // 500ms debounce
 
     return () => clearTimeout(timeoutId);
-  }, [
-    searchQuery,
-    searchIsAddress,
-    addressFoundInWallet,
-    selectedChain,
-  ]);
+  }, [searchQuery, searchIsAddress, addressFoundInWallet, selectedChain]);
 
   // Refresh handler using React Query's refetch
   const handleRefresh = useCallback(async () => {
     if (!userAddress) return;
     setIsRefreshing(true);
-    try {
-      await refetchWalletTokens(userAddress, chain);
-      await refetchTokens();
-    } finally {
-      setIsRefreshing(false);
-    }
+    await refetchWalletTokens(userAddress, chain);
+    await refetchTokens();
+    setIsRefreshing(false);
   }, [userAddress, chain, refetchWalletTokens, refetchTokens]);
 
   const handleTokenClick = (token: TokenWithBalance) => {
     updateFormData({ tokenId: token.id });
-    onTokenSelect?.(token);
+    if (onTokenSelect) {
+      onTokenSelect(token);
+    }
     onNext();
   };
 
@@ -338,7 +366,9 @@ export function TokenSelectionStep({
       {/* Chain switcher - show available chains */}
       {availableChains.length > 1 && (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">Chain:</span>
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            Chain:
+          </span>
           <div className="flex gap-1">
             {availableChains.includes("ethereum") && (
               <button
@@ -514,70 +544,68 @@ export function TokenSelectionStep({
 
       {/* Token list - no inner scroll, flows naturally */}
       <div className="space-y-2">
-        {loading && (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-500 mx-auto mb-3" />
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              Loading tokens...
-            </p>
-          </div>
-        )}
-        {!loading && filteredTokens.length === 0 && !searchQuery && hasLoadedOnce && (
-          <div className="text-center py-8 text-zinc-500 dark:text-zinc-400 text-sm">
-            No tokens found in your wallet
-          </div>
-        )}
-        {!loading && filteredTokens.map((token) => (
-          <div
-            key={token.id}
-            onClick={() => handleTokenClick(token)}
-            className={`p-3 rounded-lg cursor-pointer transition-all ${
-              formData.tokenId === token.id
-                ? "bg-brand-500/10 ring-1 ring-brand-500/30"
-                : "bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <TokenAvatar
-                logoUrl={token.logoUrl}
-                symbol={token.symbol}
-                size={40}
-                ringClass=""
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                    {token.symbol}
-                  </span>
-                  <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                    {formatUsd(token.balanceUsd)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-zinc-500 truncate pr-2">
-                    {token.name}
-                  </span>
-                  <span className="text-xs text-zinc-400 whitespace-nowrap">
-                    {formatBalance(token.balance, token.decimals)}
-                  </span>
-                </div>
-              </div>
-              <svg
-                className="w-5 h-5 text-zinc-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
+        {loading && <InlineLoading message="Loading tokens..." />}
+        {!loading &&
+          filteredTokens.length === 0 &&
+          !searchQuery &&
+          hasLoadedOnce && (
+            <div className="text-center py-8 text-zinc-500 dark:text-zinc-400 text-sm">
+              No tokens found in your wallet
             </div>
-          </div>
-        ))}
+          )}
+        {!loading &&
+          filteredTokens.map((token) => (
+            <div
+              key={token.id}
+              data-testid={`token-row-${token.id}`}
+              onClick={() => handleTokenClick(token)}
+              className={`p-3 rounded-lg cursor-pointer transition-all ${
+                formData.tokenId === token.id
+                  ? "bg-brand-500/10 ring-1 ring-brand-500/30"
+                  : "bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <TokenAvatar
+                  logoUrl={token.logoUrl}
+                  symbol={token.symbol}
+                  size={40}
+                  ringClass=""
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                      {token.symbol}
+                    </span>
+                    <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      {formatUsd(token.balanceUsd)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-zinc-500 truncate pr-2">
+                      {token.name}
+                    </span>
+                    <span className="text-xs text-zinc-400 whitespace-nowrap">
+                      {formatBalance(token.balance, token.decimals)}
+                    </span>
+                  </div>
+                </div>
+                <svg
+                  className="w-5 h-5 text-zinc-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                  />
+                </svg>
+              </div>
+            </div>
+          ))}
       </div>
     </div>
   );

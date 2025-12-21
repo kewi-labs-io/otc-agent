@@ -2,20 +2,38 @@
 pragma solidity ^0.8.26;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {UniswapV3TWAPOracle} from "./UniswapV3TWAPOracle.sol";
 import {IUniswapV3Pool} from "./interfaces/IUniswapV3Pool.sol";
 import {IOTC} from "./interfaces/IOTC.sol";
 import {IAggregatorV3} from "./interfaces/IAggregatorV3.sol";
 
+// Custom errors
+error ZeroOtc();
+error ZeroFeed();
+error InsufficientFee();
+error ZeroToken();
+error ZeroPool();
+error InvalidDecimals();
+error InvalidPool();
+error OracleValidationFailed();
+error InsufficientLiquidity();
+error FeeTransferFailed();
+error RefundFailed();
+error FeeTooHigh();
+error ZeroRecipient();
+error NoFees();
+error WithdrawalFailed();
+
 /// @title RegistrationHelper
 /// @notice Allows users to register tokens to the OTC contract by paying a fee
 /// @dev Deploys UniswapV3TWAPOracle and registers token in single transaction
-contract RegistrationHelper is Ownable {
+contract RegistrationHelper is Ownable2Step {
     IOTC public immutable otc;
     address public immutable ethUsdFeed;
     
-    uint256 public registrationFee = 0.005 ether; // ~$15 at $3000 ETH
+    uint256 public registrationFee = 0; // No fee - only gas cost
     address public feeRecipient;
     
     event TokenRegistered(
@@ -55,20 +73,30 @@ contract RegistrationHelper is Ownable {
         // Verify token is in pool
         if (token0 != token && token1 != token) return false;
 
-        // Verify pool has liquidity by checking recent observations
-        uint32[] memory secondsAgos = new uint32[](2);
-        secondsAgos[0] = 300; // 5 minutes
-        secondsAgos[1] = 0;
+        // Try progressively shorter observation windows
+        // New pools may not have enough history for 5 minutes
+        uint32[4] memory intervals = [uint32(300), uint32(120), uint32(60), uint32(30)];
+        
+        for (uint256 i; i < intervals.length;) {
+            uint32[] memory secondsAgos = new uint32[](2);
+            secondsAgos[0] = intervals[i];
+            secondsAgos[1] = 0;
 
-        (bool successObserve, bytes memory dataObserve) = pool.staticcall(
-            abi.encodeWithSelector(IUniswapV3Pool.observe.selector, secondsAgos)
-        );
-        if (!successObserve) return false;
-
-        (int56[] memory tickCumulatives,) = abi.decode(dataObserve, (int56[], uint160[]));
-
-        // Check that observations are valid (not zero)
-        return tickCumulatives[0] != 0 && tickCumulatives[1] != 0;
+            (bool successObserve, bytes memory dataObserve) = pool.staticcall(
+                abi.encodeWithSelector(IUniswapV3Pool.observe.selector, secondsAgos)
+            );
+            
+            if (successObserve) {
+                (int56[] memory tickCumulatives,) = abi.decode(dataObserve, (int56[], uint160[]));
+                // Check that observations are valid (not zero)
+                if (tickCumulatives[0] != 0 && tickCumulatives[1] != 0) {
+                    return true;
+                }
+            }
+            unchecked { ++i; }
+        }
+        
+        return false;
     }
 
     /**
@@ -122,9 +150,9 @@ contract RegistrationHelper is Ownable {
         }
     }
 
-    constructor(address _otc, address _ethUsdFeed) Ownable(msg.sender) {
-        require(_otc != address(0), "zero otc");
-        require(_ethUsdFeed != address(0), "zero feed");
+    constructor(address _otc, address _ethUsdFeed) payable Ownable(msg.sender) {
+        if (_otc == address(0)) revert ZeroOtc();
+        if (_ethUsdFeed == address(0)) revert ZeroFeed();
         otc = IOTC(_otc);
         ethUsdFeed = _ethUsdFeed;
         feeRecipient = msg.sender;
@@ -138,23 +166,23 @@ contract RegistrationHelper is Ownable {
         address tokenAddress,
         address poolAddress
     ) external payable returns (address oracle) {
-        require(msg.value >= registrationFee, "insufficient fee");
-        require(tokenAddress != address(0), "zero token");
-        require(poolAddress != address(0), "zero pool");
+        if (msg.value < registrationFee) revert InsufficientFee();
+        if (tokenAddress == address(0)) revert ZeroToken();
+        if (poolAddress == address(0)) revert ZeroPool();
 
         // Validate token is ERC20
         IERC20Metadata token = IERC20Metadata(tokenAddress);
         uint8 decimals = token.decimals();
-        require(decimals <= 18, "invalid decimals");
+        if (decimals > 18) revert InvalidDecimals();
 
         // Validate pool is legitimate Uniswap V3 pool
-        require(isValidUniswapV3Pool(poolAddress, tokenAddress), "invalid pool");
+        if (!isValidUniswapV3Pool(poolAddress, tokenAddress)) revert InvalidPool();
 
         // Pre-validate oracle functionality
-        require(validateOracle(poolAddress, tokenAddress), "oracle validation failed");
+        if (!validateOracle(poolAddress, tokenAddress)) revert OracleValidationFailed();
 
         // Validate pool has sufficient liquidity
-        require(hasSufficientLiquidity(poolAddress, tokenAddress), "insufficient liquidity");
+        if (!hasSufficientLiquidity(poolAddress, tokenAddress)) revert InsufficientLiquidity();
         
         // Generate tokenId (use keccak256 of address for uniqueness)
         bytes32 tokenId = keccak256(abi.encodePacked(tokenAddress));
@@ -181,20 +209,20 @@ contract RegistrationHelper is Ownable {
         // Forward fee to recipient
         if (feeRecipient != address(0)) {
             (bool success, ) = payable(feeRecipient).call{value: registrationFee}("");
-            require(success, "fee transfer failed");
+            if (!success) revert FeeTransferFailed();
         }
         
         // Refund excess payment
         if (msg.value > registrationFee) {
             uint256 refund = msg.value - registrationFee;
             (bool refundSuccess, ) = payable(msg.sender).call{value: refund}("");
-            require(refundSuccess, "refund failed");
+            if (!refundSuccess) revert RefundFailed();
         }
     }
     
     /// @notice Update registration fee (owner only)
     function setRegistrationFee(uint256 newFee) external onlyOwner {
-        require(newFee <= 0.1 ether, "fee too high");
+        if (newFee > 0.1 ether) revert FeeTooHigh();
         uint256 oldFee = registrationFee;
         registrationFee = newFee;
         emit RegistrationFeeUpdated(oldFee, newFee);
@@ -202,7 +230,7 @@ contract RegistrationHelper is Ownable {
     
     /// @notice Update fee recipient (owner only)
     function setFeeRecipient(address newRecipient) external onlyOwner {
-        require(newRecipient != address(0), "zero recipient");
+        if (newRecipient == address(0)) revert ZeroRecipient();
         address oldRecipient = feeRecipient;
         feeRecipient = newRecipient;
         emit FeeRecipientUpdated(oldRecipient, newRecipient);
@@ -211,9 +239,9 @@ contract RegistrationHelper is Ownable {
     /// @notice Withdraw accumulated fees (owner only)
     function withdrawFees() external onlyOwner {
         uint256 balance = address(this).balance;
-        require(balance > 0, "no fees");
+        if (balance == 0) revert NoFees();
         (bool success, ) = payable(owner()).call{value: balance}("");
-        require(success, "withdrawal failed");
+        if (!success) revert WithdrawalFailed();
     }
     
     receive() external payable {}

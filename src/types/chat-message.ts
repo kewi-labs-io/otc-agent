@@ -10,6 +10,7 @@ export interface ChatMessageQuoteData {
   tokenAmount?: string | number;
   tokenSymbol?: string;
   chain?: string;
+  tokenAddress?: string; // Token contract address for direct lookup
   lockupMonths?: number;
   lockupDays?: number;
   discountBps?: number;
@@ -33,7 +34,7 @@ export interface ChatMessageContent {
 export interface ChatMessage {
   id: string;
   name: string;
-  text: string | null | undefined;
+  text: string; // Required - messages always have text (empty string if no content)
   senderId: string;
   roomId: string;
   createdAt: number;

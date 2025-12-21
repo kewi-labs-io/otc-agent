@@ -1,33 +1,47 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const OTC_DESK_PORT = parseInt(process.env.OTC_DESK_PORT || '4444');
-const BASE_URL = `http://localhost:${OTC_DESK_PORT}`;
+// Use IPv4 loopback explicitly to avoid localhost IPv6 (::1) issues in Chromium
+const BASE_URL = `http://127.0.0.1:${OTC_DESK_PORT}`;
+const IS_DARWIN = process.platform === 'darwin';
+const USE_CHROME_CHANNEL =
+  process.env.SYNPRESS_BROWSER_CHANNEL === 'chrome' ||
+  (!IS_DARWIN && Boolean(process.env.CI));
 
 /**
- * Synpress + Playwright configuration for wallet-based E2E tests
- * 
- * These tests use real wallet extensions (MetaMask and Phantom) to test:
- * - Wallet connection flows
- * - Order creation with transaction signing
- * - Two-party trading (buyer + seller)
- * - Solana withdrawals (Phantom)
- * 
- * IMPORTANT: Run with `npx playwright test --config=synpress.config.ts`
- * The wallet setup is cached in .cache/synpress-cache to prevent re-setup loops.
- * 
- * WALLETS SUPPORTED:
- * - MetaMask: For EVM chains (Base, Ethereum)
- * - Phantom: For Solana chain
- * 
- * RUN EXAMPLES:
- * - All tests: npx playwright test --config=synpress.config.ts
- * - MetaMask only: npx playwright test --config=synpress.config.ts tests/synpress/wallet-e2e.test.ts
- * - Phantom only: npx playwright test --config=synpress.config.ts tests/synpress/solana-withdrawal.test.ts
+ * Synpress + Playwright configuration for E2E tests with real wallet interactions
+ *
+ * These tests perform REAL on-chain transactions and verify contract state:
+ * - EVM: MetaMask + Anvil (local) or Base (testnet/mainnet)
+ * - Solana: Phantom + solana-test-validator (local) or Solana mainnet
+ *
+ * Test Files:
+ * - evm.e2e.test.ts: Full EVM lifecycle (list → buy → claim → withdraw)
+ * - solana.e2e.test.ts: Full Solana lifecycle with on-chain verification
+ *
+ * Prerequisites:
+ * - Anvil running: `anvil --host 127.0.0.1 --port 8545`
+ * - Solana validator: `solana-test-validator` (optional, for Solana tests)
+ * - Contracts deployed: `cd contracts && forge script scripts/DeployElizaOTC.s.sol --broadcast`
+ * - Next.js running: `bun run dev`
+ * - Synpress cache: `npx synpress`
+ *
+ * Run Commands:
+ * - All tests:     npx playwright test --config=synpress.config.ts
+ * - EVM only:      npx playwright test --config=synpress.config.ts tests/synpress/evm.e2e.test.ts
+ * - Solana only:   npx playwright test --config=synpress.config.ts tests/synpress/solana.e2e.test.ts
+ *
+ * Environment:
+ * - TEST_ENV=local (default) | testnet | mainnet
  */
 export default defineConfig({
   testDir: './tests/synpress',
   testMatch: /.*\.(test|spec)\.ts$/,
   
+  // Bring up/down real infrastructure for wallet E2E runs
+  globalSetup: './tests/synpress/playwright-global-setup.ts',
+  globalTeardown: './tests/global-teardown.ts',
+
   // Run tests serially - wallet tests need isolation
   fullyParallel: false,
   workers: 1,
@@ -38,7 +52,6 @@ export default defineConfig({
     timeout: 30000,
   },
   
-  // Fail fast in CI
   forbidOnly: !!process.env.CI,
   retries: 0, // No retries for wallet tests - each retry resets wallet state
   
@@ -63,7 +76,10 @@ export default defineConfig({
       name: 'chromium-synpress',
       use: { 
         ...devices['Desktop Chrome'],
-        channel: process.env.CI ? 'chrome' : undefined,
+        // On macOS, Playwright's Chrome channel does not reliably load unpacked extensions
+        // (MetaMask/Phantom) even when `--load-extension` is provided. Prefer bundled
+        // Chromium unless explicitly requested.
+        channel: USE_CHROME_CHANNEL ? 'chrome' : undefined,
         launchOptions: {
           headless: false,
           args: [

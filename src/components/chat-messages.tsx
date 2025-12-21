@@ -37,7 +37,17 @@ export function ChatMessages({
     if (messages.length === 0) return;
     const lastMessage = messages[messages.length - 1];
 
-    const currentText = lastMessage.text ?? "";
+    // FAIL-FAST: Message must have text
+    if (
+      !lastMessage ||
+      lastMessage.text === undefined ||
+      lastMessage.text === null
+    ) {
+      throw new Error(
+        `Last message missing text: ${lastMessage?.id || "unknown"}`,
+      );
+    }
+    const currentText = lastMessage.text;
     const isNewMessage = currentText !== lastMessageRef.current;
 
     if (isNewMessage) {
@@ -46,15 +56,32 @@ export function ChatMessages({
     }
   }, [messages]);
 
-  const lastMessageName = messages[messages.length - 1]?.name;
-  const lastMessageText = messages[messages.length - 1]?.text;
+  // Get last message for effect dependencies (can be null if no messages)
+  const lastMessage =
+    messages.length > 0 ? messages[messages.length - 1] : null;
+
+  // Extract fields for dependencies - only if message exists (validated in effect)
+  const lastMessageName = lastMessage ? lastMessage.name : null;
+  const lastMessageText = lastMessage ? lastMessage.text : null;
 
   useEffect(() => {
     if (!messages.length) return;
     const lastMessage = messages[messages.length - 1];
 
+    // FAIL-FAST: Message must have required fields
+    if (!lastMessage) {
+      throw new Error("Last message is null or undefined");
+    }
+    if (!lastMessage.name) {
+      throw new Error(`Last message missing name: ${lastMessage.id}`);
+    }
+    if (lastMessage.text === undefined || lastMessage.text === null) {
+      throw new Error(`Last message missing text: ${lastMessage.id}`);
+    }
+
+    // At this point, lastMessage.name and lastMessage.text are guaranteed to exist
     const isUserMessage = lastMessage.name === USER_NAME;
-    const hasContent = lastMessage.text && lastMessage.text.trim() !== "";
+    const hasContent = lastMessage.text.trim() !== "";
 
     if (isUserMessage && hasContent) {
       scrollToBottom("smooth");

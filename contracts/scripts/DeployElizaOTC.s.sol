@@ -86,7 +86,9 @@ contract DeployElizaOTC is Script {
         
         // 6. Register elizaOS token and create consignment
         console.log("\n6. Setting up elizaOS consignment...");
-        bytes32 elizaTokenId = keccak256("elizaOS");
+        // TokenId convention: keccak256(abi.encodePacked(tokenAddress))
+        // This matches RegistrationHelper and app-side tokenId computations.
+        bytes32 elizaTokenId = keccak256(abi.encodePacked(address(elizaToken)));
         otc.registerToken(elizaTokenId, address(elizaToken), address(elizaUsdFeed));
         console.log("Token registered");
         

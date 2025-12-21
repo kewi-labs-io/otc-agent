@@ -6,13 +6,13 @@ resolution = true
 skip-lint = true
 
 [programs.devnet]
-otc = "q9MhHpeydqTdtPaNpzDoWvP1qY5s3sFHTF1uYcXjdsc"
+otc = "3uTdWzoAcBFKTVYRd2z2jDKAcuyW64rQLxa9wMreDJKo"
 
 [programs.localnet]
 otc = "6qn8ELVXd957oRjLaomCpKpcVZshUjNvSzw1nc7QVyXc"
 
 [programs.mainnet]
-otc = "q9MhHpeydqTdtPaNpzDoWvP1qY5s3sFHTF1uYcXjdsc"
+otc = "3uTdWzoAcBFKTVYRd2z2jDKAcuyW64rQLxa9wMreDJKo"
 
 [registry]
 url = "https://api.apr.dev"

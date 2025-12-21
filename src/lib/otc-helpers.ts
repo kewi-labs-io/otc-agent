@@ -29,24 +29,24 @@ export interface ParsedOffer {
  */
 export type RawOfferData =
   | readonly [
-      bigint,   // 0. consignmentId
-      string,   // 1. tokenId
-      string,   // 2. beneficiary
-      bigint,   // 3. tokenAmount
-      bigint,   // 4. discountBps
-      bigint,   // 5. createdAt
-      bigint,   // 6. unlockTime
-      bigint,   // 7. priceUsdPerToken
-      bigint,   // 8. maxPriceDeviation
-      bigint,   // 9. ethUsdPrice
-      number,   // 10. currency
-      boolean,  // 11. approved
-      boolean,  // 12. paid
-      boolean,  // 13. fulfilled
-      boolean,  // 14. cancelled
-      string,   // 15. payer
-      bigint,   // 16. amountPaid
-      number,   // 17. agentCommissionBps
+      bigint, // 0. consignmentId
+      string, // 1. tokenId
+      string, // 2. beneficiary
+      bigint, // 3. tokenAmount
+      bigint, // 4. discountBps
+      bigint, // 5. createdAt
+      bigint, // 6. unlockTime
+      bigint, // 7. priceUsdPerToken
+      bigint, // 8. maxPriceDeviation
+      bigint, // 9. ethUsdPrice
+      number, // 10. currency
+      boolean, // 11. approved
+      boolean, // 12. paid
+      boolean, // 13. fulfilled
+      boolean, // 14. cancelled
+      string, // 15. payer
+      bigint, // 16. amountPaid
+      number, // 17. agentCommissionBps
     ]
   | ParsedOffer;
 

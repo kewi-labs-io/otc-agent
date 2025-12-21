@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { createPublicClient, http, erc20Abi } from "viem";
+import { createPublicClient, http, erc20Abi, type Address } from "viem";
 import { base } from "viem/chains";
 import type { Token, TokenMarketData } from "@/services/database";
+import { TokenResponseSchema } from "@/types/validation/hook-schemas";
 
 interface TokenCacheEntry {
   token: Token;
@@ -14,62 +15,78 @@ const pendingFetches = new Map<string, Promise<TokenCacheEntry | null>>();
 
 const CACHE_DURATION = 30000; // 30 seconds
 
-// Fallback: fetch token metadata from blockchain
-async function fetchTokenFromChain(tokenId: string): Promise<Token | null> {
+async function fetchTokenFromChain(tokenId: string): Promise<Token> {
   const parts = tokenId.split("-");
-  if (parts.length < 3) return null;
+  if (parts.length < 3) {
+    throw new Error(
+      `Invalid tokenId format: ${tokenId}. Expected "token-{chain}-{address}"`,
+    );
+  }
 
   const chain = parts[1];
   const address = parts[2] as `0x${string}`;
 
-  if (!address?.startsWith("0x")) return null;
-
-  // For now, only support base chain for on-chain fallback
-  if (chain !== "base") return null;
-
-  try {
-    const publicClient = createPublicClient({
-      chain: base,
-      transport: http("/api/rpc/base"),
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const readContract = publicClient.readContract.bind(publicClient) as any;
-    const [symbol, name, decimals] = await Promise.all([
-      readContract({
-        address,
-        abi: erc20Abi,
-        functionName: "symbol",
-      }),
-      readContract({
-        address,
-        abi: erc20Abi,
-        functionName: "name",
-      }),
-      readContract({
-        address,
-        abi: erc20Abi,
-        functionName: "decimals",
-      }),
-    ]);
-
-    return {
-      id: tokenId,
-      symbol: symbol as string,
-      name: name as string,
-      decimals: decimals as number,
-      chain: chain as Token["chain"],
-      contractAddress: address,
-      logoUrl: "",
-      description: "",
-      isActive: true,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-  } catch (err) {
-    console.error("[useTokenCache] Failed to fetch token from chain:", err);
-    return null;
+  if (!address || !address.startsWith("0x")) {
+    throw new Error(
+      `Invalid address in tokenId: ${tokenId}. Address must start with "0x"`,
+    );
   }
+
+  if (chain !== "base") {
+    throw new Error(
+      `On-chain token fetch not supported for chain: ${chain}. Only "base" is supported.`,
+    );
+  }
+
+  const publicClient = createPublicClient({
+    chain: base,
+    transport: http("/api/rpc/base"),
+  });
+
+  // Type assertion needed: viem's readContract has strict generics that
+  // cause deep type instantiation issues with dynamic ABIs
+  // Using bind + cast to bypass type checking while preserving runtime behavior
+  interface ReadContractFn {
+    (params: {
+      address: Address;
+      abi: typeof erc20Abi;
+      functionName: string;
+    }): Promise<unknown>;
+  }
+  const readContract = publicClient.readContract.bind(
+    publicClient,
+  ) as ReadContractFn;
+  const [symbol, name, decimals] = await Promise.all([
+    readContract({
+      address,
+      abi: erc20Abi,
+      functionName: "symbol",
+    }),
+    readContract({
+      address,
+      abi: erc20Abi,
+      functionName: "name",
+    }),
+    readContract({
+      address,
+      abi: erc20Abi,
+      functionName: "decimals",
+    }),
+  ]);
+
+  return {
+    id: tokenId,
+    symbol: symbol as string,
+    name: name as string,
+    decimals: decimals as number,
+    chain: chain as Token["chain"],
+    contractAddress: address,
+    logoUrl: "",
+    description: "",
+    isActive: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
 }
 
 export function useTokenCache(tokenId: string | null) {
@@ -119,21 +136,10 @@ export function useTokenCache(tokenId: string | null) {
         // Start new fetch - only ONE component will enter this block
         fetchPromise = (async () => {
           const response = await fetch(`/api/tokens/${id}`);
-          const data = await response.json();
 
-          if (data.success) {
-            const entry: TokenCacheEntry = {
-              token: data.token,
-              marketData: data.marketData || null,
-              fetchedAt: Date.now(),
-            };
-            globalTokenCache.set(id, entry);
-            return entry;
-          }
-
-          // Fallback: fetch from blockchain if not in database
-          const chainToken = await fetchTokenFromChain(id);
-          if (chainToken) {
+          if (!response.ok) {
+            // Token not in database - fetch from blockchain (throws on failure)
+            const chainToken = await fetchTokenFromChain(id);
             const entry: TokenCacheEntry = {
               token: chainToken,
               marketData: null,
@@ -143,7 +149,23 @@ export function useTokenCache(tokenId: string | null) {
             return entry;
           }
 
-          return null;
+          const rawData = await response.json();
+
+          const { parseOrThrow } = await import("@/lib/validation/helpers");
+          const data = parseOrThrow(TokenResponseSchema, rawData);
+
+          if (!data.success || !data.token) {
+            throw new Error(`Invalid token response for: ${id}`);
+          }
+
+          const entry: TokenCacheEntry = {
+            token: data.token as Token,
+            // marketData is optional - use null if not present
+            marketData: (data.marketData as TokenMarketData) ?? null,
+            fetchedAt: Date.now(),
+          };
+          globalTokenCache.set(id, entry);
+          return entry;
         })();
 
         // Set pending IMMEDIATELY to block other components
@@ -212,9 +234,10 @@ function subscribeToMarketData(
         }
 
         // Notify all subscribers
-        marketDataSubscribers
-          .get(tokenId)
-          ?.forEach((cb) => cb(data.marketData));
+        const subscribers = marketDataSubscribers.get(tokenId);
+        if (subscribers) {
+          subscribers.forEach((cb) => cb(data.marketData));
+        }
       }
     }
 

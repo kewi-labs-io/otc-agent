@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { DealCompletion } from "@/components/deal-completion";
+import { DealCompletion, type DealQuote } from "@/components/deal-completion";
+import { PageLoading } from "@/components/ui/loading-spinner";
 
 // Force dynamic rendering for this route
 export const dynamic = "force-dynamic";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default function DealPage() {
   const params = useParams();
   const router = useRouter();
-  const [quote, setQuote] = useState<any>(null);
+  const [quote, setQuote] = useState<DealQuote | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -48,7 +49,11 @@ export default function DealPage() {
         }
 
         const data = await response.json();
-        console.log("[DealPage] Quote loaded:", data.quote?.quoteId);
+        // FAIL-FAST: Quote must exist in response
+        if (!data.quote) {
+          throw new Error("Quote not found in API response");
+        }
+        console.log("[DealPage] Quote loaded:", data.quote.quoteId);
         setQuote(data.quote);
         setLoading(false);
         return;
@@ -60,14 +65,10 @@ export default function DealPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
-          <div className="text-xl text-zinc-600 dark:text-zinc-400">
-            Loading your deal...
-          </div>
-        </div>
-      </div>
+      <PageLoading
+        message="Loading your deal..."
+        colorClass="border-green-500"
+      />
     );
   }
 

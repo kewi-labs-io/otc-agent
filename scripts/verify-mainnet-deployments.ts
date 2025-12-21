@@ -37,7 +37,7 @@ const DEPLOYMENTS = {
   },
   solana: {
     rpc: "https://api.mainnet-beta.solana.com",
-    programId: "q9MhHpeydqTdtPaNpzDoWvP1qY5s3sFHTF1uYcXjdsc",
+    programId: "3uTdWzoAcBFKTVYRd2z2jDKAcuyW64rQLxa9wMreDJKo",
     desk: "6CBcxFR6dSMJJ7Y4dQZTshJT2KxuwnSXioXEABxNVZPW",
   },
 };
@@ -58,8 +58,7 @@ async function verifyEvmContract(name: string, config: { rpc: string; otc: strin
   // Verify contract exists
   const code = await client.getCode({ address: otcAddress });
   if (!code || code === "0x") {
-    console.log("❌ Contract NOT deployed");
-    return false;
+    throw new Error(`Contract NOT deployed at ${otcAddress} on ${name}`);
   }
   console.log("✅ Contract deployed");
   
@@ -80,8 +79,6 @@ async function verifyEvmContract(name: string, config: { rpc: string; otc: strin
   console.log(`   Min USD: $${Number(minUsdAmount) / 1e8}`);
   console.log(`   Consignments: ${Number(nextConsignmentId) - 1}`);
   console.log(`   Offers: ${Number(nextOfferId) - 1}`);
-  
-  return true;
 }
 
 async function verifySolana() {
@@ -95,8 +92,7 @@ async function verifySolana() {
   const programInfo = await connection.getAccountInfo(programId);
   
   if (!programInfo) {
-    console.log("❌ Program NOT deployed");
-    return false;
+    throw new Error(`Program NOT deployed at ${DEPLOYMENTS.solana.programId}`);
   }
   console.log("✅ Program deployed");
   console.log(`   Program ID: ${DEPLOYMENTS.solana.programId}`);
@@ -106,8 +102,7 @@ async function verifySolana() {
   const deskInfo = await connection.getAccountInfo(deskPubkey);
   
   if (!deskInfo) {
-    console.log("❌ Desk NOT initialized");
-    return false;
+    throw new Error(`Desk NOT initialized at ${DEPLOYMENTS.solana.desk}`);
   }
   console.log("✅ Desk initialized");
   console.log(`   Desk Address: ${DEPLOYMENTS.solana.desk}`);
@@ -119,8 +114,6 @@ async function verifySolana() {
     const owner = new PublicKey(data.slice(8, 40));
     console.log(`   Owner: ${owner.toBase58()}`);
   }
-  
-  return true;
 }
 
 async function main() {
@@ -128,37 +121,35 @@ async function main() {
   console.log("  MAINNET DEPLOYMENT VERIFICATION");
   console.log("═".repeat(70));
   
-  const results: Record<string, boolean> = {};
-  
   // Verify EVM chains with delay between requests
   for (const [name, config] of Object.entries(DEPLOYMENTS)) {
     if (name === "solana") continue;
     
     await new Promise(r => setTimeout(r, 1000)); // Rate limit
-    results[name] = await verifyEvmContract(name, config as any);
+    // Type assertion needed: verifyEvmContract expects specific config shape
+    // DEPLOYMENTS values are compatible but TypeScript can't infer the exact type
+    await verifyEvmContract(name, config as Parameters<typeof verifyEvmContract>[1]);
   }
   
   // Verify Solana
   await new Promise(r => setTimeout(r, 1000));
-  results.solana = await verifySolana();
+  await verifySolana();
   
   // Summary
   console.log("\n" + "═".repeat(70));
   console.log("  VERIFICATION SUMMARY");
   console.log("═".repeat(70));
   
-  let allPassed = true;
-  for (const [name, passed] of Object.entries(results)) {
-    console.log(`  ${passed ? "✅" : "❌"} ${name.toUpperCase()}`);
-    if (!passed) allPassed = false;
+  for (const [name] of Object.entries(DEPLOYMENTS)) {
+    if (name === "solana") {
+      console.log(`  ✅ ${name.toUpperCase()}`);
+    } else {
+      console.log(`  ✅ ${name.toUpperCase()}`);
+    }
   }
   
   console.log();
-  if (allPassed) {
-    console.log("🎉 All mainnet deployments verified successfully!");
-  } else {
-    console.log("⚠️  Some deployments need attention");
-  }
+  console.log("🎉 All mainnet deployments verified successfully!");
   
   // P2P Feature Summary
   console.log("\n" + "═".repeat(70));

@@ -10,21 +10,6 @@ description: Fail-fast, minimal nesting, strong typing
 - **Minimal nesting** - keep conditionals ≤2 levels deep; use early returns
 - **Strong types** - rely on compile-time types, not runtime checks; no `any` or `unknown`
 
-## Examples
+IMPORTANT: Always use an expect / throw pattern for any input to a function or constructor to verify that the input and output is what you expect it to be. This way we can catch bugs faster.
 
-```ts
-// Bad: nested, defensive
-function handle(input: Thing | null | undefined) {
-  if (input) {
-    if (input.kind === 'ok') {
-      doWork(input);
-    }
-  }
-}
-
-// Good: early return, strong types
-function handle(input: Thing) {
-  if (input.kind !== 'ok') throw new Error('bad');
-  doWork(input);
-}
-```
+Always develop with the goal of writing code to minimize bugs and maximally validate our inputs, outputs and data.

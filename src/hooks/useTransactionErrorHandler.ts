@@ -4,16 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useDisconnect, useAccount } from "wagmi";
 import { usePrivy } from "@privy-io/react-auth";
-
-type TransactionError = Error & {
-  message: string;
-  cause?: {
-    reason?: string;
-    code?: string | number;
-  };
-  details?: string;
-  shortMessage?: string;
-};
+import type { TransactionError } from "@/types";
 
 export function useTransactionErrorHandler() {
   const [mounted, setMounted] = useState(false);
@@ -27,10 +18,22 @@ export function useTransactionErrorHandler() {
   const { logout } = usePrivy();
 
   const isNonceError = useCallback((error: TransactionError): boolean => {
-    const errorStr = error.message?.toLowerCase() || "";
-    const causeStr = error.cause?.reason?.toLowerCase() || "";
-    const detailsStr = error.details?.toLowerCase() || "";
-    const shortMsg = error.shortMessage?.toLowerCase() || "";
+    const errorStr = error.message.toLowerCase();
+    const causeStr =
+      error.cause &&
+      typeof error.cause === "object" &&
+      "reason" in error.cause &&
+      typeof error.cause.reason === "string"
+        ? error.cause.reason.toLowerCase()
+        : "";
+    const detailsStr =
+      error.details && typeof error.details === "string"
+        ? error.details.toLowerCase()
+        : "";
+    const shortMsg =
+      error.shortMessage && typeof error.shortMessage === "string"
+        ? error.shortMessage.toLowerCase()
+        : "";
 
     const noncePatterns = [
       "nonce too high",
@@ -50,8 +53,14 @@ export function useTransactionErrorHandler() {
   }, []);
 
   const isUserRejection = useCallback((error: TransactionError): boolean => {
-    const errorStr = error.message?.toLowerCase() || "";
-    const causeStr = error.cause?.reason?.toLowerCase() || "";
+    const errorStr = error.message.toLowerCase();
+    const causeStr =
+      error.cause &&
+      typeof error.cause === "object" &&
+      "reason" in error.cause &&
+      typeof error.cause.reason === "string"
+        ? error.cause.reason.toLowerCase()
+        : "";
 
     return (
       errorStr.includes("user rejected") ||
@@ -116,15 +125,18 @@ export function useTransactionErrorHandler() {
         return "Wallet nonce error - please reset your wallet connection using the button above";
       }
 
-      if (error.message?.includes("insufficient funds")) {
+      if (error.message.includes("insufficient funds")) {
         return "Insufficient funds to complete transaction";
       }
 
-      if (error.message?.includes("gas")) {
+      if (error.message.includes("gas")) {
         return "Transaction failed due to gas estimation error";
       }
 
-      return error.shortMessage || error.message || "Transaction failed";
+      if (error.shortMessage) {
+        return error.shortMessage;
+      }
+      return error.message;
     },
     [mounted, isNonceError, isUserRejection, resetWalletConnection],
   );

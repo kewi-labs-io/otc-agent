@@ -1,6 +1,27 @@
-import { createPublicClient, http, parseAbi } from "viem";
+import { createPublicClient, http, parseAbi, type Abi } from "viem";
 import { base } from "viem/chains";
 import { TokenRegistryService } from "./tokenRegistry";
+import { getRegistrationHelperForChain } from "@/config/contracts";
+import type { MinimalPublicClient, ReadContractParams } from "@/lib/viem-utils";
+
+/**
+ * Decoded TokenRegistered event args
+ */
+interface TokenRegisteredArgs {
+  tokenId: string;
+  tokenAddress: string;
+  pool: string;
+  oracle: string;
+  registeredBy: string;
+}
+
+/**
+ * TokenRegistered event log with decoded args
+ */
+interface TokenRegisteredLog {
+  args: TokenRegisteredArgs;
+  // Other log fields are not used
+}
 
 const ERC20_ABI = parseAbi([
   "function symbol() view returns (string)",
@@ -19,18 +40,19 @@ export async function startBaseListener() {
     return;
   }
 
-  const registrationHelperAddress =
-    process.env.NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS;
+  const registrationHelperAddress = getRegistrationHelperForChain(8453);
   if (!registrationHelperAddress) {
-    console.error("[Base Listener] REGISTRATION_HELPER_ADDRESS not configured");
-    return;
+    throw new Error(
+      "[Base Listener] RegistrationHelper not configured for Base mainnet - cannot start listener",
+    );
   }
 
   // Server-side: use Alchemy directly
   const alchemyKey = process.env.ALCHEMY_API_KEY;
   if (!alchemyKey) {
-    console.error("[Base Listener] ALCHEMY_API_KEY not configured");
-    return;
+    throw new Error(
+      "[Base Listener] ALCHEMY_API_KEY not configured - cannot start listener",
+    );
   }
   const rpcUrl = `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`;
 
@@ -61,7 +83,10 @@ export async function startBaseListener() {
     },
     onLogs: async (logs) => {
       for (const log of logs) {
-        await handleTokenRegistered(client, log);
+        await handleTokenRegistered(
+          client as MinimalPublicClient,
+          log as TokenRegisteredLog,
+        );
       }
     },
     onError: (error) => {
@@ -88,19 +113,19 @@ export async function startBaseListener() {
 /**
  * Handle a TokenRegistered event
  */
-async function handleTokenRegistered(client: any, log: any) {
+async function handleTokenRegistered(
+  client: MinimalPublicClient,
+  log: TokenRegisteredLog,
+) {
   // When using watchEvent with event definition, viem automatically decodes the log
-  const { tokenAddress, registeredBy } = log.args as {
-    tokenId: string;
-    tokenAddress: string;
-    pool: string;
-    registeredBy: string;
-  };
+  const { tokenAddress, pool, registeredBy } = log.args;
 
   console.log(
     "[Base Listener] Token registered:",
     tokenAddress,
-    "by",
+    "pool:",
+    pool,
+    "by:",
     registeredBy,
   );
 
@@ -123,7 +148,7 @@ async function handleTokenRegistered(client: any, log: any) {
     }),
   ]);
 
-  // Add to database
+  // Add to database with pool address for future price updates
   const tokenService = new TokenRegistryService();
   await tokenService.registerToken({
     symbol: symbol as string,
@@ -133,10 +158,11 @@ async function handleTokenRegistered(client: any, log: any) {
     decimals: Number(decimals),
     logoUrl: undefined, // Could fetch from a token list
     description: `Registered via RegistrationHelper by ${registeredBy}`,
+    poolAddress: pool, // Store pool address for price feed lookups
   });
 
   console.log(
-    `[Base Listener] ✅ Successfully registered ${symbol} (${tokenAddress}) to database`,
+    `[Base Listener] ✅ Successfully registered ${symbol} (${tokenAddress}) with pool ${pool} to database`,
   );
 }
 
@@ -144,10 +170,9 @@ async function handleTokenRegistered(client: any, log: any) {
  * Backfill historical events (run once after deployment)
  */
 export async function backfillBaseEvents(fromBlock?: bigint) {
-  const registrationHelperAddress =
-    process.env.NEXT_PUBLIC_REGISTRATION_HELPER_ADDRESS;
+  const registrationHelperAddress = getRegistrationHelperForChain(8453);
   if (!registrationHelperAddress) {
-    throw new Error("REGISTRATION_HELPER_ADDRESS not configured");
+    throw new Error("RegistrationHelper not configured for Base mainnet");
   }
 
   // Server-side: use Alchemy directly
@@ -189,7 +214,10 @@ export async function backfillBaseEvents(fromBlock?: bigint) {
   console.log(`[Base Backfill] Found ${logs.length} TokenRegistered events`);
 
   for (const log of logs) {
-    await handleTokenRegistered(client, log);
+    await handleTokenRegistered(
+      client as MinimalPublicClient,
+      log as TokenRegisteredLog,
+    );
   }
 
   console.log("[Base Backfill] ✅ Backfill complete");

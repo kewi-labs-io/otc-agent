@@ -163,7 +163,7 @@ const nextConfig: NextConfig = {
           '.jsx',
           '.json',
           // Only include .ts/.tsx after .js so webpack prefers compiled files
-          ...(config.resolve?.extensions?.filter(ext => !['.js', '.jsx', '.json'].includes(ext)) || ['.ts', '.tsx']),
+          ...(config.resolve?.extensions?.filter((ext: string) => !['.js', '.jsx', '.json'].includes(ext)) || ['.ts', '.tsx']),
         ],
         // Ensure nested packages can resolve @noble/hashes from top-level
         modules: [

@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { agentRuntime } from "@/lib/agent-runtime";
 import QuoteService from "@/lib/plugin-otc-desk/services/quoteService";
+import {
+  validateRouteParams,
+  validationErrorResponse,
+} from "@/lib/validation/helpers";
+import {
+  GetQuoteByOfferParamsSchema,
+  QuoteByOfferErrorResponseSchema,
+} from "@/types/validation/api-schemas";
+import { z } from "zod";
 
 export async function GET(
   request: NextRequest,
@@ -8,30 +17,32 @@ export async function GET(
 ) {
   await agentRuntime.getRuntime();
 
-  const { offerId } = await params;
+  const routeParams = await params;
+  const validatedParams = validateRouteParams(
+    GetQuoteByOfferParamsSchema,
+    routeParams,
+  );
 
-  if (!offerId) {
-    return NextResponse.json({ error: "Offer ID required" }, { status: 400 });
-  }
+  const { offerId } = validatedParams;
 
   const runtime = await agentRuntime.getRuntime();
   const quoteService = runtime.getService<QuoteService>("QuoteService");
 
+  // FAIL-FAST: QuoteService must be available
   if (!quoteService) {
-    return NextResponse.json(
-      { error: "QuoteService not available" },
-      { status: 500 },
+    throw new Error(
+      "QuoteService not available - agent runtime not properly initialized",
     );
   }
 
   // Search for quote with matching offerId
-  const matchingQuote = await quoteService.getQuoteByOfferId(offerId);
+  const matchingQuote = await quoteService.getQuoteByOfferId(String(offerId));
 
   if (!matchingQuote) {
-    return NextResponse.json(
-      { error: "Quote not found for this offer" },
-      { status: 404 },
-    );
+    const notFoundResponse = { error: "Quote not found for this offer" };
+    const validatedNotFound =
+      QuoteByOfferErrorResponseSchema.parse(notFoundResponse);
+    return NextResponse.json(validatedNotFound, { status: 404 });
   }
 
   // Redirect to the deal page

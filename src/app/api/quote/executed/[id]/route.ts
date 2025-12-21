@@ -1,6 +1,15 @@
 import { agentRuntime } from "@/lib/agent-runtime";
 import { QuoteDB } from "@/services/database";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  validateRouteParams,
+  validationErrorResponse,
+} from "@/lib/validation/helpers";
+import {
+  GetExecutedQuoteParamsSchema,
+  ExecutedQuoteResponseSchema,
+} from "@/types/validation/api-schemas";
+import { z } from "zod";
 
 export async function GET(
   request: NextRequest,
@@ -8,13 +17,20 @@ export async function GET(
 ) {
   await agentRuntime.getRuntime();
 
-  const { id: quoteId } = await params;
+  const routeParams = await params;
+  const validatedParams = validateRouteParams(
+    GetExecutedQuoteParamsSchema,
+    routeParams,
+  );
 
-  if (!quoteId) {
-    return NextResponse.json({ error: "Quote ID required" }, { status: 400 });
-  }
+  const { id: quoteId } = validatedParams;
 
   const quote = await QuoteDB.getQuoteByQuoteId(quoteId);
+
+  // FAIL-FAST: Quote must exist
+  if (!quote) {
+    throw new Error(`Quote ${quoteId} not found`);
+  }
 
   // Allow active, approved, and executed quotes to be viewed
   // active = quote created, approved = offer created/approved on-chain, executed = paid/fulfilled
@@ -53,5 +69,7 @@ export async function GET(
     chain: quote.chain,
   };
 
-  return NextResponse.json({ success: true, quote: formattedQuote });
+  const response = { success: true, quote: formattedQuote };
+  const validatedResponse = ExecutedQuoteResponseSchema.parse(response);
+  return NextResponse.json(validatedResponse);
 }

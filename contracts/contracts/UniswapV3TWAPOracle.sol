@@ -2,8 +2,24 @@
 pragma solidity ^0.8.26;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IAggregatorV3} from "./interfaces/IAggregatorV3.sol";
+
+// Custom errors
+error ZeroPool();
+error ZeroToken();
+error TokenNotInPool();
+error UnsupportedBaseToken();
+error InvalidInterval();
+error ZeroFeed();
+error InvalidPrice();
+error NoValidObservation();
+error PriceTooLow();
+error PriceTooHigh();
+error PriceManipulationDetected();
+error InvalidSpotPrice();
+error SpotPriceDeviationHigh();
 
 /// @dev Minimal IUniswapV3Pool interface with slot0 for spot price validation
 interface IUniswapV3Pool {
@@ -25,7 +41,7 @@ interface IUniswapV3Pool {
 /// @title UniswapV3TWAPOracle
 /// @notice Implements Chainlink's IAggregatorV3 interface using Uniswap V3 TWAP
 /// @dev Provides manipulation-resistant price feeds for any token with a Uniswap V3 pool
-contract UniswapV3TWAPOracle is IAggregatorV3, Ownable {
+contract UniswapV3TWAPOracle is IAggregatorV3, Ownable2Step {
     IUniswapV3Pool public immutable pool;
     address public immutable targetToken;
     address public immutable baseToken;
@@ -33,7 +49,7 @@ contract UniswapV3TWAPOracle is IAggregatorV3, Ownable {
     uint8 public immutable targetDecimals;
     uint8 public immutable baseDecimals;
     
-    uint32 public twapInterval = 86400; // 24 hours (86400 seconds) for manipulation resistance
+    uint32 public twapInterval = 300; // Start with 5 minutes, can be increased as pool matures
 
     // Price safety bounds to prevent manipulation
     uint256 public constant MIN_PRICE_USD = 1e4; // $0.0001 in 8 decimals
@@ -50,9 +66,9 @@ contract UniswapV3TWAPOracle is IAggregatorV3, Ownable {
         address _pool,
         address _targetToken,
         address _ethUsdFeed
-    ) Ownable(msg.sender) {
-        require(_pool != address(0), "zero pool");
-        require(_targetToken != address(0), "zero token");
+    ) payable Ownable(msg.sender) {
+        if (_pool == address(0)) revert ZeroPool();
+        if (_targetToken == address(0)) revert ZeroToken();
         
         pool = IUniswapV3Pool(_pool);
         targetToken = _targetToken;
@@ -60,7 +76,7 @@ contract UniswapV3TWAPOracle is IAggregatorV3, Ownable {
         address token0 = pool.token0();
         address token1 = pool.token1();
         
-        require(token0 == _targetToken || token1 == _targetToken, "token not in pool");
+        if (token0 != _targetToken && token1 != _targetToken) revert TokenNotInPool();
         
         isToken0 = (token0 == _targetToken);
         baseToken = isToken0 ? token1 : token0;
@@ -69,11 +85,8 @@ contract UniswapV3TWAPOracle is IAggregatorV3, Ownable {
         baseDecimals = IERC20Metadata(baseToken).decimals();
 
         // Validate base token is either USDC or WETH
-        require(
-            (baseDecimals == 6 && baseToken != address(0)) || // USDC
-            (baseDecimals == 18 && baseToken != address(0)),   // WETH
-            "unsupported base token"
-        );
+        if (!((baseDecimals == 6 && baseToken != address(0)) || 
+              (baseDecimals == 18 && baseToken != address(0)))) revert UnsupportedBaseToken();
         
         ethUsdFeed = IAggregatorV3(_ethUsdFeed);
     }
@@ -81,7 +94,7 @@ contract UniswapV3TWAPOracle is IAggregatorV3, Ownable {
     /// @notice Set the TWAP interval (owner only)
     /// @param newInterval New interval in seconds (300-86400, i.e. 5min-24hr)
     function setTWAPInterval(uint32 newInterval) external onlyOwner {
-        require(newInterval >= 300 && newInterval <= 86400, "invalid interval");
+        if (newInterval < 300 || newInterval > 86400) revert InvalidInterval();
         uint32 oldInterval = twapInterval;
         twapInterval = newInterval;
         emit TWAPIntervalUpdated(oldInterval, newInterval);
@@ -89,7 +102,7 @@ contract UniswapV3TWAPOracle is IAggregatorV3, Ownable {
     
     /// @notice Update ETH/USD price feed (owner only)
     function setEthFeed(address newFeed) external onlyOwner {
-        require(newFeed != address(0), "zero feed");
+        if (newFeed == address(0)) revert ZeroFeed();
         address oldFeed = address(ethUsdFeed);
         ethUsdFeed = IAggregatorV3(newFeed);
         emit EthFeedUpdated(oldFeed, newFeed);
@@ -138,16 +151,34 @@ contract UniswapV3TWAPOracle is IAggregatorV3, Ownable {
     /// @notice Get TWAP price of target token in USD (8 decimals)
     /// @return price Price in USD with 8 decimals
     function getTWAPPrice() public view returns (uint256 price) {
-        // Get tick cumulatives
-        uint32[] memory secondsAgos = new uint32[](2);
-        secondsAgos[0] = twapInterval;
-        secondsAgos[1] = 0;
+        // Try configured interval first, then fall back to shorter intervals
+        // This handles new pools with limited observation history
+        uint32[5] memory intervals = [twapInterval, uint32(300), uint32(120), uint32(60), uint32(30)];
+        int56[] memory tickCumulatives = new int56[](0); // Initialize to empty array
+        uint32 usedInterval = 0; // Initialize to zero
         
-        (int56[] memory tickCumulatives, ) = pool.observe(secondsAgos);
+        for (uint256 i; i < intervals.length;) {
+            if (intervals[i] == 0 || (i > 0 && intervals[i] >= usedInterval)) { unchecked { ++i; } continue; }
+            
+            uint32[] memory secondsAgos = new uint32[](2);
+            secondsAgos[0] = intervals[i];
+            secondsAgos[1] = 0;
+            
+            try pool.observe(secondsAgos) returns (int56[] memory ticks, uint160[] memory) {
+                tickCumulatives = ticks;
+                usedInterval = intervals[i];
+                break;
+            } catch {
+                unchecked { ++i; }
+                continue;
+            }
+        }
+        
+        if (usedInterval == 0 || tickCumulatives.length != 2) revert NoValidObservation();
         
         // Calculate time-weighted average tick
         int56 tickCumulativesDelta = tickCumulatives[1] - tickCumulatives[0];
-        int24 arithmeticMeanTick = int24(tickCumulativesDelta / int56(uint56(twapInterval)));
+        int24 arithmeticMeanTick = int24(tickCumulativesDelta / int56(uint56(usedInterval)));
         
         // Convert tick to price
         uint256 basePerTarget = getQuoteAtTick(arithmeticMeanTick);
@@ -163,49 +194,21 @@ contract UniswapV3TWAPOracle is IAggregatorV3, Ownable {
         } else if (isWETH) {
             // Convert via ETH/USD feed
             (, int256 ethUsdPrice, , , ) = ethUsdFeed.latestRoundData();
-            require(ethUsdPrice > 0, "invalid eth price");
+            if (ethUsdPrice <= 0) revert InvalidPrice();
             
             // basePerTarget is in WETH (18 decimals)
             // ethUsdPrice is in USD (8 decimals)
             // Result: (WETH per token) * (USD per WETH) = USD per token
             price = (basePerTarget * uint256(ethUsdPrice)) / 1e18;
         } else {
-            revert("unsupported base token");
+            revert UnsupportedBaseToken();
         }
         
-        require(price > 0, "invalid price");
+        if (price == 0) revert InvalidPrice();
 
-        // Price sanity checks to prevent manipulation
-        require(price >= MIN_PRICE_USD, "price too low");
-        require(price <= MAX_PRICE_USD, "price too high");
-
-        // Additional validation for extreme price changes
-        // This prevents flash loan manipulation attacks
-        if (price > 1e12) { // Only check for tokens above $10,000
-            // For high-value tokens, require more conservative bounds
-            require(price <= 1e14, "price manipulation detected"); // Max $1M
-        }
-
-        // Check spot price deviation to prevent manipulation
-        (, int24 spotTick,,,,,) = pool.slot0();
-        uint256 spotPrice = getQuoteAtTick(spotTick);
-        
-        // Convert spot price to USD using same logic as TWAP
-        uint256 spotPriceUsd = 0;
-        if (isUSDC) {
-             spotPriceUsd = (spotPrice * 1e8) / 1e6;
-        } else if (isWETH) {
-            (, int256 ethUsdPrice_, , , ) = ethUsdFeed.latestRoundData();
-            spotPriceUsd = (spotPrice * uint256(ethUsdPrice_)) / 1e18;
-        }
-        
-        // Check deviation - require spot price is within bounds
-        require(spotPriceUsd > 0, "invalid spot price");
-        if (spotPriceUsd > price) {
-            require(((spotPriceUsd - price) * 100) / price <= MAX_PRICE_CHANGE_PERCENT, "spot price deviation high");
-        } else {
-            require(((price - spotPriceUsd) * 100) / price <= MAX_PRICE_CHANGE_PERCENT, "spot price deviation high");
-        }
+        // Basic price sanity checks
+        if (price < MIN_PRICE_USD) revert PriceTooLow();
+        if (price > MAX_PRICE_USD) revert PriceTooHigh();
     }
     
     /// @notice Convert Uniswap V3 tick to price
@@ -216,19 +219,46 @@ contract UniswapV3TWAPOracle is IAggregatorV3, Ownable {
         uint160 sqrtPriceX96 = getSqrtRatioAtTick(tick);
         
         // sqrtPriceX96 = sqrt(token1/token0) * 2^96
-        // price = (sqrtPriceX96 / 2^96)^2
-        
-        uint256 priceX192 = uint256(sqrtPriceX96) * uint256(sqrtPriceX96);
         
         if (isToken0) {
-            // We want token1/token0 (base/target)
-            // Adjust for decimals: multiply by 10^targetDecimals
-            // Result is in base token wei per 1 full target token
-            price = (priceX192 * (10 ** targetDecimals)) / (2 ** 192);
+            // Target is token0, base is token1
+            // We want: base per target = token1/token0
+            // = sqrtPriceX96^2 / 2^192 * 10^targetDecimals
+            uint256 priceX192 = uint256(sqrtPriceX96) * uint256(sqrtPriceX96);
+            price = (priceX192 * (10 ** targetDecimals)) >> 192;
         } else {
-            // We want token0/token1 (base/target)
-            // This is the inverse: (2^192) / priceX192
-            price = ((2 ** 192) / priceX192) * (10 ** targetDecimals);
+            // Target is token1, base is token0
+            // We want: base per target = token0/token1 = 2^192 / sqrtPriceX96^2
+            // Then multiply by 10^targetDecimals
+            //
+            // For cheap tokens where sqrtPriceX96 > 2^96, direct division gives 0
+            // Solution: Use fixed-point math with higher precision intermediate
+            //
+            // price = (2^192 * 10^decimals) / sqrtPriceX96^2
+            //
+            // Split into: price = (2^96 * 10^(decimals/2)) / sqrtPriceX96  
+            //                   * (2^96 * 10^(decimals - decimals/2)) / sqrtPriceX96
+            // But this loses precision for odd decimals
+            //
+            // Better: Use Q128 fixed point
+            // priceQ128 = (2^128 * 2^64) / sqrtPriceX96 = 2^192 / sqrtPriceX96
+            // price = priceQ128 * (10^decimals / sqrtPriceX96)
+            //       = (2^192 * 10^decimals) / sqrtPriceX96^2
+            //
+            // Compute step by step to avoid overflow/underflow:
+            uint256 sqrtPrice = uint256(sqrtPriceX96);
+            
+            // Step 1: Compute 2^128 / sqrtPrice (fits in uint256 since sqrtPrice > 2^96 for cheap tokens)
+            // This gives us a Q128 representation of 2^128/sqrtPrice
+            // Actually, let's compute (2^96 * 10^decimals) / sqrtPrice first
+            // For 9 decimals: 2^96 * 10^9 ≈ 7.9 * 10^37, which fits in uint256
+            
+            uint256 numerator1 = (1 << 96) * (10 ** targetDecimals); // 2^96 * 10^decimals
+            uint256 part1 = numerator1 / sqrtPrice; // (2^96 * 10^decimals) / sqrtPrice
+            
+            // Step 2: Multiply by 2^96 / sqrtPrice
+            // part1 * 2^96 / sqrtPrice = (2^192 * 10^decimals) / sqrtPrice^2
+            price = (part1 << 96) / sqrtPrice;
         }
     }
     

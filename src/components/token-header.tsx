@@ -9,10 +9,11 @@ interface TokenHeaderProps {
 }
 
 export function TokenHeader({ token, marketData }: TokenHeaderProps) {
-  const priceChange = marketData?.priceChange24h || 0;
+  const priceChange = marketData?.priceChange24h ?? 0;
   const priceChangeColor = priceChange >= 0 ? "text-brand-500" : "text-red-600";
 
-  const formatMarketCap = (mc: number) => {
+  const formatMarketCap = (mc: number | null | undefined) => {
+    if (mc == null) return "—";
     if (mc >= 1e9) return `$${(mc / 1e9).toFixed(2)}B`;
     if (mc >= 1e6) return `$${(mc / 1e6).toFixed(2)}M`;
     if (mc >= 1e3) return `$${(mc / 1e3).toFixed(2)}K`;
@@ -24,7 +25,8 @@ export function TokenHeader({ token, marketData }: TokenHeaderProps) {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  const formatPrice = (price: number) => {
+  const formatPrice = (price: number | null | undefined) => {
+    if (price == null) return "—";
     if (price < 0.0001) return price.toExponential(2);
     if (price < 1) return price.toFixed(6);
     return price.toFixed(4);

@@ -1,6 +1,12 @@
 import { MarketDataDB, type TokenMarketData } from "./database";
 import type { Chain } from "@/config/chains";
 import { getCoingeckoApiKey, getBirdeyeApiKey } from "@/config/env";
+import { parseOrThrow } from "@/lib/validation/helpers";
+import {
+  FetchTokenPriceInputSchema,
+  FetchMarketDataInputSchema,
+} from "@/types/validation/service-schemas";
+import { z } from "zod";
 
 interface CoinGeckoPrice {
   [key: string]: {
@@ -31,6 +37,7 @@ export class MarketDataService {
   }
 
   async fetchTokenPrice(tokenAddress: string, chain: Chain): Promise<number> {
+    parseOrThrow(FetchTokenPriceInputSchema, { tokenAddress, chain });
     const marketData = await this.fetchMarketData(tokenAddress, chain);
     return marketData.priceUsd;
   }
@@ -39,6 +46,7 @@ export class MarketDataService {
     tokenAddress: string,
     chain: Chain,
   ): Promise<TokenMarketData> {
+    parseOrThrow(FetchMarketDataInputSchema, { tokenAddress, chain });
     if (chain === "solana") {
       return await this.fetchSolanaData(tokenAddress);
     }
@@ -144,6 +152,14 @@ export class MarketDataService {
     tokenAddress: string,
     chain: Chain,
   ): Promise<void> {
+    parseOrThrow(
+      z.object({
+        tokenId: z.string().min(1),
+        tokenAddress: z.string().min(1),
+        chain: z.enum(["ethereum", "base", "bsc", "solana"]),
+      }),
+      { tokenId, tokenAddress, chain },
+    );
     const marketData = await this.fetchMarketData(tokenAddress, chain);
     await MarketDataDB.setMarketData(marketData);
   }
@@ -153,13 +169,7 @@ export class MarketDataService {
   ): Promise<void> {
     await Promise.all(
       tokens.map((token) =>
-        this.refreshTokenData(
-          token.id,
-          token.contractAddress,
-          token.chain,
-        ).catch((err) => {
-          console.error(`Failed to refresh ${token.id}:`, err);
-        }),
+        this.refreshTokenData(token.id, token.contractAddress, token.chain),
       ),
     );
   }

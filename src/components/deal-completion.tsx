@@ -17,24 +17,27 @@ interface NavigatorWithShare {
   share?: (data?: ShareData) => Promise<void>;
 }
 
+/** Deal quote data structure */
+export interface DealQuote {
+  quoteId: string;
+  entityId: string;
+  beneficiary: string;
+  tokenAmount: string;
+  lockupMonths: number;
+  discountBps: number;
+  totalUsd: number;
+  discountUsd: number;
+  discountedUsd: number;
+  paymentAmount: string;
+  paymentCurrency: string;
+  transactionHash?: string;
+  offerId?: string;
+  status?: string;
+  chain?: "evm" | "solana";
+}
+
 interface DealCompletionProps {
-  quote: {
-    quoteId: string;
-    entityId: string;
-    beneficiary: string;
-    tokenAmount: string;
-    lockupMonths: number;
-    discountBps: number;
-    totalUsd: number;
-    discountUsd: number;
-    discountedUsd: number;
-    paymentAmount: string;
-    paymentCurrency: string;
-    transactionHash?: string;
-    offerId?: string;
-    status?: string;
-    chain?: "evm" | "solana";
-  };
+  quote: DealQuote;
 }
 
 export function DealCompletion({ quote }: DealCompletionProps) {
@@ -73,39 +76,42 @@ export function DealCompletion({ quote }: DealCompletionProps) {
           quote.tokenAmount &&
           quote.tokenAmount !== "0"
         ) {
-          try {
-            await fetch("/api/deal-completion", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                action: "complete",
-                quoteId: quote.quoteId,
-                tokenAmount: quote.tokenAmount,
-                paymentCurrency: quote.paymentCurrency,
-                transactionHash: quote.transactionHash || "pending",
-                blockNumber: undefined,
-                offerId: quote.offerId || undefined,
-                chain: quote.chain || undefined,
-              }),
-            });
-          } catch (err) {
-            console.error("[DealCompletion] Failed to record:", err);
+          // FAIL-FAST: transactionHash is required for deal completion
+          // If missing, the deal hasn't been executed yet
+          if (!quote.transactionHash) {
+            console.warn(
+              `[DealCompletion] Quote ${quote.quoteId} missing transactionHash - deal may not be executed yet`,
+            );
+            // Don't send completion request if transaction hash is missing
+            return;
           }
+
+          await fetch("/api/deal-completion", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "complete",
+              quoteId: quote.quoteId,
+              tokenAmount: quote.tokenAmount,
+              paymentCurrency: quote.paymentCurrency,
+              transactionHash: quote.transactionHash,
+              blockNumber: undefined,
+              // Optional fields - pass as-is (undefined is acceptable)
+              offerId: quote.offerId,
+              chain: quote.chain,
+            }),
+          });
         }
       }
 
       // Generate shareable image
-      try {
-        const { dataUrl } = await createDealShareImage({
-          tokenAmount: parseFloat(quote.tokenAmount),
-          discountBps: quote.discountBps,
-          lockupMonths: quote.lockupMonths,
-          paymentCurrency: quote.paymentCurrency as "ETH" | "USDC",
-        });
-        setShareImageUrl(dataUrl);
-      } catch (err) {
-        console.error("[DealCompletion] Failed to generate share image:", err);
-      }
+      const { dataUrl } = await createDealShareImage({
+        tokenAmount: parseFloat(quote.tokenAmount),
+        discountBps: quote.discountBps,
+        lockupMonths: quote.lockupMonths,
+        paymentCurrency: quote.paymentCurrency as "ETH" | "USDC",
+      });
+      setShareImageUrl(dataUrl);
     };
 
     init();
@@ -135,9 +141,10 @@ export function DealCompletion({ quote }: DealCompletionProps) {
     if (
       typeof navigator !== "undefined" &&
       nav.canShare &&
+      nav.share &&
       nav.canShare({ files: [file] })
     ) {
-      await nav.share?.({ text, files: [file] });
+      await nav.share({ text, files: [file] });
     } else {
       // Fallback to Twitter intent
       const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(window.location.href)}`;

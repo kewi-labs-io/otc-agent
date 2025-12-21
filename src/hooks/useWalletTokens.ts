@@ -1,12 +1,15 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Chain } from "@/config/chains";
-import type { Token } from "@/types";
+import type { WalletToken } from "@/types";
+import { parseOrThrow } from "@/lib/validation/helpers";
+import { AddressSchema, ChainSchema } from "@/types/validation/schemas";
+import {
+  EvmBalancesResponseSchema,
+  SolanaBalancesResponseSchema,
+} from "@/types/validation/hook-schemas";
 
-export interface WalletToken extends Token {
-  balance: string;
-  balanceUsd: number;
-  priceUsd: number;
-}
+// Re-export for consumers
+export type { WalletToken } from "@/types";
 
 interface EvmBalanceToken {
   contractAddress: string;
@@ -30,16 +33,6 @@ interface SolanaBalanceToken {
   balanceUsd?: number;
 }
 
-interface EvmBalancesResponse {
-  tokens: EvmBalanceToken[];
-  error?: string;
-}
-
-interface SolanaBalancesResponse {
-  tokens: SolanaBalanceToken[];
-  error?: string;
-}
-
 /**
  * Minimum thresholds to filter dust tokens
  */
@@ -50,6 +43,17 @@ const MIN_VALUE_USD = 0.001;
  * Transform EVM balance to WalletToken
  */
 function transformEvmToken(token: EvmBalanceToken, chain: Chain): WalletToken {
+  if (!token.symbol || typeof token.symbol !== "string") {
+    throw new Error(
+      `EVM token missing symbol for address: ${token.contractAddress}`,
+    );
+  }
+  if (!token.name || typeof token.name !== "string") {
+    throw new Error(
+      `EVM token missing name for address: ${token.contractAddress}`,
+    );
+  }
+
   return {
     id: `token-${chain}-${token.contractAddress}`,
     symbol: token.symbol,
@@ -57,14 +61,15 @@ function transformEvmToken(token: EvmBalanceToken, chain: Chain): WalletToken {
     contractAddress: token.contractAddress,
     chain,
     decimals: token.decimals,
-    logoUrl: token.logoUrl || "",
+    // logoUrl is optional - use empty string as default if not provided
+    logoUrl: token.logoUrl ?? "",
     description: "",
     isActive: true,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     balance: token.balance,
-    balanceUsd: token.balanceUsd || 0,
-    priceUsd: token.priceUsd || 0,
+    balanceUsd: token.balanceUsd ?? 0, // balanceUsd can legitimately be 0
+    priceUsd: token.priceUsd ?? 0, // priceUsd can legitimately be 0
   };
 }
 
@@ -72,21 +77,29 @@ function transformEvmToken(token: EvmBalanceToken, chain: Chain): WalletToken {
  * Transform Solana balance to WalletToken
  */
 function transformSolanaToken(token: SolanaBalanceToken): WalletToken {
+  if (!token.symbol || typeof token.symbol !== "string") {
+    throw new Error(`Solana token missing symbol for mint: ${token.mint}`);
+  }
+  if (!token.name || typeof token.name !== "string") {
+    throw new Error(`Solana token missing name for mint: ${token.mint}`);
+  }
+
   return {
     id: `token-solana-${token.mint}`,
-    symbol: token.symbol || "SPL",
-    name: token.name || "SPL Token",
+    symbol: token.symbol,
+    name: token.name,
     contractAddress: token.mint,
     chain: "solana",
     decimals: token.decimals,
-    logoUrl: token.logoURI || "",
+    // logoUrl is optional - use empty string as default if not provided
+    logoUrl: token.logoURI ?? "",
     description: "",
     isActive: true,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     balance: token.amount.toString(),
-    balanceUsd: token.balanceUsd || 0,
-    priceUsd: token.priceUsd || 0,
+    balanceUsd: token.balanceUsd ?? 0, // balanceUsd can legitimately be 0
+    priceUsd: token.priceUsd ?? 0, // priceUsd can legitimately be 0
   };
 }
 
@@ -126,18 +139,25 @@ async function fetchEvmTokens(
   chain: Chain,
   forceRefresh: boolean,
 ): Promise<WalletToken[]> {
+  // Validate inputs
+  parseOrThrow(AddressSchema, address);
+  parseOrThrow(ChainSchema, chain);
+
   const url = `/api/evm-balances?address=${address}&chain=${chain}${forceRefresh ? "&refresh=true" : ""}`;
   const response = await fetch(url, {
     signal: AbortSignal.timeout(60000),
   });
-  const data: EvmBalancesResponse = await response.json();
+  const rawData = await response.json();
+
+  const data = parseOrThrow(EvmBalancesResponseSchema, rawData);
 
   if (data.error) {
-    console.warn("[useWalletTokens] EVM error:", data.error);
-    return [];
+    throw new Error(`EVM balance fetch failed: ${data.error}`);
   }
 
-  const tokens = (data.tokens || []).map((t) => transformEvmToken(t, chain));
+  const tokens = data.tokens.map((t) =>
+    transformEvmToken(t as EvmBalanceToken, chain),
+  );
   return processTokens(tokens);
 }
 
@@ -148,18 +168,25 @@ async function fetchSolanaTokens(
   address: string,
   forceRefresh: boolean,
 ): Promise<WalletToken[]> {
+  // Validate address
+  parseOrThrow(AddressSchema, address);
+
   const url = `/api/solana-balances?address=${address}${forceRefresh ? "&refresh=true" : ""}`;
   const response = await fetch(url, {
     signal: AbortSignal.timeout(30000),
   });
 
   if (!response.ok) {
-    console.warn("[useWalletTokens] Solana error:", response.status);
-    return [];
+    throw new Error(`Solana balance fetch failed: ${response.status}`);
   }
 
-  const data: SolanaBalancesResponse = await response.json();
-  const tokens = (data.tokens || []).map(transformSolanaToken);
+  const rawData = await response.json();
+
+  const data = parseOrThrow(SolanaBalancesResponseSchema, rawData);
+
+  const tokens = data.tokens.map((t) =>
+    transformSolanaToken(t as SolanaBalanceToken),
+  );
   return processTokens(tokens);
 }
 
@@ -255,6 +282,3 @@ export function useRefetchWalletTokens() {
     });
   };
 }
-
-
-

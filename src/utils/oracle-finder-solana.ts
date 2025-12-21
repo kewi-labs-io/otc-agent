@@ -92,17 +92,32 @@ async function findJupiterPool(
 
   const data = await response.json();
 
-  if (data && data.routePlan && data.routePlan.length > 0) {
-    // Extract pool address from route
-    const firstRoute = data.routePlan[0];
-
-    return {
-      type: "jupiter",
-      address: JUPITER_PROGRAM_ID,
-      poolAddress: firstRoute.swapInfo?.ammKey || "unknown",
-      valid: true,
-    };
+  if (!data) {
+    throw new Error("Jupiter API returned null or undefined response");
   }
+  if (
+    !data.routePlan ||
+    !Array.isArray(data.routePlan) ||
+    data.routePlan.length === 0
+  ) {
+    return null;
+  }
+
+  // Extract pool address from route
+  const firstRoute = data.routePlan[0];
+  if (!firstRoute || !firstRoute.swapInfo) {
+    throw new Error("Jupiter routePlan missing swapInfo");
+  }
+  if (!firstRoute.swapInfo.ammKey) {
+    throw new Error("Jupiter swapInfo missing ammKey");
+  }
+
+  return {
+    type: "jupiter",
+    address: JUPITER_PROGRAM_ID,
+    poolAddress: firstRoute.swapInfo.ammKey,
+    valid: true,
+  };
 
   return null;
 }
@@ -126,7 +141,12 @@ async function findRaydiumPool(
     ammId: string;
     liquidity?: string;
   }
-  const pools: RaydiumPool[] = await response.json();
+  const pools = (await response.json()) as RaydiumPool[];
+  if (!Array.isArray(pools)) {
+    throw new Error(
+      "Raydium API returned invalid response format (expected array)",
+    );
+  }
 
   // Find pool with this token
   const pool = pools.find(
@@ -135,7 +155,15 @@ async function findRaydiumPool(
 
   if (pool) {
     // Validate pool has liquidity
-    const liquidity = parseFloat(pool.liquidity || "0");
+    if (!pool.liquidity) {
+      throw new Error(`Raydium pool ${pool.ammId} missing liquidity field`);
+    }
+    const liquidity = parseFloat(pool.liquidity);
+    if (isNaN(liquidity)) {
+      throw new Error(
+        `Raydium pool ${pool.ammId} has invalid liquidity: ${pool.liquidity}`,
+      );
+    }
 
     if (liquidity < 50000) {
       return {
@@ -189,46 +217,52 @@ export function validateSolanaOracle(oracle: SolanaOracleInfo): {
   }
 
   if (oracle.type === "raydium") {
-    if (oracle.liquidity && oracle.liquidity >= 50000) {
+    if (oracle.liquidity === undefined) {
+      throw new Error("Raydium oracle missing liquidity field");
+    }
+    if (oracle.liquidity >= 50000) {
       return {
         valid: true,
         message: `Raydium pool available (TVL: $${oracle.liquidity.toLocaleString()})`,
       };
-    } else {
-      return {
-        valid: false,
-        message: "Raydium pool liquidity too low",
-      };
     }
+    return {
+      valid: false,
+      message: "Raydium pool liquidity too low",
+    };
   }
 
   if (oracle.type === "orca") {
-    if (oracle.liquidity && oracle.liquidity >= 50000) {
+    if (oracle.liquidity === undefined) {
+      throw new Error("Orca oracle missing liquidity field");
+    }
+    if (oracle.liquidity >= 50000) {
       return {
         valid: true,
         message: `Orca Whirlpool available (TVL: $${oracle.liquidity.toLocaleString()})`,
       };
-    } else {
-      return {
-        valid: false,
-        message: "Orca pool liquidity too low",
-      };
     }
+    return {
+      valid: false,
+      message: "Orca pool liquidity too low",
+    };
   }
 
   if (oracle.type === "pumpswap") {
     // PumpSwap/Pump.fun bonding curves typically have lower liquidity but are still valid
-    if (oracle.liquidity && oracle.liquidity >= 10000) {
+    if (oracle.liquidity === undefined) {
+      throw new Error("PumpSwap oracle missing liquidity field");
+    }
+    if (oracle.liquidity >= 10000) {
       return {
         valid: true,
         message: `PumpSwap bonding curve available (TVL: $${oracle.liquidity.toLocaleString()})`,
       };
-    } else {
-      return {
-        valid: false,
-        message: "PumpSwap bonding curve liquidity too low (min $10k required)",
-      };
     }
+    return {
+      valid: false,
+      message: "PumpSwap bonding curve liquidity too low (min $10k required)",
+    };
   }
 
   return {
@@ -241,9 +275,10 @@ export function validateSolanaOracle(oracle: SolanaOracleInfo): {
  * Format oracle info for display
  */
 export function formatOracleInfo(oracle: SolanaOracleInfo): string {
-  const tvl = oracle.liquidity
-    ? ` - TVL: $${oracle.liquidity.toLocaleString()}`
-    : "";
+  const tvl =
+    oracle.liquidity != null
+      ? ` - TVL: $${oracle.liquidity.toLocaleString()}`
+      : "";
 
   switch (oracle.type) {
     case "pyth":

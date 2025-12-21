@@ -10,7 +10,11 @@ export const tokenContextProvider: Provider = {
     runtime: IAgentRuntime,
     message: Memory,
   ): Promise<ProviderResult> => {
-    const messageText = message.content?.text || "";
+    // FAIL-FAST: message content is required
+    if (!message.content || typeof message.content.text !== "string") {
+      throw new Error("TOKEN_CONTEXT provider requires message.content.text");
+    }
+    const messageText = message.content.text;
 
     const tokenMatch = messageText.match(/\b([A-Z]{2,6})\b/);
     let tokenId: string | null = null;
