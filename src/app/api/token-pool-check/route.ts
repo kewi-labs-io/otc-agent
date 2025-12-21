@@ -8,24 +8,16 @@ import {
   keccak256,
 } from "viem";
 import { base, bsc, mainnet } from "viem/chains";
-import { z } from "zod";
 import { type Chain, SUPPORTED_CHAINS } from "@/config/chains";
 import { getCurrentNetwork } from "@/config/contracts";
-import {
-  validateQueryParams,
-  validationErrorResponse,
-} from "@/lib/validation/helpers";
-import { type ReadContractParams, safeReadContract } from "@/lib/viem-utils";
-import type { PoolCheckPool, PoolCheckResult } from "@/types";
+import { validationErrorResponse } from "@/lib/validation/helpers";
+import { safeReadContract } from "@/lib/viem-utils";
+import type { PoolCheckResult } from "@/types";
 import {
   TokenPoolCheckQuerySchema,
   TokenPoolCheckResponseSchema,
 } from "@/types/validation/api-schemas";
-import {
-  findAllPools,
-  findBestPool,
-  type PoolInfo,
-} from "@/utils/pool-finder-base";
+import { findAllPools, type PoolInfo } from "@/utils/pool-finder-base";
 
 // ABI for reading token registration status from OTC
 const tokensAbi = [

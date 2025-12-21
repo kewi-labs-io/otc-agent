@@ -63,7 +63,7 @@ async function fetchSolPriceUsd(): Promise<number> {
     // Update cache
     cachedSolPrice = { price: data.solana.usd, timestamp: Date.now() };
     return data.solana.usd;
-  } catch (error) {
+  } catch {
     // On any error, try to use cached price
     if (cachedSolPrice) {
       console.warn(
@@ -79,19 +79,6 @@ async function fetchSolPriceUsd(): Promise<number> {
 
 // Rate limiting: delay between sequential RPC calls (ms)
 const RPC_CALL_DELAY_MS = 500;
-
-// Helper to check if error is rate limit related
-function isRateLimitError(error: unknown): boolean {
-  if (error instanceof Error) {
-    const message = error.message.toLowerCase();
-    return (
-      message.includes("429") ||
-      message.includes("rate limit") ||
-      message.includes("too many requests")
-    );
-  }
-  return false;
-}
 
 // Helper to delay between RPC calls
 async function delay(ms: number): Promise<void> {
@@ -180,16 +167,11 @@ export async function findBestSolanaPool(
   // Public RPCs are very restrictive, so sequential is more reliable
 
   // Try pump.fun bonding curve FIRST (for unbonded tokens)
-  pumpFunCurves = await findPumpFunBondingCurve(
-    connection,
-    mint,
-    cluster,
-    false,
-  );
+  pumpFunCurves = await findPumpFunBondingCurve(connection, mint, cluster);
   await delay(RPC_CALL_DELAY_MS);
 
   // Then try PumpSwap AMM (for graduated tokens)
-  pumpSwapPools = await findPumpSwapPools(connection, mint, cluster, false);
+  pumpSwapPools = await findPumpSwapPools(connection, mint, cluster);
   await delay(RPC_CALL_DELAY_MS);
 
   // Then try Raydium
@@ -261,7 +243,6 @@ async function findPumpFunBondingCurve(
   connection: Connection,
   mint: PublicKey,
   cluster: "mainnet" | "devnet",
-  _strict: boolean = false,
 ): Promise<SolanaPoolInfo[]> {
   const pools: SolanaPoolInfo[] = [];
 
@@ -381,7 +362,6 @@ async function findPumpSwapPools(
   connection: Connection,
   mint: PublicKey,
   cluster: "mainnet" | "devnet",
-  _strict: boolean = false,
 ): Promise<SolanaPoolInfo[]> {
   const pools: SolanaPoolInfo[] = [];
   const USDC_MINT =
@@ -552,7 +532,6 @@ async function findRaydiumPools(
   connection: Connection,
   mint: PublicKey,
   cluster: "mainnet" | "devnet",
-  _strict: boolean = false,
 ): Promise<SolanaPoolInfo[]> {
   const pools: SolanaPoolInfo[] = [];
   const PROGRAM_ID =
@@ -702,7 +681,6 @@ async function findRaydiumCpmmPools(
   connection: Connection,
   mint: PublicKey,
   cluster: "mainnet" | "devnet",
-  _strict: boolean = false,
 ): Promise<SolanaPoolInfo[]> {
   const pools: SolanaPoolInfo[] = [];
 
@@ -789,7 +767,6 @@ async function findMeteoraPools(
   connection: Connection,
   mint: PublicKey,
   cluster: "mainnet" | "devnet",
-  _strict: boolean = false,
 ): Promise<SolanaPoolInfo[]> {
   const pools: SolanaPoolInfo[] = [];
 

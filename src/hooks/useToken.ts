@@ -243,10 +243,7 @@ export function useMarketData(tokenId: string | null) {
  *
  * @deprecated Use useMarketData for independent refresh, or useToken which includes marketData
  */
-export function useMarketDataRefresh(
-  tokenId: string | null,
-  _token: Token | null, // Kept for API compatibility, not used
-) {
+export function useMarketDataRefresh(tokenId: string | null) {
   const { marketData } = useMarketData(tokenId);
   return marketData;
 }

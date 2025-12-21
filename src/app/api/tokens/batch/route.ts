@@ -1,10 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { getCachedTokenBatch } from "@/lib/cache";
-import {
-  validateQueryParams,
-  validationErrorResponse,
-} from "@/lib/validation/helpers";
+import { validationErrorResponse } from "@/lib/validation/helpers";
 import {
   GetTokenBatchQuerySchema,
   TokenBatchResponseSchema,

@@ -1,14 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import {
-  validateRouteParams,
-  validationErrorResponse,
-} from "@/lib/validation/helpers";
 import { ConsignmentDB, MarketDataDB, TokenDB } from "@/services/database";
-import {
-  GetTokenByIdParamsSchema,
-  TokenByIdResponseSchema,
-} from "@/types/validation/api-schemas";
+import { TokenByIdResponseSchema } from "@/types/validation/api-schemas";
 import { sanitizeConsignmentForBuyer } from "@/utils/consignment-sanitizer";
 
 export async function GET(

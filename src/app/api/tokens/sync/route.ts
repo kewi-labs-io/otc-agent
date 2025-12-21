@@ -18,11 +18,7 @@ interface SolanaParsedRegistration {
   poolAddress: string;
 }
 
-import { z } from "zod";
-import {
-  parseOrThrow,
-  validationErrorResponse,
-} from "@/lib/validation/helpers";
+import { parseOrThrow } from "@/lib/validation/helpers";
 import {
   TokenSyncRequestSchema,
   TokenSyncResponseSchema,

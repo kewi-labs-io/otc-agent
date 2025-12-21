@@ -124,14 +124,12 @@ function SingleSlider({
   value,
   step = 1,
   onChange,
-  formatValue,
 }: {
   min: number;
   max: number;
   value: number;
   step?: number;
   onChange: (val: number) => void;
-  formatValue?: (val: number) => string;
 }) {
   const percent = ((value - min) / (max - min)) * 100;
 

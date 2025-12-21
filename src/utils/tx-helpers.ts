@@ -27,7 +27,7 @@ export async function waitForEvmTx(
         return receipt.status;
       }
       // Receipt not found yet - this is expected during polling, continue
-    } catch (_err) {
+    } catch {
       // During polling, "receipt not found" is expected and we should continue
       // However, if it's a different error (network, RPC error), we should check
       // Most RPC clients throw specific errors for "not found" vs other errors

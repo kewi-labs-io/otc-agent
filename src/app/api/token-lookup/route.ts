@@ -1,9 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import {
-  validateQueryParams,
-  validationErrorResponse,
-} from "@/lib/validation/helpers";
+import { validationErrorResponse } from "@/lib/validation/helpers";
 import type { TokenInfo } from "@/types/api";
 import {
   TokenLookupQuerySchema,

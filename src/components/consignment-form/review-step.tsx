@@ -4,7 +4,8 @@ import { AlertCircle, ArrowLeft, Check, Copy } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
 import { usePoolCheck } from "@/hooks/usePoolCheck";
-import type { Chain, PoolCheckResult } from "@/types";
+import type { Chain } from "@/types";
+import { formatAddress } from "@/utils/format";
 import { Button } from "../button";
 import { useMultiWallet } from "../multiwallet";
 
@@ -86,10 +87,8 @@ export function ReviewStep({
     tokenChain,
   );
 
-  const getDisplayAddress = (addr: string) => {
-    if (!addr || addr.length <= 12) return addr;
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  };
+  // getDisplayAddress uses centralized formatAddress from @/utils/format
+  const getDisplayAddress = (addr: string) => (addr ? formatAddress(addr) : "");
 
   const handleCopyToken = async () => {
     await navigator.clipboard.writeText(rawTokenAddress);

@@ -615,6 +615,7 @@ export default function FlowTestClient() {
     evmAddress,
     solanaPublicKey,
     solanaCanSign,
+    solanaWallet,
     getActiveSolanaContext,
     privyAuthenticated,
     login,
@@ -1104,9 +1105,7 @@ export default function FlowTestClient() {
     }
   }, [
     testState.chain,
-    evmAddress,
     solanaPublicKey,
-    solanaWallet,
     solanaCanSign,
     phantomPublicKey,
     phantomCanSign,

@@ -1,10 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { agentRuntime } from "@/lib/agent-runtime";
-import {
-  validateQueryParams,
-  validationErrorResponse,
-} from "@/lib/validation/helpers";
+import { validationErrorResponse } from "@/lib/validation/helpers";
 import type { CachedPrice } from "@/types/api";
 import {
   GetTokenPricesQuerySchema,

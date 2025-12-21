@@ -1,11 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { getCachedTokenAddresses } from "@/lib/cache";
-import {
-  validateQueryParams,
-  validationErrorResponse,
-} from "@/lib/validation/helpers";
-import type { Chain } from "@/types";
+import { validationErrorResponse } from "@/lib/validation/helpers";
 import {
   GetTokenAddressesQuerySchema,
   TokenAddressesResponseSchema,

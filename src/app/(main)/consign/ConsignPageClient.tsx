@@ -677,8 +677,6 @@ export default function ConsignPageClient() {
       activeFamily,
       solanaWallet,
       solanaPublicKey,
-      wallets,
-      connectWallet,
       rawTokenAddress,
       selectedToken,
       formData,
