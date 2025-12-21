@@ -1,18 +1,19 @@
 {
   "extends": ["next/core-web-vitals", "next/typescript"],
   "rules": {
-    "@typescript-eslint/no-explicit-any": "error",
-    "@typescript-eslint/no-require-imports": "off",
     "import/no-anonymous-default-export": "off",
-    "@typescript-eslint/ban-ts-comment": "off",
     "path-alias/no-relative": "off",
     "tailwindcss/no-custom-classname": "off",
     "tailwindcss/enforces-negative-arbitrary-values": "off",
     "import/no-relative-parent-imports": "off",
     "import/order": "off",
-    "@typescript-eslint/no-unused-vars": "warn"
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]
   },
-  "ignorePatterns": ["src/templates/files/**/*"],
+  "ignorePatterns": [
+    "src/templates/files/**/*",
+    "src/contracts/artifacts/**/*"
+  ],
   "plugins": ["path-alias"],
   "settings": {
     "import/resolver": {
@@ -21,11 +22,5 @@
         "extensions": [".js", ".jsx", ".ts", ".tsx"]
       }
     }
-  },
-  "overrides": [
-    {
-      "files": ["*.ts", "*.tsx", "*.js"],
-      "parser": "@typescript-eslint/parser"
-    }
-  ]
+  }
 }

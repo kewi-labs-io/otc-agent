@@ -9,6 +9,7 @@ import {
   PublicKey as SolPubkey,
   SystemProgram as SolSystemProgram,
 } from "@solana/web3.js";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import type { Abi, Address } from "viem";
@@ -1070,9 +1071,16 @@ export function AcceptQuoteModal({
       });
       dispatch({ type: "SET_REQUIRE_APPROVER", payload: flag });
     })();
-    // Note: readContract and SOLANA_DESK are stable refs that don't change
+    // readContract and SOLANA_DESK are stable refs - excluding from deps to prevent unnecessary re-runs
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, effectiveOtcAddress, publicClient, abi, isSolanaToken, readChain]);
+  }, [
+    isOpen,
+    effectiveOtcAddress,
+    publicClient,
+    abi,
+    isSolanaToken,
+    readChain,
+  ]);
 
   const discountBps = useMemo(() => {
     const bps = initialQuote.discountBps;
@@ -2522,32 +2530,27 @@ export function AcceptQuoteModal({
                 )}
                 <div className="flex items-center gap-3 text-right flex-shrink-0">
                   {/* Token Logo */}
-                  <div className="h-10 w-10 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden ring-1 ring-white/10">
+                  <div className="h-10 w-10 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden ring-1 ring-white/10 relative">
                     {/* Use tokenMetadata if loaded, otherwise fallback to quote data (always available) */}
                     {tokenMetadata && tokenMetadata.logoUrl ? (
-                      <img
+                      <Image
                         src={tokenMetadata.logoUrl}
                         alt={tokenMetadata.symbol}
-                        className="h-full w-full object-cover"
+                        fill
+                        className="object-cover"
+                        unoptimized
                         onError={(e) => {
-                          // Fallback to symbol if image fails
+                          // Fallback to symbol if image fails - hide the image
                           e.currentTarget.style.display = "none";
-                          // FAIL-FAST: Symbol must exist for display
-                          // Use tokenMetadata symbol if available, otherwise fall back to quote symbol
-                          const symbol =
-                            tokenMetadata?.symbol?.trim() ||
-                            initialQuote.tokenSymbol?.trim();
-                          if (!symbol || typeof symbol !== "string") {
-                            throw new Error(
-                              "Token symbol missing - cannot display token",
-                            );
-                          }
-                          e.currentTarget.parentElement!.innerHTML = `<span class="text-brand-400 text-sm font-bold">${symbol.slice(0, 2)}</span>`;
                         }}
                       />
-                    ) : (
+                    ) : null}
+                    {/* Fallback symbol - shown when no logo or logo fails to load */}
+                    {(!tokenMetadata || !tokenMetadata.logoUrl) && (
                       <span className="text-brand-400 text-sm font-bold">
-                        {initialQuote.tokenSymbol.slice(0, 2)}
+                        {(
+                          tokenMetadata?.symbol || initialQuote.tokenSymbol
+                        ).slice(0, 2)}
                       </span>
                     )}
                   </div>

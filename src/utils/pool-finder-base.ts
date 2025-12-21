@@ -1351,7 +1351,6 @@ async function findCoinGeckoPrice(
  * Find Aerodrome pools (Stable + Volatile)
  * @internal Currently disabled pending token-agnostic deployment
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function _findAerodromePools(
   client: PublicClient,
   tokenAddress: string,

@@ -158,8 +158,9 @@ async function readContractFromClient<T>(
 ): Promise<T> {
   // Type assertion needed: ReadContractConfig uses flexible typing for dynamic ABIs,
   // but viem expects strict types. Safe because we control all call sites.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = await (client as any).readContract(params);
+  const result = await (
+    client as { readContract: (params: ReadContractConfig) => Promise<T> }
+  ).readContract(params);
   return result as T;
 }
 
@@ -308,17 +309,21 @@ export function useOTC(): {
   const otcAddress = getOtcAddress();
   const abi = otcArtifact.abi as Abi;
 
-  // Typed event definition for ConsignmentCreated
-  const ConsignmentCreatedEvent = {
-    type: "event" as const,
-    name: "ConsignmentCreated" as const,
-    inputs: [
-      { name: "consignmentId", type: "uint256", indexed: true },
-      { name: "tokenId", type: "bytes32", indexed: true },
-      { name: "consigner", type: "address", indexed: true },
-      { name: "amount", type: "uint256", indexed: false },
-    ],
-  } as const;
+  // Typed event definition for ConsignmentCreated - memoized to prevent unnecessary re-renders
+  const ConsignmentCreatedEvent = useMemo(
+    () =>
+      ({
+        type: "event" as const,
+        name: "ConsignmentCreated" as const,
+        inputs: [
+          { name: "consignmentId", type: "uint256", indexed: true },
+          { name: "tokenId", type: "bytes32", indexed: true },
+          { name: "consigner", type: "address", indexed: true },
+          { name: "amount", type: "uint256", indexed: false },
+        ],
+      }) as const,
+    [],
+  );
 
   // Use wagmi's public client which automatically handles all configured chains
   const publicClient = usePublicClient();
@@ -530,13 +535,15 @@ export function useOTC(): {
   // Wrapper to handle writeContractAsync with dynamic ABIs
   // wagmi's types require chain/account which are inferred from context
   // Type assertion needed: writeContractAsyncBase has strict generics that don't work with dynamic ABIs
-  function writeContractAsync(
-    config: WriteContractConfig,
-  ): Promise<`0x${string}`> {
-    return writeContractAsyncBase(
-      config as Parameters<typeof writeContractAsyncBase>[0],
-    );
-  }
+  // Wrapped in useCallback to prevent unnecessary re-renders
+  const writeContractAsync = useCallback(
+    (config: WriteContractConfig): Promise<`0x${string}`> => {
+      return writeContractAsyncBase(
+        config as Parameters<typeof writeContractAsyncBase>[0],
+      );
+    },
+    [writeContractAsyncBase],
+  );
 
   const claim = useCallback(
     async (offerId: bigint) => {
@@ -549,7 +556,7 @@ export function useOTC(): {
         args: [offerId],
       });
     },
-    [otcAddress, account, abi, chainId, switchToChain, getOtcAddressForChain, writeContractAsync],
+    [otcAddress, account, abi, writeContractAsync],
   );
 
   const createOfferFromConsignment = useCallback(
@@ -739,7 +746,6 @@ export function useOTC(): {
         transport: http(chainRpcUrl),
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await (
         targetPublicClient.readContract as (params: {
           address: Address;
@@ -1123,7 +1129,16 @@ export function useOTC(): {
 
       return { txHash: txHash as `0x${string}`, consignmentId };
     },
-    [account, abi, chainId, switchToChain, ConsignmentCreatedEvent, getRegistrationFee, isTokenRegistered, writeContractAsync],
+    [
+      account,
+      abi,
+      chainId,
+      switchToChain,
+      ConsignmentCreatedEvent,
+      getRegistrationFee,
+      isTokenRegistered,
+      writeContractAsync,
+    ],
   );
 
   const approveToken = useCallback(
@@ -1306,112 +1321,6 @@ export function useOTC(): {
       });
     },
     [otcAddress, publicClient, abi],
-  );
-
-  // Check if a token is registered on the OTC contract
-  const isTokenRegistered = useCallback(
-    async (tokenAddress: Address, chain?: Chain): Promise<boolean> => {
-      // chain is optional - default to "base" if not provided
-      const targetChain =
-        chain !== undefined && chain !== null ? chain : "base";
-      const targetOtcAddress = getOtcAddressForChain(targetChain);
-
-      if (!targetOtcAddress) {
-        throw new Error(
-          `OTC contract address not configured for chain: ${targetChain}`,
-        );
-      }
-
-      // Compute tokenId the same way as RegistrationHelper
-      const tokenIdBytes32 = keccak256(
-        encodePacked(["address"], [tokenAddress]),
-      );
-
-      const viemChain = getViemChain(targetChain);
-      const chainConfig = SUPPORTED_CHAINS[targetChain];
-      if (!chainConfig) {
-        throw new Error(`Unsupported chain: ${targetChain}`);
-      }
-      const chainRpcUrl = chainConfig.rpcUrl;
-      if (!chainRpcUrl) {
-        throw new Error(`RPC URL not configured for chain: ${targetChain}`);
-      }
-      if (!viemChain) {
-        throw new Error(`Could not get viem chain config for: ${targetChain}`);
-      }
-
-      const targetPublicClient = createPublicClient({
-        chain: viemChain,
-        transport: http(chainRpcUrl),
-      });
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await (
-        targetPublicClient.readContract as (params: {
-          address: Address;
-          abi: typeof tokensAbi;
-          functionName: string;
-          args: readonly [`0x${string}`];
-        }) => Promise<[Address, number, boolean, Address]>
-      )({
-        address: targetOtcAddress,
-        abi: tokensAbi,
-        functionName: "tokens",
-        args: [tokenIdBytes32],
-      });
-
-      const [registeredAddress, , isActive] = result;
-      console.log(
-        `[useOTC] Token registration check: ${tokenAddress} -> isActive=${isActive}, registeredAddress=${registeredAddress}`,
-      );
-      return (
-        isActive &&
-        registeredAddress !== "0x0000000000000000000000000000000000000000"
-      );
-    },
-    [],
-  );
-
-  // Get registration fee from RegistrationHelper
-  const getRegistrationFee = useCallback(
-    async (chain?: Chain): Promise<bigint> => {
-      // chain is optional - default to "base" if not provided
-      const targetChain =
-        chain !== undefined && chain !== null ? chain : "base";
-      const chainConfig = getChainConfig(targetChain);
-      const registrationHelperAddress =
-        chainConfig.contracts.registrationHelper;
-
-      if (!registrationHelperAddress) {
-        throw new Error(
-          `RegistrationHelper not configured for chain: ${targetChain}`,
-        );
-      }
-
-      const viemChain = getViemChain(targetChain);
-      if (!chainConfig) {
-        throw new Error(`Unsupported chain: ${targetChain}`);
-      }
-      const chainRpcUrl = chainConfig.rpcUrl;
-      if (!chainRpcUrl) {
-        throw new Error(`RPC URL not configured for chain: ${targetChain}`);
-      }
-      if (!viemChain) {
-        throw new Error(`Could not get viem chain config for: ${targetChain}`);
-      }
-
-      const targetPublicClient = createPublicClient({
-        chain: viemChain,
-        transport: http(chainRpcUrl),
-      });
-
-      return readContractFromClient<bigint>(targetPublicClient, {
-        address: registrationHelperAddress as Address,
-        abi: registrationHelperAbi,
-        functionName: "registrationFee",
-      });
-    },
-    [],
   );
 
   // Register a token on the OTC contract via RegistrationHelper

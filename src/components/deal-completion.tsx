@@ -227,7 +227,6 @@ export function DealCompletion({ quote }: DealCompletionProps) {
         {shareImageUrl && (
           <div className="p-3 sm:p-6 mb-4 sm:mb-6">
             <div className="mb-3 sm:mb-4 rounded-lg overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={shareImageUrl}
                 alt="Share card preview"

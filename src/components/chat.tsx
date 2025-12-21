@@ -849,6 +849,9 @@ export const Chat = ({
     }
   }, [messages]);
 
+  // Extract marketData.priceUsd to a variable for static dependency checking
+  const priceUsd = marketData?.priceUsd;
+
   // Set default quote when token is provided but no quote exists yet
   // This shows the minimum offer (worst terms) that user can accept or negotiate better
   useEffect(() => {
@@ -906,15 +909,12 @@ export const Chat = ({
       discountBps: consignmentData.startingDiscountBps,
       discountPercent: consignmentData.startingDiscountBps / 100,
       paymentCurrency: "USDC",
-      // marketData.priceUsd is optional - use typeof check
-      pricePerToken:
-        typeof marketData?.priceUsd === "number"
-          ? marketData.priceUsd
-          : undefined,
+      // priceUsd is optional - use typeof check
+      pricePerToken: typeof priceUsd === "number" ? priceUsd : undefined,
       totalValueUsd:
-        typeof marketData?.priceUsd === "number"
+        typeof priceUsd === "number"
           ? (Number(consignmentData.totalAvailable) / 10 ** token.decimals) *
-            marketData.priceUsd
+            priceUsd
           : undefined,
       status: "default",
       // Pass consignment properties for UI
@@ -929,9 +929,7 @@ export const Chat = ({
       type: "SET_CURRENT_QUOTE",
       payload: defaultQuote,
     });
-    // Extract marketData.priceUsd to a variable for static checking
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, currentQuote, isLoadingHistory, marketData?.priceUsd, consignmentData]);
+  }, [token, currentQuote, isLoadingHistory, priceUsd, consignmentData]);
 
   const handleAcceptOffer = useCallback(() => {
     if (!currentQuote) {

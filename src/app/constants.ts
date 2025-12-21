@@ -1,9 +1,6 @@
 export const siteConfig = {
   name: "AI Trading Desk",
-  url:
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "https://tradingdesk.ai/" ||
-    "http://localhost:4444",
+  url: process.env.NEXT_PUBLIC_APP_URL ?? "https://tradingdesk.ai/",
   description:
     "AI Trading Desk is an autonomous OTC trading platform powered by AI agents for seamless token deals.",
   ogImage: "/og.png",
