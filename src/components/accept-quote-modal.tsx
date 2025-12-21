@@ -5,7 +5,6 @@ import * as anchor from "@coral-xyz/anchor";
 import { usePrivy } from "@privy-io/react-auth";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
 import {
-  Connection,
   Keypair,
   PublicKey as SolPubkey,
   SystemProgram as SolSystemProgram,
@@ -44,7 +43,6 @@ import type {
   ModalAction,
   ModalState,
   QuoteChain,
-  StepState,
   TokenMetadata,
   TransactionError,
 } from "@/types";
@@ -597,7 +595,6 @@ export function AcceptQuoteModal({
   // Keep isSolanaActive for execution logic only (user's actual connected wallet)
   const isSolanaActive = activeFamily === "solana";
   // Use centralized Solana config (from JSON deployment files)
-  const SOLANA_RPC = SUPPORTED_CHAINS.solana.rpcUrl;
   const SOLANA_DESK = getSolanaDesk();
   const SOLANA_USDC_MINT = getSolanaConfig().usdcMint;
 

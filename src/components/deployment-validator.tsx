@@ -3,6 +3,6 @@
 import { useDeploymentValidation } from "@/hooks/useDeploymentValidation";
 
 export function DeploymentValidator() {
-	useDeploymentValidation();
-	return null;
+  useDeploymentValidation();
+  return null;
 }

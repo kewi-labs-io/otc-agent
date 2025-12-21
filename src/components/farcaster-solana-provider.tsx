@@ -9,18 +9,18 @@ import { SUPPORTED_CHAINS } from "@/config/chains";
  * Similar pattern to SolanaWalletProvider
  */
 function getSolanaEndpoint(): string {
-	const configUrl = SUPPORTED_CHAINS.solana.rpcUrl;
+  const configUrl = SUPPORTED_CHAINS.solana.rpcUrl;
 
-	// If it's a relative path (proxy), construct full URL
-	if (configUrl.startsWith("/")) {
-		if (typeof window !== "undefined") {
-			return `${window.location.origin}${configUrl}`;
-		}
-		// SSR fallback - will be replaced on client
-		return "https://api.mainnet-beta.solana.com";
-	}
+  // If it's a relative path (proxy), construct full URL
+  if (configUrl.startsWith("/")) {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}${configUrl}`;
+    }
+    // SSR fallback - will be replaced on client
+    return "https://api.mainnet-beta.solana.com";
+  }
 
-	return configUrl;
+  return configUrl;
 }
 
 /**
@@ -34,29 +34,29 @@ function getSolanaEndpoint(): string {
  * This is the Solana equivalent of @farcaster/miniapp-wagmi-connector for EVM.
  */
 export function FarcasterSolanaWrapper({
-	children,
+  children,
 }: {
-	children: React.ReactNode;
+  children: React.ReactNode;
 }) {
-	const endpoint = useMemo(() => getSolanaEndpoint(), []);
-	const hasLoggedInit = useRef(false);
+  const endpoint = useMemo(() => getSolanaEndpoint(), []);
+  const hasLoggedInit = useRef(false);
 
-	// Log only once on mount
-	useEffect(() => {
-		if (hasLoggedInit.current) return;
-		hasLoggedInit.current = true;
+  // Log only once on mount
+  useEffect(() => {
+    if (hasLoggedInit.current) return;
+    hasLoggedInit.current = true;
 
-		if (process.env.NODE_ENV === "development") {
-			console.log(
-				"[FarcasterSolanaWrapper] Initialized with endpoint:",
-				endpoint,
-			);
-		}
-	}, [endpoint]);
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        "[FarcasterSolanaWrapper] Initialized with endpoint:",
+        endpoint,
+      );
+    }
+  }, [endpoint]);
 
-	return (
-		<FarcasterSolanaProvider endpoint={endpoint}>
-			{children}
-		</FarcasterSolanaProvider>
-	);
+  return (
+    <FarcasterSolanaProvider endpoint={endpoint}>
+      {children}
+    </FarcasterSolanaProvider>
+  );
 }
