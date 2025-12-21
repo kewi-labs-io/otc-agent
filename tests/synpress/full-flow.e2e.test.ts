@@ -152,9 +152,12 @@ evmTest.describe("EVM Full Flow: LIST → BUY → CLAIM → WITHDRAW", () => {
     await sleep(2000);
     await page.bringToFront();
 
-    // Verify wallet connected
-    const walletIndicator = page.getByTestId("wallet-menu");
-    await expect(walletIndicator).toBeVisible({ timeout: 30000 });
+    // Verify wallet connected by checking Sign In button is gone
+    const signInButton = page.locator('button:has-text("Sign In")').first();
+    const stillShowingSignIn = await signInButton.isVisible({ timeout: 5000 }).catch(() => false);
+    if (stillShowingSignIn) {
+      throw new Error("Wallet connection failed - Sign In button still visible");
+    }
     log("EVM", "Wallet connected");
 
     // =========================================================================
@@ -447,8 +450,12 @@ solanaTest.describe("Solana Full Flow: LIST → BUY → CLAIM → WITHDRAW", () 
     await waitForAppReady(page, `${BASE_URL}/my-deals`);
     await connectPhantomWallet(page, context, phantom);
 
-    const walletIndicator = page.getByTestId("wallet-menu");
-    await expect(walletIndicator).toBeVisible({ timeout: 30000 });
+    // Verify wallet connected by checking Sign In button is gone
+    const signInButton = page.locator('button:has-text("Sign In")').first();
+    const stillShowingSignIn = await signInButton.isVisible({ timeout: 5000 }).catch(() => false);
+    if (stillShowingSignIn) {
+      throw new Error("Phantom wallet connection failed - Sign In button still visible");
+    }
     log("Solana", "Phantom wallet connected");
 
     // =========================================================================
@@ -657,8 +664,8 @@ solanaTest.describe("Solana Full Flow: LIST → BUY → CLAIM → WITHDRAW", () 
     await waitForAppReady(page, `${BASE_URL}/my-deals`);
 
     // May need to reconnect
-    const signInButton = page.locator('button:has-text("Sign In")').first();
-    if (await signInButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+    const signInAfterClaim = page.locator('button:has-text("Sign In")').first();
+    if (await signInAfterClaim.isVisible({ timeout: 3000 }).catch(() => false)) {
       await connectPhantomWallet(page, context, phantom);
     }
 

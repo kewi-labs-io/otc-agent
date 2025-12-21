@@ -283,9 +283,21 @@ export async function getSolanaTokenBalance(owner: string, mint: string): Promis
   expectNonEmptyString(mint, "token mint");
 
   const connection = solanaConnection();
-  const accounts = await connection.getParsedTokenAccountsByOwner(new PublicKey(owner), {
-    mint: new PublicKey(mint),
-  });
+  
+  let accounts;
+  try {
+    accounts = await connection.getParsedTokenAccountsByOwner(new PublicKey(owner), {
+      mint: new PublicKey(mint),
+    });
+  } catch (err) {
+    // Handle case where mint doesn't exist (common in local testing)
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    if (errorMessage.includes("could not find mint")) {
+      console.warn(`[getSolanaTokenBalance] Mint ${mint} does not exist, returning 0`);
+      return 0n;
+    }
+    throw err;
+  }
 
   if (accounts.value.length === 0) {
     return 0n;

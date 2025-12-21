@@ -1,33 +1,36 @@
 import { defineWalletSetup } from '@synthetixio/synpress';
 import { MetaMask } from '@synthetixio/synpress/playwright';
-import { evmBuyer } from '../synpress/utils/wallets';
 
 /**
  * Buyer wallet setup for two-party OTC testing
- * Uses a different seed phrase than the seller to simulate real trading
+ * This wallet will purchase from consignments
  */
 
-// Buyer uses Anvil account #1 (different from seller which uses #0)
-export default defineWalletSetup(evmBuyer.password, async (context, walletPage) => {
+// Use the default Anvil seed phrase and password
+const defaultSeed = 'test test test test test test test test test test test junk';
+const defaultPassword = 'Tester@1234';
+
+const BUYER_SEED = process.env.BUYER_SEED_PHRASE || defaultSeed;
+const PASSWORD = process.env.WALLET_PASSWORD || defaultPassword;
+const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'http://127.0.0.1:8545';
+const CHAIN_ID = parseInt(process.env.CHAIN_ID || '31337');
+
+export default defineWalletSetup(PASSWORD, async (context, walletPage) => {
   // Wait for page to be fully loaded in CI
   await walletPage.waitForLoadState('domcontentloaded');
   
-  const metamask = new MetaMask(context, walletPage, evmBuyer.password);
-  await metamask.importWallet(evmBuyer.seedPhrase);
-
-  const chainId = evmBuyer.chainId;
-  const rpcUrl = evmBuyer.rpcUrl;
+  const metamask = new MetaMask(context, walletPage, PASSWORD);
+  await metamask.importWallet(BUYER_SEED);
 
   await metamask.addNetwork({
     name: 'Anvil Localnet',
-    rpcUrl: rpcUrl,
-    chainId: chainId,
+    rpcUrl: RPC_URL,
+    chainId: CHAIN_ID,
     symbol: 'ETH',
   });
 });
 
 export const buyerSetup = {
-  walletPassword: evmBuyer.password,
-  seedPhrase: evmBuyer.seedPhrase,
+  walletPassword: PASSWORD,
+  seedPhrase: BUYER_SEED,
 };
-
