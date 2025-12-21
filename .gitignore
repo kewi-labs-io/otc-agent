@@ -72,3 +72,5 @@ contracts/mythril-out/solana/otc-program/desk-mainnet-keypair.json
 # Build/tool output
 forge-output.txt
 contracts/slither-results.json
+contracts/echidna-corpus/
+contracts/crytic-export/

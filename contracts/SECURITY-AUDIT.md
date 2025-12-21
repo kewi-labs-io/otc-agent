@@ -15,9 +15,10 @@ All contracts have been analyzed using multiple security tools. The contracts ar
 |------|---------|--------|
 | Slither | 0.10.x | 0 high, 0 medium |
 | Mythril | 0.24.8 | No issues (UniswapV3TWAPOracle) |
+| Echidna | 2.3.0 | All 4 properties pass (100,240 calls) |
 | Forge Tests | Latest | 85/85 passing |
-| Fuzz Testing | 256 runs | All pass |
-| Invariant Testing | 12,800 calls | All invariants hold |
+| Forge Fuzz | 256 runs | All pass |
+| Forge Invariant | 12,800 calls | All invariants hold |
 
 ## Findings Summary
 
@@ -89,12 +90,18 @@ All contracts have been analyzed using multiple security tools. The contracts ar
 | Fee-on-Transfer | 2 | ✅ Pass |
 | **Total** | **85** | ✅ Pass |
 
-### Invariants Tested
+### Forge Invariants Tested
 1. Token balance solvency (deposited >= reserved)
 2. No offer double-claiming
 3. Consignment integrity
 4. Gas deposit accounting
 5. State consistency across operations
+
+### Echidna Properties Tested (100,240 calls)
+1. `echidna_token_balance_invariant` - Deposited tokens >= reserved tokens
+2. `echidna_contract_balance_matches` - Contract balance <= tracked deposits
+3. `echidna_no_reentrancy` - ReentrancyGuard prevents reentrancy
+4. `echidna_valid_owner` - Owner is never zero address
 
 ## Gas Optimization
 

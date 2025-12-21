@@ -1,0 +1,13 @@
+# Echidna configuration for OTC contracts
+testMode: property
+testLimit: 100000
+shrinkLimit: 5000
+seqLen: 100
+deployer: "0x10000"
+sender: ["0x10000", "0x20000", "0x30000"]
+contractAddr: "0x00a329c0648769A73afAc7F9381E08FB43dBEA72"
+cryticArgs: ["--foundry-out-directory", "out"]
+filterBlacklist: true
+filterFunctions: ["constructor"]
+coverage: true
+corpusDir: "echidna-corpus"
