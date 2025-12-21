@@ -122,7 +122,7 @@ export default function ConsignPageClient() {
     isFarcasterContext,
   } = useMultiWallet();
   const { login, ready: privyReady } = usePrivy();
-  const { wallets } = useWallets();
+  useWallets(); // Keeping hook for wallet state sync
   const { createConsignmentOnChain, approveToken, getRequiredGasDeposit } =
     useOTC();
 

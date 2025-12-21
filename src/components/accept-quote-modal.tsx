@@ -1070,14 +1070,9 @@ export function AcceptQuoteModal({
       });
       dispatch({ type: "SET_REQUIRE_APPROVER", payload: flag });
     })();
-  }, [
-    isOpen,
-    effectiveOtcAddress,
-    publicClient,
-    abi,
-    isSolanaToken,
-    readChain,
-  ]);
+    // Note: readContract and SOLANA_DESK are stable refs that don't change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, effectiveOtcAddress, publicClient, abi, isSolanaToken, readChain]);
 
   const discountBps = useMemo(() => {
     const bps = initialQuote.discountBps;
@@ -2288,6 +2283,7 @@ export function AcceptQuoteModal({
     effectiveMaxTokens,
     estPerTokenUsd,
     currency,
+    nativeUsdPrice,
     usdcBalance.data?.formatted,
     ethBalance.data?.formatted,
     initialQuote.ethPrice, // Optional field, but initialQuote itself is required
