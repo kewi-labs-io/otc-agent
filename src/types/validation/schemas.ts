@@ -24,13 +24,13 @@ export type EVMChain = z.infer<typeof EVMChainSchema>;
 
 // EVM addresses: 0x followed by 40 hex characters (case-insensitive)
 export const EvmAddressSchema = z
-	.string()
-	.regex(/^0x[a-fA-F0-9]{40}$/, "Invalid EVM address format");
+  .string()
+  .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid EVM address format");
 
 // Solana addresses: Base58 encoded, 32-44 characters (case-sensitive)
 export const SolanaAddressSchema = z
-	.string()
-	.regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/, "Invalid Solana address format");
+  .string()
+  .regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/, "Invalid Solana address format");
 
 // Union schema that accepts either EVM or Solana addresses
 export const AddressSchema = z.union([EvmAddressSchema, SolanaAddressSchema]);
@@ -42,8 +42,8 @@ export const AddressSchema = z.union([EvmAddressSchema, SolanaAddressSchema]);
 // BigInt string validation (for token amounts stored as strings)
 // Must be a non-negative integer string
 export const BigIntStringSchema = z
-	.string()
-	.regex(/^\d+$/, "Must be a non-negative integer string");
+  .string()
+  .regex(/^\d+$/, "Must be a non-negative integer string");
 
 // Basis points: 0-10000 (0% to 100%)
 export const BpsSchema = z.number().int().min(0).max(10000);
@@ -69,11 +69,11 @@ export type PaymentCurrency = z.infer<typeof PaymentCurrencySchema>;
 //==============================================================================
 
 export const QuoteStatusSchema = z.enum([
-	"active",
-	"expired",
-	"executed",
-	"rejected",
-	"approved",
+  "active",
+  "expired",
+  "executed",
+  "rejected",
+  "approved",
 ]);
 export type QuoteStatus = z.infer<typeof QuoteStatusSchema>;
 
@@ -82,10 +82,10 @@ export type QuoteStatus = z.infer<typeof QuoteStatusSchema>;
 //==============================================================================
 
 export const ConsignmentStatusSchema = z.enum([
-	"active",
-	"paused",
-	"depleted",
-	"withdrawn",
+  "active",
+  "paused",
+  "depleted",
+  "withdrawn",
 ]);
 export type ConsignmentStatus = z.infer<typeof ConsignmentStatusSchema>;
 
@@ -105,9 +105,9 @@ export type DealStatus = z.infer<typeof DealStatusSchema>;
 // - Relative paths starting with / (e.g., /tokens/eliza.svg)
 // - Empty string (no URL)
 export const UrlSchema = z.union([
-	z.string().url(),
-	z.string().startsWith("/"),
-	z.literal(""),
+  z.string().url(),
+  z.string().startsWith("/"),
+  z.literal(""),
 ]);
 
 //==============================================================================
@@ -122,13 +122,13 @@ export const OptionalNonEmptyStringSchema = z.string().min(1).optional();
 
 // Hex string (for bytes32, transaction hashes, etc.)
 export const HexStringSchema = z
-	.string()
-	.regex(/^0x[a-fA-F0-9]+$/, "Must be a valid hex string");
+  .string()
+  .regex(/^0x[a-fA-F0-9]+$/, "Must be a valid hex string");
 
 // Bytes32 hex string (64 hex characters after 0x)
 export const Bytes32Schema = z
-	.string()
-	.regex(/^0x[a-fA-F0-9]{64}$/, "Must be a valid bytes32 hex string");
+  .string()
+  .regex(/^0x[a-fA-F0-9]{64}$/, "Must be a valid bytes32 hex string");
 
 //==============================================================================
 // ARRAY VALIDATIONS
@@ -148,16 +148,16 @@ export const OptionalAddressArraySchema = z.array(AddressSchema).optional();
  * Create a schema that validates an address based on chain type
  */
 export function createChainAddressSchema(chain: Chain) {
-	if (chain === "solana") {
-		return SolanaAddressSchema;
-	}
-	return EvmAddressSchema;
+  if (chain === "solana") {
+    return SolanaAddressSchema;
+  }
+  return EvmAddressSchema;
 }
 
 /**
  * Validate that a value is a valid BigInt string and convert to BigInt
  */
 export function parseBigIntString(value: string): bigint {
-	const validated = BigIntStringSchema.parse(value);
-	return BigInt(validated);
+  const validated = BigIntStringSchema.parse(value);
+  return BigInt(validated);
 }

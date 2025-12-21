@@ -1,9 +1,9 @@
 export interface Citation {
-	url: string;
-	content: string;
-	title: string;
+  url: string;
+  content: string;
+  title: string;
 }
 
 export interface ChatStreamData {
-	citations?: Citation[];
+  citations?: Citation[];
 }
