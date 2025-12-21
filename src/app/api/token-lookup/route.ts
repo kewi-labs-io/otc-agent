@@ -140,17 +140,19 @@ async function lookupEvmToken(
 
   const result = data.result;
 
-  if (!result || !result.symbol) return null;
+  // No result means token not found - return null for 404
+  if (!result) return null;
 
-  if (!result.symbol) {
-    throw new Error("Token metadata missing symbol");
+  // FAIL-FAST: Symbol, name, and decimals are required - if missing, this indicates a data quality issue
+  if (!result.symbol || typeof result.symbol !== "string") {
+    throw new Error(`Token metadata missing symbol for address: ${address}`);
   }
-  if (!result.name) {
-    throw new Error("Token metadata missing name");
+  if (!result.name || typeof result.name !== "string") {
+    throw new Error(`Token metadata missing name for address: ${address}`);
   }
   if (typeof result.decimals !== "number") {
     throw new Error(
-      `Token metadata missing or invalid decimals: ${result.decimals}`,
+      `Token metadata missing or invalid decimals: ${result.decimals} for address: ${address}`,
     );
   }
 

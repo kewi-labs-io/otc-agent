@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/button";
+import { formatTokenAmountFull, getExplorerTxUrl } from "@/utils/format";
 import { createDealShareImage } from "@/utils/share-card";
 
 // Extended Navigator type for Web Share API with files support
@@ -86,7 +87,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
             return;
           }
 
-          await fetch("/api/deal-completion", {
+          const completionResponse = await fetch("/api/deal-completion", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -101,6 +102,11 @@ export function DealCompletion({ quote }: DealCompletionProps) {
               chain: quote.chain,
             }),
           });
+          if (!completionResponse.ok) {
+            console.error(
+              `[DealCompletion] Failed to record deal completion: HTTP ${completionResponse.status}`,
+            );
+          }
         }
       }
 
@@ -130,7 +136,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
       quote.discountUsd > 0 ? `$${quote.discountUsd.toFixed(2)}` : "TBD";
     const roiText = roi > 0 ? `${roi.toFixed(1)}%` : "TBD";
 
-    const text = `Just secured ${parseFloat(quote.tokenAmount).toLocaleString()} tokens at ${(quote.discountBps / 100).toFixed(0)}% discount on AI OTC Desk!
+    const text = `Just secured ${formatTokenAmountFull(parseFloat(quote.tokenAmount))} tokens at ${(quote.discountBps / 100).toFixed(0)}% discount on AI OTC Desk!
 
 💰 Saved: ${savingsText}
 ⏱️ Lockup: ${quote.lockupMonths} months
@@ -212,11 +218,14 @@ export function DealCompletion({ quote }: DealCompletionProps) {
           </p>
           {quote.transactionHash && (
             <a
-              href={`https://basescan.org/tx/${quote.transactionHash}`}
+              href={getExplorerTxUrl(
+                quote.transactionHash,
+                quote.chain === "solana" ? "solana" : "base",
+              )}
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-400 hover:text-blue-300 text-xs sm:text-sm mt-2 inline-block break-all px-2"
-              title="Block explorer (Base)"
+              title="View on block explorer"
             >
               View Transaction →
             </a>
@@ -367,7 +376,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
               <div>
                 <p className="text-zinc-400 text-sm">Token Amount</p>
                 <p className="text-2xl font-bold text-white">
-                  {parseFloat(quote.tokenAmount).toLocaleString()} tokens
+                  {formatTokenAmountFull(parseFloat(quote.tokenAmount))} tokens
                 </p>
               </div>
               <div className="text-right">

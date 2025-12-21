@@ -25,7 +25,7 @@ import {
 import { useAccount, useBalance } from "wagmi";
 import { Button } from "@/components/button";
 import { Dialog } from "@/components/dialog";
-import { useMultiWallet } from "@/components/multiwallet";
+import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { ChainConfig } from "@/config/chains";
 import { SUPPORTED_CHAINS } from "@/config/chains";
@@ -39,6 +39,7 @@ import { useOTC } from "@/hooks/contracts/useOTC";
 import { useNativePrices } from "@/hooks/useNativePrices";
 import { useTransactionErrorHandler } from "@/hooks/useTransactionErrorHandler";
 import { safeReadContract } from "@/lib/viem-utils";
+import { getExplorerTxUrl } from "@/utils/format";
 import type {
   Currency,
   ModalAction,
@@ -376,35 +377,26 @@ export function AcceptQuoteModal({
     return isMainnet ? base : baseSepolia;
   }, [isLocalRpc, rpcUrl, isMainnet, targetEvmChain, isSolanaToken]);
 
-  const explorerTxBase = useMemo(() => {
-    // For Solana tokens, explorer is Solana Explorer
-    if (isSolanaToken) {
-      return "https://explorer.solana.com/tx/";
-    }
-
-    // For EVM chains, targetEvmChain is guaranteed to be non-null (set from quoteChain when isEvmToken is true)
-    if (!targetEvmChain) {
-      throw new Error(
-        `targetEvmChain is null for EVM token - type system should prevent this`,
-      );
-    }
-
-    const chainId = readChain.id;
-    if (targetEvmChain === "bsc") {
-      return chainId === 97
-        ? "https://testnet.bscscan.com/tx/"
-        : "https://bscscan.com/tx/";
-    }
-    if (targetEvmChain === "ethereum") {
-      return chainId === 11155111
-        ? "https://sepolia.etherscan.io/tx/"
-        : "https://etherscan.io/tx/";
-    }
-    // base
-    return chainId === 84532
-      ? "https://sepolia.basescan.org/tx/"
-      : "https://basescan.org/tx/";
-  }, [readChain.id, targetEvmChain, isSolanaToken]);
+  // getExplorerUrl uses centralized getExplorerTxUrl from @/utils/format
+  const getExplorerUrl = useCallback(
+    (txHash: string) => {
+      if (isSolanaToken) {
+        return getExplorerTxUrl(txHash, "solana");
+      }
+      if (!targetEvmChain) {
+        throw new Error(
+          `targetEvmChain is null for EVM token - type system should prevent this`,
+        );
+      }
+      // Testnet chain IDs: BSC testnet = 97, Sepolia = 11155111, Base Sepolia = 84532
+      const isTestnet =
+        readChain.id === 97 ||
+        readChain.id === 11155111 ||
+        readChain.id === 84532;
+      return getExplorerTxUrl(txHash, targetEvmChain, isTestnet);
+    },
+    [readChain.id, targetEvmChain, isSolanaToken],
+  );
 
   const publicClient = useMemo(
     () => createPublicClient({ chain: readChain, transport: http(rpcUrl) }),
@@ -555,11 +547,12 @@ export function AcceptQuoteModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tokenMint: tokenAddress }),
       });
-      const data = await res.json();
 
       if (!res.ok) {
         throw new Error(`Price fetch failed: HTTP ${res.status}`);
       }
+
+      const data = await res.json();
 
       // Get price from response (could be from pool, database, or on-chain)
       // Try multiple possible field names (different APIs use different names)
@@ -580,7 +573,9 @@ export function AcceptQuoteModal({
         console.log(`[AcceptQuote] Fallback price fetched: $${price}`);
         setFallbackTokenPrice(price);
       }
-    })();
+    })().catch((err) => {
+      console.error("[AcceptQuote] Failed to fetch fallback price:", err);
+    });
 
     return () => {
       cancelled = true;
@@ -750,7 +745,9 @@ export function AcceptQuoteModal({
           }
         }
       }
-    })();
+    })().catch((err) => {
+      console.error("[AcceptQuote] Failed to fetch token metadata:", err);
+    });
   }, [
     isOpen,
     isSolanaToken,
@@ -1070,7 +1067,13 @@ export function AcceptQuoteModal({
         args: [],
       });
       dispatch({ type: "SET_REQUIRE_APPROVER", payload: flag });
-    })();
+    })().catch((err) => {
+      console.error("[AcceptQuote] Failed to validate contract:", err);
+      dispatch({
+        type: "SET_ERROR",
+        payload: `Contract validation failed: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    });
     // readContract and SOLANA_DESK are stable refs - excluding from deps to prevent unnecessary re-runs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -2831,7 +2834,7 @@ export function AcceptQuoteModal({
                 </p>
                 {completedTxHash && (
                   <a
-                    href={`${explorerTxBase}${completedTxHash}`}
+                    href={getExplorerUrl(completedTxHash)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300 mt-3"
