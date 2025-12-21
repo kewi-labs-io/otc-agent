@@ -9,6 +9,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { OTCConsignment } from "@/types";
+import { throwApiError } from "../lib/api-helpers";
 import { consignmentKeys, walletTokenKeys } from "../queryKeys";
 
 /**
@@ -95,12 +96,10 @@ async function createConsignment(
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const errorMessage =
-      typeof errorData.error === "string" && errorData.error.trim() !== ""
-        ? errorData.error
-        : `Failed to create consignment: ${response.status}`;
-    throw new Error(errorMessage);
+    await throwApiError(
+      response,
+      `Failed to create consignment: ${response.status}`,
+    );
   }
 
   const data = (await response.json()) as CreateConsignmentResponse;
@@ -124,12 +123,7 @@ async function withdrawConsignment(
   );
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const errorMessage =
-      typeof errorData.error === "string" && errorData.error.trim() !== ""
-        ? errorData.error
-        : "Failed to update database after withdrawal";
-    throw new Error(errorMessage);
+    await throwApiError(response, "Failed to update database after withdrawal");
   }
 }
 
@@ -146,12 +140,7 @@ async function withdrawSolanaConsignment(
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const errorMessage =
-      typeof errorData.error === "string" && errorData.error.trim() !== ""
-        ? errorData.error
-        : "Solana withdrawal failed";
-    throw new Error(errorMessage);
+    await throwApiError(response, "Solana withdrawal failed");
   }
 
   return response.json();
@@ -176,12 +165,7 @@ async function updateConsignment(
   );
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const errorMessage =
-      typeof errorData.error === "string" && errorData.error.trim() !== ""
-        ? errorData.error
-        : "Failed to update consignment";
-    throw new Error(errorMessage);
+    await throwApiError(response, "Failed to update consignment");
   }
 
   const data = await response.json();

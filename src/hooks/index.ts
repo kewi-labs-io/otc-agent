@@ -1,47 +1,48 @@
 /**
  * Hooks Index
  *
- * Re-exports all React Query hooks for easy import
+ * Re-exports all hooks for convenient imports.
+ * Organized by: Query Keys → Query Hooks → Mutations → Utilities
  */
 
-// Query keys
+// ============================================================================
+// Query Keys - Centralized cache key factories
+// ============================================================================
 export * from "./queryKeys";
 
-// Query hooks
+// ============================================================================
+// Query Hooks - Data fetching with React Query
+// ============================================================================
+
+// Token data
 export {
   useToken,
+  useTokenCache, // Backward compatibility alias
   useMarketData,
   useMarketDataRefresh,
   useInvalidateToken,
   usePrefetchToken,
-  useTokenCache,
 } from "./useToken";
-export {
-  useExecutedQuote,
-  useQuoteByOffer,
-  useInvalidateQuote,
-  usePrefetchQuote,
-} from "./useQuote";
-export {
-  usePoolCheck,
-  useInvalidatePoolCheck,
-  usePrefetchPoolCheck,
-} from "./usePoolCheck";
-export { useNativePrices, useNativePrice } from "./useNativePrices";
-export {
-  useConsignment,
-  useInvalidateConsignment,
-  usePrefetchConsignment,
-  useSetConsignmentData,
-} from "./useConsignment";
+
+// Token lookup (by address)
 export {
   useTokenLookup,
   useInvalidateTokenLookup,
   usePrefetchTokenLookup,
 } from "./useTokenLookup";
 
-// Existing hooks (already using React Query)
-export { useDeals, useInvalidateDeals, dealsKeys } from "./useDeals";
+// Token batch fetching
+export { useTokenBatch } from "./useTokenBatch";
+
+// Wallet tokens
+export {
+  useWalletTokens,
+  useInvalidateWalletTokens,
+  useRefetchWalletTokens,
+  walletTokensKeys,
+} from "./useWalletTokens";
+
+// Consignments
 export {
   useConsignments,
   useTradingDeskConsignments,
@@ -49,18 +50,43 @@ export {
   useInvalidateConsignments,
   consignmentsKeys,
 } from "./useConsignments";
-export {
-  useWalletTokens,
-  useInvalidateWalletTokens,
-  useRefetchWalletTokens,
-  walletTokensKeys,
-} from "./useWalletTokens";
-export { useTokenBatch, tokenKeys as tokenBatchKeys } from "./useTokenBatch";
 
-// Mutation hooks
+export {
+  useConsignment,
+  useInvalidateConsignment,
+  usePrefetchConsignment,
+  useSetConsignmentData,
+} from "./useConsignment";
+
+// Deals
+export { useDeals, useInvalidateDeals, dealsKeys } from "./useDeals";
+
+// Quotes
+export {
+  useExecutedQuote,
+  useQuoteByOffer,
+  useInvalidateQuote,
+  usePrefetchQuote,
+} from "./useQuote";
+
+// Prices
+export { useNativePrices, useNativePrice } from "./useNativePrices";
+
+// Pool validation
+export {
+  usePoolCheck,
+  useInvalidatePoolCheck,
+  usePrefetchPoolCheck,
+} from "./usePoolCheck";
+
+// ============================================================================
+// Mutation Hooks - Data mutations with React Query
+// ============================================================================
 export * from "./mutations";
 
-// Other hooks (non-React-Query)
+// ============================================================================
+// Utility Hooks - Non-React-Query hooks
+// ============================================================================
 export { useDeploymentValidation } from "./useDeploymentValidation";
 export { useChainReset } from "./useChainReset";
 export { useTransactionErrorHandler } from "./useTransactionErrorHandler";

@@ -9,6 +9,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Currency } from "@/types";
+import { throwApiError } from "../lib/api-helpers";
 import {
   consignmentKeys,
   dealKeys,
@@ -99,12 +100,10 @@ async function completeDeal(
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const errorMessage =
-      typeof errorData.error === "string" && errorData.error.trim() !== ""
-        ? errorData.error
-        : `Failed to complete deal: ${response.status}`;
-    throw new Error(errorMessage);
+    await throwApiError(
+      response,
+      `Failed to complete deal: ${response.status}`,
+    );
   }
 
   const data = (await response.json()) as DealCompletionResponse;
@@ -149,12 +148,7 @@ async function claimTokens(
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const errorMessage =
-      typeof errorData.error === "string" && errorData.error.trim() !== ""
-        ? errorData.error
-        : "Claim failed";
-    throw new Error(errorMessage);
+    await throwApiError(response, "Claim failed");
   }
 
   return response.json();

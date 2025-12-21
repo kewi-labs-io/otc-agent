@@ -596,7 +596,7 @@ export function MultiWalletProvider({
     linkedSolanaAddress,
     hasFarcasterSolanaWallet,
     walletAdapterPublicKey,
-    walletAdapterWallet?.adapter?.name,
+    walletAdapterWallet,
     walletAdapterSignTransaction,
     walletAdapterSignAllTransactions,
   ]);

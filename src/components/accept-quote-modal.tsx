@@ -2286,7 +2286,6 @@ export function AcceptQuoteModal({
     nativeUsdPrice,
     usdcBalance.data?.formatted,
     ethBalance.data?.formatted,
-    initialQuote.ethPrice, // Optional field, but initialQuote itself is required
   ]);
 
   const validationError = useMemo(() => {

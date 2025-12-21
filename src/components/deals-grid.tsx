@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useTradingDeskConsignments } from "@/hooks/useConsignments";
 import { useTokenBatch } from "@/hooks/useTokenBatch";
 import type { Chain, OTCConsignment, Token } from "@/types";
@@ -144,14 +144,12 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
     });
   }, [tokenGroups, searchQuery, tokensData]);
 
-  // Reset to page 1 when filters or search changes
-  useMemo(() => {
+  // Reset to page 1 when filters change - use useEffect for side effects
+  const chainsKey = filters.chains.join(",");
+  const negotiableTypesKey = filters.negotiableTypes.join(",");
+  useEffect(() => {
     setCurrentPage(1);
-  }, [
-    filters.chains.join(","),
-    filters.negotiableTypes.join(","),
-    searchQuery,
-  ]);
+  }, [chainsKey, negotiableTypesKey]);
 
   // Pagination
   const totalPages = Math.ceil(filteredGroups.length / PAGE_SIZE);

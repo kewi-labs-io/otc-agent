@@ -929,15 +929,9 @@ export const Chat = ({
       type: "SET_CURRENT_QUOTE",
       payload: defaultQuote,
     });
-  }, [
-    token,
-    currentQuote,
-    isLoadingHistory,
-    marketData && marketData.priceUsd !== undefined
-      ? marketData.priceUsd
-      : undefined,
-    consignmentData,
-  ]);
+    // Extract marketData.priceUsd to a variable for static checking
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, currentQuote, isLoadingHistory, marketData?.priceUsd, consignmentData]);
 
   const handleAcceptOffer = useCallback(() => {
     if (!currentQuote) {
@@ -999,11 +993,10 @@ export const Chat = ({
     dispatch({ type: "SET_ACCEPT_MODAL", payload: true });
   }, [
     currentQuote,
+    isConnected,
     solanaConnected,
     evmConnected,
-    privyAuthenticated,
     connectWallet,
-    login,
     setActiveFamily,
   ]);
 

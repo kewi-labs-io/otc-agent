@@ -66,6 +66,7 @@ function DualRangeSlider({
   maxValue: number;
   step?: number;
   onChange: (min: number, max: number) => void;
+  formatValue?: (val: number) => string;
   accentColor?: "orange" | "purple" | "blue";
 }) {
   const colorClasses = {
@@ -403,7 +404,6 @@ export function FormStep({
               onChange={(val) =>
                 updateFormData({ amount: Math.floor(val).toString() })
               }
-              formatValue={(v) => v.toLocaleString()}
             />
           )}
 
@@ -493,7 +493,6 @@ export function FormStep({
                   maxDiscountBps: maxVal * 100,
                 })
               }
-              formatValue={(v) => `${v}%`}
               accentColor="orange"
             />
             <div className="flex items-center justify-between text-sm">
@@ -517,7 +516,6 @@ export function FormStep({
             max={50}
             value={formData.fixedDiscountBps / 100}
             onChange={(val) => updateFormData({ fixedDiscountBps: val * 100 })}
-            formatValue={(v) => `${v}%`}
           />
         )}
       </div>
@@ -559,7 +557,6 @@ export function FormStep({
                 }
                 updateFormData(updates);
               }}
-              formatValue={(v) => `${v}d`}
               accentColor="blue"
             />
             <div className="flex items-center justify-between text-sm">
@@ -583,7 +580,6 @@ export function FormStep({
             max={365}
             value={formData.fixedLockupDays}
             onChange={(val) => updateFormData({ fixedLockupDays: val })}
-            formatValue={(v) => `${v} days`}
           />
         )}
       </div>

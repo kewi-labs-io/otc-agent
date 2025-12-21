@@ -549,7 +549,7 @@ export function useOTC(): {
         args: [offerId],
       });
     },
-    [otcAddress, account, abi, chainId, switchToChain, getOtcAddressForChain],
+    [otcAddress, account, abi, chainId, switchToChain, getOtcAddressForChain, writeContractAsync],
   );
 
   const createOfferFromConsignment = useCallback(
@@ -588,7 +588,7 @@ export function useOTC(): {
         ],
       });
     },
-    [otcAddress, account, abi],
+    [otcAddress, account, abi, chainId, switchToChain, writeContractAsync],
   );
 
   const approveOffer = useCallback(
@@ -602,7 +602,7 @@ export function useOTC(): {
         args: [offerId],
       });
     },
-    [otcAddress, account, abi],
+    [otcAddress, account, abi, writeContractAsync],
   );
 
   const cancelOffer = useCallback(
@@ -616,7 +616,7 @@ export function useOTC(): {
         args: [offerId],
       });
     },
-    [otcAddress, account, abi],
+    [otcAddress, account, abi, writeContractAsync],
   );
 
   const fulfillOffer = useCallback(
@@ -631,7 +631,7 @@ export function useOTC(): {
         value: valueWei,
       });
     },
-    [otcAddress, account, abi],
+    [otcAddress, account, abi, writeContractAsync],
   );
 
   const usdcAddressRes = useReadContract({
@@ -671,7 +671,7 @@ export function useOTC(): {
         args: [otcAddress, amount],
       });
     },
-    [otcAddress, usdcAddress, account],
+    [otcAddress, usdcAddress, account, writeContractAsync],
   );
 
   const emergencyRefund = useCallback(
@@ -685,7 +685,7 @@ export function useOTC(): {
         args: [offerId],
       });
     },
-    [otcAddress, account, abi],
+    [otcAddress, account, abi, writeContractAsync],
   );
 
   const withdrawConsignment = useCallback(
@@ -699,7 +699,113 @@ export function useOTC(): {
         args: [consignmentId],
       });
     },
-    [otcAddress, account, abi],
+    [otcAddress, account, abi, writeContractAsync],
+  );
+
+  // Check if a token is registered on the OTC contract
+  const isTokenRegistered = useCallback(
+    async (tokenAddress: Address, chain?: Chain): Promise<boolean> => {
+      // chain is optional - default to "base" if not provided
+      const targetChain =
+        chain !== undefined && chain !== null ? chain : "base";
+      const targetOtcAddress = getOtcAddressForChain(targetChain);
+
+      if (!targetOtcAddress) {
+        throw new Error(
+          `OTC contract address not configured for chain: ${targetChain}`,
+        );
+      }
+
+      // Compute tokenId the same way as RegistrationHelper
+      const tokenIdBytes32 = keccak256(
+        encodePacked(["address"], [tokenAddress]),
+      );
+
+      const viemChain = getViemChain(targetChain);
+      const chainConfig = SUPPORTED_CHAINS[targetChain];
+      if (!chainConfig) {
+        throw new Error(`Unsupported chain: ${targetChain}`);
+      }
+      const chainRpcUrl = chainConfig.rpcUrl;
+      if (!chainRpcUrl) {
+        throw new Error(`RPC URL not configured for chain: ${targetChain}`);
+      }
+      if (!viemChain) {
+        throw new Error(`Could not get viem chain config for: ${targetChain}`);
+      }
+
+      const targetPublicClient = createPublicClient({
+        chain: viemChain,
+        transport: http(chainRpcUrl),
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (
+        targetPublicClient.readContract as (params: {
+          address: Address;
+          abi: typeof tokensAbi;
+          functionName: string;
+          args: readonly [`0x${string}`];
+        }) => Promise<[Address, number, boolean, Address]>
+      )({
+        address: targetOtcAddress,
+        abi: tokensAbi,
+        functionName: "tokens",
+        args: [tokenIdBytes32],
+      });
+
+      const [registeredAddress, , isActive] = result;
+      console.log(
+        `[useOTC] Token registration check: ${tokenAddress} -> isActive=${isActive}, registeredAddress=${registeredAddress}`,
+      );
+      return (
+        isActive &&
+        registeredAddress !== "0x0000000000000000000000000000000000000000"
+      );
+    },
+    [],
+  );
+
+  // Get registration fee from RegistrationHelper
+  const getRegistrationFee = useCallback(
+    async (chain?: Chain): Promise<bigint> => {
+      // chain is optional - default to "base" if not provided
+      const targetChain =
+        chain !== undefined && chain !== null ? chain : "base";
+      const chainConfig = getChainConfig(targetChain);
+      const registrationHelperAddress =
+        chainConfig.contracts.registrationHelper;
+
+      if (!registrationHelperAddress) {
+        throw new Error(
+          `RegistrationHelper not configured for chain: ${targetChain}`,
+        );
+      }
+
+      const viemChain = getViemChain(targetChain);
+      if (!chainConfig) {
+        throw new Error(`Unsupported chain: ${targetChain}`);
+      }
+      const chainRpcUrl = chainConfig.rpcUrl;
+      if (!chainRpcUrl) {
+        throw new Error(`RPC URL not configured for chain: ${targetChain}`);
+      }
+      if (!viemChain) {
+        throw new Error(`Could not get viem chain config for: ${targetChain}`);
+      }
+
+      const targetPublicClient = createPublicClient({
+        chain: viemChain,
+        transport: http(chainRpcUrl),
+      });
+
+      return readContractFromClient<bigint>(targetPublicClient, {
+        address: registrationHelperAddress as Address,
+        abi: registrationHelperAbi,
+        functionName: "registrationFee",
+      });
+    },
+    [],
   );
 
   const createConsignmentOnChain = useCallback(
@@ -1017,7 +1123,7 @@ export function useOTC(): {
 
       return { txHash: txHash as `0x${string}`, consignmentId };
     },
-    [account, abi, chainId, switchToChain],
+    [account, abi, chainId, switchToChain, ConsignmentCreatedEvent, getRegistrationFee, isTokenRegistered, writeContractAsync],
   );
 
   const approveToken = useCallback(
@@ -1115,7 +1221,7 @@ export function useOTC(): {
         args: [targetOtcAddress, amount],
       });
     },
-    [account, chainId, switchToChain],
+    [account, chainId, switchToChain, writeContractAsync],
   );
 
   // Helper to extract contract address from tokenId format: "token-{chain}-{address}"
@@ -1355,7 +1461,7 @@ export function useOTC(): {
         value: fee,
       });
     },
-    [account, chainId, switchToChain, getRegistrationFee],
+    [account, chainId, switchToChain, getRegistrationFee, writeContractAsync],
   );
 
   // agentAddr is optional - undefined if not set

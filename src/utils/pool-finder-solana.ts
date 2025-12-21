@@ -237,7 +237,7 @@ export async function findBestSolanaPool(
 async function findPumpFunBondingCurve(
   connection: Connection,
   mint: PublicKey,
-  cluster: "mainnet" | "devnet",
+  _cluster: "mainnet" | "devnet",
 ): Promise<SolanaPoolInfo[]> {
   const pools: SolanaPoolInfo[] = [];
 
