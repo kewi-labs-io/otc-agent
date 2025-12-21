@@ -22,6 +22,14 @@ export function isEvmAddress(address: string): boolean {
 }
 
 /**
+ * Check if a string is any valid blockchain address (EVM or Solana)
+ * Useful for detecting when a user has pasted an address into a search field
+ */
+export function isContractAddress(address: string): boolean {
+  return isSolanaAddress(address) || isEvmAddress(address);
+}
+
+/**
  * Detect chain from address format
  * Returns 'solana', 'evm', or null if unrecognized
  */

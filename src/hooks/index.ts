@@ -43,12 +43,14 @@ export {
 } from "./useWalletTokens";
 
 // Consignments
+// Note: consignmentKeys (canonical) is exported from ./queryKeys via "export * from"
+// consignmentsKeys is a deprecated alias for backward compatibility
 export {
   useConsignments,
   useTradingDeskConsignments,
   useMyConsignments,
   useInvalidateConsignments,
-  consignmentsKeys,
+  consignmentsKeys, // @deprecated - use consignmentKeys from queryKeys instead
 } from "./useConsignments";
 
 export {

@@ -25,8 +25,8 @@ import {
   SOLANA_DESK,
   SOLANA_RPC,
 } from "@/utils/solana-otc";
+import { useWalletConnection } from "@/contexts";
 import { Button } from "./button";
-import { useMultiWallet } from "./multiwallet";
 
 interface ConsignmentRowProps {
   consignment: OTCConsignment;
@@ -47,7 +47,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
   const { withdrawConsignment, switchToChain } = useOTC();
   const { address } = useAccount();
   const chainId = useChainId();
-  const { solanaPublicKey, solanaWallet } = useMultiWallet();
+  const { solanaPublicKey, solanaWallet } = useWalletConnection();
 
   // Mutation hooks for withdrawal operations
   const solanaWithdrawMutation = useSolanaWithdrawConsignment();

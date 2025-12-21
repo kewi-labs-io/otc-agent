@@ -10,6 +10,7 @@
  */
 
 import type { Chain } from "@/config/chains";
+import type { ConsignmentsFilters } from "@/types/validation/hook-schemas";
 
 /**
  * Token query keys
@@ -30,11 +31,12 @@ export const tokenKeys = {
 
 /**
  * Consignment query keys
+ * Single source of truth for all consignment-related cache keys
  */
 export const consignmentKeys = {
   all: ["consignments"] as const,
   lists: () => [...consignmentKeys.all, "list"] as const,
-  list: (filters: Record<string, unknown>) =>
+  list: (filters: ConsignmentsFilters) =>
     [...consignmentKeys.lists(), filters] as const,
   single: (id: string) => [...consignmentKeys.all, "single", id] as const,
   byConsigner: (address: string) =>

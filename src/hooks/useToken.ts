@@ -14,6 +14,7 @@ import { base, bsc, mainnet } from "viem/chains";
 import { parseOrThrow } from "@/lib/validation/helpers";
 import type { Token, TokenMarketData } from "@/types";
 import { TokenResponseSchema } from "@/types/validation/hook-schemas";
+import { parseTokenId } from "@/utils/token-utils";
 import { tokenKeys, priceKeys } from "./queryKeys";
 
 // Chain configs for on-chain fetching (RPC endpoints via API proxy)
@@ -24,25 +25,6 @@ const chainConfigs = {
 } as const;
 
 type SupportedEvmChain = keyof typeof chainConfigs;
-
-/**
- * Parse tokenId to extract chain and address
- * Format: "token-{chain}-{address}"
- */
-function parseTokenId(tokenId: string): { chain: string; address: string } {
-  const parts = tokenId.split("-");
-  if (parts.length < 3) {
-    throw new Error(
-      `Invalid tokenId format: ${tokenId}. Expected "token-{chain}-{address}"`,
-    );
-  }
-  const chain = parts[1];
-  const address = parts.slice(2).join("-"); // Handle addresses with dashes (unlikely but safe)
-  if (!address) {
-    throw new Error(`Missing address in tokenId: ${tokenId}`);
-  }
-  return { chain, address };
-}
 
 /**
  * Fetch token directly from blockchain (fallback for unregistered tokens)

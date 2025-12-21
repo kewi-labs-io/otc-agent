@@ -22,14 +22,10 @@ import {
   useWalletTokens,
   type WalletToken,
 } from "@/hooks/useWalletTokens";
-import {
-  isContractAddress,
-  isEvmAddress,
-  isSolanaAddress,
-} from "@/utils/address-utils";
+import { isContractAddress, isSolanaAddress } from "@/utils/address-utils";
 import { formatRawTokenAmount, formatUsdCompact } from "@/utils/format";
+import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { Button } from "../button";
-import { useMultiWallet } from "../multiwallet";
 
 // Token avatar component with fallback on image error
 function TokenAvatar({
@@ -95,17 +91,16 @@ export function TokenSelectionStep({
   onNext,
   onTokenSelect,
 }: TokenSelectionProps) {
+  const { activeFamily, setActiveFamily } = useChain();
   const {
-    activeFamily,
-    setActiveFamily,
     evmAddress,
     solanaPublicKey,
     evmConnected,
     solanaConnected,
     hasWallet,
     privyAuthenticated,
-    connectWallet,
-  } = useMultiWallet();
+  } = useWalletConnection();
+  const { connectWallet } = useWalletActions();
   const { login, ready: privyReady } = usePrivy();
   const chainId = useChainId();
 

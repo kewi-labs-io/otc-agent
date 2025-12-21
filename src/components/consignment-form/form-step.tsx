@@ -20,7 +20,7 @@ import {
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePoolCheck } from "@/hooks/usePoolCheck";
-import type { Chain } from "@/types";
+import { parseTokenId } from "@/utils/token-utils";
 import { Button } from "../button";
 
 interface FormStepProps {
@@ -66,7 +66,6 @@ function DualRangeSlider({
   maxValue: number;
   step?: number;
   onChange: (min: number, max: number) => void;
-  formatValue?: (val: number) => string;
   accentColor?: "orange" | "purple" | "blue";
 }) {
   const colorClasses = {
@@ -155,29 +154,6 @@ function SingleSlider({
   );
 }
 
-// Extract chain and address from tokenId (format: token-{chain}-{address})
-function getTokenInfo(tokenId: string): { chain: Chain; address: string } {
-  if (!tokenId) {
-    throw new Error("tokenId is required");
-  }
-  const parts = tokenId.split("-");
-  if (parts.length < 3) {
-    throw new Error(`Invalid tokenId format: ${tokenId}`);
-  }
-  const chainStr = parts[1];
-  // FAIL-FAST: Validate chain is a valid Chain type
-  const validChains: Chain[] = ["ethereum", "base", "bsc", "solana"];
-  if (!validChains.includes(chainStr as Chain)) {
-    throw new Error(`Invalid chain in tokenId: ${chainStr}`);
-  }
-  const chain = chainStr as Chain;
-  const address = parts.slice(2).join("-");
-  if (!address) {
-    throw new Error(`Missing address in tokenId: ${tokenId}`);
-  }
-  return { chain, address };
-}
-
 export function FormStep({
   formData,
   updateFormData,
@@ -193,7 +169,7 @@ export function FormStep({
   const [selectedPoolIndex, setSelectedPoolIndex] = useState(0);
   const [showPoolSelector, setShowPoolSelector] = useState(false);
 
-  const { chain: tokenChain, address: rawTokenAddress } = getTokenInfo(
+  const { chain: tokenChain, address: rawTokenAddress } = parseTokenId(
     formData.tokenId,
   );
 

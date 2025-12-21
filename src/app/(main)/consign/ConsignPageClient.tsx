@@ -17,7 +17,13 @@ import { useMultiWallet } from "@/components/multiwallet";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { type Chain, SUPPORTED_CHAINS } from "@/config/chains";
 import { useOTC } from "@/hooks/contracts/useOTC";
+import { getExplorerTxUrl } from "@/utils/format";
 import { useRenderTracker } from "@/utils/render-tracker";
+import {
+  extractAddressFromTokenId,
+  extractChainFromTokenId,
+  getChainFamily,
+} from "@/utils/token-utils";
 
 // Shared Solana OTC utilities - consolidated to avoid duplication
 import {
@@ -58,19 +64,6 @@ const SubmissionStepComponent = dynamic(
   { ssr: false },
 );
 
-function getRequiredChain(tokenId: string): "evm" | "solana" | null {
-  if (!tokenId) return null;
-  if (tokenId.includes("solana")) return "solana";
-  if (
-    tokenId.includes("ethereum") ||
-    tokenId.includes("base") ||
-    tokenId.includes("evm") ||
-    tokenId.includes("bsc")
-  )
-    return "evm";
-  return null;
-}
-
 const STEP_LABELS = ["Select", "Configure", "Review", "Submit"];
 
 const INITIAL_FORM_DATA = {
@@ -91,20 +84,6 @@ const INITIAL_FORM_DATA = {
   maxTimeToExecuteSeconds: 1800,
   selectedPoolAddress: "", // User-selected pool for token registration (EVM only)
 };
-
-// Extract chain and address from tokenId (format: token-{chain}-{address})
-function getTokenInfo(tokenId: string) {
-  if (!tokenId) {
-    throw new Error("Token ID is required");
-  }
-  const parts = tokenId.split("-");
-  if (parts.length < 3) {
-    throw new Error(`Invalid token ID format: ${tokenId}`);
-  }
-  const chain = parts[1];
-  const address = parts.slice(2).join("-");
-  return { chain, address };
-}
 
 export default function ConsignPageClient() {
   useRenderTracker("ConsignPageClient");
@@ -140,15 +119,18 @@ export default function ConsignPageClient() {
     : null;
 
   const requiredChain = useMemo(
-    () => getRequiredChain(formData.tokenId),
+    () => getChainFamily(formData.tokenId),
     [formData.tokenId],
   );
-  const { chain: tokenChain, address: rawTokenAddress } = useMemo(() => {
+  const { tokenChain, rawTokenAddress } = useMemo(() => {
     // Return empty values when tokenId is not yet set (initial state)
     if (!formData.tokenId) {
-      return { chain: "", address: "" };
+      return { tokenChain: "", rawTokenAddress: "" };
     }
-    return getTokenInfo(formData.tokenId);
+    return {
+      tokenChain: extractChainFromTokenId(formData.tokenId),
+      rawTokenAddress: extractAddressFromTokenId(formData.tokenId),
+    };
   }, [formData.tokenId]);
 
   const isConnectedToRequiredChain = useMemo(() => {
@@ -242,18 +224,17 @@ export default function ConsignPageClient() {
     }));
   }, []);
 
+  // getBlockExplorerUrl uses centralized getExplorerTxUrl from @/utils/format
   const getBlockExplorerUrl = useCallback(
     (txHash: string) => {
-      if (tokenChain === "solana") {
-        return `https://solscan.io/tx/${txHash}`;
-      }
-      if (tokenChain === "ethereum") {
-        return `https://etherscan.io/tx/${txHash}`;
-      }
-      if (tokenChain === "bsc") {
-        return `https://bscscan.com/tx/${txHash}`;
-      }
-      return `https://basescan.org/tx/${txHash}`;
+      const chain =
+        tokenChain === "ethereum" ||
+        tokenChain === "base" ||
+        tokenChain === "bsc" ||
+        tokenChain === "solana"
+          ? tokenChain
+          : "base";
+      return getExplorerTxUrl(txHash, chain);
     },
     [tokenChain],
   );

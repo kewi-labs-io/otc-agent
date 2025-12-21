@@ -6,6 +6,7 @@ import {
   ConsignmentsFiltersSchema,
   ConsignmentsResponseSchema,
 } from "@/types/validation/hook-schemas";
+import { consignmentKeys } from "./queryKeys";
 
 async function fetchConsignments(
   filters: ConsignmentsFilters,
@@ -51,18 +52,10 @@ async function fetchConsignments(
 }
 
 /**
- * Query key factory for consignments - enables fine-grained cache invalidation
+ * Re-export consignmentKeys for backward compatibility
+ * @deprecated Use { consignmentKeys } from "./queryKeys" instead
  */
-export const consignmentsKeys = {
-  all: ["consignments"] as const,
-  lists: () => [...consignmentsKeys.all, "list"] as const,
-  list: (filters: ConsignmentsFilters) =>
-    [...consignmentsKeys.lists(), filters] as const,
-  byConsigner: (address: string) =>
-    [...consignmentsKeys.lists(), { consigner: address }] as const,
-  byToken: (tokenId: string) =>
-    [...consignmentsKeys.lists(), { tokenId }] as const,
-};
+export { consignmentKeys as consignmentsKeys } from "./queryKeys";
 
 interface UseConsignmentsOptions {
   filters?: ConsignmentsFilters;
@@ -85,7 +78,7 @@ export function useConsignments(options: UseConsignmentsOptions = {}) {
   const validatedFilters = parseOrThrow(ConsignmentsFiltersSchema, filters);
 
   return useQuery({
-    queryKey: consignmentsKeys.list(validatedFilters),
+    queryKey: consignmentKeys.list(validatedFilters),
     queryFn: () => fetchConsignments(validatedFilters),
     staleTime: 60_000, // 1 minute - consignments change less frequently
     gcTime: 300_000, // 5 minutes - keep in cache longer
@@ -127,6 +120,6 @@ export function useInvalidateConsignments() {
   const queryClient = useQueryClient();
 
   return () => {
-    queryClient.invalidateQueries({ queryKey: consignmentsKeys.all });
+    queryClient.invalidateQueries({ queryKey: consignmentKeys.all });
   };
 }

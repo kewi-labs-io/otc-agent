@@ -18,6 +18,14 @@ import {
 import { useAccount, useChainId, useConnect, useDisconnect } from "wagmi";
 import { base, baseSepolia, bsc, bscTestnet, localhost } from "wagmi/chains";
 import { type ChainFamily, SUPPORTED_CHAINS } from "@/config/chains";
+import {
+  ChainContext,
+  type ChainContextValue,
+  WalletActionsContext,
+  type WalletActionsContextValue,
+  WalletConnectionContext,
+  type WalletConnectionContextValue,
+} from "@/contexts";
 import type {
   EVMChain,
   PhantomSolanaProvider,
@@ -29,51 +37,14 @@ import type {
 import { useRenderTracker } from "@/utils/render-tracker";
 import { clearWalletCaches } from "@/utils/wallet-utils";
 
-type MultiWalletContextValue = {
-  // Active chain family - derived from connection state + user preference
-  // null when no wallet is connected
-  activeFamily: ChainFamily | null;
-  setActiveFamily: (family: ChainFamily) => void;
-
-  // EVM-specific chain selection (Base, BSC, etc.)
-  selectedEVMChain: EVMChain;
-  setSelectedEVMChain: (chain: EVMChain) => void;
-
-  // Connection status
-  isConnected: boolean;
-  hasWallet: boolean; // True if any blockchain wallet connected (not just social auth)
-  entityId: string | null;
-  networkLabel: string;
-
-  // EVM wallet state
-  evmConnected: boolean;
-  evmAddress: string | undefined;
-
-  // Solana wallet state
-  solanaConnected: boolean;
-  solanaPublicKey: string | undefined;
-  solanaWallet: SolanaWalletAdapter | null;
-  solanaCanSign: boolean; // True only if we have an active wallet that can sign
-
-  // Privy auth state
-  privyAuthenticated: boolean;
-  privyReady: boolean;
-  privyUser: PrivyUser | null;
-  isFarcasterContext: boolean;
-
-  // Helpers
-  paymentPairLabel: string;
-  isPhantomInstalled: boolean;
-  currentChainId: number | null;
-
-  // Auth methods
-  login: () => void;
-  logout: () => Promise<void>;
-  connectWallet: () => void;
-  connectSolanaWallet: () => void;
-  switchSolanaWallet: () => void;
-  disconnect: () => Promise<void>;
-};
+/**
+ * Combined MultiWallet context value
+ * This is the legacy interface - kept for backward compatibility.
+ * New code should use the split hooks: useChain, useWalletConnection, useWalletActions
+ */
+type MultiWalletContextValue = ChainContextValue &
+  WalletConnectionContextValue &
+  WalletActionsContextValue;
 
 const MultiWalletContext = createContext<MultiWalletContextValue | undefined>(
   undefined,
@@ -784,13 +755,22 @@ export function MultiWalletProvider({
 
   const paymentPairLabel = activeFamily === "solana" ? "USDC/SOL" : "USDC/ETH";
 
-  // === Context value - memoized to prevent unnecessary child re-renders ===
-  const value = useMemo<MultiWalletContextValue>(
+  // === Split Context Values - memoized separately to reduce re-renders ===
+
+  // Chain context - changes when user switches chains (rare)
+  const chainValue = useMemo<ChainContextValue>(
     () => ({
       activeFamily,
       setActiveFamily,
       selectedEVMChain,
       setSelectedEVMChain,
+    }),
+    [activeFamily, setActiveFamily, selectedEVMChain, setSelectedEVMChain],
+  );
+
+  // Connection context - changes when wallet connects/disconnects
+  const connectionValue = useMemo<WalletConnectionContextValue>(
+    () => ({
       isConnected,
       hasWallet,
       entityId,
@@ -808,18 +788,8 @@ export function MultiWalletProvider({
       paymentPairLabel,
       isPhantomInstalled,
       currentChainId: chainId ?? null,
-      login,
-      logout,
-      connectWallet,
-      connectSolanaWallet,
-      switchSolanaWallet,
-      disconnect,
     }),
     [
-      activeFamily,
-      setActiveFamily,
-      selectedEVMChain,
-      setSelectedEVMChain,
       isConnected,
       hasWallet,
       entityId,
@@ -837,6 +807,20 @@ export function MultiWalletProvider({
       paymentPairLabel,
       isPhantomInstalled,
       chainId,
+    ],
+  );
+
+  // Actions context - should remain stable (useCallback refs)
+  const actionsValue = useMemo<WalletActionsContextValue>(
+    () => ({
+      login,
+      logout,
+      connectWallet,
+      connectSolanaWallet,
+      switchSolanaWallet,
+      disconnect,
+    }),
+    [
       login,
       logout,
       connectWallet,
@@ -846,19 +830,37 @@ export function MultiWalletProvider({
     ],
   );
 
+  // Legacy combined context value for backward compatibility
+  const combinedValue = useMemo<MultiWalletContextValue>(
+    () => ({
+      ...chainValue,
+      ...connectionValue,
+      ...actionsValue,
+    }),
+    [chainValue, connectionValue, actionsValue],
+  );
+
   return (
-    <MultiWalletContext.Provider value={value}>
-      {children}
-    </MultiWalletContext.Provider>
+    <ChainContext.Provider value={chainValue}>
+      <WalletConnectionContext.Provider value={connectionValue}>
+        <WalletActionsContext.Provider value={actionsValue}>
+          <MultiWalletContext.Provider value={combinedValue}>
+            {children}
+          </MultiWalletContext.Provider>
+        </WalletActionsContext.Provider>
+      </WalletConnectionContext.Provider>
+    </ChainContext.Provider>
   );
 }
 
 // Default values for SSR/prerendering
 const defaultContextValue: MultiWalletContextValue = {
+  // Chain context
   activeFamily: null,
   setActiveFamily: () => {},
   selectedEVMChain: "base",
   setSelectedEVMChain: () => {},
+  // Connection context
   isConnected: false,
   hasWallet: false,
   entityId: null,
@@ -876,6 +878,7 @@ const defaultContextValue: MultiWalletContextValue = {
   paymentPairLabel: "",
   isPhantomInstalled: false,
   currentChainId: null,
+  // Actions context
   login: () => {},
   logout: async () => {},
   connectWallet: () => {},
@@ -884,7 +887,29 @@ const defaultContextValue: MultiWalletContextValue = {
   disconnect: async () => {},
 };
 
+/**
+ * Legacy hook that provides all wallet state and actions.
+ *
+ * For better performance, consider using the split hooks:
+ * - useChain() - for chain selection only
+ * - useWalletConnection() - for connection state only
+ * - useWalletActions() - for actions only (stable refs)
+ *
+ * @example
+ * ```tsx
+ * // Legacy usage (still works)
+ * const { activeFamily, evmAddress, login } = useMultiWallet();
+ *
+ * // Better performance - use specific hooks
+ * const { activeFamily } = useChain();
+ * const { evmAddress } = useWalletConnection();
+ * const { login } = useWalletActions();
+ * ```
+ */
 export function useMultiWallet(): MultiWalletContextValue {
   const ctx = useContext(MultiWalletContext);
   return ctx ?? defaultContextValue;
 }
+
+// Re-export the split hooks for convenience
+export { useChain, useWalletActions, useWalletConnection } from "@/contexts";

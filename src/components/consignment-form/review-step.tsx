@@ -3,11 +3,12 @@
 import { AlertCircle, ArrowLeft, Check, Copy } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
+import { useChain, useWalletConnection } from "@/contexts";
 import { usePoolCheck } from "@/hooks/usePoolCheck";
 import type { Chain } from "@/types";
-import { formatAddress } from "@/utils/format";
+import { formatAddress, formatTokenAmountFull } from "@/utils/format";
+import { parseTokenId } from "@/utils/token-utils";
 import { Button } from "../button";
-import { useMultiWallet } from "../multiwallet";
 
 interface ReviewStepProps {
   formData: {
@@ -49,35 +50,13 @@ export function ReviewStep({
   selectedTokenSymbol = "TOKEN",
   selectedTokenLogoUrl,
 }: ReviewStepProps) {
-  const { activeFamily, evmAddress, solanaPublicKey } = useMultiWallet();
+  const { activeFamily } = useChain();
+  const { evmAddress, solanaPublicKey } = useWalletConnection();
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
 
-  // Extract chain and address from tokenId (format: token-{chain}-{address})
-  const getTokenInfo = (tokenId: string): { chain: Chain; address: string } => {
-    if (!tokenId) {
-      throw new Error("tokenId is required");
-    }
-    const parts = tokenId.split("-");
-    if (parts.length < 3) {
-      throw new Error(`Invalid tokenId format: ${tokenId}`);
-    }
-    const chainStr = parts[1];
-    // FAIL-FAST: Validate chain is a valid Chain type
-    const validChains: Chain[] = ["ethereum", "base", "bsc", "solana"];
-    if (!validChains.includes(chainStr as Chain)) {
-      throw new Error(`Invalid chain in tokenId: ${chainStr}`);
-    }
-    const chain = chainStr as Chain;
-    const address = parts.slice(2).join("-");
-    if (!address) {
-      throw new Error(`Missing address in tokenId: ${tokenId}`);
-    }
-    return { chain, address };
-  };
-
-  const { chain: tokenChain, address: rawTokenAddress } = getTokenInfo(
+  const { chain: tokenChain, address: rawTokenAddress } = parseTokenId(
     formData.tokenId,
   );
 
@@ -128,10 +107,10 @@ export function ReviewStep({
     onNext();
   };
 
+  // formatAmount uses centralized formatTokenAmountFull from @/utils/format
   const formatAmount = (amount: string) => {
     const num = parseFloat(amount);
-    const validNum = isNaN(num) ? 0 : num;
-    return validNum.toLocaleString();
+    return isNaN(num) ? "0" : formatTokenAmountFull(num);
   };
 
   return (
