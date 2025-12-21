@@ -25,16 +25,24 @@ export async function GET(
     );
   }
 
-  // Token lookup - return 404 if not found
+  // Token lookup - return 404 if not found, 400 if invalid format
   let token;
   try {
     token = await TokenDB.getToken(tokenId);
   } catch (err) {
-    if (err instanceof Error && err.message.includes("not found")) {
-      return NextResponse.json(
-        { success: false, error: `Token ${tokenId} not found` },
-        { status: 404 },
-      );
+    if (err instanceof Error) {
+      if (err.message.includes("not found")) {
+        return NextResponse.json(
+          { success: false, error: `Token ${tokenId} not found` },
+          { status: 404 },
+        );
+      }
+      if (err.message.includes("invalid tokenId format")) {
+        return NextResponse.json(
+          { success: false, error: "Invalid tokenId format" },
+          { status: 400 },
+        );
+      }
     }
     throw err;
   }

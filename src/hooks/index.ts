@@ -39,18 +39,14 @@ export {
   useWalletTokens,
   useInvalidateWalletTokens,
   useRefetchWalletTokens,
-  walletTokensKeys,
 } from "./useWalletTokens";
 
 // Consignments
-// Note: consignmentKeys (canonical) is exported from ./queryKeys via "export * from"
-// consignmentsKeys is a deprecated alias for backward compatibility
 export {
   useConsignments,
   useTradingDeskConsignments,
   useMyConsignments,
   useInvalidateConsignments,
-  consignmentsKeys, // @deprecated - use consignmentKeys from queryKeys instead
 } from "./useConsignments";
 
 export {
@@ -61,7 +57,7 @@ export {
 } from "./useConsignment";
 
 // Deals
-export { useDeals, useInvalidateDeals, dealsKeys } from "./useDeals";
+export { useDeals, useInvalidateDeals } from "./useDeals";
 
 // Quotes
 export {

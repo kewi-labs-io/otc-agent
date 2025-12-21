@@ -3,7 +3,10 @@
  * Tracks component renders and throws if a component renders too many times
  * in a short time window, indicating a render loop or performance issue.
  *
- * TEMPORARILY DISABLED: Set to true to enable render tracking
+ * This is a debugging tool, not production code. The useRenderTracker hook
+ * is called throughout the app but early-returns when disabled.
+ *
+ * Set to true to enable render tracking during development.
  */
 const RENDER_TRACKING_ENABLED = false;
 

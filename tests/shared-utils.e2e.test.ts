@@ -273,17 +273,16 @@ describe("Deal Transformation Utilities", () => {
 
     test("throws when beneficiary is missing (fail-fast)", () => {
       const dealWithoutBeneficiary = { ...mockSolanaDeal, beneficiary: "" };
-      const wallet = "WalletPubKey111111111111111111111111111111";
 
-      expect(() => transformSolanaDeal(dealWithoutBeneficiary, wallet)).toThrow(
-        "missing required beneficiary"
+      expect(() => transformSolanaDeal(dealWithoutBeneficiary)).toThrow(
+        "missing beneficiary"
       );
     });
   });
 
   describe("transformEvmDeal", () => {
     test("transforms EVM deal to OfferWithMetadata", () => {
-      const result = transformEvmDeal(mockEvmDeal, "0x0000000000000000000000000000000000000000");
+      const result = transformEvmDeal(mockEvmDeal);
 
       expect(result.id).toBe(BigInt(456));
       expect(result.tokenAmount).toBe(BigInt(5000));

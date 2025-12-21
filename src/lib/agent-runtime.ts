@@ -156,14 +156,9 @@ class AgentRuntimeManager {
         );
       }
       // FAIL-FAST: Validate URL format - new URL() throws if invalid
-      let url: URL;
-      try {
-        url = new URL(postgresUrl.replace(/^postgres(ql)?:\/\//, "http://"));
-      } catch {
-        throw new Error(
-          "Database connection failed: Invalid database URL format",
-        );
-      }
+      const url = new URL(
+        postgresUrl.replace(/^postgres(ql)?:\/\//, "http://"),
+      );
       // FAIL-FAST: hostname is required in URL - if missing, URL is invalid
       if (!url.hostname || url.hostname === "") {
         throw new Error(

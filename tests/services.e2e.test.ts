@@ -23,7 +23,6 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { z } from "zod";
 import {
   BASE_URL,
-  loadEvmDeployment,
   waitForServer as waitForServerUtil,
 } from "./test-utils";
 import {
@@ -119,10 +118,8 @@ function validateSchema<T>(schema: z.ZodSchema<T>, data: unknown): T {
 }
 
 describe("Service Layer E2E Tests", () => {
-  let evmDeployment: ReturnType<typeof loadEvmDeployment> | null = null;
-
   beforeAll(async () => {
-        if (skipIfNoServer()) return;
+    if (skipIfNoServer()) return;
     // Wait for server to be ready (with shorter timeout for CI)
     serverAvailable = await waitForServer(15_000);
 
@@ -134,13 +131,6 @@ describe("Service Layer E2E Tests", () => {
           "   Skipping service E2E tests.\n",
       );
       return;
-    }
-
-    // Try to load EVM deployment (may not exist if contracts not deployed)
-    try {
-      evmDeployment = loadEvmDeployment();
-    } catch {
-      console.log("EVM deployment not found - some tests will be skipped");
     }
   });
 

@@ -205,12 +205,8 @@ export function AcceptQuoteModal({
   } = useWalletConnection();
   const { connectWallet } = useWalletActions();
 
-  // Validate chain compatibility
-  // FAIL-FAST: Quote must have tokenChain
   if (!initialQuote.tokenChain) {
-    throw new Error(
-      "Quote missing tokenChain - cannot determine required wallet type",
-    );
+    throw new Error("Quote missing tokenChain");
   }
   const quoteChain = initialQuote.tokenChain as Exclude<QuoteChain, null>;
   const requiredFamily = quoteChain === "solana" ? "solana" : "evm";
@@ -276,11 +272,8 @@ export function AcceptQuoteModal({
       : undefined;
   const chainOtcAddress = chainOtcAddressFromHook ?? chainOtcAddressFromConfig;
 
-  // FAIL-FAST: EVM chains require OTC address
   if (isEvmToken && !chainOtcAddress && !otcAddress) {
-    throw new Error(
-      `No OTC address available for EVM chain ${targetEvmChain} - check deployment config`,
-    );
+    throw new Error(`No OTC address for ${targetEvmChain}`);
   }
   // Use chain-specific address if available, otherwise fall back to default otcAddress
   const effectiveOtcAddress = chainOtcAddress ?? otcAddress;
@@ -563,9 +556,8 @@ export function AcceptQuoteModal({
             : typeof data.priceUsd === "number"
               ? data.priceUsd
               : undefined;
-      // FAIL-FAST: Price must be available and valid
       if (typeof price !== "number" || price <= 0) {
-        throw new Error(`Invalid or missing price in response: ${price}`);
+        throw new Error(`Invalid price: ${price}`);
       }
 
       if (!cancelled) {
@@ -627,15 +619,8 @@ export function AcceptQuoteModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    // FAIL-FAST: Quote must have tokenSymbol
-    if (!initialQuote.tokenSymbol) {
-      throw new Error("Quote missing tokenSymbol - cannot proceed");
-    }
-
-    // FAIL-FAST: Quote must have tokenChain
-    if (!initialQuote.tokenChain) {
-      throw new Error("Quote missing tokenChain - cannot determine chain");
-    }
+    if (!initialQuote.tokenSymbol) throw new Error("Quote missing tokenSymbol");
+    if (!initialQuote.tokenChain) throw new Error("Quote missing tokenChain");
 
     const chain = initialQuote.tokenChain;
     const symbol = initialQuote.tokenSymbol;
@@ -662,9 +647,8 @@ export function AcceptQuoteModal({
       // Still need to fetch decimals from DB - don't return early
       // Fall through to DB lookup for decimals
     } else {
-      // FAIL-FAST: Token address should be present for transactions
       console.warn(
-        "[AcceptQuote] Quote missing tokenAddress - will try to fetch from DB",
+        "[AcceptQuote] Quote missing tokenAddress - will fetch from DB",
       );
     }
 
@@ -759,15 +743,8 @@ export function AcceptQuoteModal({
   useEffect(() => {
     if (!isOpen || !isSolanaToken) return;
 
-    // FAIL-FAST: Quote must have consignmentId for Solana
     if (!initialQuote.consignmentId) {
-      const error =
-        "Quote is missing consignmentId. Solana quotes require a consignment link.";
-      console.error(`[AcceptQuote] CRITICAL: ${error}`, initialQuote);
-      dispatch({
-        type: "SET_ERROR",
-        payload: error,
-      });
+      dispatch({ type: "SET_ERROR", payload: "Quote missing consignmentId" });
       return;
     }
 
@@ -791,10 +768,9 @@ export function AcceptQuoteModal({
       );
       const res = await fetch(`/api/consignments/${consignmentDbId}`);
 
-      // FAIL-FAST: API must return consignment
       if (!res.ok) {
         throw new Error(
-          `Failed to fetch consignment ${consignmentDbId}: HTTP ${res.status}`,
+          `Failed to fetch consignment ${consignmentDbId}: ${res.status}`,
         );
       }
 
@@ -811,10 +787,9 @@ export function AcceptQuoteModal({
         chain: data.consignment.chain,
       });
 
-      // FAIL-FAST: Solana consignment must have on-chain ID
       if (!data.consignment.contractConsignmentId) {
         throw new Error(
-          `Consignment ${consignmentDbId} missing on-chain ID (contractConsignmentId). The consignment may not have been created on-chain properly.`,
+          `Consignment ${consignmentDbId} missing contractConsignmentId`,
         );
       }
 
@@ -897,15 +872,8 @@ export function AcceptQuoteModal({
   useEffect(() => {
     if (!isOpen || isSolanaToken) return;
 
-    // FAIL-FAST: Quote must have consignmentId for EVM
     if (!initialQuote.consignmentId) {
-      const error =
-        "Quote is missing consignmentId. EVM quotes require a consignment link.";
-      console.error(`[AcceptQuote] CRITICAL: ${error}`, initialQuote);
-      dispatch({
-        type: "SET_ERROR",
-        payload: error,
-      });
+      dispatch({ type: "SET_ERROR", payload: "Quote missing consignmentId" });
       return;
     }
 
@@ -915,10 +883,9 @@ export function AcceptQuoteModal({
       console.log(`[AcceptQuote] EVM fetching consignment: ${consignmentDbId}`);
       const res = await fetch(`/api/consignments/${consignmentDbId}`);
 
-      // FAIL-FAST: API must return consignment
       if (!res.ok) {
         throw new Error(
-          `Failed to fetch consignment ${consignmentDbId}: HTTP ${res.status}`,
+          `Failed to fetch consignment ${consignmentDbId}: ${res.status}`,
         );
       }
 
@@ -927,10 +894,9 @@ export function AcceptQuoteModal({
         throw new Error(`Consignment ${consignmentDbId} not found in database`);
       }
 
-      // FAIL-FAST: EVM consignment must have on-chain ID
       if (!data.consignment.contractConsignmentId) {
         throw new Error(
-          `Consignment ${consignmentDbId} not deployed on-chain yet. The consignment may not have been created properly.`,
+          `Consignment ${consignmentDbId} missing contractConsignmentId`,
         );
       }
 
@@ -940,12 +906,7 @@ export function AcceptQuoteModal({
       });
 
       if (data.consignment.remainingAmount) {
-        // FAIL-FAST: Token decimals are required - if missing, we can't calculate human-readable amount
-        if (
-          data.consignment.tokenDecimals === undefined ||
-          data.consignment.tokenDecimals === null ||
-          typeof data.consignment.tokenDecimals !== "number"
-        ) {
+        if (typeof data.consignment.tokenDecimals !== "number") {
           throw new Error(
             `Consignment missing tokenDecimals - cannot display remaining amount`,
           );
@@ -1422,9 +1383,8 @@ export function AcceptQuoteModal({
       }
       console.log("[AcceptQuote] Using token mint:", tokenMintAddress);
 
-      // FAIL-FAST: Solana wallet MUST be connected and ready
       if (!solanaWallet) {
-        throw new Error("Solana wallet not connected - cannot proceed");
+        throw new Error("Solana wallet not connected");
       }
       if (!solanaWallet.publicKey) {
         throw new Error(
@@ -1611,13 +1571,9 @@ export function AcceptQuoteModal({
       console.log(
         `[AcceptQuote] At transaction time, contractConsignmentId: ${contractConsignmentId}`,
       );
-      // FAIL-FAST: initialQuote is required prop, validate required fields
-      if (!initialQuote.tokenChain) {
-        throw new Error("Quote missing required tokenChain field");
-      }
-      if (!initialQuote.tokenSymbol) {
-        throw new Error("Quote missing required tokenSymbol field");
-      }
+      if (!initialQuote.tokenChain) throw new Error("Quote missing tokenChain");
+      if (!initialQuote.tokenSymbol)
+        throw new Error("Quote missing tokenSymbol");
       console.log(`[AcceptQuote] Quote data:`, {
         consignmentId: initialQuote.consignmentId, // Optional field
         tokenAddress: initialQuote.tokenAddress, // Optional field
@@ -1685,9 +1641,8 @@ export function AcceptQuoteModal({
       // Sign with offer keypair first
       tx.partialSign(offerKeypair);
 
-      // FAIL-FAST: signTransaction MUST exist (validated above)
       if (!solanaWallet.signTransaction) {
-        throw new Error("Solana wallet signTransaction method not available");
+        throw new Error("Wallet missing signTransaction");
       }
       const signedTx = await solanaWallet.signTransaction(tx);
 
@@ -1767,11 +1722,8 @@ export function AcceptQuoteModal({
 
       // Quote ID already validated at component mount
 
-      // FAIL-FAST: Solana public key is required for Solana transactions
       if (!solanaPublicKey) {
-        throw new Error(
-          "Solana wallet public key is required but not available",
-        );
+        throw new Error("Solana public key not available");
       }
       // Solana addresses are Base58 encoded and case-sensitive - preserve original case
       const solanaWalletAddress = solanaPublicKey;
@@ -1898,9 +1850,6 @@ export function AcceptQuoteModal({
       typeof solanaTokenDecimals === "number" ? solanaTokenDecimals : null;
     if (tokenDecimals === null) {
       console.log("[AcceptQuote] Decimals not set, fetching from API...");
-      // FAIL-FAST: Chain and token address must be available
-      // Use quote chain if available, otherwise fall back to targetEvmChain
-      // Use quote chain if available, otherwise fall back to targetEvmChain
       const chain = initialQuote.tokenChain ?? targetEvmChain ?? undefined;
       if (!chain) {
         throw new Error("Token chain not available - cannot fetch decimals");
@@ -2046,8 +1995,6 @@ export function AcceptQuoteModal({
     }
 
     const approveData = await approveRes.json();
-    // FAIL-FAST: Approval response must have transaction hash
-    // Use approvalTx if available, otherwise fall back to txHash
     const approvalTxHash = approveData.approvalTx ?? approveData.txHash;
     if (!approvalTxHash) {
       throw new Error("Approval response missing transaction hash");
@@ -2087,8 +2034,6 @@ export function AcceptQuoteModal({
       }
     }
 
-    // FAIL-FAST: Payment transaction hash must be available
-    // Use fulfillTx if available, otherwise fall back to approvalTx
     const paymentTxHashTyped = (approveData.fulfillTx ??
       approveData.approvalTx) as `0x${string}` | undefined;
     if (!paymentTxHashTyped) {
@@ -2173,9 +2118,7 @@ export function AcceptQuoteModal({
 
   const estPerTokenUsd = useMemo(() => {
     // Use quote's pricePerToken with discount applied for estimation
-    // Actual cost will be determined by on-chain oracle at execution
-    // FAIL-FAST: Price is required for estimation - if missing, we can't estimate
-    // Use pricePerToken if available and valid, otherwise fall back to fallbackTokenPrice
+    // Use pricePerToken if available, otherwise fallbackTokenPrice
     const basePrice =
       initialQuote.pricePerToken && initialQuote.pricePerToken > 0
         ? initialQuote.pricePerToken
@@ -2197,9 +2140,11 @@ export function AcceptQuoteModal({
   ]);
 
   const balanceDisplay = useMemo(() => {
-    // For Solana tokens, we don't have wagmi balances - show dash
+    // For Solana tokens, wagmi (EVM-only) cannot fetch balances.
+    // User proceeds with available max - transaction will fail on-chain if insufficient funds.
+    // TODO: Add useSolanaBalance hook for proper balance display
     if (isSolanaToken) {
-      return "—"; // Solana balance fetching not implemented via wagmi
+      return "—";
     }
     if (!isConnected) return "—";
     if (currency === "USDC") {

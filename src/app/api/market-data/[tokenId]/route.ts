@@ -49,43 +49,42 @@ export async function GET(
   }
 
   const { tokenId } = parseResult.data;
-  let marketData = await MarketDataDB.getMarketData(tokenId);
 
-  if (!marketData || Date.now() - marketData.lastUpdated > 300000) {
-    // Token lookup - return 404 if not found
-    let token;
-    try {
-      token = await TokenDB.getToken(tokenId);
-    } catch (err) {
-      if (err instanceof Error && err.message.includes("not found")) {
-        return NextResponse.json(
-          { success: false, error: `Token ${tokenId} not found` },
-          { status: 404 },
+  try {
+    let marketData = await MarketDataDB.getMarketData(tokenId);
+
+    if (!marketData || Date.now() - marketData.lastUpdated > 300000) {
+      const token = await TokenDB.getToken(tokenId);
+
+      // Skip external API calls for local development
+      if (!isLocalDevelopment(token.chain, token.contractAddress)) {
+        const service = new MarketDataService();
+        await service.refreshTokenData(
+          tokenId,
+          token.contractAddress,
+          token.chain,
         );
+        marketData = await MarketDataDB.getMarketData(tokenId);
       }
-      throw err;
     }
 
-    // Skip external API calls for local development
-    if (!isLocalDevelopment(token.chain, token.contractAddress)) {
-      const service = new MarketDataService();
-      await service.refreshTokenData(
-        tokenId,
-        token.contractAddress,
-        token.chain,
+    // Cache for 60 seconds, serve stale for 5 minutes while revalidating
+    // Market data changes frequently but not every request
+    const response = { success: true, marketData };
+    const validatedResponse = MarketDataResponseSchema.parse(response);
+
+    return NextResponse.json(validatedResponse, {
+      headers: {
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+      },
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("not found")) {
+      return NextResponse.json(
+        { success: false, error: `Token ${tokenId} not found` },
+        { status: 404 },
       );
-      marketData = await MarketDataDB.getMarketData(tokenId);
     }
+    throw err;
   }
-
-  // Cache for 60 seconds, serve stale for 5 minutes while revalidating
-  // Market data changes frequently but not every request
-  const response = { success: true, marketData };
-  const validatedResponse = MarketDataResponseSchema.parse(response);
-
-  return NextResponse.json(validatedResponse, {
-    headers: {
-      "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
-    },
-  });
 }

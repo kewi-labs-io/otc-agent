@@ -3,6 +3,7 @@ import { z } from "zod";
 import { parseOrThrow } from "@/lib/validation/helpers";
 import type { Token } from "@/types";
 import { TokenBatchResponseSchema } from "@/types/validation/hook-schemas";
+import { tokenKeys } from "./queryKeys";
 
 // Token IDs array validation
 const TokenIdsArraySchema = z.array(z.string().min(1));
@@ -35,17 +36,6 @@ async function fetchTokenBatch(
 
   return data.tokens as Record<string, Token | null>;
 }
-
-/**
- * Query key factory for tokens
- */
-export const tokenKeys = {
-  all: ["tokens"] as const,
-  batches: () => [...tokenKeys.all, "batch"] as const,
-  batch: (ids: string[]) =>
-    [...tokenKeys.batches(), ids.sort().join(",")] as const,
-  single: (id: string) => [...tokenKeys.all, "single", id] as const,
-};
 
 /**
  * Hook to batch-fetch multiple tokens at once.

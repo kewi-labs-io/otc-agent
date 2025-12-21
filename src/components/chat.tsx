@@ -522,19 +522,23 @@ export const Chat = ({
           const byServerId = new Map<string, ChatMessage>();
           withoutOptimistic.forEach((m) => {
             // Use serverMessageId if available, otherwise fall back to id
-            // Both are required fields - at least one must exist
-            const key = m.serverMessageId?.trim() || m.id?.trim();
+            // id is required in ChatMessage; serverMessageId is optional
+            const key = m.serverMessageId?.trim() || m.id.trim();
             if (!key) {
-              throw new Error("Message missing both serverMessageId and id");
+              throw new Error(
+                `Message has empty id after trim: serverMessageId=${m.serverMessageId}, id=${m.id}`,
+              );
             }
             byServerId.set(key, m);
           });
           formattedMessages.forEach((m: ChatMessage) => {
             // Use serverMessageId if available, otherwise fall back to id
-            // Both are required fields - at least one must exist
-            const key = m.serverMessageId?.trim() || m.id?.trim();
+            // id is required in ChatMessage; serverMessageId is optional
+            const key = m.serverMessageId?.trim() || m.id.trim();
             if (!key) {
-              throw new Error("Message missing both serverMessageId and id");
+              throw new Error(
+                `Message has empty id after trim: serverMessageId=${m.serverMessageId}, id=${m.id}`,
+              );
             }
             byServerId.set(key, m);
           });

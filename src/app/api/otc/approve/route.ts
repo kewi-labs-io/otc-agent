@@ -31,6 +31,7 @@ import {
   ApproveOfferRequestSchema,
   ApproveOfferResponseSchema,
 } from "@/types/validation/api-schemas";
+import { fetchJupiterPrices } from "@/utils/price-fetcher";
 
 /**
  * Minimal wallet client interface for contract writes
@@ -418,14 +419,16 @@ async function handleApproval(request: NextRequest) {
         `[Approve API] Fetched SOL price: $${solPriceUsd} (${solPrice8d} in 8d)`,
       );
 
-      // Also fetch token price for consistency
+      // Also fetch token price for consistency - try CoinGecko first, then Jupiter
       const tokenMintStr = offerData.tokenMint.toString();
+      let tokenPriceUsd: number | null = null;
+
+      // Try CoinGecko first
       const tokenCgRes = await fetch(
         `https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses=${tokenMintStr}&vs_currencies=usd`,
         { headers: { accept: "application/json" } },
       );
 
-      let tokenPrice8d = 350000; // Default fallback ~$0.0035
       if (tokenCgRes.ok) {
         const tokenCgData = (await tokenCgRes.json()) as Record<
           string,
@@ -443,16 +446,40 @@ async function handleApproval(request: NextRequest) {
               `CoinGecko returned invalid price for ${tokenMintStr}: ${tokenPriceEntry.usd}`,
             );
           }
-          tokenPrice8d = Math.round(tokenPriceEntry.usd * 1e8);
+          tokenPriceUsd = tokenPriceEntry.usd;
           console.log(
-            `[Approve API] Fetched token price: $${tokenPriceEntry.usd} (${tokenPrice8d} in 8d)`,
-          );
-        } else {
-          console.log(
-            `[Approve API] Token price not found, using default: ${tokenPrice8d}`,
+            `[Approve API] Fetched token price from CoinGecko: $${tokenPriceUsd}`,
           );
         }
       }
+
+      // If CoinGecko doesn't have it, try Jupiter
+      if (tokenPriceUsd === null) {
+        console.log(
+          `[Approve API] Token not in CoinGecko, trying Jupiter: ${tokenMintStr}`,
+        );
+        const jupiterPrices = await fetchJupiterPrices([tokenMintStr]);
+        const jupiterPrice = jupiterPrices[tokenMintStr];
+        if (jupiterPrice && jupiterPrice > 0) {
+          tokenPriceUsd = jupiterPrice;
+          console.log(
+            `[Approve API] Fetched token price from Jupiter: $${tokenPriceUsd}`,
+          );
+        }
+      }
+
+      // FAIL-FAST: If no price from either source, cannot safely proceed
+      if (tokenPriceUsd === null || tokenPriceUsd <= 0) {
+        throw new Error(
+          `Token price unavailable for ${tokenMintStr}: not found in CoinGecko or Jupiter. ` +
+            `Cannot safely approve offer without valid token price.`,
+        );
+      }
+
+      const tokenPrice8d = Math.round(tokenPriceUsd * 1e8);
+      console.log(
+        `[Approve API] Using token price: $${tokenPriceUsd} (${tokenPrice8d} in 8d)`,
+      );
 
       const now = Math.floor(Date.now() / 1000);
       await program.methods
@@ -950,7 +977,7 @@ async function handleApproval(request: NextRequest) {
   console.log("[Approve API] Approval receipt:", {
     status: approvalReceipt.status,
     blockNumber: approvalReceipt.blockNumber,
-    gasUsed: approvalReceipt.gasUsed?.toString(),
+    gasUsed: approvalReceipt.gasUsed.toString(),
   });
 
   console.log("[Approve API] ✅ Offer approved:", offerId, "tx:", txHash);

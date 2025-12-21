@@ -13,11 +13,7 @@
  */
 
 // Chain selection
-export {
-  ChainContext,
-  useChain,
-  type ChainContextValue,
-} from "./ChainContext";
+export { ChainContext, useChain, type ChainContextValue } from "./ChainContext";
 
 // Wallet connection state (read-only)
 export {

@@ -115,7 +115,12 @@ function parseRegisterTokenTransaction(
   if ("staticAccountKeys" in message) {
     // Versioned transaction (v0)
     accountKeys.push(...message.staticAccountKeys);
-    if (tx.meta?.loadedAddresses) {
+    // For confirmed transactions, meta must exist
+    if (!tx.meta) {
+      throw new Error("Transaction meta missing for confirmed transaction");
+    }
+    // loadedAddresses is optional - only present when using address table lookups
+    if (tx.meta.loadedAddresses) {
       accountKeys.push(
         ...tx.meta.loadedAddresses.writable.map((addr) => new PublicKey(addr)),
         ...tx.meta.loadedAddresses.readonly.map((addr) => new PublicKey(addr)),
@@ -223,8 +228,11 @@ async function registerTokenToDatabase(
     new PublicKey(parsed.tokenMint),
   );
 
+  // Fail fast: token mint must exist since it was just registered on-chain
+  if (!mintInfo.value) {
+    throw new Error(`Token mint account not found: ${parsed.tokenMint}`);
+  }
   if (
-    !mintInfo.value?.data ||
     typeof mintInfo.value.data !== "object" ||
     !("parsed" in mintInfo.value.data)
   ) {

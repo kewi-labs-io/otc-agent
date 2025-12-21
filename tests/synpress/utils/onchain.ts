@@ -366,8 +366,8 @@ export async function getSolanaDesk(deskAddress: string): Promise<SolanaDeskSnap
   const connection = solanaConnection();
   const accountInfo = await connection.getAccountInfo(new PublicKey(deskAddress));
 
-  // FAIL-FAST: Desk account must exist with data
-  if (!accountInfo?.data) {
+  // FAIL-FAST: Desk account must exist
+  if (!accountInfo) {
     throw new Error(`Desk account not found: ${deskAddress}`);
   }
 
@@ -530,7 +530,7 @@ export async function getSolanaOffer(deskAddress: string, offerId: bigint): Prom
   const accountInfo = await connection.getAccountInfo(pda);
 
   // Offer may not exist - return null if account not found
-  if (!accountInfo?.data) {
+  if (!accountInfo) {
     return null;
   }
 

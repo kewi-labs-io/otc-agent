@@ -1,7 +1,22 @@
 import { NextResponse } from "next/server";
 import { agentRuntime } from "@/lib/agent-runtime";
-import { TokenDB } from "@/services/database";
-import type { OTCConsignment } from "@/types";
+import type { OTCConsignment, Token } from "@/types";
+
+/**
+ * Check if a token exists in the cache without throwing.
+ * Uses the same normalization logic as TokenDB.getToken.
+ */
+async function tokenExists(tokenId: string): Promise<boolean> {
+  const runtime = await agentRuntime.getRuntime();
+  // Normalize: EVM addresses lowercase, Solana preserved
+  const match = tokenId.match(/^token-([a-z]+)-(.+)$/);
+  const normalizedId =
+    match && match[1] !== "solana"
+      ? `token-${match[1]}-${match[2].toLowerCase()}`
+      : tokenId;
+  const token = await runtime.getCache<Token>(`token:${normalizedId}`);
+  return token !== null && token !== undefined;
+}
 
 /**
  * Clean up orphaned consignments (consignments with non-existent tokens)
@@ -32,11 +47,9 @@ export async function POST() {
       continue;
     }
 
-    // Check if token exists
-    try {
-      await TokenDB.getToken(consignment.tokenId);
-    } catch {
-      // Token doesn't exist - this consignment is orphaned
+    // Check if token exists - if not, this consignment is orphaned
+    const exists = await tokenExists(consignment.tokenId);
+    if (!exists) {
       orphanedIds.push(consignmentId);
       if (!cleanedByToken[consignment.tokenId]) {
         cleanedByToken[consignment.tokenId] = [];
@@ -117,10 +130,9 @@ export async function GET() {
       continue;
     }
 
-    // Check if token exists
-    try {
-      await TokenDB.getToken(consignment.tokenId);
-    } catch {
+    // Check if token exists - if not, this consignment is orphaned
+    const exists = await tokenExists(consignment.tokenId);
+    if (!exists) {
       orphaned.push({
         id: consignmentId,
         tokenId: consignment.tokenId,

@@ -11,10 +11,6 @@ const Markdown = dynamic(() => import("markdown-to-jsx"), {
 type MarkdownComponentOptions = ComponentProps<typeof Markdown>["options"];
 
 function parseMarkdownIntoBlocks(markdown: string): string[] {
-  // FAIL-FAST: markdown must be a string
-  if (typeof markdown !== "string") {
-    throw new Error("markdown must be a string");
-  }
   const lexer = new Lexer();
   const tokens = lexer.lex(markdown);
   return tokens.map((token) => token.raw);

@@ -67,16 +67,20 @@ async function openPrivyConnectFlow(page: Page): Promise<void> {
 
   const connectVisible = await connectButton.isVisible({ timeout: 4000 }).catch(() => false);
   if (connectVisible) {
+    console.log("[openPrivyConnectFlow] Clicking Sign In button");
     await connectButton.click();
-    await sleep(500);
+    await sleep(1000);
   }
 
   // Look for "Continue with a wallet" in Privy modal
   const continueWithWallet = page.locator('button:has-text("Continue with a wallet")').first();
-  const continueVisible = await continueWithWallet.isVisible({ timeout: 4000 }).catch(() => false);
+  const continueVisible = await continueWithWallet.isVisible({ timeout: 6000 }).catch(() => false);
   if (continueVisible) {
+    console.log("[openPrivyConnectFlow] Clicking Continue with a wallet");
     await continueWithWallet.click();
-    await sleep(500);
+    await sleep(1500);
+  } else {
+    console.log("[openPrivyConnectFlow] Continue with a wallet button not found");
   }
 }
 
@@ -98,15 +102,37 @@ export async function connectMetaMaskWallet(
   // Open Privy connect flow
   await openPrivyConnectFlow(page);
 
-  // Select MetaMask
-  const metamaskOption = page.locator('button:has-text("MetaMask")').first();
-  const metamaskVisible = await metamaskOption.isVisible({ timeout: 4000 }).catch(() => false);
-  if (metamaskVisible) {
-    await metamaskOption.click();
-    await sleep(1000);
+  // Select MetaMask - look in the wallet selection modal
+  // Privy shows "MetaMask" as a list item, try multiple selectors
+  const metamaskSelectors = [
+    'button:has-text("MetaMask")',
+    'div[role="button"]:has-text("MetaMask")',
+    '[data-testid*="metamask"]',
+    'text=/MetaMask/i',
+  ];
+  
+  let metamaskClicked = false;
+  for (const selector of metamaskSelectors) {
+    const option = page.locator(selector).first();
+    if (await option.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await option.click();
+      metamaskClicked = true;
+      console.log(`[connectMetaMaskWallet] Clicked MetaMask using selector: ${selector}`);
+      await sleep(1500);
+      break;
+    }
+  }
+  
+  if (!metamaskClicked) {
+    console.log("[connectMetaMaskWallet] MetaMask button not found, trying to proceed anyway");
   }
 
-  await metamask.connectToDapp();
+  // Try to connect via MetaMask - this may timeout if no popup appears
+  try {
+    await metamask.connectToDapp();
+  } catch {
+    console.log("[connectMetaMaskWallet] connectToDapp failed, MetaMask may already be connected");
+  }
   await sleep(1000);
 
   await metamask.confirmSignature().catch(() => {

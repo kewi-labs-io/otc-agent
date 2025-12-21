@@ -46,12 +46,9 @@ import { findBestPool } from "@/utils/pool-finder-base";
 const otcAddressCache: Record<string, Address | undefined> = {};
 const addressLoggedForChain: Record<string, boolean> = {};
 
-// Helper: Get chain config with validation (guarantees ChainConfig exists)
 function getChainConfig(chain: Chain): ChainConfig {
-  // FAIL-FAST: chain must be valid Chain type, SUPPORTED_CHAINS guarantees ChainConfig exists
-  if (!(chain in SUPPORTED_CHAINS)) {
+  if (!(chain in SUPPORTED_CHAINS))
     throw new Error(`Unsupported chain: ${chain}`);
-  }
   return SUPPORTED_CHAINS[chain];
 }
 
@@ -80,22 +77,16 @@ function getOtcAddressForChain(chain: Chain): Address | undefined {
   return otcAddressCache[cacheKey];
 }
 
-// Helper to get default OTC address (Base) - for backward compatibility
 function getOtcAddress(): Address | undefined {
   return getOtcAddressForChain("base");
 }
 
-// Get the numeric chain ID for a chain string
 function getChainId(chain: Chain): number {
-  // FAIL-FAST: chain must be valid Chain type, SUPPORTED_CHAINS guarantees ChainConfig exists
-  if (!(chain in SUPPORTED_CHAINS)) {
+  if (!(chain in SUPPORTED_CHAINS))
     throw new Error(`Unsupported chain: ${chain}`);
-  }
   const chainConfig = SUPPORTED_CHAINS[chain];
-  // FAIL-FAST: chainId is optional in interface but required for this function
-  if (chainConfig.chainId === undefined) {
-    throw new Error(`Chain ID not configured for chain: ${chain}`);
-  }
+  if (chainConfig.chainId === undefined)
+    throw new Error(`Chain ID not configured: ${chain}`);
   return chainConfig.chainId;
 }
 
@@ -328,7 +319,6 @@ export function useOTC(): {
   // Use wagmi's public client which automatically handles all configured chains
   const publicClient = usePublicClient();
 
-  // Helper to switch to a specific chain with verification
   const switchToChain = useCallback(
     async (chain: Chain): Promise<void> => {
       const targetChainId = getChainId(chain);
@@ -899,6 +889,9 @@ export function useOTC(): {
           );
 
           // Find the best pool for this token
+          // Note: Called directly instead of via usePoolCheck because this is inside a mutation.
+          // pool-finder-base has its own 30s cache which is appropriate for this use case.
+          // For form validation, use usePoolCheck hook which goes through React Query.
           const targetChainId = getChainId(targetChain);
           if (!targetChainId) {
             throw new Error(`Could not get chain ID for: ${targetChain}`);
@@ -1239,14 +1232,9 @@ export function useOTC(): {
     [account, chainId, switchToChain, writeContractAsync],
   );
 
-  // Helper to extract contract address from tokenId format: "token-{chain}-{address}"
   const extractContractAddress = useCallback((tokenId: string): Address => {
     const parts = tokenId.split("-");
-    if (parts.length < 3) {
-      throw new Error(
-        `Invalid tokenId format: ${tokenId}. Expected "token-{chain}-{address}"`,
-      );
-    }
+    if (parts.length < 3) throw new Error(`Invalid tokenId: ${tokenId}`);
     // Format is: token-chain-address, so join everything after the second dash
     return parts.slice(2).join("-") as Address;
   }, []);
@@ -1302,7 +1290,6 @@ export function useOTC(): {
     [abi],
   );
 
-  // Helper to get exact required payment amount
   const getRequiredPayment = useCallback(
     async (offerId: bigint, currency: "ETH" | "USDC"): Promise<bigint> => {
       if (!otcAddress) {

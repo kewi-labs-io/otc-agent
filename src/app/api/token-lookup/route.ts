@@ -50,34 +50,26 @@ async function lookupSolanaToken(
     signal: AbortSignal.timeout(8000),
   });
 
-  // FAIL-FAST: Check response status
   if (!response.ok) {
-    // Return null for "not found" - this is expected for invalid addresses
-    // But log other errors for debugging
     if (response.status !== 404) {
-      console.error(
-        `[Token Lookup] Codex API error: ${response.status} ${response.statusText}`,
-      );
+      console.error(`[Token Lookup] Codex API error: ${response.status}`);
     }
     return null;
   }
 
   const data = await response.json();
-  // FAIL-FAST: Validate response structure
   if (typeof data !== "object" || data === null) {
-    throw new Error("Invalid Codex API response: expected object");
+    throw new Error("Invalid Codex API response");
   }
 
   const token = data.data?.token;
-
   if (!token) return null;
 
-  // FAIL-FAST: Symbol and name are required - if missing, this indicates a data quality issue
   if (!token.symbol || typeof token.symbol !== "string") {
-    throw new Error(`Codex token missing symbol for address: ${address}`);
+    throw new Error(`Token missing symbol: ${address}`);
   }
   if (!token.name || typeof token.name !== "string") {
-    throw new Error(`Codex token missing name for address: ${address}`);
+    throw new Error(`Token missing name: ${address}`);
   }
 
   return {
@@ -120,40 +112,29 @@ async function lookupEvmToken(
     signal: AbortSignal.timeout(5000),
   });
 
-  // FAIL-FAST: Check response status
   if (!response.ok) {
-    // Return null for "not found" - this is expected for invalid addresses
-    // But log other errors for debugging
     if (response.status !== 404) {
-      console.error(
-        `[Token Lookup] Alchemy API error: ${response.status} ${response.statusText}`,
-      );
+      console.error(`[Token Lookup] Alchemy API error: ${response.status}`);
     }
     return null;
   }
 
   const data = await response.json();
-  // FAIL-FAST: Validate response structure
   if (typeof data !== "object" || data === null) {
-    throw new Error("Invalid Alchemy API response: expected object");
+    throw new Error("Invalid Alchemy API response");
   }
 
   const result = data.result;
-
-  // No result means token not found - return null for 404
   if (!result) return null;
 
-  // FAIL-FAST: Symbol, name, and decimals are required - if missing, this indicates a data quality issue
   if (!result.symbol || typeof result.symbol !== "string") {
-    throw new Error(`Token metadata missing symbol for address: ${address}`);
+    throw new Error(`Token missing symbol: ${address}`);
   }
   if (!result.name || typeof result.name !== "string") {
-    throw new Error(`Token metadata missing name for address: ${address}`);
+    throw new Error(`Token missing name: ${address}`);
   }
   if (typeof result.decimals !== "number") {
-    throw new Error(
-      `Token metadata missing or invalid decimals: ${result.decimals} for address: ${address}`,
-    );
+    throw new Error(`Token missing decimals: ${address}`);
   }
 
   return {
@@ -206,6 +187,8 @@ export async function GET(request: NextRequest) {
 
   let token: TokenInfo | null = null;
 
+  // Lookup from external API (Alchemy for EVM, Codex for Solana)
+  // Handle external API errors at this boundary
   if (chain === "solana") {
     const codexKey = process.env.CODEX_API_KEY;
     if (!codexKey) {
@@ -214,7 +197,17 @@ export async function GET(request: NextRequest) {
         { status: 503 },
       );
     }
-    token = await lookupSolanaToken(address, codexKey);
+    // External API call - handle errors at boundary
+    try {
+      token = await lookupSolanaToken(address, codexKey);
+    } catch (err) {
+      // External API returned malformed data - surface as 502 Bad Gateway
+      const message = err instanceof Error ? err.message : "External API error";
+      return NextResponse.json(
+        { error: message, address, chain },
+        { status: 502 },
+      );
+    }
   } else {
     const alchemyKey = process.env.ALCHEMY_API_KEY;
     if (!alchemyKey) {
@@ -223,7 +216,17 @@ export async function GET(request: NextRequest) {
         { status: 503 },
       );
     }
-    token = await lookupEvmToken(address, chain, alchemyKey);
+    // External API call - handle errors at boundary
+    try {
+      token = await lookupEvmToken(address, chain, alchemyKey);
+    } catch (err) {
+      // External API returned malformed data - surface as 502 Bad Gateway
+      const message = err instanceof Error ? err.message : "External API error";
+      return NextResponse.json(
+        { error: message, address, chain },
+        { status: 502 },
+      );
+    }
   }
 
   if (!token) {

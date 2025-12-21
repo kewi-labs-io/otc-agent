@@ -51,12 +51,6 @@ async function fetchConsignments(
   return data.consignments;
 }
 
-/**
- * Re-export consignmentKeys for backward compatibility
- * @deprecated Use { consignmentKeys } from "./queryKeys" instead
- */
-export { consignmentKeys as consignmentsKeys } from "./queryKeys";
-
 interface UseConsignmentsOptions {
   filters?: ConsignmentsFilters;
   enabled?: boolean;

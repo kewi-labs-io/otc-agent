@@ -26,11 +26,15 @@ export function extractErrorMessage(
 
 /**
  * Parse API error response and throw with message
+ * Always throws - the error is extracted from JSON body if possible,
+ * otherwise uses fallbackMessage
  */
 export async function throwApiError(
   response: Response,
   fallbackMessage: string,
 ): Promise<never> {
+  // If JSON parsing fails (empty body, malformed), fall back to empty object
+  // The error will still be thrown with fallbackMessage
   const errorData = await response.json().catch(() => ({}));
   // Handle null/undefined responses by treating them as empty objects
   const safeErrorData =

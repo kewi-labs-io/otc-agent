@@ -147,7 +147,9 @@ async function fetchMarketData(
       return null;
     }
     // Other errors should be thrown
-    throw new Error(`Failed to fetch market data: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to fetch market data: ${response.status} ${response.statusText}`,
+    );
   }
 
   const data = await response.json();

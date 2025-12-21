@@ -20,14 +20,8 @@ export function isBlobStorageAvailable(): boolean {
  * FAIL-FAST: Throws if URL is invalid or extension cannot be determined
  */
 export function getExtensionFromUrl(url: string): string {
-  // FAIL-FAST: URL must be valid
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(url);
-  } catch {
-    throw new Error(`Invalid URL: ${url}`);
-  }
-
+  // new URL() throws TypeError if invalid - let it propagate
+  const parsedUrl = new URL(url);
   const pathname = parsedUrl.pathname;
   const match = pathname.match(/\.([a-zA-Z0-9]+)$/);
   if (!match) {

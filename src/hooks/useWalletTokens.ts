@@ -7,6 +7,7 @@ import {
   SolanaBalancesResponseSchema,
 } from "@/types/validation/hook-schemas";
 import { AddressSchema, ChainSchema } from "@/types/validation/schemas";
+import { walletTokenKeys } from "./queryKeys";
 
 // Re-export for consumers
 export type { WalletToken } from "@/types";
@@ -191,16 +192,6 @@ async function fetchSolanaTokens(
 }
 
 /**
- * Query key factory for wallet tokens
- */
-export const walletTokensKeys = {
-  all: ["walletTokens"] as const,
-  byChain: (chain: Chain) => [...walletTokensKeys.all, chain] as const,
-  byWallet: (address: string, chain: Chain) =>
-    [...walletTokensKeys.byChain(chain), address] as const,
-};
-
-/**
  * Hook to fetch and cache wallet tokens using React Query.
  *
  * Features:
@@ -218,8 +209,8 @@ export function useWalletTokens(
 
   return useQuery({
     queryKey: address
-      ? walletTokensKeys.byWallet(address, chain)
-      : walletTokensKeys.byChain(chain),
+      ? walletTokenKeys.byWallet(address, chain)
+      : walletTokenKeys.byChain(chain),
     queryFn: async () => {
       if (!address) return [];
 
@@ -245,14 +236,14 @@ export function useInvalidateWalletTokens() {
   return (address?: string, chain?: Chain) => {
     if (address && chain) {
       queryClient.invalidateQueries({
-        queryKey: walletTokensKeys.byWallet(address, chain),
+        queryKey: walletTokenKeys.byWallet(address, chain),
       });
     } else if (chain) {
       queryClient.invalidateQueries({
-        queryKey: walletTokensKeys.byChain(chain),
+        queryKey: walletTokenKeys.byChain(chain),
       });
     } else {
-      queryClient.invalidateQueries({ queryKey: walletTokensKeys.all });
+      queryClient.invalidateQueries({ queryKey: walletTokenKeys.all });
     }
   };
 }
@@ -266,12 +257,12 @@ export function useRefetchWalletTokens() {
   return async (address: string, chain: Chain) => {
     // Clear the cache entry first
     queryClient.removeQueries({
-      queryKey: walletTokensKeys.byWallet(address, chain),
+      queryKey: walletTokenKeys.byWallet(address, chain),
     });
 
     // Then refetch with forceRefresh=true
     return queryClient.fetchQuery({
-      queryKey: walletTokensKeys.byWallet(address, chain),
+      queryKey: walletTokenKeys.byWallet(address, chain),
       queryFn: async () => {
         if (chain === "solana") {
           return fetchSolanaTokens(address, true);

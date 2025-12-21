@@ -25,7 +25,8 @@ echo ""
 # 2. Unit/Integration Tests (bun test)
 # ============================================
 echo "=== Unit/Integration Tests (bun test) ==="
-bun test tests/shared-utils.e2e.test.ts
+# Run all tests from tests/ folder (excludes contracts/lib OpenZeppelin tests)
+bun test tests/
 echo ""
 
 echo "=== All Tests Complete ==="

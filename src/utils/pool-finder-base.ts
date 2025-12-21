@@ -1,3 +1,15 @@
+/**
+ * EVM Pool Finder
+ *
+ * Finds liquidity pools for EVM tokens across DEXs (Uniswap V3, etc.)
+ * Used for price discovery and token registration.
+ *
+ * CACHING STRATEGY:
+ * - Uses retry-cache module with 30s TTL for pool data
+ * - Intended for server-side API routes (e.g., /api/token-pool-check)
+ * - For client-side React components, use usePoolCheck hook which wraps the API
+ * - Direct client-side calls will use the same cache but bypass React Query
+ */
 import {
   type Abi,
   type Address,

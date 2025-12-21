@@ -92,7 +92,9 @@ async function fetchQuoteByOffer(
       return null;
     }
     // Other errors should be thrown
-    throw new Error(`Failed to fetch quote by offer: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to fetch quote by offer: ${response.status} ${response.statusText}`,
+    );
   }
 
   const data = await response.json();

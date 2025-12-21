@@ -83,7 +83,8 @@ export function useTokenLookup(
   const normalizedAddress = address?.trim() ?? null;
 
   // Detect chain from address format if not provided
-  const detectedChain = chain ?? (normalizedAddress?.startsWith("0x") ? "base" : "solana");
+  const detectedChain =
+    chain ?? (normalizedAddress?.startsWith("0x") ? "base" : "solana");
 
   const query = useQuery({
     queryKey: normalizedAddress

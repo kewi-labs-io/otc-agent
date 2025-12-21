@@ -290,6 +290,9 @@ async function startNextJs(): Promise<{ process: ChildProcess | null; shouldStop
 
   await sleep(2000);
 
+  // Clean .next directory to avoid stale cache issues (routes-manifest.json corruption)
+  execSync(`rm -rf ${join(PROJECT_ROOT, ".next")}`, { stdio: "ignore" });
+
   // Environment for local testing
   const env = { ...process.env };
   env.NEXT_PUBLIC_NETWORK = "local";
@@ -356,7 +359,11 @@ async function seedLocalTokens(): Promise<void> {
         tokens: Array<{ contractAddress: string }>;
       }
       const checkData = (await checkResponse.json()) as TokensCheckResponse;
-      const existingToken = checkData.tokens?.find(
+      // FAIL-FAST: tokens field is required per interface - if missing, API contract is broken
+      if (!checkData.tokens) {
+        throw new Error("Token check response missing required 'tokens' field");
+      }
+      const existingToken = checkData.tokens.find(
         (t) => t.contractAddress.toLowerCase() === tokenAddress.toLowerCase(),
       );
       if (existingToken) {

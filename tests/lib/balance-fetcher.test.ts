@@ -218,21 +218,8 @@ describe("balance-fetcher", () => {
         },
       ];
 
-      // This test requires Jupiter API access
-      // Skip gracefully if API is unavailable (401/503)
-      try {
-        const enriched = await enrichSolanaTokensWithPrices(tokens);
-        // If API succeeds, verify USD value is calculated
-        expect(enriched[0].balanceUsd).toBeGreaterThanOrEqual(0);
-      } catch (error) {
-        // API unavailable - skip test
-        const message = error instanceof Error ? error.message : String(error);
-        if (message.includes("401") || message.includes("503") || message.includes("ConnectionRefused")) {
-          console.log("  (skipped: Jupiter API unavailable)");
-          return;
-        }
-        throw error; // Re-throw unexpected errors
-      }
+      const enriched = await enrichSolanaTokensWithPrices(tokens);
+      expect(enriched[0].balanceUsd).toBeGreaterThanOrEqual(0);
     });
 
     test("preserves existing priceUsd when set", () => {

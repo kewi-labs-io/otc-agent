@@ -291,8 +291,15 @@ export const recentMessagesProvider: Provider = {
       sanitizeMemoryIfUser(m, runtime),
     );
 
+    // FAIL-FAST: Room must exist for a valid message - if not, it's a data integrity bug
+    if (!room) {
+      throw new Error(
+        `Room not found for roomId: ${roomId}. Message cannot be processed without a valid room.`,
+      );
+    }
+
     const isPostFormat =
-      room?.type === ChannelType.FEED || room?.type === ChannelType.THREAD;
+      room.type === ChannelType.FEED || room.type === ChannelType.THREAD;
 
     // Format recent messages and posts in parallel
     const [formattedRecentMessages, formattedRecentPosts] = await Promise.all([

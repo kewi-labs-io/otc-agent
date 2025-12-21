@@ -202,11 +202,6 @@ export class QuoteService extends Service {
     await this.runtime.setCache(QUOTE_KEY(quoteId), quoteData);
     await this.addToIndex(quoteId, data.entityId, normalizedBeneficiary);
 
-    // FAIL-FAST: tokenSymbol is required in function signature
-    if (!data.tokenSymbol) {
-      throw new Error(`Quote ${quoteId} missing required tokenSymbol`);
-    }
-
     console.log(
       `[QuoteService] ✅ Quote stored: ${quoteId} - ${data.discountBps}bps/${data.lockupMonths}mo - token: ${data.tokenSymbol}`,
     );

@@ -24,22 +24,11 @@ function getDealTerms(c: OTCConsignment): {
       lockupDays: c.maxLockupDays,
     };
   }
-  // FAIL-FAST: Fixed consignments MUST have fixedDiscountBps and fixedLockupDays
-  // These values determine the exact terms shown to users - wrong values would be misleading
-  if (c.fixedDiscountBps === undefined || c.fixedDiscountBps === null) {
-    throw new Error(
-      `Fixed consignment ${c.id} missing fixedDiscountBps - cannot display terms`,
-    );
-  }
-  if (c.fixedLockupDays === undefined || c.fixedLockupDays === null) {
-    throw new Error(
-      `Fixed consignment ${c.id} missing fixedLockupDays - cannot display terms`,
-    );
-  }
-  return {
-    discountBps: c.fixedDiscountBps,
-    lockupDays: c.fixedLockupDays,
-  };
+  if (c.fixedDiscountBps == null)
+    throw new Error(`Consignment ${c.id}: missing fixedDiscountBps`);
+  if (c.fixedLockupDays == null)
+    throw new Error(`Consignment ${c.id}: missing fixedLockupDays`);
+  return { discountBps: c.fixedDiscountBps, lockupDays: c.fixedLockupDays };
 }
 
 function getDealScore(c: OTCConsignment) {

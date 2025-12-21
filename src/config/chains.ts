@@ -162,12 +162,13 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
     }
 
     // For local development, BSC is not available (no local BSC fork)
-    // Provide a stub config that won't be used
+    // Provide a stub config with mainnet RPC - safe for read-only operations
+    // but contracts.otc is undefined so writes will fail-fast
     if (isLocal) {
       return {
         id: chain.id.toString(),
         name: "BSC (Not Available Locally)",
-        rpcUrl: "https://bsc-dataseed1.binance.org", // Placeholder
+        rpcUrl: "https://bsc-dataseed1.binance.org", // Public mainnet RPC (read-only)
         explorerUrl: "https://bscscan.com",
         nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
         contracts: {

@@ -66,8 +66,10 @@ function skipIfNoServer(): boolean {
 
 // IDL response type (Anchor IDL format - not in validation schemas)
 interface IdlResponse {
-  version: string;
-  name: string;
+  metadata: {
+    version: string;
+    name: string;
+  };
   instructions: Array<{ name: string }>;
   accounts: Array<{ name: string }>;
 }
@@ -132,8 +134,8 @@ const INVALID_ADDRESS = "invalid-address-format";
 
 describe("API Routes Integration Tests", () => {
   beforeAll(async () => {
-    // Server check
-    serverAvailable = await waitForServer(15_000);
+    // Server check - use shorter timeout that fits within default hook timeout
+    serverAvailable = await waitForServer(4_000);
     if (!serverAvailable) {
       console.log(
         "\n  Server not available at " + BASE_URL +
@@ -230,7 +232,8 @@ describe("API Routes Integration Tests", () => {
         `${BASE_URL}/api/token-lookup?address=${TEST_EVM_TOKEN}`,
       );
 
-      if (status === 503) return; // API key not configured
+      // 503 = API not configured, 502 = external API error
+      if (status === 503 || status === 502) return;
       expect([200, 404]).toContain(status);
 
       if (status === 200) {
@@ -577,10 +580,12 @@ describe("API Routes Integration Tests", () => {
       if (skipIfNoServer()) return;
       const { status, data } = await fetchJson<IdlResponse>(`${BASE_URL}/api/solana/idl`);
       expect(status).toBe(200);
-      // IDL metadata contains version and name
-      expect(data.metadata).toBeDefined();
-      expect(data.metadata?.version).toBeDefined();
-      expect(data.metadata?.name).toBeDefined();
+      // IDL metadata contains version and name - fail fast if structure is wrong
+      if (!data.metadata) {
+        throw new Error("IDL response missing metadata field");
+      }
+      expect(data.metadata.version).toBeDefined();
+      expect(data.metadata.name).toBeDefined();
       expect(data.instructions).toBeDefined();
       expect(Array.isArray(data.instructions)).toBe(true);
     }, TEST_TIMEOUT);

@@ -242,7 +242,9 @@ interface UpdateQuoteInput {
 /**
  * Update quote data (for pre-transaction updates)
  */
-async function updateQuote(input: UpdateQuoteInput): Promise<{ success: boolean }> {
+async function updateQuote(
+  input: UpdateQuoteInput,
+): Promise<{ success: boolean }> {
   const response = await fetch("/api/quote/latest", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

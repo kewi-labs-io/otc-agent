@@ -29,7 +29,7 @@ interface ChatMessageProps {
 
 export const ChatMessage = memo(function ChatMessage({
   message,
-  i,
+  i: _i,
   citations,
   followUpPrompts,
   onFollowUpClick,
@@ -37,34 +37,6 @@ export const ChatMessage = memo(function ChatMessage({
   assistantName = "Eliza",
 }: ChatMessageProps) {
   const [isSourcesExpanded, setIsSourcesExpanded] = useState(false);
-
-  // FAIL-FAST: Message must be valid object
-  if (!message || typeof message !== "object") {
-    throw new Error(`Invalid message at index ${i}: not an object`);
-  }
-
-  // FAIL-FAST: Required fields must exist
-  if (!message.id) {
-    throw new Error(`Message at index ${i} missing id`);
-  }
-  if (!message.name) {
-    throw new Error(`Message at index ${i} missing name`);
-  }
-  if (message.text == null) {
-    throw new Error(`Message at index ${i} missing text`);
-  }
-  if (!message.createdAt) {
-    throw new Error(`Message at index ${i} missing createdAt`);
-  }
-
-  // All fields validated above - no fallbacks needed
-  const safeMessage = {
-    ...message,
-    name: message.name, // Guaranteed to exist (validated above)
-    text: message.text, // Guaranteed to be string (validated above)
-    id: message.id, // Guaranteed to exist (validated above)
-    createdAt: message.createdAt, // Guaranteed to exist (validated above)
-  };
 
   // Null component to hide XML tags
   const NullComponent = () => null;
@@ -151,19 +123,19 @@ export const ChatMessage = memo(function ChatMessage({
 
   // name is guaranteed to exist (validated above) - no optional chaining needed
   const isUser =
-    safeMessage.name === USER_NAME || safeMessage.name.toLowerCase() === "user";
+    message.name === USER_NAME || message.name.toLowerCase() === "user";
 
   // Parse message text - handle both raw text and structured content
   let messageText = "";
-  if (typeof safeMessage.text === "string") {
-    messageText = safeMessage.text;
-  } else if (safeMessage.content?.text) {
-    messageText = safeMessage.content.text;
-  } else if (safeMessage.content) {
+  if (typeof message.text === "string") {
+    messageText = message.text;
+  } else if (message.content?.text) {
+    messageText = message.content.text;
+  } else if (message.content) {
     messageText =
-      typeof safeMessage.content === "string"
-        ? safeMessage.content
-        : JSON.stringify(safeMessage.content);
+      typeof message.content === "string"
+        ? message.content
+        : JSON.stringify(message.content);
   }
 
   // Clean up any XML artifacts or special formatting for agent messages
@@ -222,7 +194,7 @@ export const ChatMessage = memo(function ChatMessage({
             )}
           >
             <MemoizedMarkdown
-              id={safeMessage.id}
+              id={message.id}
               content={cleanMessageText}
               options={markdownOptions}
             />
@@ -268,7 +240,7 @@ export const ChatMessage = memo(function ChatMessage({
                       <LinkIcon className="w-3.5 h-3.5 flex-shrink-0" />
                       <div className="flex-1 truncate">
                         <MemoizedMarkdown
-                          id={`citation-${safeMessage.id}-${index}`}
+                          id={`citation-${message.id}-${index}`}
                           content={citation.title}
                           options={{
                             wrapper: "span",
@@ -293,9 +265,9 @@ export const ChatMessage = memo(function ChatMessage({
           )}
         </div>
 
-        {isUser && safeMessage.senderId && (
+        {isUser && message.senderId && (
           <div className="flex-shrink-0">
-            <WalletAvatar address={safeMessage.senderId} size={48} />
+            <WalletAvatar address={message.senderId} size={48} />
           </div>
         )}
       </div>

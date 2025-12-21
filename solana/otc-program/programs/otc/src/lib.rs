@@ -292,21 +292,9 @@ pub mod otc {
             .map_err(|_| OtcError::StalePrice)?;
 
         let token_usd_8d = convert_pyth_price(token_price.price, token_price.exponent)?;
-
-        if registry.token_usd_price_8d > 0 && max_price_deviation_bps > 0 {
-            let old_price = registry.token_usd_price_8d;
-            let price_diff = if token_usd_8d > old_price {
-                token_usd_8d - old_price
-            } else {
-                old_price - token_usd_8d
-            };
-            let max_deviation = (old_price as u128 * max_price_deviation_bps as u128) / 10000u128;
-            require!(price_diff as u128 <= max_deviation, OtcError::PriceDeviationTooLarge);
-        }
-
+        check_price_deviation(registry.token_usd_price_8d, token_usd_8d, max_price_deviation_bps)?;
         registry.token_usd_price_8d = token_usd_8d;
         registry.prices_updated_at = current_time;
-        
         Ok(())
     }
 
@@ -564,24 +552,8 @@ pub mod otc {
         let sol_usd_8d = convert_pyth_price(sol_price.price, sol_price.exponent)?;
 
         // Price deviation check (prevent manipulation/oracle attacks)
-        if desk.token_usd_price_8d > 0 && max_price_deviation_bps > 0 {
-            let old_price = desk.token_usd_price_8d;
-            let price_diff = if token_usd_8d > old_price {
-                token_usd_8d - old_price
-            } else {
-                old_price - token_usd_8d
-            };
-            let max_deviation = (old_price as u128 * max_price_deviation_bps as u128) / 10000u128;
-            require!(price_diff as u128 <= max_deviation, OtcError::PriceDeviationTooLarge);
-        }
-
-        // Also enforce deviation bound for SOL price if previously set
-        if desk.sol_usd_price_8d > 0 && max_price_deviation_bps > 0 {
-            let old_price = desk.sol_usd_price_8d;
-            let price_diff = if sol_usd_8d > old_price { sol_usd_8d - old_price } else { old_price - sol_usd_8d };
-            let max_deviation = (old_price as u128 * max_price_deviation_bps as u128) / 10000u128;
-            require!(price_diff as u128 <= max_deviation, OtcError::PriceDeviationTooLarge);
-        }
+        check_price_deviation(desk.token_usd_price_8d, token_usd_8d, max_price_deviation_bps)?;
+        check_price_deviation(desk.sol_usd_price_8d, sol_usd_8d, max_price_deviation_bps)?;
 
         desk.token_usd_price_8d = token_usd_8d;
         desk.sol_usd_price_8d = sol_usd_8d;
@@ -693,10 +665,8 @@ pub mod otc {
             require!(now - registry.prices_updated_at <= desk.max_price_age_secs, OtcError::StalePrice);
         }
 
-        // Check implied USD value
-        let token_dec = registry.decimals as u32;
-        let total_usd_8d = safe_u128_to_u64(mul_div_u128(token_amount as u128, registry.token_usd_price_8d as u128, pow10(token_dec) as u128)?)?;
-        let total_usd_disc = total_usd_8d.checked_mul((10_000 - discount_bps as u64) as u64).ok_or(OtcError::Overflow)?.checked_div(10_000).ok_or(OtcError::Overflow)?;
+        // Check implied USD value meets minimum
+        let total_usd_disc = calc_discounted_usd(token_amount, registry.token_usd_price_8d, registry.decimals, discount_bps)?;
         require!(total_usd_disc >= desk.min_usd_amount_8d, OtcError::MinUsd);
 
         require!(lockup_secs >= desk.default_unlock_delay_secs && lockup_secs <= desk.max_lockup_secs, OtcError::AmountRange);
@@ -805,10 +775,8 @@ pub mod otc {
             require!(now - registry.prices_updated_at <= desk.max_price_age_secs, OtcError::StalePrice);
         }
 
-        // Actually, mul_div logic uses registry.decimals. 
-        // Desk has token_decimals too.
-        let total_usd_8d = safe_u128_to_u64(mul_div_u128(token_amount as u128, price_8d as u128, pow10(registry.decimals as u32) as u128)?)?;
-        let total_usd_disc = total_usd_8d.checked_mul((10_000 - discount_bps as u64) as u64).ok_or(OtcError::Overflow)?.checked_div(10_000).ok_or(OtcError::Overflow)?;
+        // Check implied USD value meets minimum
+        let total_usd_disc = calc_discounted_usd(token_amount, price_8d, registry.decimals, discount_bps)?;
         require!(total_usd_disc >= desk.min_usd_amount_8d, OtcError::MinUsd);
 
         consignment.remaining_amount = consignment.remaining_amount.checked_sub(token_amount).ok_or(OtcError::Overflow)?;
@@ -988,14 +956,12 @@ pub mod otc {
         let now = Clock::get()?.unix_timestamp;
         let expiry = offer.created_at.checked_add(desk.quote_expiry_secs).ok_or(OtcError::Overflow)?;
         require!(now <= expiry, OtcError::Expired);
-        let available = available_inventory(desk, ctx.accounts.desk_token_treasury.amount); require!(available >= offer.token_amount, OtcError::InsuffInv);
+        require!(available_inventory(ctx.accounts.desk_token_treasury.amount) >= offer.token_amount, OtcError::InsuffInv);
         if desk.restrict_fulfill {
             let caller = ctx.accounts.payer.key();
             require!(caller == offer.beneficiary || caller == desk.owner || caller == desk.agent || desk.approvers.contains(&caller), OtcError::FulfillRestricted);
         }
-        let price_8d = offer.price_usd_per_token_8d; let token_dec = offer.token_decimals as u32;
-        let mut usd_8d = safe_u128_to_u64(mul_div_u128(offer.token_amount as u128, price_8d as u128, pow10(token_dec) as u128)?)?;
-        usd_8d = usd_8d.checked_mul((10_000 - offer.discount_bps as u64) as u64).ok_or(OtcError::Overflow)?.checked_div(10_000).ok_or(OtcError::Overflow)?;
+        let usd_8d = calc_discounted_usd(offer.token_amount, offer.price_usd_per_token_8d, offer.token_decimals, offer.discount_bps)?;
         let usdc_amount = safe_u128_to_u64(mul_div_ceil_u128(usd_8d as u128, 1_000_000u128, 100_000_000u128)?)?;
         
         // Calculate agent commission (from seller proceeds)
@@ -1054,14 +1020,12 @@ pub mod otc {
         let now = Clock::get()?.unix_timestamp;
         let expiry = offer.created_at.checked_add(desk.quote_expiry_secs).ok_or(OtcError::Overflow)?;
         require!(now <= expiry, OtcError::Expired);
-        let available = available_inventory(desk, ctx.accounts.desk_token_treasury.amount); require!(available >= offer.token_amount, OtcError::InsuffInv);
+        require!(available_inventory(ctx.accounts.desk_token_treasury.amount) >= offer.token_amount, OtcError::InsuffInv);
         if desk.restrict_fulfill {
             let caller = ctx.accounts.payer.key();
             require!(caller == offer.beneficiary || caller == desk.owner || caller == desk.agent || desk.approvers.contains(&caller), OtcError::FulfillRestricted);
         }
-        let price_8d = offer.price_usd_per_token_8d; let token_dec = offer.token_decimals as u32;
-        let mut usd_8d = safe_u128_to_u64(mul_div_u128(offer.token_amount as u128, price_8d as u128, pow10(token_dec) as u128)?)?;
-        usd_8d = usd_8d.checked_mul((10_000 - offer.discount_bps as u64) as u64).ok_or(OtcError::Overflow)?.checked_div(10_000).ok_or(OtcError::Overflow)?;
+        let usd_8d = calc_discounted_usd(offer.token_amount, offer.price_usd_per_token_8d, offer.token_decimals, offer.discount_bps)?;
         let sol_usd = if offer.sol_usd_price_8d > 0 { offer.sol_usd_price_8d } else { desk.sol_usd_price_8d };
         require!(sol_usd > 0, OtcError::NoPrice);
         let lamports_req = safe_u128_to_u64(mul_div_ceil_u128(usd_8d as u128, 1_000_000_000u128, sol_usd as u128)?)?;
@@ -1831,9 +1795,9 @@ pub struct Offer {
 impl Offer { pub const SIZE: usize = 32+8+32+1+8+32+8+2+8+8+8+2+8+1+1+1+1+1+32+8+2; } // +2 for agent_commission_bps
 
 /// Returns available inventory for a token treasury
-/// Note: desk.token_reserved is deprecated - now all tokens are equal and tracked separately
-/// In the multi-token model, each token has its own treasury and the balance is the available amount
-fn available_inventory(_desk: &Desk, treasury_balance: u64) -> u64 {
+/// Multi-token model: treasury balance is the available amount
+#[inline]
+fn available_inventory(treasury_balance: u64) -> u64 {
     treasury_balance
 }
 fn only_owner(desk: &Desk, who: &Pubkey) -> Result<()> { require!(*who == desk.owner, OtcError::NotOwner); Ok(()) }
@@ -1845,6 +1809,28 @@ fn mul_div_ceil_u128(a: u128, b: u128, d: u128) -> Result<u128> { let prod = a.c
 /// Safe conversion from u128 to u64 with overflow check
 fn safe_u128_to_u64(value: u128) -> Result<u64> {
     u64::try_from(value).map_err(|_| OtcError::Overflow.into())
+}
+
+/// Check if new_price deviates too much from old_price
+/// Returns Ok(()) if within bounds, Err(PriceDeviationTooLarge) if exceeded
+fn check_price_deviation(old_price: u64, new_price: u64, max_deviation_bps: u16) -> Result<()> {
+    if old_price == 0 || max_deviation_bps == 0 {
+        return Ok(());
+    }
+    let diff = if new_price > old_price { new_price - old_price } else { old_price - new_price };
+    let max_deviation = (old_price as u128 * max_deviation_bps as u128) / 10000u128;
+    require!(diff as u128 <= max_deviation, OtcError::PriceDeviationTooLarge);
+    Ok(())
+}
+
+/// Calculate USD value with discount applied
+fn calc_discounted_usd(token_amount: u64, price_8d: u64, decimals: u8, discount_bps: u16) -> Result<u64> {
+    let token_dec = decimals as u32;
+    let usd_8d = safe_u128_to_u64(mul_div_u128(token_amount as u128, price_8d as u128, pow10(token_dec) as u128)?)?;
+    usd_8d.checked_mul((10_000 - discount_bps as u64) as u64)
+        .ok_or(OtcError::Overflow)?
+        .checked_div(10_000)
+        .ok_or(OtcError::Overflow.into())
 }
 
 /// Calculate recommended agent commission based on discount and lockup
@@ -1891,27 +1877,25 @@ const RAYDIUM_CPMM: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C";
 const RAYDIUM_CLMM: &str = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK";
 /// Orca Whirlpool Program ID
 const ORCA_WHIRLPOOL: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
-/// PumpSwap Program ID (Pump.fun)
+/// PumpSwap / Pump.fun Program ID
 const PUMPSWAP_PROGRAM: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
-/// Pump.fun Bonding Curve Program ID
-const PUMP_FUN_PROGRAM: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
 
 /// Check if the given program ID is a valid Raydium program
 fn is_raydium_program(program_id: &Pubkey) -> bool {
-    let program_str = program_id.to_string();
-    program_str == RAYDIUM_AMM_V4 || program_str == RAYDIUM_CPMM || program_str == RAYDIUM_CLMM
+    matches!(
+        program_id.to_string().as_str(),
+        RAYDIUM_AMM_V4 | RAYDIUM_CPMM | RAYDIUM_CLMM
+    )
 }
 
 /// Check if the given program ID is a valid Orca program
 fn is_orca_program(program_id: &Pubkey) -> bool {
-    let program_str = program_id.to_string();
-    program_str == ORCA_WHIRLPOOL
+    program_id.to_string() == ORCA_WHIRLPOOL
 }
 
 /// Check if the given program ID is a valid PumpSwap program
 fn is_pumpswap_program(program_id: &Pubkey) -> bool {
-    let program_str = program_id.to_string();
-    program_str == PUMPSWAP_PROGRAM || program_str == PUMP_FUN_PROGRAM
+    program_id.to_string() == PUMPSWAP_PROGRAM
 }
 
 /// Convert Pyth price to our 8-decimal USD format

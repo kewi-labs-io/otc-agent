@@ -180,7 +180,7 @@ async function main() {
   );
 
   // Verify BSC
-  if (mainnetEvmConfig.networks?.bsc) {
+  if (mainnetEvmConfig.networks.bsc) {
     if (!mainnetEvmConfig.networks.bsc.otc) {
       throw new Error("BSC network config exists but missing OTC address");
     }
@@ -193,7 +193,7 @@ async function main() {
   }
 
   // Verify Ethereum
-  if (mainnetEvmConfig.networks?.ethereum) {
+  if (mainnetEvmConfig.networks.ethereum) {
     if (!mainnetEvmConfig.networks.ethereum.otc) {
       throw new Error("Ethereum network config exists but missing OTC address");
     }

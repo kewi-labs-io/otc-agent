@@ -169,6 +169,14 @@ evmTest.describe("EVM Full Flow: LIST → BUY → CLAIM → WITHDRAW", () => {
     await page.goto(`${BASE_URL}/consign`, { timeout: 60000, waitUntil: "domcontentloaded" });
     await waitForAppReady(page, `${BASE_URL}/consign`);
 
+    // Check if wallet needs to be reconnected on consign page
+    const signInOnConsign = page.locator('button:has-text("Sign In")').first();
+    if (await signInOnConsign.isVisible({ timeout: 3000 }).catch(() => false)) {
+      log("EVM", "Reconnecting wallet on consign page...");
+      await connectMetaMaskWallet(page, context, metamask);
+      await sleep(2000);
+    }
+
     // Wait for tokens to load
     const tokenList = page.locator('[data-testid^="token-row-"]');
     await expect(tokenList.first()).toBeVisible({ timeout: 60000 });
@@ -465,6 +473,14 @@ solanaTest.describe("Solana Full Flow: LIST → BUY → CLAIM → WITHDRAW", () 
 
     await page.goto(`${BASE_URL}/consign`);
     await waitForAppReady(page, `${BASE_URL}/consign`);
+
+    // Check if wallet needs to be reconnected on consign page
+    const signInOnConsign = page.locator('button:has-text("Sign In")').first();
+    if (await signInOnConsign.isVisible({ timeout: 3000 }).catch(() => false)) {
+      log("Solana", "Reconnecting wallet on consign page...");
+      await connectPhantomWallet(page, context, phantom);
+      await sleep(2000);
+    }
 
     // Select Solana chain if selector visible
     const solanaChainButton = page.locator('button:has-text("Solana"), [data-chain="solana"]').first();

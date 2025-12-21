@@ -21,11 +21,19 @@ export async function GET(
 
   const { id: quoteId } = validatedParams;
 
-  const quote = await QuoteDB.getQuoteByQuoteId(quoteId);
-
-  // FAIL-FAST: Quote must exist
-  if (!quote) {
-    throw new Error(`Quote ${quoteId} not found`);
+  // Lookup quote - handle not found at boundary
+  let quote;
+  try {
+    quote = await QuoteDB.getQuoteByQuoteId(quoteId);
+  } catch (err) {
+    // QuoteDB throws for not found - return 404
+    if (err instanceof Error && err.message.includes("not found")) {
+      return NextResponse.json(
+        { error: `Quote ${quoteId} not found` },
+        { status: 404 },
+      );
+    }
+    throw err;
   }
 
   // Allow active, approved, and executed quotes to be viewed

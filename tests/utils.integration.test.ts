@@ -298,7 +298,7 @@ describe("Retry Cache Utilities", () => {
         // Should be cached
         const cached = getCached<HttpBinResponse>(cacheKey);
         expect(cached).toBeDefined();
-        expect(cached?.slideshow.title).toBe(data.slideshow.title);
+        expect(cached!.slideshow.title).toBe(data.slideshow.title);
       },
       15_000,
     );
@@ -349,13 +349,9 @@ describe("Validation Helpers", () => {
         }),
       });
 
-      try {
-        parseOrThrow(schema, { nested: { value: "not-a-number" } });
-        throw new Error("Should have thrown");
-      } catch (e) {
-        const error = e as Error;
-        expect(error.message).toContain("nested.value");
-      }
+      expect(() => parseOrThrow(schema, { nested: { value: "not-a-number" } })).toThrow(
+        /nested\.value/,
+      );
     });
   });
 
@@ -1245,9 +1241,8 @@ describe("Deal Transforms - Comprehensive", () => {
       expect(() =>
         transformSolanaDeal(
           invalidDeal as Parameters<typeof transformSolanaDeal>[0],
-          "WalletPubKey",
         ),
-      ).toThrow(/missing required offerId/i);
+      ).toThrow(/missing offerId/i);
     });
 
     test("throws for missing tokenSymbol", async () => {
@@ -1274,7 +1269,6 @@ describe("Deal Transforms - Comprehensive", () => {
       expect(() =>
         transformSolanaDeal(
           invalidDeal as Parameters<typeof transformSolanaDeal>[0],
-          "WalletPubKey",
         ),
       ).toThrow(/missing tokenSymbol/i);
     });
@@ -1303,9 +1297,8 @@ describe("Deal Transforms - Comprehensive", () => {
       expect(() =>
         transformSolanaDeal(
           invalidDeal as Parameters<typeof transformSolanaDeal>[0],
-          "WalletPubKey",
         ),
-      ).toThrow(/missing required lockupDays/i);
+      ).toThrow(/missing lockupDays/i);
     });
   });
 
@@ -1335,7 +1328,6 @@ describe("Deal Transforms - Comprehensive", () => {
       expect(() =>
         transformEvmDeal(
           invalidDeal as Parameters<typeof transformEvmDeal>[0],
-          "0x0000000000000000000000000000000000000000",
         ),
       ).toThrow(/invalid ethUsdPrice/i);
     });
@@ -1365,9 +1357,8 @@ describe("Deal Transforms - Comprehensive", () => {
       expect(() =>
         transformEvmDeal(
           invalidDeal as Parameters<typeof transformEvmDeal>[0],
-          "0x0000000000000000000000000000000000000000",
         ),
-      ).toThrow(/missing required priceUsdPerToken/i);
+      ).toThrow(/missing priceUsdPerToken/i);
     });
   });
 
@@ -1447,8 +1438,9 @@ describe("Format Utilities - Edge Cases", () => {
     test("handles very large numbers", async () => {
       const { formatTokenAmount } = await import("@/utils/format");
 
+      // 999 billion should use B suffix
       const result = formatTokenAmount(999_999_999_999);
-      expect(result).toContain("M");
+      expect(result).toContain("B");
     });
 
     test("handles boundary values", async () => {
@@ -1757,13 +1749,9 @@ describe("Error Handling - Fail Fast", () => {
         c: z.array(z.string()).min(1),
       });
 
-      try {
-        parseOrThrow(schema, { a: -1, b: "ab", c: [] });
-        throw new Error("Should have thrown");
-      } catch (e) {
-        const error = e as Error;
-        expect(error.message).toContain("Validation failed");
-      }
+      expect(() => parseOrThrow(schema, { a: -1, b: "ab", c: [] })).toThrow(
+        /Validation failed/,
+      );
     });
 
     test("handles deeply nested validation errors", async () => {
@@ -1778,13 +1766,9 @@ describe("Error Handling - Fail Fast", () => {
         }),
       });
 
-      try {
-        parseOrThrow(schema, { level1: { level2: { value: -5 } } });
-        throw new Error("Should have thrown");
-      } catch (e) {
-        const error = e as Error;
-        expect(error.message).toContain("level1.level2.value");
-      }
+      expect(() => parseOrThrow(schema, { level1: { level2: { value: -5 } } })).toThrow(
+        /level1\.level2\.value/,
+      );
     });
   });
 });

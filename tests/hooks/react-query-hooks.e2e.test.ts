@@ -25,7 +25,8 @@ const TEST_TIMEOUT = 30_000;
 // Test addresses
 const TEST_EVM_ADDRESS = "0x514910771AF9Ca656af840dff83E8264EcF986CA"; // LINK on Ethereum
 const TEST_SOLANA_ADDRESS = "So11111111111111111111111111111111111111112"; // Wrapped SOL
-const INVALID_TOKEN_ID = "token-base-0x0000000000000000000000000000000000000000";
+// Use a clearly non-existent token ID (not the zero address which may be seeded)
+const INVALID_TOKEN_ID = "token-base-0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 const INVALID_UUID = "00000000-0000-0000-0000-000000000000";
 
 // Flag to track server availability
@@ -290,7 +291,8 @@ describe("React Query Hooks Integration Tests", () => {
         token?: { symbol?: string; decimals?: number };
       }>(`${BASE_URL}/api/token-lookup?address=${TEST_EVM_ADDRESS}`);
 
-      if (status === 503) return; // API not configured
+      // 503 = API not configured, 502 = external API error
+      if (status === 503 || status === 502) return;
       expect([200, 404]).toContain(status);
 
       if (status === 200 && data.token) {

@@ -1,3 +1,15 @@
+/**
+ * Solana Pool Finder
+ *
+ * Finds liquidity pools for Solana tokens across DEXs (Raydium, Meteora, Orca, PumpSwap)
+ * Used for price discovery and token registration.
+ *
+ * CACHING STRATEGY:
+ * - Uses retry-cache module with 30s TTL for pool data
+ * - Has separate 60s cache for SOL price (module-level, not retry-cache)
+ * - Intended for server-side API routes (e.g., /api/solana/update-price)
+ * - FAIL-FAST: SOL price fetching throws if unavailable (no hardcoded fallbacks)
+ */
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getCoingeckoApiKey, getHeliusRpcUrl, getNetwork } from "@/config/env";
 import { getCached, setCache } from "./retry-cache";
@@ -42,29 +54,33 @@ async function fetchSolPriceUsd(): Promise<number> {
     });
 
     if (!response.ok) {
-      // Rate limited - return cached price if available, otherwise use fallback
+      // Rate limited - return cached price if available
       if (cachedSolPrice) {
         console.warn(
           `[Pool Finder] CoinGecko rate limited (${response.status}), using cached SOL price: $${cachedSolPrice.price}`,
         );
         return cachedSolPrice.price;
       }
-      // Fallback to a reasonable estimate (will be stale but better than crashing)
-      console.warn(
-        `[Pool Finder] CoinGecko rate limited (${response.status}), using fallback SOL price`,
+      // FAIL-FAST: No cached price and API failed - cannot safely proceed with unknown price
+      throw new Error(
+        `SOL price unavailable: CoinGecko returned ${response.status} and no cached price exists. ` +
+          `Cannot calculate token values without SOL price.`,
       );
-      return 125; // Approximate SOL price as fallback
     }
 
     const data = (await response.json()) as { solana?: { usd?: number } };
-    if (!data.solana?.usd) {
-      throw new Error("Invalid CoinGecko response - missing solana.usd");
+    // FAIL-FAST: Validate API response structure explicitly
+    if (!data.solana) {
+      throw new Error("Invalid CoinGecko response - missing solana field");
+    }
+    if (data.solana.usd === undefined || data.solana.usd === null) {
+      throw new Error("Invalid CoinGecko response - missing solana.usd field");
     }
 
-    // Update cache
+    // Update cache - solana.usd is guaranteed to be a number after validation
     cachedSolPrice = { price: data.solana.usd, timestamp: Date.now() };
     return data.solana.usd;
-  } catch {
+  } catch (error) {
     // On any error, try to use cached price
     if (cachedSolPrice) {
       console.warn(
@@ -72,9 +88,11 @@ async function fetchSolPriceUsd(): Promise<number> {
       );
       return cachedSolPrice.price;
     }
-    // Final fallback
-    console.warn(`[Pool Finder] CoinGecko failed, using fallback SOL price`);
-    return 125;
+    // FAIL-FAST: No cached price and fetch failed - cannot safely proceed
+    throw new Error(
+      `SOL price unavailable: ${error instanceof Error ? error.message : "Unknown error"}. ` +
+        `Cannot calculate token values without SOL price.`,
+    );
   }
 }
 

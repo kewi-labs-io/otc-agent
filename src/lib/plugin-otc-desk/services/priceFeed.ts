@@ -38,7 +38,9 @@ async function setCachedPrice(key: string, value: PriceCache): Promise<void> {
 /**
  * Fetch native token price from CoinGecko with caching
  */
-async function fetchNativePrice(symbol: "ETH" | "BNB" | "SOL"): Promise<number> {
+async function fetchNativePrice(
+  symbol: "ETH" | "BNB" | "SOL",
+): Promise<number> {
   // Check cache first
   const cached = await getCachedPrice(symbol);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -55,14 +57,18 @@ async function fetchNativePrice(symbol: "ETH" | "BNB" | "SOL"): Promise<number> 
   );
 
   if (!response.ok) {
-    throw new Error(`CoinGecko ${symbol} fetch failed: HTTP ${response.status}`);
+    throw new Error(
+      `CoinGecko ${symbol} fetch failed: HTTP ${response.status}`,
+    );
   }
 
   const data = (await response.json()) as Record<string, { usd?: number }>;
   const priceData = data[coinId];
 
   if (!priceData || typeof priceData.usd !== "number" || priceData.usd <= 0) {
-    throw new Error(`Invalid ${symbol} price from CoinGecko: ${JSON.stringify(data)}`);
+    throw new Error(
+      `Invalid ${symbol} price from CoinGecko: ${JSON.stringify(data)}`,
+    );
   }
 
   await setCachedPrice(symbol, { price: priceData.usd, timestamp: Date.now() });
