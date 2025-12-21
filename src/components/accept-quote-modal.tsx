@@ -196,15 +196,14 @@ export function AcceptQuoteModal({
   onComplete,
 }: AcceptQuoteModalProps) {
   const { isConnected, address } = useAccount();
+  const { activeFamily, setActiveFamily } = useChain();
   const {
-    activeFamily,
     isConnected: walletConnected,
     solanaWallet,
     solanaPublicKey,
-    setActiveFamily,
     privyAuthenticated,
-    connectWallet,
-  } = useMultiWallet();
+  } = useWalletConnection();
+  const { connectWallet } = useWalletActions();
 
   // Validate chain compatibility
   // FAIL-FAST: Quote must have tokenChain

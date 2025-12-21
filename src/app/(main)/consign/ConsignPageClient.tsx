@@ -13,7 +13,7 @@ import {
 import dynamic from "next/dynamic";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { TokenWithBalance } from "@/components/consignment-form/token-selection-step";
-import { useMultiWallet } from "@/components/multiwallet";
+import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { type Chain, SUPPORTED_CHAINS } from "@/config/chains";
 import { useOTC } from "@/hooks/contracts/useOTC";
@@ -88,18 +88,16 @@ const INITIAL_FORM_DATA = {
 export default function ConsignPageClient() {
   useRenderTracker("ConsignPageClient");
 
+  const { activeFamily, setActiveFamily } = useChain();
   const {
     hasWallet,
-    activeFamily,
-    setActiveFamily,
     evmAddress,
     solanaPublicKey,
     solanaWallet,
-    disconnect,
-    connectWallet,
     privyAuthenticated,
     isFarcasterContext,
-  } = useMultiWallet();
+  } = useWalletConnection();
+  const { disconnect, connectWallet } = useWalletActions();
   const { login, ready: privyReady } = usePrivy();
   useWallets(); // Keeping hook for wallet state sync
   const { createConsignmentOnChain, approveToken, getRequiredGasDeposit } =

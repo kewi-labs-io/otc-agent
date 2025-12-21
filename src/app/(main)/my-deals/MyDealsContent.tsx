@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/button";
 import { ConsignmentRow } from "@/components/consignment-row";
-import { useMultiWallet } from "@/components/multiwallet";
+import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { CardLoading } from "@/components/ui/loading-spinner";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { useOTC } from "@/hooks/contracts/useOTC";
@@ -32,16 +32,15 @@ export function MyDealsContent() {
   useRenderTracker("MyDealsContent");
   const router = useRouter();
 
+  const { activeFamily } = useChain();
   const {
-    activeFamily,
     evmAddress,
     solanaPublicKey,
     hasWallet,
-    disconnect,
     networkLabel,
-    connectWallet,
     privyAuthenticated,
-  } = useMultiWallet();
+  } = useWalletConnection();
+  const { disconnect, connectWallet } = useWalletActions();
   const { login, ready: privyReady } = usePrivy();
 
   const handleConnect = useCallback(() => {
