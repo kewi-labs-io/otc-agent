@@ -2,7 +2,8 @@
 
 import { AlertCircle, ArrowLeft, Check, Copy } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { usePoolCheck } from "@/hooks/usePoolCheck";
 import type { Chain, PoolCheckResult } from "@/types";
 import { Button } from "../button";
 import { useMultiWallet } from "../multiwallet";
@@ -51,8 +52,6 @@ export function ReviewStep({
 	const [copied, setCopied] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [logoError, setLogoError] = useState(false);
-	const [poolCheck, setPoolCheck] = useState<PoolCheckResult | null>(null);
-	const [isCheckingPool, setIsCheckingPool] = useState(false);
 
 	// Extract chain and address from tokenId (format: token-{chain}-{address})
 	const getTokenInfo = (tokenId: string): { chain: Chain; address: string } => {
@@ -81,35 +80,8 @@ export function ReviewStep({
 		formData.tokenId,
 	);
 
-	// Check pool status for EVM tokens
-	useEffect(() => {
-		if (tokenChain === "solana" || !rawTokenAddress) {
-			setPoolCheck(null);
-			return;
-		}
-
-		const checkPool = async () => {
-			setIsCheckingPool(true);
-			const res = await fetch(
-				`/api/token-pool-check?address=${encodeURIComponent(rawTokenAddress)}&chain=${tokenChain}`,
-			);
-			// FAIL-FAST: Check response status
-			if (!res.ok) {
-				throw new Error(
-					`Pool check API failed: ${res.status} ${res.statusText}`,
-				);
-			}
-			const data = await res.json();
-			// FAIL-FAST: Validate response structure
-			if (typeof data !== "object" || data === null) {
-				throw new Error("Invalid pool check response: expected object");
-			}
-			setPoolCheck(data);
-			setIsCheckingPool(false);
-		};
-
-		checkPool();
-	}, [tokenChain, rawTokenAddress]);
+	// Use React Query for pool checking - automatic caching and deduplication
+	const { poolCheck, isCheckingPool } = usePoolCheck(rawTokenAddress, tokenChain);
 
 	const getDisplayAddress = (addr: string) => {
 		if (!addr || addr.length <= 12) return addr;

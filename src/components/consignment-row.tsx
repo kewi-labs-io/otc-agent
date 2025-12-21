@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAccount, useChainId } from "wagmi";
 import { type Chain, isSolanaChain, SUPPORTED_CHAINS } from "@/config/chains";
 import { useOTC } from "@/hooks/contracts/useOTC";
-import { useTokenCache } from "@/hooks/useTokenCache";
+import { useToken } from "@/hooks/useToken";
 import type { OTCConsignment } from "@/services/database";
 // Shared Solana OTC utilities
 import {
@@ -29,10 +29,8 @@ interface ConsignmentRowProps {
 }
 
 export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
-	// Use shared token cache - deduplicates requests across components
-	const { token, isLoading: isLoadingToken } = useTokenCache(
-		consignment.tokenId,
-	);
+	// Use React Query for token data - automatic caching and deduplication
+	const { token, isLoading: isLoadingToken } = useToken(consignment.tokenId);
 
 	const [dealCount, setDealCount] = useState<number>(0);
 	const [isWithdrawing, setIsWithdrawing] = useState(false);

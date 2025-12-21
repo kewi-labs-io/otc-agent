@@ -3,7 +3,7 @@
 import dynamicImport from "next/dynamic";
 import { useParams } from "next/navigation";
 import { PageLoading } from "@/components/ui/loading-spinner";
-import { useMarketDataRefresh, useTokenCache } from "@/hooks/useTokenCache";
+import { useToken, useMarketData } from "@/hooks/useToken";
 
 const Chat = dynamicImport(() => import("@/components/chat"), { ssr: false });
 
@@ -12,12 +12,10 @@ export const dynamic = "force-dynamic";
 export default function TokenPage() {
 	const params = useParams();
 	const tokenId = params.tokenId as string;
-	const {
-		token,
-		marketData: initialMarketData,
-		isLoading: loading,
-	} = useTokenCache(tokenId);
-	const refreshedMarketData = useMarketDataRefresh(tokenId, token);
+	
+	// Use React Query hooks for token and market data
+	const { token, marketData: initialMarketData, isLoading: loading } = useToken(tokenId);
+	const { marketData: refreshedMarketData } = useMarketData(tokenId);
 	const marketData = refreshedMarketData || initialMarketData;
 
 	if (loading) {
