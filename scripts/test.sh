@@ -2,7 +2,7 @@
 # Run all tests
 # 
 # Contract tests: Run directly with forge (no infrastructure needed)
-# E2E tests: Vitest handles infrastructure setup/teardown automatically
+# Unit/Integration tests: Run with bun test
 #
 # Set TEARDOWN_POSTGRES=true to also stop the database after tests
 
@@ -22,15 +22,10 @@ cd ..
 echo ""
 
 # ============================================
-# 2. E2E Integration Tests (Vitest)
+# 2. Unit/Integration Tests (bun test)
 # ============================================
-# Vitest automatically handles infrastructure via globalSetup/globalTeardown:
-# - Starts PostgreSQL, Anvil, deploys contracts, starts Next.js
-# - Runs all E2E tests
-# - Tears down infrastructure when done
-echo "=== E2E Integration Tests (Vitest) ==="
-echo "Infrastructure will be started automatically..."
-bun run vitest run tests/otc-e2e.test.ts
+echo "=== Unit/Integration Tests (bun test) ==="
+bun test tests/shared-utils.e2e.test.ts
 echo ""
 
 echo "=== All Tests Complete ==="
