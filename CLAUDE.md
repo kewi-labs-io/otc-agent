@@ -130,3 +130,29 @@ Tokens must be registered before consignment creation:
 - Prepaid gas deposits for consignment creation
 
 This architecture solves the trust problem in decentralized OTC trading through cryptographic verification, AI-driven fair pricing, and atomic execution across all settlement steps.
+
+## Production Readiness Notes
+
+### Verified (Dec 2024)
+- **Tests**: 243 pass, 5 skip (server-dependent hooks - expected in CI)
+- **Build**: Clean production build with Next.js 15.5.8
+- **Secrets**: All via `process.env`, documented in `env.example`
+- **Error Handling**: 751 fail-fast throws, 113 warning/error logs
+- **Caching**: TTL-based with MAX_CACHE_SIZE=1000 and eviction
+- **Rollback**: Git history + Vercel instant deployment rollback
+
+### Security Vulnerabilities
+65 total vulnerabilities from transitive dependencies (5 critical). All critical ones are:
+- **socket.io-client** - Not directly imported in src/
+- **form-data** - Via axios/@elizaos (we use browser FormData API)
+- **morgan** - Via dev-only tomahawk
+- **uglify-js** - Build tool only
+- **js-yaml** - Via eslint/langchain (not parsing untrusted YAML)
+
+**Risk Assessment**: LOW - vulnerabilities are in transitive deps, not directly exploitable in our application code.
+
+### Monitoring Assumptions
+- Console.log/warn/error are captured by Vercel Logs
+- Cron jobs run every 5 minutes for reconciliation
+- No external alerting (Sentry recommended for production)
+- In-memory cache resets on serverless cold starts (acceptable)

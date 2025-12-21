@@ -176,20 +176,15 @@ export async function findBestSolanaPool(
 
   // Then try Raydium
   await delay(RPC_CALL_DELAY_MS);
-  raydiumPools = await findRaydiumPools(connection, mint, cluster, false);
+  raydiumPools = await findRaydiumPools(connection, mint, cluster);
 
   // Try Meteora pools (DLMM and standard AMM)
   await delay(RPC_CALL_DELAY_MS);
-  meteoraPools = await findMeteoraPools(connection, mint, cluster, false);
+  meteoraPools = await findMeteoraPools(connection, mint, cluster);
 
   // Try Raydium CPMM pools (new constant product AMM)
   await delay(RPC_CALL_DELAY_MS);
-  raydiumCpmmPools = await findRaydiumCpmmPools(
-    connection,
-    mint,
-    cluster,
-    false,
-  );
+  raydiumCpmmPools = await findRaydiumCpmmPools(connection, mint, cluster);
 
   const allPools = [
     ...pumpFunCurves,
