@@ -272,7 +272,6 @@ type ContractOfferWithId = {
 export function mergeDealsWithOffers(
   dbDeals: DealFromAPI[],
   contractOffers: ContractOfferWithId[],
-  walletAddress: string,
 ): OfferWithMetadata[] {
   const result: OfferWithMetadata[] = [];
   const processedOfferIds = new Set<string>();

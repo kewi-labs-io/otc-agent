@@ -21,7 +21,7 @@ import {
   useWalletTokens,
   type WalletToken,
 } from "@/hooks/useWalletTokens";
-import { formatUsdCompact } from "@/utils/format";
+import { formatRawTokenAmount, formatUsdCompact } from "@/utils/format";
 import { Button } from "../button";
 import { useMultiWallet } from "../multiwallet";
 
@@ -94,15 +94,8 @@ interface TokenSelectionProps {
   onTokenSelect?: (token: TokenWithBalance) => void;
 }
 
-// Format raw balance (with decimals) to human-readable with K/M suffixes
-function formatBalance(balance: string, decimals: number): string {
-  const num = Number(balance) / 10 ** decimals;
-  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
-  if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
-  return num.toFixed(2);
-}
-
-// formatUsd is imported from @/utils/format (formatUsdCompact)
+// formatBalance uses centralized formatRawTokenAmount from @/utils/format
+// formatUsd uses centralized formatUsdCompact from @/utils/format
 
 export function TokenSelectionStep({
   formData,
@@ -529,7 +522,7 @@ export function TokenSelectionStep({
                       {token.name}
                     </span>
                     <span className="text-xs text-zinc-400 whitespace-nowrap">
-                      {formatBalance(token.balance, token.decimals)}
+                      {formatRawTokenAmount(token.balance, token.decimals)}
                     </span>
                   </div>
                 </div>
