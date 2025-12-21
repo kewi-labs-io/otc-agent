@@ -74,3 +74,5 @@ forge-output.txt
 contracts/slither-results.json
 contracts/echidna-corpus/
 contracts/crytic-export/
+contracts/*.call-graph.dot
+contracts/*.dot
