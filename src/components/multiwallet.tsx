@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  type User as PrivyUser,
-  usePrivy,
-  useWallets,
-} from "@privy-io/react-auth";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useWallet as useSolanaWalletAdapter } from "@solana/wallet-adapter-react";
 import {
   createContext,

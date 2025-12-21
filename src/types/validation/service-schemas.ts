@@ -14,7 +14,11 @@ import {
   BigIntStringSchema,
   BpsSchema,
   ChainSchema,
+  ConsignmentStatusSchema,
+  DealStatusSchema,
   OptionalAddressArraySchema,
+  PaymentCurrencySchema,
+  QuoteStatusSchema,
 } from "./schemas";
 //==============================================================================
 // CONSIGNMENT SERVICE
@@ -240,7 +244,7 @@ export const CreateQuoteInputSchema = z.object({
   discountBps: BpsSchema,
   apr: z.number(),
   lockupMonths: z.number().int().min(0),
-  paymentCurrency: z.enum(["ETH", "USDC", "BNB", "SOL"]),
+  paymentCurrency: PaymentCurrencySchema,
   totalUsd: z.number().nonnegative(),
   discountUsd: z.number().nonnegative(),
   discountedUsd: z.number().nonnegative(),
@@ -250,7 +254,7 @@ export const CreateQuoteInputSchema = z.object({
 // Update quote status input
 export const UpdateQuoteStatusInputSchema = z.object({
   quoteId: z.string().min(1),
-  status: z.enum(["active", "expired", "executed", "rejected", "approved"]),
+  status: QuoteStatusSchema,
   offerId: z.string().optional(),
   transactionHash: z.string().optional(),
   blockNumber: z.number().int().nonnegative().optional(),
@@ -265,7 +269,7 @@ export const UpdateQuoteExecutionInputSchema = z.object({
   totalUsd: z.number().nonnegative(),
   discountUsd: z.number().nonnegative(),
   discountedUsd: z.number().nonnegative(),
-  paymentCurrency: z.enum(["ETH", "USDC", "BNB", "SOL"]),
+  paymentCurrency: PaymentCurrencySchema,
   paymentAmount: BigIntStringSchema,
   offerId: z.string(),
   transactionHash: z.string(),
@@ -344,7 +348,7 @@ const ConsignmentOutputBaseSchema = z.object({
   allowedBuyers: OptionalAddressArraySchema,
   maxPriceVolatilityBps: BpsSchema,
   maxTimeToExecuteSeconds: z.number().int().min(0),
-  status: z.enum(["active", "paused", "depleted", "withdrawn"]),
+  status: ConsignmentStatusSchema,
   contractConsignmentId: z.string().optional(),
   chain: ChainSchema,
   createdAt: z.number().int().positive(),
@@ -385,7 +389,7 @@ export const ConsignmentDealOutputSchema = z.object({
   lockupDays: z.number().int().min(0),
   executedAt: z.number().int().positive(),
   offerId: z.string().optional(),
-  status: z.enum(["pending", "executed", "failed"]),
+  status: DealStatusSchema,
 });
 
 // Price validation result output schema
@@ -410,13 +414,13 @@ export const QuoteOutputSchema = z.object({
   apr: z.number(),
   lockupMonths: z.number().int().min(0),
   lockupDays: z.number().int().min(0),
-  paymentCurrency: z.enum(["ETH", "USDC", "BNB", "SOL"]),
+  paymentCurrency: PaymentCurrencySchema,
   priceUsdPerToken: z.number().nonnegative(),
   totalUsd: z.number().nonnegative(),
   discountUsd: z.number().nonnegative(),
   discountedUsd: z.number().nonnegative(),
   paymentAmount: BigIntStringSchema,
-  status: z.enum(["active", "expired", "executed", "rejected", "approved"]),
+  status: QuoteStatusSchema,
   signature: z.string(),
   createdAt: z.number().int().positive(),
   executedAt: z.number().int().nonnegative(),

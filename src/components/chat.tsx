@@ -8,11 +8,11 @@ import { AcceptQuoteModal } from "@/components/accept-quote-modal";
 import { Button } from "@/components/button";
 import { ChatMessages } from "@/components/chat-messages";
 import { Dialog } from "@/components/dialog";
-import { useMultiWallet } from "@/components/multiwallet";
 import { InlineSvgSpinner } from "@/components/ui/loading-spinner";
 import { TextareaWithActions } from "@/components/textarea-with-actions";
 import { TokenHeader } from "@/components/token-header";
 import { CHAT_SOURCE, USER_NAME } from "@/constants";
+import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { useConsignments } from "@/hooks/useConsignments";
 import type { Token, TokenMarketData } from "@/types";
 import type {
@@ -242,15 +242,15 @@ export const Chat = ({
     showClearChatModal,
   } = state;
 
+  const { setActiveFamily } = useChain();
   const {
     isConnected,
     entityId: walletEntityId,
-    setActiveFamily,
     evmConnected,
     solanaConnected,
     privyAuthenticated,
-    connectWallet,
-  } = useMultiWallet();
+  } = useWalletConnection();
+  const { connectWallet } = useWalletActions();
   const { login, ready: privyReady } = usePrivy();
 
   // Fetch consignments for this token to get available amounts and terms

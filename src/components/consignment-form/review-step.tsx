@@ -5,7 +5,6 @@ import Image from "next/image";
 import { useState } from "react";
 import { useChain, useWalletConnection } from "@/contexts";
 import { usePoolCheck } from "@/hooks/usePoolCheck";
-import type { Chain } from "@/types";
 import { formatAddress, formatTokenAmountFull } from "@/utils/format";
 import { parseTokenId } from "@/utils/token-utils";
 import { Button } from "../button";

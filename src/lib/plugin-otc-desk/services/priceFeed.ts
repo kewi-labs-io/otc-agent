@@ -1,12 +1,21 @@
-// Price feed service for fetching real-time token prices
-// For multi-token support, use MarketDataService
+/**
+ * Price feed service for fetching real-time native token prices
+ * For multi-token/ERC20 support, use MarketDataService or price-fetcher utils
+ */
 
 interface PriceCache {
   price: number;
   timestamp: number;
 }
 
-const CACHE_TTL = 60 * 1000; // 60 seconds
+const CACHE_TTL = 60_000; // 60 seconds
+
+/** CoinGecko IDs for native tokens */
+const COINGECKO_IDS: Record<string, string> = {
+  ETH: "ethereum",
+  BNB: "binancecoin",
+  SOL: "solana",
+};
 
 /**
  * Get cached price from runtime storage
@@ -27,20 +36,18 @@ async function setCachedPrice(key: string, value: PriceCache): Promise<void> {
 }
 
 /**
- * Get ETH price in USD
+ * Fetch native token price from CoinGecko with caching
  */
-export async function getEthPriceUsd(): Promise<number> {
-  const cacheKey = "ETH";
-
-  // Check runtime cache
-  const cached = await getCachedPrice(cacheKey);
+async function fetchNativePrice(symbol: "ETH" | "BNB" | "SOL"): Promise<number> {
+  // Check cache first
+  const cached = await getCachedPrice(symbol);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.price;
   }
 
-  // Fetch from CoinGecko
+  const coinId = COINGECKO_IDS[symbol];
   const response = await fetch(
-    "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
+    `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`,
     {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(5000),
@@ -48,126 +55,25 @@ export async function getEthPriceUsd(): Promise<number> {
   );
 
   if (!response.ok) {
-    throw new Error(`CoinGecko ETH fetch failed: HTTP ${response.status}`);
+    throw new Error(`CoinGecko ${symbol} fetch failed: HTTP ${response.status}`);
   }
 
-  const data = await response.json();
-  if (!data.ethereum || typeof data.ethereum.usd !== "number") {
-    throw new Error(
-      `Invalid ETH price response from CoinGecko: ${JSON.stringify(data)}`,
-    );
-  }
-  const price = data.ethereum.usd;
+  const data = (await response.json()) as Record<string, { usd?: number }>;
+  const priceData = data[coinId];
 
-  if (price <= 0) {
-    throw new Error(`Invalid ETH price from CoinGecko: ${price}`);
+  if (!priceData || typeof priceData.usd !== "number" || priceData.usd <= 0) {
+    throw new Error(`Invalid ${symbol} price from CoinGecko: ${JSON.stringify(data)}`);
   }
 
-  await setCachedPrice(cacheKey, { price, timestamp: Date.now() });
-  return price;
+  await setCachedPrice(symbol, { price: priceData.usd, timestamp: Date.now() });
+  return priceData.usd;
 }
 
-/**
- * Get BNB price in USD
- */
-export async function getBnbPriceUsd(): Promise<number> {
-  const cacheKey = "BNB";
+/** Get ETH price in USD */
+export const getEthPriceUsd = () => fetchNativePrice("ETH");
 
-  const cached = await getCachedPrice(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.price;
-  }
+/** Get BNB price in USD */
+export const getBnbPriceUsd = () => fetchNativePrice("BNB");
 
-  const response = await fetch(
-    "https://api.coingecko.com/api/v3/simple/price?ids=binancecoin&vs_currencies=usd",
-    {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(5000),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(`CoinGecko BNB fetch failed: HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  if (!data.binancecoin || typeof data.binancecoin.usd !== "number") {
-    throw new Error(
-      `Invalid BNB price response from CoinGecko: ${JSON.stringify(data)}`,
-    );
-  }
-  const price = data.binancecoin.usd;
-
-  if (price <= 0) {
-    throw new Error(`Invalid BNB price from CoinGecko: ${price}`);
-  }
-
-  await setCachedPrice(cacheKey, { price, timestamp: Date.now() });
-  return price;
-}
-
-/**
- * Get SOL price in USD
- */
-export async function getSolPriceUsd(): Promise<number> {
-  const cacheKey = "SOL";
-
-  // Check runtime cache
-  const cached = await getCachedPrice(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.price;
-  }
-
-  // Fetch from CoinGecko
-  const response = await fetch(
-    "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
-    {
-      headers: {
-        Accept: "application/json",
-      },
-      signal: AbortSignal.timeout(5000),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(`CoinGecko SOL fetch failed: HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  if (!data.solana || typeof data.solana.usd !== "number") {
-    throw new Error(
-      `Invalid SOL price response from CoinGecko: ${JSON.stringify(data)}`,
-    );
-  }
-  const price = data.solana.usd;
-
-  if (price <= 0) {
-    throw new Error(`Invalid SOL price from CoinGecko: ${price}`);
-  }
-
-  await setCachedPrice(cacheKey, {
-    price,
-    timestamp: Date.now(),
-  });
-  return price;
-}
-
-/**
- * Format token amount with proper display (K, M, B suffixes)
- */
-export function formatTokenAmount(amount: string | number): string {
-  const num = typeof amount === "string" ? parseFloat(amount) : amount;
-
-  if (isNaN(num)) return "0";
-
-  // Format with appropriate decimal places based on token value
-  if (num >= 1000000000) {
-    return `${(num / 1000000000).toFixed(2)}B`;
-  } else if (num >= 1000000) {
-    return `${(num / 1000000).toFixed(2)}M`;
-  } else if (num >= 1000) {
-    return `${(num / 1000).toFixed(2)}K`;
-  } else {
-    return num.toLocaleString();
-  }
-}
+/** Get SOL price in USD */
+export const getSolPriceUsd = () => fetchNativePrice("SOL");

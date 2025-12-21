@@ -67,7 +67,7 @@ export async function waitForSolanaTx(
       throw new Error("getSignatureStatuses response missing value field");
     }
     if (response.value.length === 0) {
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      await sleep(pollIntervalMs);
       continue;
     }
     const status = response.value[0];

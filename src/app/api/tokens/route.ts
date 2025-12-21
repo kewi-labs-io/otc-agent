@@ -6,6 +6,7 @@ import {
   invalidateTokenCache,
 } from "@/lib/cache";
 import { parseOrThrow, validateQueryParams } from "@/lib/validation/helpers";
+import { SUPPORTED_CHAINS } from "@/config/chains";
 import { type Chain, MarketDataDB, TokenDB } from "@/services/database";
 import { MarketDataService } from "@/services/marketDataService";
 import { TokenRegistryService } from "@/services/tokenRegistry";
@@ -17,6 +18,7 @@ import {
   TokensResponseSchema,
   UpdateTokenResponseSchema,
 } from "@/types/validation/api-schemas";
+import { isContractAddress } from "@/utils/address-utils";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -57,20 +59,14 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // Filter out tokens with invalid chain values before validation
-  // Supported chains are: ethereum, base, bsc, solana
-  const VALID_CHAINS = new Set(["ethereum", "base", "bsc", "solana"]);
+  // Filter out tokens with invalid chain values or contract addresses
   const validTokens = tokens.filter((token) => {
-    // Filter out tokens with invalid chain
-    if (!VALID_CHAINS.has(token.chain)) {
+    // Filter out tokens with invalid chain (must be in SUPPORTED_CHAINS)
+    if (!(token.chain in SUPPORTED_CHAINS)) {
       return false;
     }
     // Filter out tokens with invalid contract addresses
-    const isEvmAddress = /^0x[a-fA-F0-9]{40}$/.test(token.contractAddress);
-    const isSolanaAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(
-      token.contractAddress,
-    );
-    if (!isEvmAddress && !isSolanaAddress) {
+    if (!isContractAddress(token.contractAddress)) {
       return false;
     }
     return true;

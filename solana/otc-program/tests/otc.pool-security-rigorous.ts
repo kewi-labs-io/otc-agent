@@ -32,10 +32,13 @@ import { assert, expect } from "chai";
 
 // Helper to assert promise rejects with specific error message
 async function expectRejectedWith(promise: Promise<unknown>, expectedError: string): Promise<void> {
-  await expect(promise).to.be.rejected;
-  const error = await promise.catch((e: unknown) => e);
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  assert.include(errorMessage, expectedError);
+  try {
+    await promise;
+    assert.fail("Expected promise to reject but it resolved");
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    assert.include(errorMessage, expectedError, `Expected error containing "${expectedError}" but got: ${errorMessage}`);
+  }
 }
 
 describe("Rigorous Pool Oracle Security Tests", () => {
@@ -562,13 +565,16 @@ describe("Rigorous Pool Oracle Security Tests", () => {
         .signers([attacker])
         .rpc();
 
-      await expect(promise).to.be.rejected;
-      const error = await promise.catch((e: unknown) => e);
-      const errStr = String(error).toLowerCase();
-      assert.isTrue(
-        errStr.includes("constraint") || errStr.includes("owner"),
-        `Unexpected error: ${String(error)}`
-      );
+      try {
+        await promise;
+        assert.fail("Expected promise to reject but it resolved");
+      } catch (error) {
+        const errStr = String(error).toLowerCase();
+        assert.isTrue(
+          errStr.includes("constraint") || errStr.includes("owner"),
+          `Unexpected error: ${String(error)}`
+        );
+      }
     });
 
     it("should reject non-owner from setting manual price", async () => {
@@ -582,13 +588,16 @@ describe("Rigorous Pool Oracle Security Tests", () => {
         .signers([attacker])
         .rpc();
 
-      await expect(promise).to.be.rejected;
-      const error = await promise.catch((e: unknown) => e);
-      const errStr = String(error).toLowerCase();
-      assert.isTrue(
-        errStr.includes("constraint") || errStr.includes("owner"),
-        `Unexpected error: ${String(error)}`
-      );
+      try {
+        await promise;
+        assert.fail("Expected promise to reject but it resolved");
+      } catch (error) {
+        const errStr = String(error).toLowerCase();
+        assert.isTrue(
+          errStr.includes("constraint") || errStr.includes("owner"),
+          `Unexpected error: ${String(error)}`
+        );
+      }
     });
 
     it("should reject registry from different desk", async () => {

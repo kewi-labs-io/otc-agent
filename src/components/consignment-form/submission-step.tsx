@@ -10,6 +10,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCreateConsignment } from "@/hooks/mutations";
+import { formatTokenAmountFull } from "@/utils/format";
 import { Button } from "../button";
 
 /**
@@ -378,14 +379,10 @@ export function SubmissionStepComponent({
     router.push("/my-deals");
   };
 
+  // formatAmount uses centralized formatTokenAmountFull from @/utils/format
   const formatAmount = (amount: string) => {
-    // FAIL-FAST: Amount should be a valid number for display
     const num = parseFloat(amount);
-    if (isNaN(num)) {
-      // For display purposes, return "0" if invalid (better UX than throwing)
-      return "0";
-    }
-    return num.toLocaleString();
+    return isNaN(num) ? "0" : formatTokenAmountFull(num);
   };
 
   const steps = stepsRef.current;

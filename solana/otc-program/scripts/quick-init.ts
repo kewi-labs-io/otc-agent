@@ -211,16 +211,18 @@ async function main() {
   );
   console.log("✅ Minted 1,000,000 tokens to owner");
 
-  // Deposit to desk (now requires token_registry)
+  // Deposit to desk (requires all accounts including token_program)
   console.log("\n📥 Depositing tokens to desk...");
   await program.methods
     .depositTokens(new BN("500000000000000"))
     .accountsPartial({
       desk: desk.publicKey,
       tokenRegistry: tokenRegistryPda,
+      tokenMint: tokenMint,
       owner: owner.publicKey,
       ownerTokenAta: ownerTokenAta.address,
       deskTokenTreasury: deskTokenAta,
+      tokenProgram: TOKEN_PROGRAM_ID,
     })
     .signers([owner])
     .rpc();

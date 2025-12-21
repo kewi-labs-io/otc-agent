@@ -5,9 +5,9 @@ import type {
   ProviderResult,
 } from "@elizaos/core";
 import type QuoteService from "@/lib/plugin-otc-desk/services/quoteService";
+import { formatTokenAmount } from "@/utils/format";
 import { agentRuntime } from "../../agent-runtime";
 import { walletToEntityId } from "../../entityId";
-import { formatTokenAmount } from "../services/priceFeed";
 import type { PaymentCurrency, QuoteMemory } from "../types";
 
 export const quoteProvider: Provider = {

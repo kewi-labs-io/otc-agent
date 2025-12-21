@@ -32,11 +32,22 @@ export function formatDateTime(tsSeconds: bigint | number): string {
 }
 
 /**
- * Format a token amount with K/M suffixes for readability
+ * Format a token amount with K/M/B suffixes for readability
  * Input is expected to be in human-readable form (not wei)
+ * Accepts bigint, number, or string (parses string to number)
  */
-export function formatTokenAmount(amount: bigint | number): string {
-  const num = typeof amount === "bigint" ? Number(amount) : amount;
+export function formatTokenAmount(amount: bigint | number | string): string {
+  let num: number;
+  if (typeof amount === "bigint") {
+    num = Number(amount);
+  } else if (typeof amount === "string") {
+    num = parseFloat(amount);
+  } else {
+    num = amount;
+  }
+
+  if (isNaN(num)) return "0";
+  if (num >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(2)}B`;
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
   return num.toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -204,4 +215,31 @@ export function formatNativeAmount(
     maximumFractionDigits: 6,
   });
   return `${formatted} ${symbol}`;
+}
+
+/**
+ * Get block explorer URL for a transaction
+ * Supports EVM chains (Ethereum, Base, BSC) and Solana
+ */
+export function getExplorerTxUrl(
+  txHash: string,
+  chain: "ethereum" | "base" | "bsc" | "solana",
+  isTestnet = false,
+): string {
+  switch (chain) {
+    case "solana":
+      return `https://solscan.io/tx/${txHash}`;
+    case "ethereum":
+      return isTestnet
+        ? `https://sepolia.etherscan.io/tx/${txHash}`
+        : `https://etherscan.io/tx/${txHash}`;
+    case "bsc":
+      return isTestnet
+        ? `https://testnet.bscscan.com/tx/${txHash}`
+        : `https://bscscan.com/tx/${txHash}`;
+    case "base":
+      return isTestnet
+        ? `https://sepolia.basescan.org/tx/${txHash}`
+        : `https://basescan.org/tx/${txHash}`;
+  }
 }

@@ -20,11 +20,12 @@ import {
   sepolia,
 } from "viem/chains";
 import { Button } from "@/components/button";
-import { useMultiWallet } from "@/components/multiwallet";
 import { type Chain, SUPPORTED_CHAINS } from "@/config/chains";
+import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { getCurrentNetwork } from "@/config/contracts";
 import { useOTC } from "@/hooks/contracts/useOTC";
 import { safeReadContract } from "@/lib/viem-utils";
+import { getExplorerTxUrl } from "@/utils/format";
 import type {
   AnchorWallet,
   ChainFamily,
@@ -190,18 +191,15 @@ function getViemChain(chain: Chain) {
 }
 
 export default function FlowTestClient() {
+  const { activeFamily, setActiveFamily } = useChain();
   const {
-    activeFamily,
-    setActiveFamily,
     evmAddress,
     solanaPublicKey,
     solanaWallet,
     solanaCanSign,
     privyAuthenticated,
-    connectWallet,
-    connectSolanaWallet,
-  } = useMultiWallet();
-
+  } = useWalletConnection();
+  const { connectWallet, connectSolanaWallet } = useWalletActions();
   const { login } = usePrivy();
   const {
     approveToken,
@@ -1612,15 +1610,13 @@ export default function FlowTestClient() {
       ? Boolean(activePublicKey && activeSigner && activeSigner.signTransaction)
       : Boolean(evmAddress);
 
-  // Get explorer URL for transaction
+  // getExplorerUrl uses centralized getExplorerTxUrl from @/utils/format
   const getExplorerUrl = (txHash: string) => {
     if (testState.chain === "solana") {
-      return `https://solscan.io/tx/${txHash}`;
+      return getExplorerTxUrl(txHash, "solana");
     }
     const network = getCurrentNetwork();
-    return network === "mainnet"
-      ? `https://basescan.org/tx/${txHash}`
-      : `https://sepolia.basescan.org/tx/${txHash}`;
+    return getExplorerTxUrl(txHash, "base", network !== "mainnet");
   };
 
   return (

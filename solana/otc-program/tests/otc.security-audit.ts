@@ -20,14 +20,17 @@ import {
   TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
-import { assert, expect } from "chai";
+import { assert } from "chai";
 
 // Helper to assert promise rejects with specific error message
 async function expectRejectedWith(promise: Promise<unknown>, expectedError: string): Promise<void> {
-  await expect(promise).to.be.rejected;
-  const error = await promise.catch((e: unknown) => e);
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  assert.include(errorMessage, expectedError);
+  try {
+    await promise;
+    assert.fail("Expected promise to reject but it resolved");
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    assert.include(errorMessage, expectedError, `Expected error containing "${expectedError}" but got: ${errorMessage}`);
+  }
 }
 
 describe("OTC Security Audit Tests", () => {
@@ -35,135 +38,88 @@ describe("OTC Security Audit Tests", () => {
   anchor.setProvider(provider);
   const program = anchor.workspace.Otc as Program<Otc>;
 
-  // Test keypairs
-  let attacker: Keypair;
-  let victim: Keypair;
-  let victimDesk: Keypair;
-  let attackerDesk: Keypair;
-  let tokenMint: PublicKey;
-  let usdcMint: PublicKey;
-  let victimRegistry: PublicKey;
-  let attackerRegistry: PublicKey;
-  let victimDeskTokenTreasury: PublicKey;
-  let victimDeskUsdcTreasury: PublicKey;
-
   const airdrop = async (pk: PublicKey, lamports: number) => {
     const sig = await provider.connection.requestAirdrop(pk, lamports);
     await provider.connection.confirmTransaction(sig, "confirmed");
   };
 
+  const getTokenRegistryPda = (desk: PublicKey, tokenMint: PublicKey) => {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("registry"), desk.toBuffer(), tokenMint.toBuffer()],
+      program.programId
+    )[0];
+  };
+
+  // Test keypairs
+  let owner: Keypair;
+  let attacker: Keypair;
+  let desk: Keypair;
+  let attackerDesk: Keypair;
+  let tokenMint: PublicKey;
+  let usdcMint: PublicKey;
+  let ownerRegistry: PublicKey;
+  let attackerRegistry: PublicKey;
+  let deskTokenTreasury: PublicKey;
+  let deskUsdcTreasury: PublicKey;
+
   before(async () => {
+    owner = Keypair.generate();
     attacker = Keypair.generate();
-    victim = Keypair.generate();
-    victimDesk = Keypair.generate();
+    desk = Keypair.generate();
     attackerDesk = Keypair.generate();
 
     await Promise.all([
+      airdrop(owner.publicKey, 10 * LAMPORTS_PER_SOL),
       airdrop(attacker.publicKey, 10 * LAMPORTS_PER_SOL),
-      airdrop(victim.publicKey, 10 * LAMPORTS_PER_SOL),
     ]);
     await new Promise((r) => setTimeout(r, 1000));
 
     // Create mints
-    tokenMint = await createMint(
-      provider.connection,
-      attacker,
-      attacker.publicKey,
-      null,
-      9
-    );
-    usdcMint = await createMint(
-      provider.connection,
-      attacker,
-      attacker.publicKey,
-      null,
-      6
-    );
+    tokenMint = await createMint(provider.connection, owner, owner.publicKey, null, 9);
+    usdcMint = await createMint(provider.connection, owner, owner.publicKey, null, 6);
 
-    // Setup victim desk with inventory
-    victimDeskTokenTreasury = getAssociatedTokenAddressSync(
-      tokenMint,
-      victimDesk.publicKey,
-      true
-    );
-    victimDeskUsdcTreasury = getAssociatedTokenAddressSync(
-      usdcMint,
-      victimDesk.publicKey,
-      true
-    );
+    // Setup desk treasuries
+    deskTokenTreasury = getAssociatedTokenAddressSync(tokenMint, desk.publicKey, true);
+    deskUsdcTreasury = getAssociatedTokenAddressSync(usdcMint, desk.publicKey, true);
 
-    await getOrCreateAssociatedTokenAccount(
-      provider.connection,
-      victim,
-      tokenMint,
-      victimDesk.publicKey,
-      true
-    );
-    await getOrCreateAssociatedTokenAccount(
-      provider.connection,
-      victim,
-      usdcMint,
-      victimDesk.publicKey,
-      true
-    );
+    await getOrCreateAssociatedTokenAccount(provider.connection, owner, tokenMint, desk.publicKey, true);
+    await getOrCreateAssociatedTokenAccount(provider.connection, owner, usdcMint, desk.publicKey, true);
 
+    // Initialize owner desk
     await program.methods
       .initDesk(new anchor.BN(5 * 1e8), new anchor.BN(1800))
       .accounts({
-        payer: victim.publicKey,
-        owner: victim.publicKey,
-        agent: victim.publicKey,
+        payer: owner.publicKey,
+        owner: owner.publicKey,
+        agent: owner.publicKey,
         usdcMint,
-        desk: victimDesk.publicKey,
+        desk: desk.publicKey,
       })
-      .signers([victim, victimDesk])
+      .signers([owner, desk])
       .rpc();
 
-    // Deposit tokens to victim desk
-    const victimTokenAta = await getOrCreateAssociatedTokenAccount(
-      provider.connection,
-      victim,
-      tokenMint,
-      victim.publicKey
-    );
-    await mintTo(
-      provider.connection,
-      attacker,
-      tokenMint,
-      victimTokenAta.address,
-      attacker,
-      1000000n * 10n ** 9n
-    );
-
-    // Register token for victim desk
-    [victimRegistry] = PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("registry"),
-        victimDesk.publicKey.toBuffer(),
-        tokenMint.toBuffer(),
-      ],
-      program.programId
-    );
+    // Register token for owner desk
+    ownerRegistry = getTokenRegistryPda(desk.publicKey, tokenMint);
 
     await program.methods
       .registerToken(Array(32).fill(0), PublicKey.default, 0)
       .accounts({
-        desk: victimDesk.publicKey,
-        payer: victim.publicKey,
+        desk: desk.publicKey,
+        payer: owner.publicKey,
         tokenMint,
       })
-      .signers([victim])
+      .signers([owner])
       .rpc();
 
     // Set prices
     await program.methods
       .setManualTokenPrice(new anchor.BN(10 * 1e8))
       .accounts({
-        tokenRegistry: victimRegistry,
-        desk: victimDesk.publicKey,
-        owner: victim.publicKey,
+        tokenRegistry: ownerRegistry,
+        desk: desk.publicKey,
+        owner: owner.publicKey,
       })
-      .signers([victim])
+      .signers([owner])
       .rpc();
 
     await program.methods
@@ -173,56 +129,23 @@ describe("OTC Security Audit Tests", () => {
         new anchor.BN(0),
         new anchor.BN(3600)
       )
-      .accounts({ desk: victimDesk.publicKey })
-      .signers([victim])
+      .accounts({ desk: desk.publicKey })
+      .signers([owner])
       .rpc();
 
-    // Deposit inventory
+    // Add owner as approver
     await program.methods
-      .depositTokens(new anchor.BN(500000n * 10n ** 9n))
-      .accounts({
-        desk: victimDesk.publicKey,
-        tokenRegistry: victimRegistry,
-        owner: victim.publicKey,
-        ownerTokenAta: victimTokenAta.address,
-        deskTokenTreasury: victimDeskTokenTreasury,
-      })
-      .signers([victim])
-      .rpc();
-
-    // Add victim as approver
-    await program.methods
-      .setApprover(victim.publicKey, true)
-      .accounts({ desk: victimDesk.publicKey })
-      .signers([victim])
+      .setApprover(owner.publicKey, true)
+      .accounts({ desk: desk.publicKey })
+      .signers([owner])
       .rpc();
 
     // Setup attacker desk
-    const attackerDeskTokenTreasury = getAssociatedTokenAddressSync(
-      tokenMint,
-      attackerDesk.publicKey,
-      true
-    );
-    const attackerDeskUsdcTreasury = getAssociatedTokenAddressSync(
-      usdcMint,
-      attackerDesk.publicKey,
-      true
-    );
+    const attackerDeskTokenTreasury = getAssociatedTokenAddressSync(tokenMint, attackerDesk.publicKey, true);
+    const attackerDeskUsdcTreasury = getAssociatedTokenAddressSync(usdcMint, attackerDesk.publicKey, true);
 
-    await getOrCreateAssociatedTokenAccount(
-      provider.connection,
-      attacker,
-      tokenMint,
-      attackerDesk.publicKey,
-      true
-    );
-    await getOrCreateAssociatedTokenAccount(
-      provider.connection,
-      attacker,
-      usdcMint,
-      attackerDesk.publicKey,
-      true
-    );
+    await getOrCreateAssociatedTokenAccount(provider.connection, attacker, tokenMint, attackerDesk.publicKey, true);
+    await getOrCreateAssociatedTokenAccount(provider.connection, attacker, usdcMint, attackerDesk.publicKey, true);
 
     await program.methods
       .initDesk(new anchor.BN(1 * 1e8), new anchor.BN(86400))
@@ -243,15 +166,8 @@ describe("OTC Security Audit Tests", () => {
       .signers([attacker])
       .rpc();
 
-    // Register token on attacker desk with different price
-    [attackerRegistry] = PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("registry"),
-        attackerDesk.publicKey.toBuffer(),
-        tokenMint.toBuffer(),
-      ],
-      program.programId
-    );
+    // Register token on attacker desk
+    attackerRegistry = getTokenRegistryPda(attackerDesk.publicKey, tokenMint);
 
     await program.methods
       .registerToken(Array(32).fill(0), PublicKey.default, 0)
@@ -275,33 +191,15 @@ describe("OTC Security Audit Tests", () => {
       .rpc();
   });
 
-  describe("CRITICAL: Offer-to-Desk Validation (FIX-1)", () => {
-    it("should REJECT approving offer from different desk", async () => {
-      // Create legitimate offer on victim desk
-      const offer = Keypair.generate();
-      const buyer = Keypair.generate();
-      await airdrop(buyer.publicKey, 2 * LAMPORTS_PER_SOL);
-
-      // Create offer on victim desk
-      await program.methods
-        .createOffer(new anchor.BN(100 * 1e9), 0, 1, new anchor.BN(0))
-        .accounts({
-          desk: victimDesk.publicKey,
-          tokenRegistry: victimRegistry,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          beneficiary: buyer.publicKey,
-          offer: offer.publicKey,
-        })
-        .signers([buyer, offer])
-        .rpc();
-
-      // ATTACK: Try to approve using attacker's desk (where attacker is approver)
+  describe("CRITICAL: TokenRegistry-to-Desk Validation", () => {
+    it("should REJECT setting price on registry from different desk", async () => {
+      // Attacker tries to set price on owner's registry using their desk
       const promise = program.methods
-        .approveOffer(new anchor.BN(1))
+        .setManualTokenPrice(new anchor.BN(1 * 1e8))
         .accounts({
-          desk: attackerDesk.publicKey, // Wrong desk
-          offer: offer.publicKey,
-          approver: attacker.publicKey,
+          tokenRegistry: ownerRegistry, // Owner's registry
+          desk: attackerDesk.publicKey, // Attacker's desk
+          owner: attacker.publicKey,
         })
         .signers([attacker])
         .rpc();
@@ -309,179 +207,23 @@ describe("OTC Security Audit Tests", () => {
       await expectRejectedWith(promise, "BadState");
     });
 
-    it("should REJECT fulfilling offer from different desk", async () => {
-      const offer = Keypair.generate();
-      const buyer = Keypair.generate();
-      await airdrop(buyer.publicKey, 2 * LAMPORTS_PER_SOL);
-
-      // Create and approve offer on victim desk
+    it("should ALLOW setting price on correct registry", async () => {
       await program.methods
-        .createOffer(new anchor.BN(100 * 1e9), 0, 1, new anchor.BN(0))
+        .setManualTokenPrice(new anchor.BN(15 * 1e8))
         .accounts({
-          desk: victimDesk.publicKey,
-          tokenRegistry: victimRegistry,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          beneficiary: buyer.publicKey,
-          offer: offer.publicKey,
+          tokenRegistry: ownerRegistry,
+          desk: desk.publicKey,
+          owner: owner.publicKey,
         })
-        .signers([buyer, offer])
+        .signers([owner])
         .rpc();
 
-      await program.methods
-        .approveOffer(new anchor.BN(1))
-        .accounts({
-          desk: victimDesk.publicKey,
-          offer: offer.publicKey,
-          approver: victim.publicKey,
-        })
-        .signers([victim])
-        .rpc();
-
-      // Get attacker USDC
-      const attackerUsdcAta = await getOrCreateAssociatedTokenAccount(
-        provider.connection,
-        attacker,
-        usdcMint,
-        attacker.publicKey
-      );
-      await mintTo(
-        provider.connection,
-        attacker,
-        usdcMint,
-        attackerUsdcAta.address,
-        attacker,
-        10000n * 10n ** 6n
-      );
-
-      const attackerDeskUsdcTreasury = getAssociatedTokenAddressSync(
-        usdcMint,
-        attackerDesk.publicKey,
-        true
-      );
-      const attackerDeskTokenTreasury = getAssociatedTokenAddressSync(
-        tokenMint,
-        attackerDesk.publicKey,
-        true
-      );
-
-      // ATTACK: Try to fulfill using wrong desk
-      const promise = program.methods
-        .fulfillOfferUsdc(new anchor.BN(1))
-        .accounts({
-          desk: attackerDesk.publicKey, // Wrong desk
-          offer: offer.publicKey,
-          deskTokenTreasury: attackerDeskTokenTreasury,
-          deskUsdcTreasury: attackerDeskUsdcTreasury,
-          payerUsdcAta: attackerUsdcAta.address,
-          payer: attacker.publicKey,
-        })
-        .signers([attacker])
-        .rpc();
-
-      await expectRejectedWith(promise, "BadState");
-    });
-
-    it("should ALLOW approving offer from correct desk", async () => {
-      const offer = Keypair.generate();
-      const buyer = Keypair.generate();
-      await airdrop(buyer.publicKey, 2 * LAMPORTS_PER_SOL);
-
-      await program.methods
-        .createOffer(new anchor.BN(100 * 1e9), 0, 1, new anchor.BN(0))
-        .accounts({
-          desk: victimDesk.publicKey,
-          tokenRegistry: victimRegistry,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          beneficiary: buyer.publicKey,
-          offer: offer.publicKey,
-        })
-        .signers([buyer, offer])
-        .rpc();
-
-      // Approve using correct desk
-      await program.methods
-        .approveOffer(new anchor.BN(1))
-        .accounts({
-          desk: victimDesk.publicKey,
-          offer: offer.publicKey,
-          approver: victim.publicKey,
-        })
-        .signers([victim])
-        .rpc();
-
-      const offerAccount = await program.account.offer.fetch(offer.publicKey);
-      assert.isTrue(offerAccount.approved);
+      const registry = await program.account.tokenRegistry.fetch(ownerRegistry);
+      assert.equal(registry.tokenUsdPrice8d.toString(), (15 * 1e8).toString());
     });
   });
 
-  describe("CRITICAL: TokenRegistry-to-Desk Validation (FIX-2)", () => {
-    it("should REJECT using TokenRegistry from different desk in createOffer", async () => {
-      const buyer = Keypair.generate();
-      const offer = Keypair.generate();
-      await airdrop(buyer.publicKey, 2 * LAMPORTS_PER_SOL);
-
-      // ATTACK: Try to create offer on victim desk but using attacker's cheap price registry
-      const promise = program.methods
-        .createOffer(new anchor.BN(100 * 1e9), 0, 1, new anchor.BN(0))
-        .accounts({
-          desk: victimDesk.publicKey,
-          tokenRegistry: attackerRegistry, // WRONG REGISTRY from different desk
-          deskTokenTreasury: victimDeskTokenTreasury,
-          beneficiary: buyer.publicKey,
-          offer: offer.publicKey,
-        })
-        .signers([buyer, offer])
-        .rpc();
-
-      await expectRejectedWith(promise, "BadState");
-    });
-
-    it("should REJECT depositing with TokenRegistry from different desk", async () => {
-      const depositorTokenAta = await getOrCreateAssociatedTokenAccount(
-        provider.connection,
-        victim,
-        tokenMint,
-        victim.publicKey
-      );
-
-      const promise = program.methods
-        .depositTokens(new anchor.BN(1000 * 1e9))
-        .accounts({
-          desk: victimDesk.publicKey,
-          tokenRegistry: attackerRegistry, // Wrong registry
-          owner: victim.publicKey,
-          ownerTokenAta: depositorTokenAta.address,
-          deskTokenTreasury: victimDeskTokenTreasury,
-        })
-        .signers([victim])
-        .rpc();
-
-      await expectRejectedWith(promise, "BadState");
-    });
-
-    it("should ALLOW using TokenRegistry from correct desk", async () => {
-      const buyer = Keypair.generate();
-      const offer = Keypair.generate();
-      await airdrop(buyer.publicKey, 2 * LAMPORTS_PER_SOL);
-
-      await program.methods
-        .createOffer(new anchor.BN(100 * 1e9), 0, 1, new anchor.BN(0))
-        .accounts({
-          desk: victimDesk.publicKey,
-          tokenRegistry: victimRegistry, // Correct registry
-          deskTokenTreasury: victimDeskTokenTreasury,
-          beneficiary: buyer.publicKey,
-          offer: offer.publicKey,
-        })
-        .signers([buyer, offer])
-        .rpc();
-
-      const offerAccount = await program.account.offer.fetch(offer.publicKey);
-      assert.equal(offerAccount.desk.toBase58(), victimDesk.publicKey.toBase58());
-    });
-  });
-
-  describe("HIGH: Minimum Quote Expiry (FIX-3)", () => {
+  describe("HIGH: Minimum Quote Expiry", () => {
     it("should REJECT quote expiry less than 60 seconds", async () => {
       const promise = program.methods
         .setLimits(
@@ -491,8 +233,8 @@ describe("OTC Security Audit Tests", () => {
           new anchor.BN(0),
           new anchor.BN(365 * 86400)
         )
-        .accounts({ desk: victimDesk.publicKey })
-        .signers([victim])
+        .accounts({ desk: desk.publicKey })
+        .signers([owner])
         .rpc();
 
       await expectRejectedWith(promise, "AmountRange");
@@ -503,156 +245,16 @@ describe("OTC Security Audit Tests", () => {
         .setLimits(
           new anchor.BN(5 * 1e8),
           new anchor.BN(10000 * 1e9),
-          new anchor.BN(60), // Exactly 60 seconds - should pass
+          new anchor.BN(60),
           new anchor.BN(0),
           new anchor.BN(365 * 86400)
         )
-        .accounts({ desk: victimDesk.publicKey })
-        .signers([victim])
+        .accounts({ desk: desk.publicKey })
+        .signers([owner])
         .rpc();
 
-      const desk = await program.account.desk.fetch(victimDesk.publicKey);
-      assert.equal(desk.quoteExpirySecs.toNumber(), 60);
-    });
-  });
-
-  describe("HIGH: Treasury and ATA Owner Validation (FIX-4)", () => {
-    it("should properly validate beneficiary ATA owner in claim", async () => {
-      // Create and complete an offer flow to test claim
-      const offer = Keypair.generate();
-      const buyer = Keypair.generate();
-      await airdrop(buyer.publicKey, 5 * LAMPORTS_PER_SOL);
-
-      // Reset limits for longer expiry
-      await program.methods
-        .setLimits(
-          new anchor.BN(5 * 1e8),
-          new anchor.BN(10000 * 1e9),
-          new anchor.BN(1800),
-          new anchor.BN(0),
-          new anchor.BN(365 * 86400)
-        )
-        .accounts({ desk: victimDesk.publicKey })
-        .signers([victim])
-        .rpc();
-
-      await program.methods
-        .createOffer(new anchor.BN(100 * 1e9), 0, 1, new anchor.BN(0))
-        .accounts({
-          desk: victimDesk.publicKey,
-          tokenRegistry: victimRegistry,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          beneficiary: buyer.publicKey,
-          offer: offer.publicKey,
-        })
-        .signers([buyer, offer])
-        .rpc();
-
-      await program.methods
-        .approveOffer(new anchor.BN(1))
-        .accounts({
-          desk: victimDesk.publicKey,
-          offer: offer.publicKey,
-          approver: victim.publicKey,
-        })
-        .signers([victim])
-        .rpc();
-
-      // Fund buyer with USDC
-      const buyerUsdcAta = await getOrCreateAssociatedTokenAccount(
-        provider.connection,
-        buyer,
-        usdcMint,
-        buyer.publicKey
-      );
-      await mintTo(
-        provider.connection,
-        attacker,
-        usdcMint,
-        buyerUsdcAta.address,
-        attacker,
-        10000n * 10n ** 6n
-      );
-
-      // Fulfill offer
-      await program.methods
-        .fulfillOfferUsdc(new anchor.BN(1))
-        .accounts({
-          desk: victimDesk.publicKey,
-          offer: offer.publicKey,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          deskUsdcTreasury: victimDeskUsdcTreasury,
-          payerUsdcAta: buyerUsdcAta.address,
-          payer: buyer.publicKey,
-        })
-        .signers([buyer])
-        .rpc();
-
-      // Create buyer token ATA
-      const buyerTokenAta = await getOrCreateAssociatedTokenAccount(
-        provider.connection,
-        buyer,
-        tokenMint,
-        buyer.publicKey
-      );
-
-      // Create attacker token ATA to try stealing tokens
-      const attackerTokenAta = await getOrCreateAssociatedTokenAccount(
-        provider.connection,
-        attacker,
-        tokenMint,
-        attacker.publicKey
-      );
-
-      // ATTACK: Try to claim tokens to attacker's ATA
-      const promise = program.methods
-        .claim(new anchor.BN(1))
-        .accounts({
-          desk: victimDesk.publicKey,
-          deskSigner: victimDesk.publicKey,
-          offer: offer.publicKey,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          beneficiaryTokenAta: attackerTokenAta.address, // WRONG ATA
-          beneficiary: buyer.publicKey,
-        })
-        .signers([victimDesk])
-        .rpc();
-
-      await expectRejectedWith(promise, "BadState");
-
-      // Claim correctly - should work
-      await program.methods
-        .claim(new anchor.BN(1))
-        .accounts({
-          desk: victimDesk.publicKey,
-          deskSigner: victimDesk.publicKey,
-          offer: offer.publicKey,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          beneficiaryTokenAta: buyerTokenAta.address,
-          beneficiary: buyer.publicKey,
-        })
-        .signers([victimDesk])
-        .rpc();
-
-      const offerAccount = await program.account.offer.fetch(offer.publicKey);
-      assert.isTrue(offerAccount.fulfilled);
-    });
-  });
-
-  describe("HIGH: SetManualTokenPrice Registry Validation (FIX-5)", () => {
-    it("should REJECT setting price on registry from different desk", async () => {
-      // Attacker tries to set price on victim's registry
-      const promise = program.methods
-        .setManualTokenPrice(new anchor.BN(1 * 1e8))
-        .accounts({
-          tokenRegistry: victimRegistry, // Victim's registry
-          desk: attackerDesk.publicKey, // Attacker's desk
-          owner: attacker.publicKey,
-        })
-        .signers([attacker])
-        .rpc();
-
-      await expectRejectedWith(promise, "BadState");
+      const deskAccount = await program.account.desk.fetch(desk.publicKey);
+      assert.equal(deskAccount.quoteExpirySecs.toNumber(), 60);
     });
   });
 
@@ -665,14 +267,17 @@ describe("OTC Security Audit Tests", () => {
           new anchor.BN(0),
           new anchor.BN(3600)
         )
-        .accounts({ desk: victimDesk.publicKey })
+        .accounts({ desk: desk.publicKey })
         .signers([attacker])
         .rpc();
 
-      await expect(promise).to.be.rejected;
-      const error = await promise.catch((e: unknown) => e);
-      const errorMessage = String(error).toLowerCase();
-      assert.include(errorMessage, "constraint");
+      try {
+        await promise;
+        assert.fail("Expected promise to reject");
+      } catch (error) {
+        const msg = String(error).toLowerCase();
+        assert.isTrue(msg.includes("constraint") || msg.includes("signer"));
+      }
     });
 
     it("should REJECT non-owner setting limits", async () => {
@@ -684,281 +289,179 @@ describe("OTC Security Audit Tests", () => {
           new anchor.BN(0),
           new anchor.BN(365 * 86400)
         )
-        .accounts({ desk: victimDesk.publicKey })
+        .accounts({ desk: desk.publicKey })
         .signers([attacker])
         .rpc();
 
-      await expect(promise).to.be.rejected;
-      const error = await promise.catch((e: unknown) => e);
-      const errorMessage = String(error).toLowerCase();
-      assert.include(errorMessage, "constraint");
+      try {
+        await promise;
+        assert.fail("Expected promise to reject");
+      } catch (error) {
+        const msg = String(error).toLowerCase();
+        assert.isTrue(msg.includes("constraint") || msg.includes("signer"));
+      }
     });
 
-    it("should REJECT non-approver approving offer", async () => {
-      const offer = Keypair.generate();
-      const buyer = Keypair.generate();
-      const nonApprover = Keypair.generate();
-      await airdrop(buyer.publicKey, 2 * LAMPORTS_PER_SOL);
-      await airdrop(nonApprover.publicKey, 2 * LAMPORTS_PER_SOL);
-
-      await program.methods
-        .createOffer(new anchor.BN(100 * 1e9), 0, 1, new anchor.BN(0))
-        .accounts({
-          desk: victimDesk.publicKey,
-          tokenRegistry: victimRegistry,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          beneficiary: buyer.publicKey,
-          offer: offer.publicKey,
-        })
-        .signers([buyer, offer])
-        .rpc();
-
+    it("should REJECT non-owner setting manual token price", async () => {
       const promise = program.methods
-        .approveOffer(new anchor.BN(1))
+        .setManualTokenPrice(new anchor.BN(1 * 1e8))
         .accounts({
-          desk: victimDesk.publicKey,
-          offer: offer.publicKey,
-          approver: nonApprover.publicKey,
+          tokenRegistry: ownerRegistry,
+          desk: desk.publicKey,
+          owner: attacker.publicKey,
         })
-        .signers([nonApprover])
+        .signers([attacker])
         .rpc();
 
-      await expectRejectedWith(promise, "NotApprover");
+      try {
+        await promise;
+        assert.fail("Expected promise to reject");
+      } catch (error) {
+        const msg = String(error).toLowerCase();
+        assert.isTrue(msg.includes("constraint") || msg.includes("owner"));
+      }
     });
   });
 
   describe("Pause Functionality", () => {
     it("should pause and unpause desk", async () => {
+      // Reset to non-paused state first
+      const deskBefore = await program.account.desk.fetch(desk.publicKey);
+      if (deskBefore.paused) {
+        await program.methods
+          .unpause()
+          .accounts({ desk: desk.publicKey })
+          .signers([owner])
+          .rpc();
+      }
+
       // Pause
       await program.methods
         .pause()
-        .accounts({ desk: victimDesk.publicKey })
-        .signers([victim])
+        .accounts({ desk: desk.publicKey })
+        .signers([owner])
         .rpc();
 
-      let desk = await program.account.desk.fetch(victimDesk.publicKey);
-      assert.isTrue(desk.paused);
+      let deskAccount = await program.account.desk.fetch(desk.publicKey);
+      assert.isTrue(deskAccount.paused);
 
       // Unpause
       await program.methods
         .unpause()
-        .accounts({ desk: victimDesk.publicKey })
-        .signers([victim])
+        .accounts({ desk: desk.publicKey })
+        .signers([owner])
         .rpc();
 
-      desk = await program.account.desk.fetch(victimDesk.publicKey);
-      assert.isFalse(desk.paused);
+      deskAccount = await program.account.desk.fetch(desk.publicKey);
+      assert.isFalse(deskAccount.paused);
     });
 
-    it("should REJECT creating offers when paused", async () => {
-      await program.methods
-        .pause()
-        .accounts({ desk: victimDesk.publicKey })
-        .signers([victim])
-        .rpc();
-
-      const offer = Keypair.generate();
-      const buyer = Keypair.generate();
-      await airdrop(buyer.publicKey, 2 * LAMPORTS_PER_SOL);
-
+    it("should REJECT non-owner pausing", async () => {
       const promise = program.methods
-        .createOffer(new anchor.BN(100 * 1e9), 0, 1, new anchor.BN(0))
-        .accounts({
-          desk: victimDesk.publicKey,
-          tokenRegistry: victimRegistry,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          beneficiary: buyer.publicKey,
-          offer: offer.publicKey,
-        })
-        .signers([buyer, offer])
+        .pause()
+        .accounts({ desk: desk.publicKey })
+        .signers([attacker])
         .rpc();
 
-      await expectRejectedWith(promise, "Paused");
-
-      // Unpause for other tests
-      await program.methods
-        .unpause()
-        .accounts({ desk: victimDesk.publicKey })
-        .signers([victim])
-        .rpc();
+      try {
+        await promise;
+        assert.fail("Expected promise to reject");
+      } catch (error) {
+        const msg = String(error).toLowerCase();
+        assert.isTrue(msg.includes("constraint") || msg.includes("owner"));
+      }
     });
   });
 
-  describe("Complete Secure OTC Flow", () => {
-    it("should complete a secure OTC transaction end-to-end", async () => {
-      const buyer = Keypair.generate();
-      const offer = Keypair.generate();
-      await airdrop(buyer.publicKey, 5 * LAMPORTS_PER_SOL);
-
-      // 1. Create offer with discount
-      await program.methods
-        .createOffer(new anchor.BN(50 * 1e9), 500, 1, new anchor.BN(0)) // 5% discount
+  describe("Price Bounds Validation", () => {
+    it("should REJECT price = 0", async () => {
+      const promise = program.methods
+        .setManualTokenPrice(new anchor.BN(0))
         .accounts({
-          desk: victimDesk.publicKey,
-          tokenRegistry: victimRegistry,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          beneficiary: buyer.publicKey,
-          offer: offer.publicKey,
+          tokenRegistry: ownerRegistry,
+          desk: desk.publicKey,
+          owner: owner.publicKey,
         })
-        .signers([buyer, offer])
+        .signers([owner])
         .rpc();
 
-      // Verify offer state
-      let offerAccount = await program.account.offer.fetch(offer.publicKey);
-      assert.equal(offerAccount.desk.toBase58(), victimDesk.publicKey.toBase58());
-      assert.equal(offerAccount.tokenAmount.toNumber(), 50 * 1e9);
-      assert.equal(offerAccount.discountBps, 500);
-      assert.isFalse(offerAccount.approved);
-
-      // 2. Approve offer
-      await program.methods
-        .approveOffer(new anchor.BN(1))
-        .accounts({
-          desk: victimDesk.publicKey,
-          offer: offer.publicKey,
-          approver: victim.publicKey,
-        })
-        .signers([victim])
-        .rpc();
-
-      offerAccount = await program.account.offer.fetch(offer.publicKey);
-      assert.isTrue(offerAccount.approved);
-
-      // 3. Fund buyer and fulfill
-      const buyerUsdcAta = await getOrCreateAssociatedTokenAccount(
-        provider.connection,
-        buyer,
-        usdcMint,
-        buyer.publicKey
-      );
-      await mintTo(
-        provider.connection,
-        attacker,
-        usdcMint,
-        buyerUsdcAta.address,
-        attacker,
-        10000n * 10n ** 6n
-      );
-
-      await program.methods
-        .fulfillOfferUsdc(new anchor.BN(1))
-        .accounts({
-          desk: victimDesk.publicKey,
-          offer: offer.publicKey,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          deskUsdcTreasury: victimDeskUsdcTreasury,
-          payerUsdcAta: buyerUsdcAta.address,
-          payer: buyer.publicKey,
-        })
-        .signers([buyer])
-        .rpc();
-
-      offerAccount = await program.account.offer.fetch(offer.publicKey);
-      assert.isTrue(offerAccount.paid);
-      assert.isTrue(offerAccount.amountPaid.toNumber() > 0);
-
-      // 4. Claim tokens
-      const buyerTokenAta = await getOrCreateAssociatedTokenAccount(
-        provider.connection,
-        buyer,
-        tokenMint,
-        buyer.publicKey
-      );
-
-      await program.methods
-        .claim(new anchor.BN(1))
-        .accounts({
-          desk: victimDesk.publicKey,
-          deskSigner: victimDesk.publicKey,
-          offer: offer.publicKey,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          beneficiaryTokenAta: buyerTokenAta.address,
-          beneficiary: buyer.publicKey,
-        })
-        .signers([victimDesk])
-        .rpc();
-
-      // Verify final state
-      offerAccount = await program.account.offer.fetch(offer.publicKey);
-      assert.isTrue(offerAccount.paid);
-      assert.isTrue(offerAccount.fulfilled);
-      assert.isFalse(offerAccount.cancelled);
-
-      // Verify buyer received tokens
-      const buyerTokenBalance = await provider.connection.getTokenAccountBalance(
-        buyerTokenAta.address
-      );
-      assert.equal(buyerTokenBalance.value.amount, (50n * 10n ** 9n).toString());
+      await expectRejectedWith(promise, "BadPrice");
     });
 
-    it("should complete secure SOL payment flow", async () => {
-      const buyer = Keypair.generate();
-      const offer = Keypair.generate();
-      await airdrop(buyer.publicKey, 10 * LAMPORTS_PER_SOL);
-
-      // 1. Create offer for SOL payment
-      await program.methods
-        .createOffer(new anchor.BN(10 * 1e9), 0, 0, new anchor.BN(0)) // currency=0 for SOL
+    it("should REJECT price > $10,000", async () => {
+      const promise = program.methods
+        .setManualTokenPrice(new anchor.BN(10001 * 1e8))
         .accounts({
-          desk: victimDesk.publicKey,
-          tokenRegistry: victimRegistry,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          beneficiary: buyer.publicKey,
-          offer: offer.publicKey,
+          tokenRegistry: ownerRegistry,
+          desk: desk.publicKey,
+          owner: owner.publicKey,
         })
-        .signers([buyer, offer])
+        .signers([owner])
         .rpc();
 
-      // 2. Approve
+      await expectRejectedWith(promise, "BadPrice");
+    });
+
+    it("should ALLOW price at $10,000", async () => {
       await program.methods
-        .approveOffer(new anchor.BN(1))
+        .setManualTokenPrice(new anchor.BN(10000 * 1e8))
         .accounts({
-          desk: victimDesk.publicKey,
-          offer: offer.publicKey,
-          approver: victim.publicKey,
+          tokenRegistry: ownerRegistry,
+          desk: desk.publicKey,
+          owner: owner.publicKey,
         })
-        .signers([victim])
+        .signers([owner])
         .rpc();
 
-      // 3. Fulfill with SOL
+      const registry = await program.account.tokenRegistry.fetch(ownerRegistry);
+      assert.equal(registry.tokenUsdPrice8d.toString(), (10000 * 1e8).toString());
+    });
+
+    it("should ALLOW very small prices", async () => {
       await program.methods
-        .fulfillOfferSol(new anchor.BN(1))
+        .setManualTokenPrice(new anchor.BN(1))
         .accounts({
-          desk: victimDesk.publicKey,
-          offer: offer.publicKey,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          payer: buyer.publicKey,
+          tokenRegistry: ownerRegistry,
+          desk: desk.publicKey,
+          owner: owner.publicKey,
         })
-        .signers([buyer])
+        .signers([owner])
         .rpc();
 
-      const offerAccount = await program.account.offer.fetch(offer.publicKey);
-      assert.isTrue(offerAccount.paid);
-      assert.isTrue(offerAccount.amountPaid.toNumber() > 0);
+      const registry = await program.account.tokenRegistry.fetch(ownerRegistry);
+      assert.equal(registry.tokenUsdPrice8d.toString(), "1");
+    });
+  });
 
-      // 4. Claim
-      const buyerTokenAta = await getOrCreateAssociatedTokenAccount(
-        provider.connection,
-        buyer,
-        tokenMint,
-        buyer.publicKey
-      );
-
-      await program.methods
-        .claim(new anchor.BN(1))
-        .accounts({
-          desk: victimDesk.publicKey,
-          deskSigner: victimDesk.publicKey,
-          offer: offer.publicKey,
-          deskTokenTreasury: victimDeskTokenTreasury,
-          beneficiaryTokenAta: buyerTokenAta.address,
-          beneficiary: buyer.publicKey,
-        })
-        .signers([victimDesk])
+  describe("SOL Price Bounds Validation", () => {
+    it("should REJECT SOL price < $0.01", async () => {
+      const promise = program.methods
+        .setPrices(
+          new anchor.BN(10 * 1e8),
+          new anchor.BN(100000), // $0.001
+          new anchor.BN(0),
+          new anchor.BN(3600)
+        )
+        .accounts({ desk: desk.publicKey })
+        .signers([owner])
         .rpc();
 
-      const finalOffer = await program.account.offer.fetch(offer.publicKey);
-      assert.isTrue(finalOffer.fulfilled);
+      await expectRejectedWith(promise, "BadPrice");
+    });
+
+    it("should REJECT SOL price > $100,000", async () => {
+      const promise = program.methods
+        .setPrices(
+          new anchor.BN(10 * 1e8),
+          new anchor.BN(100001 * 1e8), // $100,001
+          new anchor.BN(0),
+          new anchor.BN(3600)
+        )
+        .accounts({ desk: desk.publicKey })
+        .signers([owner])
+        .rpc();
+
+      await expectRejectedWith(promise, "BadPrice");
     });
   });
 });

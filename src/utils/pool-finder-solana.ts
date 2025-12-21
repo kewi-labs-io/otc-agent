@@ -1,6 +1,7 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getCoingeckoApiKey, getHeliusRpcUrl, getNetwork } from "@/config/env";
 import { getCached, setCache } from "./retry-cache";
+import { sleep } from "./tx-helpers";
 
 // Cache TTL for Solana pool info (30 seconds)
 const SOLANA_POOL_CACHE_TTL_MS = 30_000;
@@ -79,11 +80,6 @@ async function fetchSolPriceUsd(): Promise<number> {
 
 // Rate limiting: delay between sequential RPC calls (ms)
 const RPC_CALL_DELAY_MS = 500;
-
-// Helper to delay between RPC calls
-async function delay(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 export interface SolanaPoolInfo {
   protocol: "Raydium" | "Meteora" | "Orca" | "PumpSwap";
@@ -168,22 +164,22 @@ export async function findBestSolanaPool(
 
   // Try pump.fun bonding curve FIRST (for unbonded tokens)
   pumpFunCurves = await findPumpFunBondingCurve(connection, mint, cluster);
-  await delay(RPC_CALL_DELAY_MS);
+  await sleep(RPC_CALL_DELAY_MS);
 
   // Then try PumpSwap AMM (for graduated tokens)
   pumpSwapPools = await findPumpSwapPools(connection, mint, cluster);
-  await delay(RPC_CALL_DELAY_MS);
+  await sleep(RPC_CALL_DELAY_MS);
 
   // Then try Raydium
-  await delay(RPC_CALL_DELAY_MS);
+  await sleep(RPC_CALL_DELAY_MS);
   raydiumPools = await findRaydiumPools(connection, mint, cluster);
 
   // Try Meteora pools (DLMM and standard AMM)
-  await delay(RPC_CALL_DELAY_MS);
+  await sleep(RPC_CALL_DELAY_MS);
   meteoraPools = await findMeteoraPools(connection, mint, cluster);
 
   // Try Raydium CPMM pools (new constant product AMM)
-  await delay(RPC_CALL_DELAY_MS);
+  await sleep(RPC_CALL_DELAY_MS);
   raydiumCpmmPools = await findRaydiumCpmmPools(connection, mint, cluster);
 
   const allPools = [
@@ -381,7 +377,7 @@ async function findPumpSwapPools(
   const poolsBase = await connection.getProgramAccounts(PUMPSWAP_AMM_PROGRAM, {
     filters: filtersBase,
   });
-  await delay(RPC_CALL_DELAY_MS);
+  await sleep(RPC_CALL_DELAY_MS);
 
   const poolsQuote = await connection.getProgramAccounts(PUMPSWAP_AMM_PROGRAM, {
     filters: filtersQuote,
@@ -432,12 +428,12 @@ async function findPumpSwapPools(
 
       baseBalance =
         await connection.getTokenAccountBalance(poolBaseTokenAccount);
-      await delay(RPC_CALL_DELAY_MS);
+      await sleep(RPC_CALL_DELAY_MS);
 
       quoteBalance = await connection.getTokenAccountBalance(
         poolQuoteTokenAccount,
       );
-      await delay(RPC_CALL_DELAY_MS);
+      await sleep(RPC_CALL_DELAY_MS);
 
       // FAIL-FAST: Token account balances must be valid numbers
       if (baseBalance.value.uiAmount == null) {
@@ -554,7 +550,7 @@ async function findRaydiumPools(
   const poolsBase = await connection.getProgramAccounts(PROGRAM_ID, {
     filters: filtersBase,
   });
-  await delay(RPC_CALL_DELAY_MS);
+  await sleep(RPC_CALL_DELAY_MS);
 
   const poolsQuote = await connection.getProgramAccounts(PROGRAM_ID, {
     filters: filtersQuote,
@@ -603,7 +599,7 @@ async function findRaydiumPools(
         value: { uiAmount: 0 },
       };
       balance = await connection.getTokenAccountBalance(vaultToCheck);
-      await delay(RPC_CALL_DELAY_MS);
+      await sleep(RPC_CALL_DELAY_MS);
       // FAIL-FAST: Token account balance must be valid
       if (
         balance.value.uiAmount === null ||
@@ -635,7 +631,7 @@ async function findRaydiumPools(
         value: { uiAmount: 0 },
       };
       otherBalance = await connection.getTokenAccountBalance(otherVault);
-      await delay(RPC_CALL_DELAY_MS);
+      await sleep(RPC_CALL_DELAY_MS);
       // FAIL-FAST: Token account balance must be valid
       if (otherBalance.value.uiAmount == null) {
         throw new Error(
@@ -934,7 +930,7 @@ async function findMeteoraPools(
     const poolsA = await connection.getProgramAccounts(METEORA_AMM_PROGRAM, {
       filters: filtersA,
     });
-    await delay(RPC_CALL_DELAY_MS);
+    await sleep(RPC_CALL_DELAY_MS);
 
     const poolsB = await connection.getProgramAccounts(METEORA_AMM_PROGRAM, {
       filters: filtersB,

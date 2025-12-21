@@ -76,3 +76,4 @@ contracts/echidna-corpus/
 contracts/crytic-export/
 contracts/*.call-graph.dot
 contracts/*.dot
+.test-infrastructure-state.json

@@ -776,23 +776,21 @@ pub mod otc {
         require!(token_amount <= consignment.remaining_amount, OtcError::InsuffInv);
 
         // Determine effective commission for the offer
-        let effective_commission_bps: u16;
-        
-        if consignment.is_negotiable {
+        let effective_commission_bps: u16 = if consignment.is_negotiable {
             require!(discount_bps >= consignment.min_discount_bps && discount_bps <= consignment.max_discount_bps, OtcError::Discount);
             let lockup_days = lockup_secs / 86400;
             require!(lockup_days >= consignment.min_lockup_days as i64 && lockup_days <= consignment.max_lockup_days as i64, OtcError::LockupTooLong);
             // Negotiated deals: commission must be 25-150 bps (0.25% - 1.5%)
             require!(agent_commission_bps >= 25 && agent_commission_bps <= 150, OtcError::CommissionRange);
-            effective_commission_bps = agent_commission_bps;
+            agent_commission_bps
         } else {
             require!(discount_bps == consignment.fixed_discount_bps, OtcError::Discount);
             let lockup_days = lockup_secs / 86400;
             require!(lockup_days == consignment.fixed_lockup_days as i64, OtcError::LockupTooLong);
             // P2P deals: use the configured p2p_commission_bps (default 0.25%)
             // agent_commission_bps parameter is ignored for P2P - uses desk-wide setting
-            effective_commission_bps = desk.p2p_commission_bps;
-        }
+            desk.p2p_commission_bps
+        };
 
         // Use registry price for multi-token support
         let registry = &ctx.accounts.token_registry;
@@ -1015,8 +1013,10 @@ pub mod otc {
         transfer_checked(cpi_ctx, usdc_amount, desk.usdc_decimals)?;
         
         // If there's a commission and agent USDC account is provided, transfer commission to agent
+        // SECURITY: Validate agent_usdc_ata owner matches desk.agent to prevent commission theft
         if commission_usdc > 0 {
             if let Some(agent_usdc_ata) = &ctx.accounts.agent_usdc_ata {
+                require!(agent_usdc_ata.owner == desk.agent, OtcError::BadState);
                 // Transfer commission from desk treasury to agent (desk_signer authorizes)
                 let cpi_accounts_commission = TransferChecked { 
                     from: ctx.accounts.desk_usdc_treasury.to_account_info(), 
@@ -1079,8 +1079,10 @@ pub mod otc {
         ])?;
         
         // If there's a commission and agent account is provided, transfer commission to agent
+        // SECURITY: Validate agent account matches desk.agent to prevent commission theft
         if commission_lamports > 0 {
             if let Some(agent_account) = &ctx.accounts.agent {
+                require!(agent_account.key() == agent_key, OtcError::BadState);
                 // Transfer commission from desk to agent (desk_signer authorizes)
                 **desk_ai.try_borrow_mut_lamports()? -= commission_lamports;
                 **agent_account.to_account_info().try_borrow_mut_lamports()? += commission_lamports;
@@ -1504,6 +1506,7 @@ pub struct FulfillOfferUsdc<'info> {
     #[account(mut, constraint = payer_usdc_ata.mint == desk.usdc_mint, constraint = payer_usdc_ata.owner == payer.key())]
     pub payer_usdc_ata: InterfaceAccount<'info, TokenAccount>,
     /// Agent USDC account for receiving commission (optional - only needed if commission > 0)
+    /// SECURITY: Validated in instruction to be owned by desk.agent to prevent commission theft
     #[account(mut)]
     pub agent_usdc_ata: Option<InterfaceAccount<'info, TokenAccount>>,
     /// Desk signer for authorizing commission transfer from treasury
@@ -1564,7 +1567,8 @@ pub struct WithdrawTokens<'info> {
     pub desk_signer: Signer<'info>,
     #[account(mut, constraint = desk_token_treasury.mint == token_registry.token_mint, constraint = desk_token_treasury.owner == desk.key() @ OtcError::BadState)]
     pub desk_token_treasury: InterfaceAccount<'info, TokenAccount>,
-    #[account(mut, constraint = owner_token_ata.mint == token_registry.token_mint)]
+    /// SECURITY: Validate owner_token_ata is owned by the owner signer to prevent withdrawal theft
+    #[account(mut, constraint = owner_token_ata.mint == token_registry.token_mint, constraint = owner_token_ata.owner == owner.key() @ OtcError::BadState)]
     pub owner_token_ata: InterfaceAccount<'info, TokenAccount>,
     pub token_program: Interface<'info, TokenInterface>,
 }

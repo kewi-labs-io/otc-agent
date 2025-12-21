@@ -24,18 +24,13 @@ import { assert, expect } from "chai";
 
 // Helper to assert promise rejects with specific error message
 async function expectRejectedWith(promise: Promise<unknown>, expectedError: string): Promise<void> {
-  await expect(promise).to.be.rejected;
-  const error = await promise.catch((e: unknown) => e);
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  assert.include(errorMessage, expectedError);
-}
-
-// Helper to assert promise rejects with specific error message
-async function expectRejectedWith(promise: Promise<unknown>, expectedError: string): Promise<void> {
-  await expect(promise).to.be.rejected;
-  const error = await promise.catch((e: unknown) => e);
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  assert.include(errorMessage, expectedError);
+  try {
+    await promise;
+    assert.fail("Expected promise to reject but it resolved");
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    assert.include(errorMessage, expectedError, `Expected error containing "${expectedError}" but got: ${errorMessage}`);
+  }
 }
 
 describe("Pool Oracle Security Tests", () => {
@@ -272,15 +267,18 @@ describe("Pool Oracle Security Tests", () => {
         .signers([nonOwner])
         .rpc();
 
-      await expect(promise).to.be.rejected;
-      const error = await promise.catch((e: unknown) => e);
-      const errorStr = String(error).toLowerCase();
-      assert.isTrue(
-        errorStr.includes("constraint") || 
-        errorStr.includes("owner") ||
-        errorStr.includes("notowner"),
-        `Expected ownership error but got: ${String(error)}`
-      );
+      try {
+        await promise;
+        assert.fail("Expected promise to reject but it resolved");
+      } catch (error) {
+        const errorStr = String(error).toLowerCase();
+        assert.isTrue(
+          errorStr.includes("constraint") || 
+          errorStr.includes("owner") ||
+          errorStr.includes("notowner"),
+          `Expected ownership error but got: ${String(error)}`
+        );
+      }
     });
   });
 

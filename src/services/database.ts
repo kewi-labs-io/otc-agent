@@ -26,6 +26,7 @@ import {
   MarketDataOutputSchema,
   TokenOutputSchema,
 } from "@/types/validation/service-schemas";
+import { isEvmAddress } from "@/utils/address-utils";
 
 export type {
   PaymentCurrency,
@@ -437,12 +438,11 @@ export class TokenDB {
     const { encodePacked, getAddress, keccak256 } = await import("viem");
     const allTokens = await TokenDB.getAllTokens();
     const normalizedTarget = onChainTokenId.toLowerCase();
-    const isEvmAddress = /^0x[a-fA-F0-9]{40}$/;
 
     for (const token of allTokens) {
       // Solana uses token mints directly; EVM uses bytes32 tokenId.
       if (token.chain === "solana") continue;
-      if (!isEvmAddress.test(token.contractAddress)) continue;
+      if (!isEvmAddress(token.contractAddress)) continue;
 
       const tokenAddress = getAddress(token.contractAddress);
       const computedId = keccak256(

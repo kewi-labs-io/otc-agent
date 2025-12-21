@@ -3,12 +3,10 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback } from "react";
-import Card from "@/components/Card";
-import { useMultiWallet } from "@/components/multiwallet";
+import Card from "@/components/card";
 
 export default function HomePage() {
   const router = useRouter();
-  useMultiWallet(); // Hook used for side effects only
 
   // Simple wallet connect - just use Privy login
   const handleOpenConsignmentForm = useCallback(() => {
