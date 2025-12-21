@@ -64,3 +64,11 @@ solana/otc-program/mainnet-deployer.json
 .cache-synpress/
 test-ledger/
 contracts/mythril-out/solana/otc-program/desk-mainnet-keypair.json
+
+# IDE
+.vscode/
+.idea/
+
+# Build/tool output
+forge-output.txt
+contracts/slither-results.json
