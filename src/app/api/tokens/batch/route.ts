@@ -1,10 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getCachedTokenBatch } from "@/lib/cache";
 import { validationErrorResponse } from "@/lib/validation/helpers";
-import {
-  GetTokenBatchQuerySchema,
-  TokenBatchResponseSchema,
-} from "@/types/validation/api-schemas";
+import { GetTokenBatchQuerySchema, TokenBatchResponseSchema } from "@/types/validation/api-schemas";
 
 /**
  * GET /api/tokens/batch?ids=token-base-0x1,token-base-0x2

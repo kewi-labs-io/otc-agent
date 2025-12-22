@@ -37,12 +37,11 @@ export function clearPendingShare() {
 // Returns true if already authenticated (has oauth1 creds); false if redirected
 export function ensureXAuth(pending?: PendingShare): boolean {
   const creds = getXCreds();
-  if (creds && creds.oauth1Token && creds.oauth1TokenSecret) return true;
+  if (creds?.oauth1Token && creds.oauth1TokenSecret) return true;
   if (typeof window === "undefined") return false;
 
   const apiUrl = getApiUrl();
-  const origin =
-    window.location.pathname + window.location.search + window.location.hash;
+  const origin = window.location.pathname + window.location.search + window.location.hash;
   localStorage.setItem(OAUTH_REDIRECT_ORIGIN_KEY, origin);
   if (pending) setPendingShare(pending);
   if (!apiUrl) return false;
@@ -120,14 +119,12 @@ export async function shareOnX(
   }
   const id = posted.tweet.data.id;
   const username = c.screen_name || c.username;
-  const tweetUrl =
-    id && username ? `https://twitter.com/${username}/status/${id}` : undefined;
+  const tweetUrl = id && username ? `https://twitter.com/${username}/status/${id}` : undefined;
   return { success: true, tweetId: id, tweetUrl };
 }
 
 export async function resumeFreshAuth(): Promise<
-  | { resumed: false }
-  | { resumed: true; success: boolean; error?: string; tweetUrl?: string }
+  { resumed: false } | { resumed: true; success: boolean; error?: string; tweetUrl?: string }
 > {
   if (typeof window === "undefined") return { resumed: false };
   const url = new URL(window.location.href);

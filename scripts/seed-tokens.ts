@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
-import fs from "fs";
+import fs from "node:fs";
 
 /**
  * Token Seeding Script - LOCAL DEVELOPMENT ONLY
- * 
+ *
  * This script seeds test tokens for local Anvil development.
  * It will NEVER seed to production databases.
- * 
+ *
  * Safety checks:
  * 1. Must be explicitly on "localnet" network
  * 2. Must be targeting localhost API
@@ -15,7 +15,7 @@ import fs from "fs";
 
 async function seedTokens() {
   const dotenv = await import("dotenv");
-  
+
   // Load .env.local if it exists
   if (fs.existsSync(".env.local")) {
     dotenv.config({ path: ".env.local" });
@@ -26,7 +26,7 @@ async function seedTokens() {
     console.log("\n⏭️  SKIP_SEED=true - skipping token seeding\n");
     process.exit(0);
   }
-  
+
   // === SAFETY CHECK 2: Only allow localnet ===
   const network = process.env.NETWORK || process.env.NEXT_PUBLIC_NETWORK || "localnet";
   if (network !== "localnet") {
@@ -35,11 +35,11 @@ async function seedTokens() {
     console.log("   Production tokens must be registered by their actual owners via the UI.\n");
     process.exit(0);
   }
-  
+
   // === SAFETY CHECK 3: Verify localhost API ===
   const apiUrl = process.env.NEXT_PUBLIC_URL || "http://localhost:4444";
   const isLocalhost = apiUrl.includes("localhost") || apiUrl.includes("127.0.0.1");
-  
+
   if (!isLocalhost) {
     console.log(`\n🛑 BLOCKED: API URL is "${apiUrl}", not localhost`);
     console.log("   Token seeding is ONLY allowed when targeting localhost.");
@@ -49,16 +49,16 @@ async function seedTokens() {
 
   // === SAFETY CHECK 4: Block if DATABASE_URL looks like production ===
   const dbUrl = process.env.DATABASE_URL ?? "";
-  const looksLikeProduction = 
-    dbUrl.includes("neon.tech") || 
-    dbUrl.includes("supabase") || 
+  const looksLikeProduction =
+    dbUrl.includes("neon.tech") ||
+    dbUrl.includes("supabase") ||
     dbUrl.includes("planetscale") ||
     dbUrl.includes("railway") ||
     dbUrl.includes("render.com") ||
     dbUrl.includes("aws") ||
     dbUrl.includes("azure") ||
     dbUrl.includes("gcp");
-    
+
   if (looksLikeProduction) {
     console.log("\n🛑 BLOCKED: DATABASE_URL appears to be a production database");
     console.log("   Token seeding is ONLY allowed for local development.\n");
@@ -69,10 +69,10 @@ async function seedTokens() {
   console.log("   Network: localnet");
   console.log("   API: localhost");
   console.log("");
-  
+
   // Check for local EVM deployment
   const evmDeploymentPath = "./contracts/deployments/eliza-otc-deployment.json";
-  
+
   if (!fs.existsSync(evmDeploymentPath)) {
     console.log("⚠️  Local contracts not deployed yet, skipping seed");
     console.log("   Run 'npm run dev' to deploy contracts first\n");
@@ -82,15 +82,19 @@ async function seedTokens() {
   // Check local frontend is ready
   const healthCheck = await fetch("http://localhost:4444/api/tokens");
   if (!healthCheck.ok) {
-    throw new Error(`Local frontend health check failed: ${healthCheck.status} ${healthCheck.statusText}`);
+    throw new Error(
+      `Local frontend health check failed: ${healthCheck.status} ${healthCheck.statusText}`,
+    );
   }
   console.log("✅ Local frontend is ready");
 
   // --- EVM Local Seeding (Anvil only) ---
   const localEvmPath = "./src/config/deployments/local-evm.json";
   if (fs.existsSync(localEvmPath)) {
-    const evmDeployment = JSON.parse(fs.readFileSync(localEvmPath, "utf8")) as { contracts?: { elizaToken?: string } };
-    
+    const evmDeployment = JSON.parse(fs.readFileSync(localEvmPath, "utf8")) as {
+      contracts?: { elizaToken?: string };
+    };
+
     if (!evmDeployment.contracts) {
       throw new Error("EVM deployment config missing 'contracts' field");
     }
@@ -101,7 +105,7 @@ async function seedTokens() {
       const anvilAccount = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
       console.log(`\n[Local EVM] Test token: ${testTokenAddress}`);
-      
+
       // Register local test token
       const tokenRes = await fetch("http://localhost:4444/api/tokens", {
         method: "POST",
@@ -116,7 +120,7 @@ async function seedTokens() {
           description: "LOCAL DEV ONLY - Not a real token",
         }),
       });
-      
+
       if (!tokenRes.ok && tokenRes.status !== 409) {
         throw new Error(`Failed to register token: ${tokenRes.status} ${tokenRes.statusText}`);
       }
@@ -125,7 +129,7 @@ async function seedTokens() {
 
       // Create test consignment
       const tokenId = `token-base-${testTokenAddress.toLowerCase()}`;
-      
+
       const consignRes = await fetch("http://localhost:4444/api/consignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -147,9 +151,11 @@ async function seedTokens() {
           chain: "base",
         }),
       });
-      
+
       if (!consignRes.ok && consignRes.status !== 409) {
-        throw new Error(`Failed to create consignment: ${consignRes.status} ${consignRes.statusText}`);
+        throw new Error(
+          `Failed to create consignment: ${consignRes.status} ${consignRes.statusText}`,
+        );
       }
 
       console.log("✅ [Local EVM] Test consignment created");

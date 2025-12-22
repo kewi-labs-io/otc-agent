@@ -1,17 +1,24 @@
 #!/usr/bin/env bun
 /**
  * Register ELIZAOS token on Base OTC contract
- * 
+ *
  * This script:
  * 1. Deploys a UniswapV3TWAPOracle for ELIZAOS
  * 2. Registers the token on the OTC contract
- * 
+ *
  * Run: PRIVATE_KEY=0x... bun run scripts/register-elizaos-base.ts
  */
 
-import { createWalletClient, createPublicClient, http, type Hex, keccak256, encodePacked } from "viem";
-import { base } from "viem/chains";
+import {
+  createPublicClient,
+  createWalletClient,
+  encodePacked,
+  type Hex,
+  http,
+  keccak256,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { base } from "viem/chains";
 
 const ELIZAOS_TOKEN = "0xea17Df5Cf6D172224892B5477A16ACb111182478";
 const ELIZAOS_POOL = "0x84b783723DaC9B89d0981FFf3dcE369bC5870C16"; // USDC/ELIZAOS pool
@@ -20,7 +27,7 @@ const ETH_USD_FEED = "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70";
 
 // UniswapV3TWAPOracle bytecode (compiled)
 // We need to deploy this contract first
-const ORACLE_ABI = [
+const _ORACLE_ABI = [
   {
     type: "constructor",
     inputs: [
@@ -86,7 +93,7 @@ async function main() {
     transport: http("https://mainnet.base.org"),
   });
 
-  const walletClient = createWalletClient({
+  const _walletClient = createWalletClient({
     account,
     chain: base,
     transport: http("https://mainnet.base.org"),
@@ -131,8 +138,10 @@ async function main() {
   // Deploy UniswapV3TWAPOracle
   // First, we need the compiled bytecode. Let's use forge to compile and get it.
   console.log("\nTo register the token, run the following forge command:");
-  console.log("cd contracts && forge script scripts/RegisterElizaOS.s.sol --broadcast --rpc-url https://mainnet.base.org\n");
-  
+  console.log(
+    "cd contracts && forge script scripts/RegisterElizaOS.s.sol --broadcast --rpc-url https://mainnet.base.org\n",
+  );
+
   console.log("Or deploy manually:");
   console.log("1. Deploy UniswapV3TWAPOracle with:");
   console.log(`   pool: ${ELIZAOS_POOL}`);

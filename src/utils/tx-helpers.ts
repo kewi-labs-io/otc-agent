@@ -82,8 +82,7 @@ export async function waitForSolanaTx(
         commitment === "processed"
           ? Boolean(confirmationStatus)
           : commitment === "confirmed"
-            ? confirmationStatus === "confirmed" ||
-              confirmationStatus === "finalized"
+            ? confirmationStatus === "confirmed" || confirmationStatus === "finalized"
             : confirmationStatus === "finalized";
 
       if (isConfirmed) return;

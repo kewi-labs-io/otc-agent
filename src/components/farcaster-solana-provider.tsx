@@ -33,11 +33,7 @@ function getSolanaEndpoint(): string {
  *
  * This is the Solana equivalent of @farcaster/miniapp-wagmi-connector for EVM.
  */
-export function FarcasterSolanaWrapper({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function FarcasterSolanaWrapper({ children }: { children: React.ReactNode }) {
   const endpoint = useMemo(() => getSolanaEndpoint(), []);
   const hasLoggedInit = useRef(false);
 
@@ -47,16 +43,9 @@ export function FarcasterSolanaWrapper({
     hasLoggedInit.current = true;
 
     if (process.env.NODE_ENV === "development") {
-      console.log(
-        "[FarcasterSolanaWrapper] Initialized with endpoint:",
-        endpoint,
-      );
+      console.log("[FarcasterSolanaWrapper] Initialized with endpoint:", endpoint);
     }
   }, [endpoint]);
 
-  return (
-    <FarcasterSolanaProvider endpoint={endpoint}>
-      {children}
-    </FarcasterSolanaProvider>
-  );
+  return <FarcasterSolanaProvider endpoint={endpoint}>{children}</FarcasterSolanaProvider>;
 }

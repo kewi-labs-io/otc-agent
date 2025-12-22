@@ -46,7 +46,7 @@ export function formatTokenAmount(amount: bigint | number | string): string {
     num = amount;
   }
 
-  if (isNaN(num)) return "0";
+  if (Number.isNaN(num)) return "0";
   if (num >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(2)}B`;
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
@@ -57,10 +57,7 @@ export function formatTokenAmount(amount: bigint | number | string): string {
  * Format a raw token amount (string or bigint) with decimals
  * Converts from raw (wei-like) format to human-readable with K/M suffixes
  */
-export function formatRawTokenAmount(
-  amount: string | bigint,
-  decimals: number,
-): string {
+export function formatRawTokenAmount(amount: string | bigint, decimals: number): string {
   const num = Number(amount) / 10 ** decimals;
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
@@ -70,10 +67,7 @@ export function formatRawTokenAmount(
 /**
  * Format a token amount with full precision
  */
-export function formatTokenAmountFull(
-  amount: bigint | number,
-  decimals = 2,
-): string {
+export function formatTokenAmountFull(amount: bigint | number, decimals = 2): string {
   const num = typeof amount === "bigint" ? Number(amount) : amount;
   return num.toLocaleString(undefined, { maximumFractionDigits: decimals });
 }
@@ -137,13 +131,9 @@ export function formatPercent(decimal: number): string {
 /**
  * Get a lockup label from createdAt and unlockTime timestamps
  */
-export function getLockupLabel(
-  createdAt: bigint | number,
-  unlockTime: bigint | number,
-): string {
+export function getLockupLabel(createdAt: bigint | number, unlockTime: bigint | number): string {
   const created = typeof createdAt === "bigint" ? Number(createdAt) : createdAt;
-  const unlock =
-    typeof unlockTime === "bigint" ? Number(unlockTime) : unlockTime;
+  const unlock = typeof unlockTime === "bigint" ? Number(unlockTime) : unlockTime;
   const seconds = Math.max(0, unlock - created);
   const months = Math.max(1, Math.round(seconds / (30 * 24 * 60 * 60)));
   return `${months} month${months === 1 ? "" : "s"}`;
@@ -168,10 +158,7 @@ export function formatTxHash(hash: string, chars = 8): string {
  * Format time remaining until a timestamp
  */
 export function formatTimeRemaining(unlockTimestamp: bigint | number): string {
-  const unlock =
-    typeof unlockTimestamp === "bigint"
-      ? Number(unlockTimestamp)
-      : unlockTimestamp;
+  const unlock = typeof unlockTimestamp === "bigint" ? Number(unlockTimestamp) : unlockTimestamp;
   const now = Math.floor(Date.now() / 1000);
   const remaining = unlock - now;
 
@@ -194,10 +181,7 @@ export function formatTimeRemaining(unlockTimestamp: bigint | number): string {
  * Check if an offer/deal has matured (unlock time has passed)
  */
 export function isMatured(unlockTimestamp: bigint | number): boolean {
-  const unlock =
-    typeof unlockTimestamp === "bigint"
-      ? Number(unlockTimestamp)
-      : unlockTimestamp;
+  const unlock = typeof unlockTimestamp === "bigint" ? Number(unlockTimestamp) : unlockTimestamp;
   const now = Math.floor(Date.now() / 1000);
   return unlock <= now;
 }
@@ -205,10 +189,7 @@ export function isMatured(unlockTimestamp: bigint | number): boolean {
 /**
  * Format native token amount (ETH, SOL, BNB) with appropriate precision
  */
-export function formatNativeAmount(
-  amount: bigint | number,
-  symbol = "ETH",
-): string {
+export function formatNativeAmount(amount: bigint | number, symbol = "ETH"): string {
   const num = typeof amount === "bigint" ? Number(amount) / 1e18 : amount;
   const formatted = num.toLocaleString(undefined, {
     minimumFractionDigits: 4,

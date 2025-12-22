@@ -12,9 +12,7 @@ async function fetchDeals(walletAddress: string): Promise<DealFromAPI[]> {
   // Validate wallet address
   parseOrThrow(AddressSchema, walletAddress);
 
-  const response = await fetch(
-    `/api/deal-completion?wallet=${encodeURIComponent(walletAddress)}`,
-  );
+  const response = await fetch(`/api/deal-completion?wallet=${encodeURIComponent(walletAddress)}`);
   const rawData = await response.json();
 
   // Validate response structure

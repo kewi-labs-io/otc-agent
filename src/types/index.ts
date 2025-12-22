@@ -136,12 +136,10 @@ export {
   isSolanaChain,
   SUPPORTED_CHAINS,
 } from "@/config/chains";
-
-// EVMChain re-exported from validation schemas (single source of truth)
-export type { EVMChain } from "./validation/schemas";
-
 // NetworkType from config/contracts.ts (source of truth)
 export type { NetworkType } from "@/config/contracts";
+// EVMChain re-exported from validation schemas (single source of truth)
+export type { EVMChain } from "./validation/schemas";
 
 //==============================================================================
 // OTC CONTRACT TYPES

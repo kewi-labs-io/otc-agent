@@ -4,19 +4,19 @@
  * Uses the same contract calls as the UI but with better error visibility
  */
 
+import * as dotenv from "dotenv";
 import {
+  type Address,
   createPublicClient,
   createWalletClient,
-  http,
-  parseAbi,
-  type Address,
-  formatEther,
-  keccak256,
   encodePacked,
+  formatEther,
+  http,
+  keccak256,
+  parseAbi,
 } from "viem";
-import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
-import * as dotenv from "dotenv";
+import { base } from "viem/chains";
 
 dotenv.config();
 
@@ -95,7 +95,9 @@ async function main() {
 
   // Check if we have enough ETH
   if (ethBalance < gasDeposit) {
-    throw new Error(`Insufficient ETH. Need ${formatEther(gasDeposit)} ETH, have ${formatEther(ethBalance)}`);
+    throw new Error(
+      `Insufficient ETH. Need ${formatEther(gasDeposit)} ETH, have ${formatEther(ethBalance)}`,
+    );
   }
 
   // Amount to deposit (100 tokens)
@@ -103,7 +105,9 @@ async function main() {
   console.log("\nDeposit Amount:", Number(depositAmount) / 10 ** TOKEN_DECIMALS, "tokens");
 
   if (tokenBalance < depositAmount) {
-    throw new Error(`Insufficient tokens. Need 100, have ${Number(tokenBalance) / 10 ** TOKEN_DECIMALS}`);
+    throw new Error(
+      `Insufficient tokens. Need 100, have ${Number(tokenBalance) / 10 ** TOKEN_DECIMALS}`,
+    );
   }
 
   // Check current allowance
@@ -118,7 +122,7 @@ async function main() {
   // Step 1: Approve if needed
   if (currentAllowance < depositAmount) {
     console.log("\n--- Step 1: Approving tokens ---");
-    
+
     // Reset to 0 first if there's an existing allowance (USDT-style)
     if (currentAllowance > 0n) {
       console.log("Resetting allowance to 0 first...");
@@ -147,8 +151,8 @@ async function main() {
 
     // Wait a moment for state propagation, then verify allowance
     console.log("Waiting for state propagation...");
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
     // Verify allowance with retries
     let newAllowance = 0n;
     for (let i = 0; i < 5; i++) {
@@ -159,13 +163,17 @@ async function main() {
         args: [account.address, OTC_ADDRESS],
       });
       if (newAllowance >= depositAmount) break;
-      console.log(`Allowance check ${i + 1}: ${Number(newAllowance) / 10 ** TOKEN_DECIMALS} tokens, retrying...`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log(
+        `Allowance check ${i + 1}: ${Number(newAllowance) / 10 ** TOKEN_DECIMALS} tokens, retrying...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
     console.log("New Allowance:", Number(newAllowance) / 10 ** TOKEN_DECIMALS, "tokens");
-    
+
     if (newAllowance < depositAmount) {
-      throw new Error(`Allowance verification failed. Expected ${Number(depositAmount) / 10 ** TOKEN_DECIMALS}, got ${Number(newAllowance) / 10 ** TOKEN_DECIMALS}`);
+      throw new Error(
+        `Allowance verification failed. Expected ${Number(depositAmount) / 10 ** TOKEN_DECIMALS}, got ${Number(newAllowance) / 10 ** TOKEN_DECIMALS}`,
+      );
     }
   } else {
     console.log("\n--- Step 1: Approval already sufficient ---");
@@ -183,14 +191,14 @@ async function main() {
     tokenId,
     amount: depositAmount,
     isNegotiable: true,
-    fixedDiscountBps: 1000,    // 10%
+    fixedDiscountBps: 1000, // 10%
     fixedLockupDays: 180,
-    minDiscountBps: 500,       // 5%
-    maxDiscountBps: 2000,      // 20%
+    minDiscountBps: 500, // 5%
+    maxDiscountBps: 2000, // 20%
     minLockupDays: 7,
-    maxLockupDays: 365,        // NOTE: This was 93 in the failing tx - should be >= fixedLockupDays
-    minDealAmount: BigInt(1 * 10 ** TOKEN_DECIMALS),    // 1 token
-    maxDealAmount: depositAmount,                        // 100 tokens
+    maxLockupDays: 365, // NOTE: This was 93 in the failing tx - should be >= fixedLockupDays
+    minDealAmount: BigInt(1 * 10 ** TOKEN_DECIMALS), // 1 token
+    maxDealAmount: depositAmount, // 100 tokens
     maxPriceVolatilityBps: 1000, // 10%
   };
 

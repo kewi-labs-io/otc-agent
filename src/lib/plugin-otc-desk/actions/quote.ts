@@ -10,21 +10,9 @@ import type {
   State,
 } from "@elizaos/core";
 import { ConsignmentService } from "@/services/consignmentService";
-import {
-  MarketDataDB,
-  type OTCConsignment,
-  TokenDB,
-} from "@/services/database";
-import {
-  deleteUserQuote,
-  getUserQuote,
-  setUserQuote,
-} from "../providers/quote";
-import {
-  getBnbPriceUsd,
-  getEthPriceUsd,
-  getSolPriceUsd,
-} from "../services/priceFeed";
+import { MarketDataDB, type OTCConsignment, TokenDB } from "@/services/database";
+import { deleteUserQuote, getUserQuote, setUserQuote } from "../providers/quote";
+import { getBnbPriceUsd, getEthPriceUsd, getSolPriceUsd } from "../services/priceFeed";
 import type { PaymentCurrency, QuoteMemory } from "../types";
 import { calculateAgentCommission } from "../types";
 
@@ -38,24 +26,17 @@ function parseQuoteRequest(text: string): QuoteRequestParams {
   const result: QuoteRequestParams = {};
 
   // Parse token amount (various formats)
-  const amountMatch = text.match(
-    /(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:tokens?|eliza)?/i,
-  );
+  const amountMatch = text.match(/(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:tokens?|eliza)?/i);
   if (amountMatch) {
     result.tokenAmount = amountMatch[1].replace(/,/g, "");
   }
 
   // Parse discount (percentage or bps)
-  const discountMatch = text.match(
-    /(\d+(?:\.\d+)?)\s*(?:%|percent|bps|basis)/i,
-  );
+  const discountMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:%|percent|bps|basis)/i);
   if (discountMatch) {
     const value = parseFloat(discountMatch[1]);
     // If it's a percentage (has % or "percent"), convert to bps
-    if (
-      discountMatch[0].includes("%") ||
-      discountMatch[0].includes("percent")
-    ) {
+    if (discountMatch[0].includes("%") || discountMatch[0].includes("percent")) {
       result.discountBps = Math.round(value * 100);
     } else {
       result.discountBps = Math.round(value);
@@ -87,23 +68,16 @@ function parseNegotiationRequest(text: string): NegotiationRequestParams {
   const result: NegotiationRequestParams = {};
 
   // Token amount (reuse existing regex)
-  const amountMatch = text.match(
-    /(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:tokens?|eliza)?/i,
-  );
+  const amountMatch = text.match(/(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:tokens?|eliza)?/i);
   if (amountMatch) {
     result.tokenAmount = amountMatch[1].replace(/,/g, "");
   }
 
   // Discount request
-  const discountMatch = text.match(
-    /(\d+(?:\.\d+)?)\s*(?:%|percent|bps|basis|discount)/i,
-  );
+  const discountMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:%|percent|bps|basis|discount)/i);
   if (discountMatch) {
     const value = parseFloat(discountMatch[1]);
-    if (
-      discountMatch[0].includes("bps") ||
-      discountMatch[0].includes("basis")
-    ) {
+    if (discountMatch[0].includes("bps") || discountMatch[0].includes("basis")) {
       result.requestedDiscountBps = Math.round(value);
     } else {
       result.requestedDiscountBps = Math.round(value * 100);
@@ -111,11 +85,9 @@ function parseNegotiationRequest(text: string): NegotiationRequestParams {
   }
 
   // Lockup period
-  const lockupMatch = text.match(
-    /(\d+)\s*(?:month|months|mo|week|weeks|wk|day|days|d)/i,
-  );
+  const lockupMatch = text.match(/(\d+)\s*(?:month|months|mo|week|weeks|wk|day|days|d)/i);
   if (lockupMatch) {
-    const value = parseInt(lockupMatch[1]);
+    const value = parseInt(lockupMatch[1], 10);
     const unit = lockupMatch[0].toLowerCase();
     if (unit.includes("month") || unit.includes("mo")) {
       result.lockupMonths = value;
@@ -152,30 +124,22 @@ async function extractTokenContext(text: string): Promise<string | null> {
     const address = solanaAddressMatch[1];
     const token = allTokens.find((t) => t.contractAddress === address);
     if (token) {
-      console.log(
-        `[extractTokenContext] Found token by Solana address: ${token.id}`,
-      );
+      console.log(`[extractTokenContext] Found token by Solana address: ${token.id}`);
       return token.id;
     }
   }
 
   if (evmAddressMatch) {
     const address = evmAddressMatch[1].toLowerCase();
-    const token = allTokens.find(
-      (t) => t.contractAddress.toLowerCase() === address,
-    );
+    const token = allTokens.find((t) => t.contractAddress.toLowerCase() === address);
     if (token) {
-      console.log(
-        `[extractTokenContext] Found token by EVM address: ${token.id}`,
-      );
+      console.log(`[extractTokenContext] Found token by EVM address: ${token.id}`);
       return token.id;
     }
   }
 
   // SECOND: Match by symbol (fallback, less reliable)
-  const sortedTokens = [...allTokens].sort(
-    (a, b) => b.symbol.length - a.symbol.length,
-  );
+  const sortedTokens = [...allTokens].sort((a, b) => b.symbol.length - a.symbol.length);
 
   for (const token of sortedTokens) {
     // Skip tokens with generic symbols
@@ -202,9 +166,7 @@ async function extractTokenContext(text: string): Promise<string | null> {
 
   // Fallback: if only one token is registered, use it
   if (allTokens.length === 1) {
-    console.log(
-      `[extractTokenContext] Using only registered token: ${allTokens[0].id}`,
-    );
+    console.log(`[extractTokenContext] Using only registered token: ${allTokens[0].id}`);
     return allTokens[0].id;
   }
 
@@ -221,9 +183,7 @@ async function findSuitableConsignment(
 
   // First get ALL consignments to debug
   const allConsignments = await consignmentService.getAllConsignments({});
-  console.log(
-    `[findSuitableConsignment] Total consignments in DB: ${allConsignments.length}`,
-  );
+  console.log(`[findSuitableConsignment] Total consignments in DB: ${allConsignments.length}`);
 
   // Now filter by tokenId
   const consignments = await consignmentService.getAllConsignments({ tokenId });
@@ -234,10 +194,7 @@ async function findSuitableConsignment(
   // Debug: show what tokenIds exist
   if (consignments.length === 0 && allConsignments.length > 0) {
     const uniqueTokenIds = [...new Set(allConsignments.map((c) => c.tokenId))];
-    console.log(
-      `[findSuitableConsignment] Available tokenIds in DB:`,
-      uniqueTokenIds,
-    );
+    console.log(`[findSuitableConsignment] Available tokenIds in DB:`, uniqueTokenIds);
   }
 
   // First try strict matching
@@ -249,9 +206,7 @@ async function findSuitableConsignment(
   );
 
   if (strictMatch) {
-    console.log(
-      `[findSuitableConsignment] Found strict match: ${strictMatch.id}`,
-    );
+    console.log(`[findSuitableConsignment] Found strict match: ${strictMatch.id}`);
     return strictMatch;
   }
 
@@ -262,9 +217,7 @@ async function findSuitableConsignment(
   );
 
   if (anyActive) {
-    console.log(
-      `[findSuitableConsignment] No strict match, using fallback: ${anyActive.id}`,
-    );
+    console.log(`[findSuitableConsignment] No strict match, using fallback: ${anyActive.id}`);
     return anyActive;
   }
 
@@ -323,10 +276,7 @@ async function negotiateTerms(
   }
 
   if (request.lockupMonths) {
-    lockupMonths = Math.max(
-      minLockupDays / 30,
-      Math.min(maxLockupDays / 30, request.lockupMonths),
-    );
+    lockupMonths = Math.max(minLockupDays / 30, Math.min(maxLockupDays / 30, request.lockupMonths));
   }
 
   // Determine discount with explicit precedence:
@@ -387,15 +337,12 @@ export const quoteAction: Action = {
   handler: async (
     runtime: IAgentRuntime,
     message: Memory,
-    state: State | undefined,
+    _state: State | undefined,
     _options?: { [key: string]: unknown },
     callback?: HandlerCallback,
   ): Promise<ActionResult> => {
     console.log("[CREATE_OTC_QUOTE] Action handler called");
-    console.log(
-      "[CREATE_OTC_QUOTE] Message object:",
-      JSON.stringify(message, null, 2),
-    );
+    console.log("[CREATE_OTC_QUOTE] Message object:", JSON.stringify(message, null, 2));
     // FAIL-FAST: entityId is required for quote creation
     if (!message.entityId) {
       throw new Error("CREATE_OTC_QUOTE requires message.entityId");
@@ -406,18 +353,10 @@ export const quoteAction: Action = {
       throw new Error("CREATE_OTC_QUOTE requires message.content.text");
     }
     const text = message.content.text;
-    console.log(
-      "[CREATE_OTC_QUOTE] EntityId:",
-      entityId,
-      "Text:",
-      text.substring(0, 50),
-    );
+    console.log("[CREATE_OTC_QUOTE] EntityId:", entityId, "Text:", text.substring(0, 50));
 
     // Check for quote cancellation
-    if (
-      text.toLowerCase().includes("cancel") ||
-      text.toLowerCase().includes("delete")
-    ) {
+    if (text.toLowerCase().includes("cancel") || text.toLowerCase().includes("delete")) {
       const existingQuote = await getUserQuote(entityId);
       if (existingQuote) {
         await deleteUserQuote(entityId);
@@ -471,9 +410,7 @@ export const quoteAction: Action = {
       const marketData = await MarketDataDB.getMarketData(tokenId);
       if (marketData && marketData.priceUsd > 0) {
         tokenPriceUsd = marketData.priceUsd;
-        console.log(
-          `[CREATE_OTC_QUOTE] Token price from DB: $${tokenPriceUsd}`,
-        );
+        console.log(`[CREATE_OTC_QUOTE] Token price from DB: $${tokenPriceUsd}`);
       }
     }
 
@@ -481,11 +418,8 @@ export const quoteAction: Action = {
     // Even without a specific tokenAmount, we need the consignment for the quote
     let consignment: OTCConsignment | null = null;
     if (tokenId) {
-      console.log(
-        `[CREATE_OTC_QUOTE] Looking for consignment with tokenId: ${tokenId}`,
-      );
-      const lockupDays =
-        (negotiationRequest.lockupMonths || DEFAULT_MAX_LOCKUP_MONTHS) * 30;
+      console.log(`[CREATE_OTC_QUOTE] Looking for consignment with tokenId: ${tokenId}`);
+      const lockupDays = (negotiationRequest.lockupMonths || DEFAULT_MAX_LOCKUP_MONTHS) * 30;
       // Use "1" as minimum amount if not specified - we just need to find ANY consignment
       const tokenAmount = negotiationRequest.tokenAmount || "1";
       consignment = await findSuitableConsignment(
@@ -499,15 +433,11 @@ export const quoteAction: Action = {
           `[CREATE_OTC_QUOTE] Found consignment: ${consignment.id}, contractId: ${consignment.contractConsignmentId}`,
         );
       } else {
-        console.log(
-          `[CREATE_OTC_QUOTE] No suitable consignment found for token ${tokenId}`,
-        );
+        console.log(`[CREATE_OTC_QUOTE] No suitable consignment found for token ${tokenId}`);
         // Debug: list all consignments to see what's available
         const consignmentService = new ConsignmentService();
         const allConsignments = await consignmentService.getAllConsignments({});
-        console.log(
-          `[CREATE_OTC_QUOTE] Total consignments in DB: ${allConsignments.length}`,
-        );
+        console.log(`[CREATE_OTC_QUOTE] Total consignments in DB: ${allConsignments.length}`);
         for (const c of allConsignments.slice(0, 5)) {
           console.log(
             `[CREATE_OTC_QUOTE]   - ${c.id}: tokenId=${c.tokenId}, status=${c.status}, remaining=${c.remainingAmount}`,
@@ -515,9 +445,7 @@ export const quoteAction: Action = {
         }
       }
     } else {
-      console.log(
-        `[CREATE_OTC_QUOTE] No tokenId found, skipping consignment search`,
-      );
+      console.log(`[CREATE_OTC_QUOTE] No tokenId found, skipping consignment search`);
     }
 
     const isNegotiation =
@@ -564,8 +492,7 @@ export const quoteAction: Action = {
 
       // TypeScript now knows these are defined after the checks above
       const requiredTokenId: string = tokenId;
-      const requiredTokenChain: "evm" | "solana" | "base" | "bsc" | "ethereum" =
-        tokenChain;
+      const requiredTokenChain: "evm" | "solana" | "base" | "bsc" | "ethereum" = tokenChain;
 
       const quote = {
         tokenAmount: "0",
@@ -622,11 +549,7 @@ export const quoteAction: Action = {
 
       if (callback) {
         await callback({
-          text:
-            textResponse +
-            "\n\n<!-- XML_START -->\n" +
-            xmlResponse +
-            "\n<!-- XML_END -->",
+          text: textResponse + "\n\n<!-- XML_START -->\n" + xmlResponse + "\n<!-- XML_END -->",
           action: "QUOTE_NEGOTIATED",
           content: { xml: xmlResponse, quote, type: "otc_quote" } as Content,
         });
@@ -678,10 +601,7 @@ export const quoteAction: Action = {
 
     // Calculate agent commission based on discount and lockup
     const lockupDays = DEFAULT_MAX_LOCKUP_MONTHS * 30;
-    const agentCommissionBps = calculateAgentCommission(
-      discountBps,
-      lockupDays,
-    );
+    const agentCommissionBps = calculateAgentCommission(discountBps, lockupDays);
 
     // FAIL-FAST: tokenId and chain are required for quote creation
     if (!tokenId) {
@@ -693,8 +613,7 @@ export const quoteAction: Action = {
 
     // TypeScript now knows these are defined after the checks above
     const requiredTokenId: string = tokenId;
-    const requiredTokenChain: "evm" | "solana" | "base" | "bsc" | "ethereum" =
-      tokenChain;
+    const requiredTokenChain: "evm" | "solana" | "base" | "bsc" | "ethereum" = tokenChain;
 
     const quote = {
       tokenAmount: "0",
@@ -732,7 +651,7 @@ export const quoteAction: Action = {
   <tokenName>${tokenName}</tokenName>
   ${tokenChain ? `<tokenChain>${tokenChain}</tokenChain>` : ""}
   ${tokenAddress ? `<tokenAddress>${tokenAddress}</tokenAddress>` : ""}
-  ${consignment && consignment.id ? `<consignmentId>${consignment.id}</consignmentId>` : ""}
+  ${consignment?.id ? `<consignmentId>${consignment.id}</consignmentId>` : ""}
   <lockupMonths>${DEFAULT_MAX_LOCKUP_MONTHS}</lockupMonths>
   <lockupDays>${DEFAULT_MAX_LOCKUP_DAYS}</lockupDays>
   <pricePerToken>${tokenPriceUsd}</pricePerToken>
@@ -755,11 +674,7 @@ export const quoteAction: Action = {
 
     if (callback) {
       await callback({
-        text:
-          textResponse +
-          "\n\n<!-- XML_START -->\n" +
-          xmlResponse +
-          "\n<!-- XML_END -->",
+        text: textResponse + "\n\n<!-- XML_START -->\n" + xmlResponse + "\n<!-- XML_END -->",
         action: "QUOTE_GENERATED",
         content: { xml: xmlResponse, quote, type: "otc_quote" } as Content,
       });

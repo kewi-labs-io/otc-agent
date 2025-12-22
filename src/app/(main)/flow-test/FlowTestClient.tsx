@@ -11,21 +11,13 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Abi, Address } from "viem";
 import { createPublicClient, http } from "viem";
-import {
-  base,
-  baseSepolia,
-  bsc,
-  bscTestnet,
-  mainnet,
-  sepolia,
-} from "viem/chains";
+import { base, baseSepolia, bsc, bscTestnet, mainnet, sepolia } from "viem/chains";
 import { Button } from "@/components/button";
 import { type Chain, SUPPORTED_CHAINS } from "@/config/chains";
-import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { getCurrentNetwork } from "@/config/contracts";
+import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { useOTC } from "@/hooks/contracts/useOTC";
 import { safeReadContract } from "@/lib/viem-utils";
-import { getExplorerTxUrl } from "@/utils/format";
 import type {
   AnchorWallet,
   ChainFamily,
@@ -40,6 +32,7 @@ import type {
   TokenRegistryAccount,
   WalletSigner,
 } from "@/types";
+import { getExplorerTxUrl } from "@/utils/format";
 
 // Shared Solana OTC utilities
 import {
@@ -146,15 +139,10 @@ function extractPriceUsd(data: PriceUpdateResponse): number | null {
 }
 
 // Create Anchor wallet from a signer (Phantom or Privy)
-function createSignerAnchorWallet(
-  publicKey: string,
-  signer: WalletSigner,
-): AnchorWallet {
+function createSignerAnchorWallet(publicKey: string, signer: WalletSigner): AnchorWallet {
   return {
     publicKey: new SolPubkey(publicKey),
-    signTransaction: async <
-      T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction,
-    >(
+    signTransaction: async <T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction>(
       tx: T,
     ): Promise<T> => {
       // WalletSigner.signTransaction accepts SolanaTransaction which is compatible
@@ -166,9 +154,7 @@ function createSignerAnchorWallet(
     >(
       txs: T[],
     ): Promise<T[]> => {
-      const signed = await signer.signAllTransactions(
-        txs as SolanaTransaction[],
-      );
+      const signed = await signer.signAllTransactions(txs as SolanaTransaction[]);
       return signed as T[];
     },
   };
@@ -192,13 +178,8 @@ function getViemChain(chain: Chain) {
 
 export default function FlowTestClient() {
   const { activeFamily, setActiveFamily } = useChain();
-  const {
-    evmAddress,
-    solanaPublicKey,
-    solanaWallet,
-    solanaCanSign,
-    privyAuthenticated,
-  } = useWalletConnection();
+  const { evmAddress, solanaPublicKey, solanaWallet, solanaCanSign, privyAuthenticated } =
+    useWalletConnection();
   const { connectWallet, connectSolanaWallet } = useWalletActions();
   const { login } = usePrivy();
   const {
@@ -218,17 +199,11 @@ export default function FlowTestClient() {
   const [phantomSigner, setPhantomSigner] = useState<WalletSigner | null>(null);
   const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
   const [phantomCanSign, setPhantomCanSign] = useState(false);
-  const [requiredSolanaTokens, setRequiredSolanaTokens] = useState<
-    bigint | null
-  >(null);
+  const [requiredSolanaTokens, setRequiredSolanaTokens] = useState<bigint | null>(null);
   const [solanaPriceUsd, setSolanaPriceUsd] = useState<number | null>(null);
   const [solanaMinUsd, setSolanaMinUsd] = useState<number | null>(null);
-  const [solanaDepositAmount, setSolanaDepositAmount] = useState<bigint | null>(
-    null,
-  );
-  const [availableBalanceWei, setAvailableBalanceWei] = useState<bigint | null>(
-    null,
-  );
+  const [solanaDepositAmount, setSolanaDepositAmount] = useState<bigint | null>(null);
+  const [availableBalanceWei, setAvailableBalanceWei] = useState<bigint | null>(null);
   // Use ref to store balance for reliable access in callbacks (avoids stale closure issues)
   const availableBalanceRef = useRef<bigint | null>(null);
 
@@ -238,7 +213,7 @@ export default function FlowTestClient() {
   // Auto-scroll logs
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [testState.logs]);
+  }, []);
 
   // Add log entry
   const addLog = useCallback((message: string) => {
@@ -258,9 +233,7 @@ export default function FlowTestClient() {
     }
     setTestState((prev) => ({
       ...prev,
-      steps: prev.steps.map((s) =>
-        s.id === stepId ? { ...s, ...updates } : s,
-      ),
+      steps: prev.steps.map((s) => (s.id === stepId ? { ...s, ...updates } : s)),
     }));
   }, []);
 
@@ -279,7 +252,7 @@ export default function FlowTestClient() {
       publicKey = solanaPublicKey;
     } else if (phantomPublicKey) {
       publicKey = phantomPublicKey;
-    } else if (walletSigner && walletSigner.publicKey) {
+    } else if (walletSigner?.publicKey) {
       publicKey = walletSigner.publicKey;
     }
 
@@ -293,9 +266,7 @@ export default function FlowTestClient() {
   const fetchSolanaRequirements = useCallback(async () => {
     const tokenConfig = ELIZAOS_TOKEN_CONFIG.solana.mainnet;
     if (!SOLANA_DESK) {
-      throw new Error(
-        "SOLANA_DESK not configured in SUPPORTED_CHAINS.solana.contracts.otc",
-      );
+      throw new Error("SOLANA_DESK not configured in SUPPORTED_CHAINS.solana.contracts.otc");
     }
 
     const connection = createSolanaConnection();
@@ -310,8 +281,7 @@ export default function FlowTestClient() {
       }),
     });
 
-    const priceJson: PriceUpdateResponse =
-      (await priceRes.json()) as PriceUpdateResponse;
+    const priceJson: PriceUpdateResponse = (await priceRes.json()) as PriceUpdateResponse;
     const apiPriceUsd = extractPriceUsd(priceJson);
 
     const idl = await fetchSolanaIdl();
@@ -323,11 +293,7 @@ export default function FlowTestClient() {
 
     const deskPk = new SolPubkey(SOLANA_DESK);
     const tokenMintPk = new SolPubkey(tokenConfig.address);
-    const tokenRegistryPda = deriveTokenRegistryPda(
-      deskPk,
-      tokenMintPk,
-      program.programId,
-    );
+    const tokenRegistryPda = deriveTokenRegistryPda(deskPk, tokenMintPk, program.programId);
 
     interface ProgramAccounts {
       desk: {
@@ -346,8 +312,7 @@ export default function FlowTestClient() {
     if (!registryInfo) {
       throw new Error("Token registry not found");
     }
-    const registryAccount =
-      await accounts.tokenRegistry.fetch(tokenRegistryPda);
+    const registryAccount = await accounts.tokenRegistry.fetch(tokenRegistryPda);
 
     if (deskAccount.minUsdAmount8D === undefined) {
       throw new Error("Desk minUsdAmount8D is not set");
@@ -502,8 +467,7 @@ export default function FlowTestClient() {
 
     // For Solana, we need BOTH address AND signTransaction capability
     if (testState.chain === "solana") {
-      const { signer: activeSigner, publicKey: activePublicKey } =
-        getActiveSolanaContext();
+      const { signer: activeSigner, publicKey: activePublicKey } = getActiveSolanaContext();
 
       // Check if wallet is ready for signing
       if (activeSigner && activePublicKey) {
@@ -521,7 +485,7 @@ export default function FlowTestClient() {
 
       // Have address (linked) but no signer - try to connect Phantom directly
       const phantom = getPhantomProvider();
-      if (phantom && phantom.isPhantom) {
+      if (phantom?.isPhantom) {
         addLog("Phantom detected - attempting direct connection...");
         // TypeScript narrowing: phantom is non-null at this point
         const phantomProvider = phantom;
@@ -536,18 +500,13 @@ export default function FlowTestClient() {
         setPhantomPublicKey(phantomAddress);
         setPhantomCanSign(true);
         // FAIL-FAST: Phantom must have signTransaction methods
-        if (
-          !phantomProvider.signTransaction ||
-          !phantomProvider.signAllTransactions
-        ) {
+        if (!phantomProvider.signTransaction || !phantomProvider.signAllTransactions) {
           throw new Error("Phantom provider missing signTransaction methods");
         }
         setPhantomSigner({
           publicKey: phantomAddress,
-          signTransaction:
-            phantomProvider.signTransaction.bind(phantomProvider),
-          signAllTransactions:
-            phantomProvider.signAllTransactions.bind(phantomProvider),
+          signTransaction: phantomProvider.signTransaction.bind(phantomProvider),
+          signAllTransactions: phantomProvider.signAllTransactions.bind(phantomProvider),
         });
 
         if (address && phantomAddress !== address) {
@@ -576,9 +535,7 @@ export default function FlowTestClient() {
       // EVM - check if we have an address
       if (address) {
         addLog(`EVM wallet found: ${address}`);
-        addLog(
-          "Opening wallet selector so you can confirm or change wallet...",
-        );
+        addLog("Opening wallet selector so you can confirm or change wallet...");
         connectWallet();
         updateStep("login", {
           status: "success",
@@ -676,9 +633,7 @@ export default function FlowTestClient() {
       // Store the available balance for use in later steps
       setAvailableBalanceWei(balance);
       availableBalanceRef.current = balance; // Also store in ref for reliable access
-      addLog(
-        `Will use available balance: ${formattedBalance.toFixed(6)} ${tokenConfig.symbol}`,
-      );
+      addLog(`Will use available balance: ${formattedBalance.toFixed(6)} ${tokenConfig.symbol}`);
 
       setTestState((prev) => ({
         ...prev,
@@ -698,13 +653,10 @@ export default function FlowTestClient() {
 
       const { publicKey: activePublicKey } = getActiveSolanaContext();
       if (!activePublicKey) {
-        throw new Error(
-          "No Solana public key - login step may not have completed",
-        );
+        throw new Error("No Solana public key - login step may not have completed");
       }
 
-      const { requiredTokens, priceUsd, minUsd } =
-        await fetchSolanaRequirements();
+      const { requiredTokens, priceUsd, minUsd } = await fetchSolanaRequirements();
       setRequiredSolanaTokens(requiredTokens);
       setSolanaPriceUsd(priceUsd);
       setSolanaMinUsd(minUsd);
@@ -713,20 +665,12 @@ export default function FlowTestClient() {
       const walletPubkey = new SolPubkey(activePublicKey);
 
       const tokenProgramId = await getTokenProgramId(connection, tokenMint);
-      const ata = await getAssociatedTokenAddress(
-        tokenMint,
-        walletPubkey,
-        false,
-        tokenProgramId,
-      );
+      const ata = await getAssociatedTokenAddress(tokenMint, walletPubkey, false, tokenProgramId);
 
       const accountInfo = await connection.getTokenAccountBalance(ata);
-      const balance =
-        Number(accountInfo.value.amount) / 10 ** tokenConfig.decimals;
-      const requiredTokensWithFloor =
-        requiredTokens > BigInt(100) ? requiredTokens : BigInt(100);
-      const requiredReadable =
-        Number(requiredTokensWithFloor) / 10 ** tokenConfig.decimals;
+      const balance = Number(accountInfo.value.amount) / 10 ** tokenConfig.decimals;
+      const requiredTokensWithFloor = requiredTokens > BigInt(100) ? requiredTokens : BigInt(100);
+      const requiredReadable = Number(requiredTokensWithFloor) / 10 ** tokenConfig.decimals;
 
       if (!minUsd) {
         throw new Error("Minimum USD amount not available");
@@ -793,18 +737,12 @@ export default function FlowTestClient() {
 
     // Approve 100 tokens
     const approveAmount = BigInt(100) * BigInt(10 ** tokenConfig.decimals);
-    const amountToApprove =
-      approveAmount > balanceToUse ? balanceToUse : approveAmount;
+    const amountToApprove = approveAmount > balanceToUse ? balanceToUse : approveAmount;
 
-    const formattedAmount =
-      Number(amountToApprove) / 10 ** tokenConfig.decimals;
+    const formattedAmount = Number(amountToApprove) / 10 ** tokenConfig.decimals;
     addLog(`Approving ${formattedAmount.toFixed(6)} ${tokenConfig.symbol}...`);
 
-    const txHash = await approveToken(
-      tokenConfig.address as Address,
-      amountToApprove,
-      "base",
-    );
+    const txHash = await approveToken(tokenConfig.address as Address, amountToApprove, "base");
 
     addLog(`Approval tx submitted: ${txHash}`);
     addLog("Waiting for approval confirmation...");
@@ -847,12 +785,9 @@ export default function FlowTestClient() {
 
       // Deposit 100 tokens
       const depositAmount = BigInt(100) * BigInt(10 ** tokenConfig.decimals);
-      const amount =
-        depositAmount > balanceToUse ? balanceToUse : depositAmount;
+      const amount = depositAmount > balanceToUse ? balanceToUse : depositAmount;
       const formattedAmount = Number(amount) / 10 ** tokenConfig.decimals;
-      addLog(
-        `Creating consignment (depositing ${formattedAmount.toFixed(6)} tokens)...`,
-      );
+      addLog(`Creating consignment (depositing ${formattedAmount.toFixed(6)} tokens)...`);
 
       // Get gas deposit
       const gasDeposit = await getRequiredGasDeposit("base");
@@ -861,9 +796,7 @@ export default function FlowTestClient() {
       const tokenId = `token-base-${tokenConfig.address}`;
 
       addLog("Submitting consignment transaction...");
-      addLog(
-        `Note: If token is not registered, this will attempt auto-registration (gas only)`,
-      );
+      addLog(`Note: If token is not registered, this will attempt auto-registration (gas only)`);
 
       const result = await createConsignmentOnChain(
         {
@@ -912,12 +845,9 @@ export default function FlowTestClient() {
       addLog(`  solanaCanSign: ${solanaCanSign || phantomCanSign}`);
 
       if (!SOLANA_DESK) {
-        throw new Error(
-          "SOLANA_DESK not configured in SUPPORTED_CHAINS.solana.contracts.otc",
-        );
+        throw new Error("SOLANA_DESK not configured in SUPPORTED_CHAINS.solana.contracts.otc");
       }
-      const { signer: activeSigner, publicKey: activePublicKey } =
-        getActiveSolanaContext();
+      const { signer: activeSigner, publicKey: activePublicKey } = getActiveSolanaContext();
       if (!activeSigner) {
         throw new Error(
           "Solana wallet signer not available - go back to Login step and connect your wallet",
@@ -948,10 +878,7 @@ export default function FlowTestClient() {
       addLog("Connection created");
 
       addLog("Building anchor wallet adapter...");
-      const anchorWallet = createSignerAnchorWallet(
-        activePublicKey,
-        activeSigner,
-      );
+      const anchorWallet = createSignerAnchorWallet(activePublicKey, activeSigner);
 
       addLog("Creating Anchor provider...");
       const provider = new anchor.AnchorProvider(connection, anchorWallet, {
@@ -986,9 +913,7 @@ export default function FlowTestClient() {
 
       // Ensure token is registered using shared utility
       addLog("Checking token registration...");
-      const signTx = activeSigner.signTransaction as <
-        T extends anchor.web3.Transaction,
-      >(
+      const signTx = activeSigner.signTransaction as <T extends anchor.web3.Transaction>(
         tx: T,
       ) => Promise<T>;
       const regResult = await ensureTokenRegistered(
@@ -1025,16 +950,11 @@ export default function FlowTestClient() {
       // Create consignment
       // NOTE: pricing.requiredTokens is ALREADY in lamports (smallest unit)!
       const consignmentKeypair = Keypair.generate();
-      const minTokensLamports =
-        BigInt(100) * BigInt(10) ** BigInt(tokenConfig.decimals); // 100 tokens in lamports
+      const minTokensLamports = BigInt(100) * BigInt(10) ** BigInt(tokenConfig.decimals); // 100 tokens in lamports
       const tokenAmountLamports =
-        pricing.requiredTokens > minTokensLamports
-          ? pricing.requiredTokens
-          : minTokensLamports;
-      const depositAmountLamports =
-        tokenAmountLamports + tokenAmountLamports / 10n; // 10% buffer
-      const minDealLamports =
-        BigInt(1) * BigInt(10) ** BigInt(tokenConfig.decimals); // 1 token minimum deal
+        pricing.requiredTokens > minTokensLamports ? pricing.requiredTokens : minTokensLamports;
+      const depositAmountLamports = tokenAmountLamports + tokenAmountLamports / 10n; // 10% buffer
+      const minDealLamports = BigInt(1) * BigInt(10) ** BigInt(tokenConfig.decimals); // 1 token minimum deal
       const amount = new anchor.BN(depositAmountLamports.toString());
       const minDeal = new anchor.BN(minDealLamports.toString());
       setSolanaDepositAmount(depositAmountLamports);
@@ -1156,9 +1076,7 @@ export default function FlowTestClient() {
       });
 
       addLog(`Next offer ID will be: ${nextOfferId.toString()}`);
-      addLog(
-        `Creating offer for 50 tokens from consignment ${testState.consignmentId}...`,
-      );
+      addLog(`Creating offer for 50 tokens from consignment ${testState.consignmentId}...`);
 
       const txHash = await createOfferFromConsignment({
         consignmentId: BigInt(testState.consignmentId),
@@ -1173,9 +1091,7 @@ export default function FlowTestClient() {
       addLog(`Offer created: ${txHash}`);
 
       // Now trigger backend approval with actual offer ID
-      addLog(
-        `Requesting backend approval for offer ${nextOfferId.toString()}...`,
-      );
+      addLog(`Requesting backend approval for offer ${nextOfferId.toString()}...`);
       const approveRes = await fetch("/api/otc/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1210,8 +1126,7 @@ export default function FlowTestClient() {
       const tokenConfig = ELIZAOS_TOKEN_CONFIG.solana.mainnet;
 
       if (!SOLANA_DESK) throw new Error("SOLANA_DESK not configured");
-      const { signer: activeSigner, publicKey: activePublicKey } =
-        getActiveSolanaContext();
+      const { signer: activeSigner, publicKey: activePublicKey } = getActiveSolanaContext();
       if (!activeSigner) {
         throw new Error("Solana wallet signer not available");
       }
@@ -1223,10 +1138,7 @@ export default function FlowTestClient() {
       }
 
       const connection = createSolanaConnection();
-      const anchorWallet = createSignerAnchorWallet(
-        activePublicKey,
-        activeSigner,
-      );
+      const anchorWallet = createSignerAnchorWallet(activePublicKey, activeSigner);
       const provider = new anchor.AnchorProvider(connection, anchorWallet, {
         commitment: "confirmed",
       });
@@ -1245,8 +1157,7 @@ export default function FlowTestClient() {
           forceUpdate: true,
         }),
       });
-      const priceData: PriceUpdateResponse =
-        (await priceRes.json()) as PriceUpdateResponse;
+      const priceData: PriceUpdateResponse = (await priceRes.json()) as PriceUpdateResponse;
       if (!priceRes.ok) {
         // FAIL-FAST: Error response should include error message
         const errorMessage =
@@ -1276,17 +1187,9 @@ export default function FlowTestClient() {
       }
 
       // Derive token registry PDA using shared utility
-      const tokenRegistryPda = deriveTokenRegistryPda(
-        desk,
-        tokenMintPk,
-        program.programId,
-      );
+      const tokenRegistryPda = deriveTokenRegistryPda(desk, tokenMintPk, program.programId);
 
-      const deskTokenTreasury = await getAssociatedTokenAddress(
-        tokenMintPk,
-        desk,
-        true,
-      );
+      const deskTokenTreasury = await getAssociatedTokenAddress(tokenMintPk, desk, true);
 
       // Fetch desk account for offer ID and limits
       interface DeskAccountWithLimits extends DeskAccount {
@@ -1301,19 +1204,15 @@ export default function FlowTestClient() {
         };
       }
 
-      const deskAccount = await (
-        program.account as DeskAccountProgram
-      ).desk.fetch(desk);
+      const deskAccount = await (program.account as DeskAccountProgram).desk.fetch(desk);
       const nextOfferId = new anchor.BN(deskAccount.nextOfferId.toString());
 
       addLog(`Next offer ID: ${nextOfferId.toString()}`);
 
       // Buy 50 tokens - must be within consignment's min/max deal limits
       const buyAmountTokens = 50n;
-      const buyAmountLamports =
-        buyAmountTokens * BigInt(10 ** tokenConfig.decimals);
-      const buyAmountReadable =
-        Number(buyAmountLamports) / 10 ** tokenConfig.decimals;
+      const buyAmountLamports = buyAmountTokens * BigInt(10 ** tokenConfig.decimals);
+      const buyAmountReadable = Number(buyAmountLamports) / 10 ** tokenConfig.decimals;
 
       addLog(
         `Token amount for offer: ${buyAmountReadable} tokens (${buyAmountLamports.toString()} lamports)`,
@@ -1465,8 +1364,7 @@ export default function FlowTestClient() {
       const tokenConfig = ELIZAOS_TOKEN_CONFIG.solana.mainnet;
 
       if (!SOLANA_DESK) throw new Error("SOLANA_DESK not configured");
-      const { signer: activeSigner, publicKey: activePublicKey } =
-        getActiveSolanaContext();
+      const { signer: activeSigner, publicKey: activePublicKey } = getActiveSolanaContext();
       if (!activeSigner) {
         throw new Error("Solana wallet signer not available");
       }
@@ -1478,10 +1376,7 @@ export default function FlowTestClient() {
       }
 
       const connection = createSolanaConnection();
-      const anchorWallet = createSignerAnchorWallet(
-        activePublicKey,
-        activeSigner,
-      );
+      const anchorWallet = createSignerAnchorWallet(activePublicKey, activeSigner);
       const provider = new anchor.AnchorProvider(connection, anchorWallet, {
         commitment: "confirmed",
       });
@@ -1514,9 +1409,7 @@ export default function FlowTestClient() {
       // Get consignment ID from the account
       interface ConsignmentWithRemainingProgram {
         consignment: {
-          fetch: (
-            addr: SolPubkey,
-          ) => Promise<{ id: anchor.BN; remainingAmount: anchor.BN }>;
+          fetch: (addr: SolPubkey) => Promise<{ id: anchor.BN; remainingAmount: anchor.BN }>;
         };
       }
       const consignmentAccount = await (
@@ -1603,8 +1496,7 @@ export default function FlowTestClient() {
   ]);
 
   // Check if wallet is connected for current chain
-  const { signer: activeSigner, publicKey: activePublicKey } =
-    getActiveSolanaContext();
+  const { signer: activeSigner, publicKey: activePublicKey } = getActiveSolanaContext();
   const isWalletReady =
     testState.chain === "solana"
       ? Boolean(activePublicKey && activeSigner && activeSigner.signTransaction)
@@ -1623,18 +1515,16 @@ export default function FlowTestClient() {
     <main className="flex-1 px-4 py-8 overflow-y-auto">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-2">OTC Flow Test</h1>
-        <p className="text-zinc-500 mb-6">
-          Step-by-step verification of the complete OTC flow
-        </p>
+        <p className="text-zinc-500 mb-6">Step-by-step verification of the complete OTC flow</p>
 
         {/* Chain Selection */}
         <div className="flex gap-4 mb-8">
           <Button
             onClick={() => startTest("evm")}
             color={
-              (testState.chain === "evm" && testState.steps.length > 0
-                ? "brand"
-                : "dark") as "brand" | "dark"
+              (testState.chain === "evm" && testState.steps.length > 0 ? "brand" : "dark") as
+                | "brand"
+                | "dark"
             }
             className="flex-1"
             data-testid="start-evm-test"
@@ -1644,9 +1534,9 @@ export default function FlowTestClient() {
           <Button
             onClick={() => startTest("solana")}
             color={
-              (testState.chain === "solana" && testState.steps.length > 0
-                ? "brand"
-                : "dark") as "brand" | "dark"
+              (testState.chain === "solana" && testState.steps.length > 0 ? "brand" : "dark") as
+                | "brand"
+                | "dark"
             }
             className="flex-1"
             data-testid="start-solana-test"
@@ -1697,23 +1587,15 @@ export default function FlowTestClient() {
                         }`}
                       >
                         {step.status === "running" && (
-                          <span className="inline-block animate-spin mr-1">
-                            ⟳
-                          </span>
+                          <span className="inline-block animate-spin mr-1">⟳</span>
                         )}
                         {step.status}
                       </span>
                     </div>
 
-                    {step.error && (
-                      <p className="text-sm text-red-400 mt-2">{step.error}</p>
-                    )}
+                    {step.error && <p className="text-sm text-red-400 mt-2">{step.error}</p>}
 
-                    {step.details && (
-                      <p className="text-sm text-zinc-400 mt-2">
-                        {step.details}
-                      </p>
-                    )}
+                    {step.details && <p className="text-sm text-zinc-400 mt-2">{step.details}</p>}
 
                     {step.txHash && (
                       <a
@@ -1776,11 +1658,7 @@ export default function FlowTestClient() {
                     {/* Change Wallet Button - only for login step when successful */}
                     {step.id === "login" && step.status === "success" && (
                       <div className="mt-2">
-                        <Button
-                          onClick={changeWallet}
-                          color="dark"
-                          className="w-full"
-                        >
+                        <Button onClick={changeWallet} color="dark" className="w-full">
                           <div className="py-1 text-sm">Change Wallet</div>
                         </Button>
                       </div>
@@ -1810,10 +1688,7 @@ export default function FlowTestClient() {
                       if (!step) continue;
 
                       // Skip already completed steps
-                      if (
-                        step.status === "success" ||
-                        step.status === "skipped"
-                      ) {
+                      if (step.status === "success" || step.status === "skipped") {
                         stepResultsRef.current[stepId] = step.status;
                         continue;
                       }
@@ -1849,9 +1724,7 @@ export default function FlowTestClient() {
                         break;
                       }
                       if (result === "pending") {
-                        addLog(
-                          `Stopping - ${stepId} step requires user action`,
-                        );
+                        addLog(`Stopping - ${stepId} step requires user action`);
                         break;
                       }
                     }
@@ -1871,9 +1744,7 @@ export default function FlowTestClient() {
 
               <div className="h-[500px] overflow-y-auto bg-zinc-950 rounded-lg p-4 font-mono text-xs">
                 {testState.logs.length === 0 ? (
-                  <p className="text-zinc-500">
-                    Logs will appear here when you run tests...
-                  </p>
+                  <p className="text-zinc-500">Logs will appear here when you run tests...</p>
                 ) : (
                   testState.logs.map((log, idx) => (
                     <div
@@ -1896,9 +1767,7 @@ export default function FlowTestClient() {
               {/* Clear Logs */}
               <div className="mt-4">
                 <Button
-                  onClick={() =>
-                    setTestState((prev) => ({ ...prev, logs: [] }))
-                  }
+                  onClick={() => setTestState((prev) => ({ ...prev, logs: [] }))}
                   color="dark"
                   className="w-full"
                 >
@@ -1916,29 +1785,21 @@ export default function FlowTestClient() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div>
                 <span className="text-zinc-500">Chain:</span>{" "}
-                <span className="font-medium">
-                  {testState.chain.toUpperCase()}
-                </span>
+                <span className="font-medium">{testState.chain.toUpperCase()}</span>
               </div>
               <div>
                 <span className="text-zinc-500">Wallet:</span>{" "}
-                <span className="font-medium">
-                  {isWalletReady ? "Connected" : "Not connected"}
-                </span>
+                <span className="font-medium">{isWalletReady ? "Connected" : "Not connected"}</span>
               </div>
               <div>
                 <span className="text-zinc-500">Consignment:</span>{" "}
                 <span className="font-medium">
-                  {testState.consignmentId
-                    ? `${testState.consignmentId.slice(0, 8)}...`
-                    : "None"}
+                  {testState.consignmentId ? `${testState.consignmentId.slice(0, 8)}...` : "None"}
                 </span>
               </div>
               <div>
                 <span className="text-zinc-500">Token:</span>{" "}
-                <span className="font-medium">
-                  {testState.tokenSymbol || "Not set"}
-                </span>
+                <span className="font-medium">{testState.tokenSymbol || "Not set"}</span>
               </div>
             </div>
 
@@ -1960,9 +1821,7 @@ export default function FlowTestClient() {
                       "manual-consignment-id",
                     ) as HTMLInputElement | null;
                     if (!input) {
-                      throw new Error(
-                        "Manual consignment ID input element not found",
-                      );
+                      throw new Error("Manual consignment ID input element not found");
                     }
                     const value = input.value.trim();
                     if (value) {

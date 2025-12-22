@@ -9,23 +9,23 @@
  * - Next.js dev server
  */
 
-import { execSync, spawn, type ChildProcess } from "child_process";
-import { existsSync, writeFileSync, readFileSync, mkdirSync, unlinkSync } from "fs";
-import { dirname, resolve, join } from "path";
-import { fileURLToPath } from "url";
+import { type ChildProcess, execSync, spawn } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   ANVIL_PORT,
-  SOLANA_PORT,
   APP_PORT,
-  POSTGRES_PORT,
+  getEvmNonce,
   isPortInUse,
   killProcessesOnPort,
+  logSetup,
+  POSTGRES_PORT,
+  SOLANA_PORT,
+  sleep,
   waitForPort,
   waitForPortToClose,
   waitForUrl,
-  getEvmNonce,
-  logSetup,
-  sleep,
 } from "./test-utils";
 
 const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -143,10 +143,13 @@ async function deployContracts(): Promise<void> {
     throw new Error(`Contracts directory not found: ${contractsDir}`);
   }
 
-  execSync("forge script scripts/DeployElizaOTC.s.sol --broadcast --rpc-url http://127.0.0.1:8545", {
-    cwd: contractsDir,
-    stdio: "inherit",
-  });
+  execSync(
+    "forge script scripts/DeployElizaOTC.s.sol --broadcast --rpc-url http://127.0.0.1:8545",
+    {
+      cwd: contractsDir,
+      stdio: "inherit",
+    },
+  );
 
   logSetup("Contracts deployed successfully");
 
@@ -167,15 +170,18 @@ async function deployContracts(): Promise<void> {
 
   // Validate required deployment fields
   const ownerAccount = deployment.accounts?.owner ?? "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-  
+
   const otcAddress = deployment.contracts.otc ?? deployment.contracts.deal;
   if (!otcAddress) {
     throw new Error("Deployment missing OTC contract (expected contracts.otc or contracts.deal)");
   }
 
-  const usdcAddress = deployment.contracts.usdc ?? deployment.contracts.usdcToken ?? deployment.contracts.usdcMock;
+  const usdcAddress =
+    deployment.contracts.usdc ?? deployment.contracts.usdcToken ?? deployment.contracts.usdcMock;
   if (!usdcAddress) {
-    throw new Error("Deployment missing USDC contract (expected contracts.usdc, contracts.usdcToken, or contracts.usdcMock)");
+    throw new Error(
+      "Deployment missing USDC contract (expected contracts.usdc, contracts.usdcToken, or contracts.usdcMock)",
+    );
   }
 
   if (!deployment.contracts.elizaToken) {
@@ -205,7 +211,9 @@ async function deployContracts(): Promise<void> {
 
   if (deployment.accounts) {
     if (!deployment.accounts.testWallet) {
-      throw new Error("Deployment has accounts config but missing testWallet - test infrastructure incomplete");
+      throw new Error(
+        "Deployment has accounts config but missing testWallet - test infrastructure incomplete",
+      );
     }
     const ownerKey = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
     execSync(

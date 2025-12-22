@@ -38,9 +38,7 @@ export type { SolanaTokenBalance, TokenBalance } from "./db-schemas";
 
 // Helper to coerce string or string[] to array (for URL query params)
 const toArray = <T extends z.ZodTypeAny>(schema: T) =>
-  z
-    .union([schema, z.array(schema)])
-    .transform((val) => (Array.isArray(val) ? val : [val]));
+  z.union([schema, z.array(schema)]).transform((val) => (Array.isArray(val) ? val : [val]));
 
 // GET /api/consignments query parameters
 export const GetConsignmentsQuerySchema = z.object({
@@ -69,7 +67,7 @@ export const CreateConsignmentRequestSchema = z
         }
         if (typeof val === "string") {
           const num = Number(val);
-          if (isNaN(num) || !isFinite(num)) {
+          if (Number.isNaN(num) || !Number.isFinite(num)) {
             throw new Error(`Invalid number: ${val}`);
           }
           if (!val.includes(".") && !val.toLowerCase().includes("e")) {
@@ -103,7 +101,7 @@ export const CreateConsignmentRequestSchema = z
         }
         if (typeof val === "string") {
           const num = Number(val);
-          if (isNaN(num) || !isFinite(num)) {
+          if (Number.isNaN(num) || !Number.isFinite(num)) {
             throw new Error(`Invalid number: ${val}`);
           }
           if (!val.includes(".") && !val.toLowerCase().includes("e")) {
@@ -123,7 +121,7 @@ export const CreateConsignmentRequestSchema = z
         }
         if (typeof val === "string") {
           const num = Number(val);
-          if (isNaN(num) || !isFinite(num)) {
+          if (Number.isNaN(num) || !Number.isFinite(num)) {
             throw new Error(`Invalid number: ${val}`);
           }
           if (!val.includes(".") && !val.toLowerCase().includes("e")) {
@@ -154,8 +152,7 @@ export const CreateConsignmentRequestSchema = z
       return true;
     },
     {
-      message:
-        "Solana consignments require contractConsignmentId (on-chain pubkey)",
+      message: "Solana consignments require contractConsignmentId (on-chain pubkey)",
     },
   )
   .refine(
@@ -254,9 +251,7 @@ export const SolanaClaimRequestSchema = z.object({
 
 // POST /api/solana/update-price request body
 export const SolanaUpdatePriceRequestSchema = z.object({
-  tokenMint: z
-    .string()
-    .regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/, "Invalid Solana address format"),
+  tokenMint: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/, "Invalid Solana address format"),
   forceUpdate: z.boolean().optional(),
 });
 
@@ -474,11 +469,7 @@ export const CreateRoomRequestSchema = z.object({
 
 // GET /api/rooms/[roomId]/messages query parameters
 export const GetRoomMessagesQuerySchema = z.object({
-  limit: z
-    .string()
-    .transform(Number)
-    .pipe(z.number().int().positive())
-    .optional(),
+  limit: z.string().transform(Number).pipe(z.number().int().positive()).optional(),
   before: z.string().optional(),
 });
 
@@ -493,21 +484,12 @@ export const GetRoomParamsSchema = z.object({
 
 // JSON-RPC primitive value schema (recursive type for nested structures)
 // JSON values can be: string, number, boolean, null, object, or array
-const JsonPrimitiveSchema = z.union([
-  z.string(),
-  z.number(),
-  z.boolean(),
-  z.null(),
-]);
+const JsonPrimitiveSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
 // For RPC params, we accept primitives, arrays of primitives, or objects with primitive values
 // This covers 99% of actual RPC calls without using z.unknown()
 const RpcParamValueSchema: z.ZodType<
-  | string
-  | number
-  | boolean
-  | null
-  | Record<string, string | number | boolean | null>
+  string | number | boolean | null | Record<string, string | number | boolean | null>
 > = z.union([JsonPrimitiveSchema, z.record(z.string(), JsonPrimitiveSchema)]);
 
 // POST /api/rpc/base, /api/rpc/ethereum, /api/rpc/solana request body
@@ -589,7 +571,7 @@ export const EvmBalancesResponseSchema = z.object({
 // Solana balances response
 export const SolanaBalancesResponseSchema = z.object({
   tokens: z.array(SolanaTokenBalanceSchema),
-  source: z.enum(["codex", "helius"]).optional(),
+  source: z.enum(["codex", "helius", "local"]).optional(),
 });
 
 // Token prices response
@@ -627,9 +609,7 @@ const MessageContentSchema = z.union([
     action: z.string().optional(),
     type: z.string().optional(),
     xml: z.string().optional(),
-    quote: z
-      .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
-      .optional(),
+    quote: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   }),
 ]);
 
@@ -890,19 +870,16 @@ export const SolanaClaimResponseSchema = z.discriminatedUnion("success", [
 ]);
 
 // Solana withdraw consignment response - discriminated union
-export const SolanaWithdrawConsignmentResponseSchema = z.discriminatedUnion(
-  "success",
-  [
-    z.object({
-      success: z.literal(true),
-      signature: z.string(),
-    }),
-    z.object({
-      success: z.literal(false),
-      error: z.string(),
-    }),
-  ],
-);
+export const SolanaWithdrawConsignmentResponseSchema = z.discriminatedUnion("success", [
+  z.object({
+    success: z.literal(true),
+    signature: z.string(),
+  }),
+  z.object({
+    success: z.literal(false),
+    error: z.string(),
+  }),
+]);
 
 // Solana update price response - discriminated union
 export const SolanaUpdatePriceResponseSchema = z.discriminatedUnion("success", [
@@ -1003,9 +980,7 @@ const RoomSchema = z.object({
   worldId: z.string().nullable(),
   agentId: z.string(),
   name: z.string().optional(),
-  metadata: z
-    .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
-    .optional(),
+  metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
 // Rooms response - discriminated union
@@ -1130,13 +1105,7 @@ export const TokenSyncResponseSchema = z.discriminatedUnion("success", [
 
 // RPC result value - can be primitive, array, or object (JSON-RPC standard)
 // Using a recursive lazy type to handle nested structures
-type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
@@ -1189,25 +1158,22 @@ const FailedOfferSchema = z.object({
 });
 
 // Cron check matured OTC response - discriminated union
-export const CronCheckMaturedOtcResponseSchema = z.discriminatedUnion(
-  "success",
-  [
-    z.object({
-      success: z.literal(true),
-      timestamp: z.string(),
-      maturedOffers: z.array(z.string()),
-      claimedOffers: z.array(z.string()),
-      failedOffers: z.array(FailedOfferSchema),
-      txHash: z.string().optional(),
-      message: z.string().optional(),
-    }),
-    z.object({
-      success: z.literal(false),
-      error: z.string(),
-      timestamp: z.string().optional(),
-    }),
-  ],
-);
+export const CronCheckMaturedOtcResponseSchema = z.discriminatedUnion("success", [
+  z.object({
+    success: z.literal(true),
+    timestamp: z.string(),
+    maturedOffers: z.array(z.string()),
+    claimedOffers: z.array(z.string()),
+    failedOffers: z.array(FailedOfferSchema),
+    txHash: z.string().optional(),
+    message: z.string().optional(),
+  }),
+  z.object({
+    success: z.literal(false),
+    error: z.string(),
+    timestamp: z.string().optional(),
+  }),
+]);
 
 // Chain results schema for poll
 const ChainPollResultSchema = z.object({
@@ -1223,24 +1189,21 @@ const SolanaChainPollResultSchema = z.object({
 });
 
 // Cron poll token registrations response - discriminated union
-export const CronPollTokenRegistrationsResponseSchema = z.discriminatedUnion(
-  "success",
-  [
-    z.object({
-      success: z.literal(true),
-      message: z.string().optional(),
-      results: z.object({
-        base: ChainPollResultSchema,
-        solana: SolanaChainPollResultSchema,
-        timestamp: z.string(),
-      }),
+export const CronPollTokenRegistrationsResponseSchema = z.discriminatedUnion("success", [
+  z.object({
+    success: z.literal(true),
+    message: z.string().optional(),
+    results: z.object({
+      base: ChainPollResultSchema,
+      solana: SolanaChainPollResultSchema,
+      timestamp: z.string(),
     }),
-    z.object({
-      success: z.literal(false),
-      error: z.string(),
-    }),
-  ],
-);
+  }),
+  z.object({
+    success: z.literal(false),
+    error: z.string(),
+  }),
+]);
 
 // Cron reconcile response - discriminated union
 export const CronReconcileResponseSchema = z.discriminatedUnion("success", [
@@ -1291,22 +1254,16 @@ export type ApiErrorResponse = z.infer<typeof ErrorResponseSchema>;
 // Token response types
 export type TokenResponse = z.infer<typeof TokensResponseSchema>;
 export type TokenBatchResponse = z.infer<typeof TokenBatchResponseSchema>;
-export type TokenAddressesResponse = z.infer<
-  typeof TokenAddressesResponseSchema
->;
+export type TokenAddressesResponse = z.infer<typeof TokenAddressesResponseSchema>;
 export type TokenDecimalsResponse = z.infer<typeof TokenDecimalsResponseSchema>;
 export type TokenBySymbolResponse = z.infer<typeof TokenBySymbolResponseSchema>;
 export type TokenByIdResponse = z.infer<typeof TokenByIdResponseSchema>;
 export type TokenLookupResponse = z.infer<typeof TokenLookupResponseSchema>;
-export type TokenPoolCheckResponse = z.infer<
-  typeof TokenPoolCheckResponseSchema
->;
+export type TokenPoolCheckResponse = z.infer<typeof TokenPoolCheckResponseSchema>;
 
 // Balance response types
 export type EvmBalanceResponse = z.infer<typeof EvmBalancesResponseSchema>;
-export type SolanaBalanceResponse = z.infer<
-  typeof SolanaBalancesResponseSchema
->;
+export type SolanaBalanceResponse = z.infer<typeof SolanaBalancesResponseSchema>;
 
 // Price response types
 export type TokenPricesResponse = z.infer<typeof TokenPricesResponseSchema>;
@@ -1314,18 +1271,10 @@ export type NativePricesResponse = z.infer<typeof NativePricesResponseSchema>;
 
 // Consignment response types
 export type ConsignmentsResponse = z.infer<typeof ConsignmentsResponseSchema>;
-export type ConsignmentByIdResponse = z.infer<
-  typeof ConsignmentByIdResponseSchema
->;
-export type CreateConsignmentResponse = z.infer<
-  typeof CreateConsignmentResponseSchema
->;
-export type UpdateConsignmentResponse = z.infer<
-  typeof UpdateConsignmentResponseSchema
->;
-export type DeleteConsignmentResponse = z.infer<
-  typeof DeleteConsignmentResponseSchema
->;
+export type ConsignmentByIdResponse = z.infer<typeof ConsignmentByIdResponseSchema>;
+export type CreateConsignmentResponse = z.infer<typeof CreateConsignmentResponseSchema>;
+export type UpdateConsignmentResponse = z.infer<typeof UpdateConsignmentResponseSchema>;
+export type DeleteConsignmentResponse = z.infer<typeof DeleteConsignmentResponseSchema>;
 
 // Quote response types
 export type QuoteResponse = z.infer<typeof QuoteResponseSchema>;
@@ -1343,12 +1292,8 @@ export type SolanaClaimResponse = z.infer<typeof SolanaClaimResponseSchema>;
 export type SolanaWithdrawConsignmentResponse = z.infer<
   typeof SolanaWithdrawConsignmentResponseSchema
 >;
-export type SolanaUpdatePriceResponse = z.infer<
-  typeof SolanaUpdatePriceResponseSchema
->;
-export type DealCompletionResponse = z.infer<
-  typeof DealCompletionResponseSchema
->;
+export type SolanaUpdatePriceResponse = z.infer<typeof SolanaUpdatePriceResponseSchema>;
+export type DealCompletionResponse = z.infer<typeof DealCompletionResponseSchema>;
 export type RoomsResponse = z.infer<typeof RoomsResponseSchema>;
 export type NotificationResponse = z.infer<typeof NotificationResponseSchema>;
 export type CreateTokenResponse = z.infer<typeof CreateTokenResponseSchema>;
@@ -1359,19 +1304,11 @@ export type TokenSyncResponse = z.infer<typeof TokenSyncResponseSchema>;
 export type RpcProxyResponse = z.infer<typeof RpcProxyResponseSchema>;
 export type RpcProxyErrorResponse = z.infer<typeof RpcProxyErrorResponseSchema>;
 export type ClearTokensResponse = z.infer<typeof ClearTokensResponseSchema>;
-export type CronCheckMaturedOtcResponse = z.infer<
-  typeof CronCheckMaturedOtcResponseSchema
->;
+export type CronCheckMaturedOtcResponse = z.infer<typeof CronCheckMaturedOtcResponseSchema>;
 export type CronPollTokenRegistrationsResponse = z.infer<
   typeof CronPollTokenRegistrationsResponseSchema
 >;
 export type CronReconcileResponse = z.infer<typeof CronReconcileResponseSchema>;
-export type QuoteByOfferErrorResponse = z.infer<
-  typeof QuoteByOfferErrorResponseSchema
->;
-export type SolanaRpcHealthResponse = z.infer<
-  typeof SolanaRpcHealthResponseSchema
->;
-export type PoolPriceProxyErrorResponse = z.infer<
-  typeof PoolPriceProxyErrorResponseSchema
->;
+export type QuoteByOfferErrorResponse = z.infer<typeof QuoteByOfferErrorResponseSchema>;
+export type SolanaRpcHealthResponse = z.infer<typeof SolanaRpcHealthResponseSchema>;
+export type PoolPriceProxyErrorResponse = z.infer<typeof PoolPriceProxyErrorResponseSchema>;

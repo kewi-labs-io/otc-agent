@@ -50,12 +50,9 @@ function validateDealQuote(data: unknown): DealQuote {
  * Handles the case where the quote may not be immediately available after redirect
  */
 async function fetchExecutedQuote(quoteId: string): Promise<DealQuote> {
-  const response = await fetch(
-    `/api/quote/executed/${encodeURIComponent(quoteId)}`,
-    {
-      cache: "no-store",
-    },
-  );
+  const response = await fetch(`/api/quote/executed/${encodeURIComponent(quoteId)}`, {
+    cache: "no-store",
+  });
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -79,12 +76,8 @@ async function fetchExecutedQuote(quoteId: string): Promise<DealQuote> {
  * Fetch quote by offer ID (for linking offers to quotes)
  * Returns null only for 404 (not found), throws for other errors
  */
-async function fetchQuoteByOffer(
-  offerId: string,
-): Promise<{ quoteId: string } | null> {
-  const response = await fetch(
-    `/api/quote/by-offer/${encodeURIComponent(offerId)}`,
-  );
+async function fetchQuoteByOffer(offerId: string): Promise<{ quoteId: string } | null> {
+  const response = await fetch(`/api/quote/by-offer/${encodeURIComponent(offerId)}`);
 
   if (!response.ok) {
     // 404 means offer->quote mapping doesn't exist (yet)
@@ -92,9 +85,7 @@ async function fetchQuoteByOffer(
       return null;
     }
     // Other errors should be thrown
-    throw new Error(
-      `Failed to fetch quote by offer: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Failed to fetch quote by offer: ${response.status} ${response.statusText}`);
   }
 
   const data = await response.json();

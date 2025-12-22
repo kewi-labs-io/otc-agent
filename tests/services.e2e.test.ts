@@ -19,22 +19,16 @@
  * Run: bun test tests/services.e2e.test.ts
  */
 
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { z } from "zod";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import type { z } from "zod";
+import { OTCConsignmentSchema, TokenSchema } from "../src/types/validation/db-schemas";
 import {
-  BASE_URL,
-  waitForServer as waitForServerUtil,
-} from "./test-utils";
-import {
-  TokenSchema,
-  OTCConsignmentSchema,
-} from "../src/types/validation/db-schemas";
-import {
-  ChainSchema,
   AddressSchema,
   BigIntStringSchema,
   BpsSchema,
+  ChainSchema,
 } from "../src/types/validation/schemas";
+import { BASE_URL, waitForServer as waitForServerUtil } from "./test-utils";
 
 // Test timeout for service operations
 const SERVICE_TIMEOUT = 30_000;
@@ -42,7 +36,7 @@ const SERVICE_TIMEOUT = 30_000;
 // Test addresses (deterministic Anvil accounts)
 const ANVIL_DEPLOYER = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 const ANVIL_ACCOUNT_1 = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
-const ANVIL_ACCOUNT_2 = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
+const _ANVIL_ACCOUNT_2 = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
 
 // Track created resources for cleanup
 const createdTokenIds: string[] = [];
@@ -88,18 +82,18 @@ async function apiCall<T>(
     options.body = JSON.stringify(body);
   }
   const res = await fetch(`${BASE_URL}${path}`, options);
-  
+
   // Handle non-JSON responses gracefully
   const contentType = res.headers.get("content-type");
-  if (contentType && contentType.includes("application/json")) {
+  if (contentType?.includes("application/json")) {
     const data = await res.json();
     return { status: res.status, data: data as T };
   }
-  
+
   // Non-JSON response - try to get text for error message
   const text = await res.text();
-  return { 
-    status: res.status, 
+  return {
+    status: res.status,
     data: { error: text || `HTTP ${res.status}` } as T,
   };
 }
@@ -107,7 +101,7 @@ async function apiCall<T>(
 /**
  * Validate response data against a Zod schema
  */
-function validateSchema<T>(schema: z.ZodSchema<T>, data: unknown): T {
+function _validateSchema<T>(schema: z.ZodSchema<T>, data: unknown): T {
   const result = schema.safeParse(data);
   if (!result.success) {
     throw new Error(
@@ -135,7 +129,7 @@ describe("Service Layer E2E Tests", () => {
   });
 
   afterAll(async () => {
-        if (skipIfNoServer()) return;
+    if (skipIfNoServer()) return;
     if (!serverAvailable) return;
 
     // Cleanup created resources
@@ -158,8 +152,7 @@ describe("Service Layer E2E Tests", () => {
         if (skipIfNoServer()) return;
         if (skipIfNoServer()) return;
 
-        const tokenAddress =
-          "0x" + Math.random().toString(16).slice(2, 42).padEnd(40, "0");
+        const tokenAddress = "0x" + Math.random().toString(16).slice(2, 42).padEnd(40, "0");
 
         const { status, data } = await apiCall<{
           success: boolean;
@@ -199,17 +192,13 @@ describe("Service Layer E2E Tests", () => {
       "registerToken - validates chain enum",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/tokens",
-          {
-            symbol: "BAD",
-            name: "Bad Token",
-            contractAddress: ANVIL_ACCOUNT_1,
-            chain: "invalid-chain",
-            decimals: 18,
-          },
-        );
+        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/tokens", {
+          symbol: "BAD",
+          name: "Bad Token",
+          contractAddress: ANVIL_ACCOUNT_1,
+          chain: "invalid-chain",
+          decimals: 18,
+        });
 
         expect(status).toBe(400);
         expect(data.error).toBeDefined();
@@ -221,17 +210,13 @@ describe("Service Layer E2E Tests", () => {
       "registerToken - validates address format",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/tokens",
-          {
-            symbol: "BAD",
-            name: "Bad Token",
-            contractAddress: "invalid-address",
-            chain: "base",
-            decimals: 18,
-          },
-        );
+        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/tokens", {
+          symbol: "BAD",
+          name: "Bad Token",
+          contractAddress: "invalid-address",
+          chain: "base",
+          decimals: 18,
+        });
 
         expect(status).toBe(400);
         expect(data.error).toBeDefined();
@@ -243,17 +228,13 @@ describe("Service Layer E2E Tests", () => {
       "registerToken - validates decimals range (0-255)",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/tokens",
-          {
-            symbol: "BAD",
-            name: "Bad Token",
-            contractAddress: ANVIL_ACCOUNT_1,
-            chain: "base",
-            decimals: 256, // Invalid: max is 255
-          },
-        );
+        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/tokens", {
+          symbol: "BAD",
+          name: "Bad Token",
+          contractAddress: ANVIL_ACCOUNT_1,
+          chain: "base",
+          decimals: 256, // Invalid: max is 255
+        });
 
         expect(status).toBe(400);
         expect(data.error).toBeDefined();
@@ -383,10 +364,7 @@ describe("Service Layer E2E Tests", () => {
       "getMarketData - validates tokenId format",
       async () => {
         if (skipIfNoServer()) return;
-        const { status } = await apiCall<{ error?: string }>(
-          "GET",
-          "/api/market-data/",
-        );
+        const { status } = await apiCall<{ error?: string }>("GET", "/api/market-data/");
 
         // Empty tokenId should be 400 or 404
         expect([400, 404]).toContain(status);
@@ -418,11 +396,7 @@ describe("Service Layer E2E Tests", () => {
       "createConsignment - validates required fields",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/consignments",
-          {},
-        );
+        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/consignments", {});
 
         expect(status).toBe(400);
         expect(data.error).toBeDefined();
@@ -434,22 +408,18 @@ describe("Service Layer E2E Tests", () => {
       "createConsignment - validates Solana requires contractConsignmentId",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/consignments",
-          {
-            tokenId: "token-solana-test",
-            consignerAddress: "E6K5x45Bxfmci6FmKRQ2YJMpLz7fCdLm7r7ReCq6P5vP",
-            amount: "1000000000",
-            chain: "solana",
-            isNegotiable: false,
-            fixedDiscountBps: 500,
-            fixedLockupDays: 30,
-            tokenSymbol: "TEST",
-            tokenAddress: "E6K5x45Bxfmci6FmKRQ2YJMpLz7fCdLm7r7ReCq6P5vP",
-            // Missing contractConsignmentId
-          },
-        );
+        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/consignments", {
+          tokenId: "token-solana-test",
+          consignerAddress: "E6K5x45Bxfmci6FmKRQ2YJMpLz7fCdLm7r7ReCq6P5vP",
+          amount: "1000000000",
+          chain: "solana",
+          isNegotiable: false,
+          fixedDiscountBps: 500,
+          fixedLockupDays: 30,
+          tokenSymbol: "TEST",
+          tokenAddress: "E6K5x45Bxfmci6FmKRQ2YJMpLz7fCdLm7r7ReCq6P5vP",
+          // Missing contractConsignmentId
+        });
 
         expect(status).toBe(400);
         expect(data.error).toBeDefined();
@@ -461,21 +431,17 @@ describe("Service Layer E2E Tests", () => {
       "createConsignment - validates BPS range (0-10000)",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/consignments",
-          {
-            tokenId: "token-base-test",
-            consignerAddress: ANVIL_DEPLOYER,
-            amount: "1000000000000000000",
-            chain: "base",
-            isNegotiable: false,
-            fixedDiscountBps: 15000, // Invalid: max is 10000
-            fixedLockupDays: 30,
-            tokenSymbol: "TEST",
-            tokenAddress: ANVIL_ACCOUNT_1,
-          },
-        );
+        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/consignments", {
+          tokenId: "token-base-test",
+          consignerAddress: ANVIL_DEPLOYER,
+          amount: "1000000000000000000",
+          chain: "base",
+          isNegotiable: false,
+          fixedDiscountBps: 15000, // Invalid: max is 10000
+          fixedLockupDays: 30,
+          tokenSymbol: "TEST",
+          tokenAddress: ANVIL_ACCOUNT_1,
+        });
 
         expect(status).toBe(400);
         expect(data.error).toBeDefined();
@@ -487,21 +453,17 @@ describe("Service Layer E2E Tests", () => {
       "createConsignment - validates amount is positive integer string",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/consignments",
-          {
-            tokenId: "token-base-test",
-            consignerAddress: ANVIL_DEPLOYER,
-            amount: "-1000", // Invalid: negative
-            chain: "base",
-            isNegotiable: false,
-            fixedDiscountBps: 500,
-            fixedLockupDays: 30,
-            tokenSymbol: "TEST",
-            tokenAddress: ANVIL_ACCOUNT_1,
-          },
-        );
+        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/consignments", {
+          tokenId: "token-base-test",
+          consignerAddress: ANVIL_DEPLOYER,
+          amount: "-1000", // Invalid: negative
+          chain: "base",
+          isNegotiable: false,
+          fixedDiscountBps: 500,
+          fixedLockupDays: 30,
+          tokenSymbol: "TEST",
+          tokenAddress: ANVIL_ACCOUNT_1,
+        });
 
         expect(status).toBe(400);
         expect(data.error).toBeDefined();
@@ -515,8 +477,7 @@ describe("Service Layer E2E Tests", () => {
         if (skipIfNoServer()) return;
         // First create a test token
         const tokenAddress =
-          "0x" +
-          Math.random().toString(16).slice(2, 42).padEnd(40, "0").toLowerCase();
+          "0x" + Math.random().toString(16).slice(2, 42).padEnd(40, "0").toLowerCase();
         const tokenSymbol = "CSN" + Date.now().toString(36).slice(-4).toUpperCase();
 
         await apiCall("POST", "/api/tokens", {
@@ -635,18 +596,14 @@ describe("Service Layer E2E Tests", () => {
       "validateQuotePrice - validates through deal-completion API",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/deal-completion",
-          {
-            quoteId: "nonexistent-quote",
-            action: "complete",
-            tokenId: "token-base-test",
-            consignmentId: "nonexistent-consignment",
-            priceAtQuote: 1.0,
-            maxPriceDeviationBps: 500,
-          },
-        );
+        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/deal-completion", {
+          quoteId: "nonexistent-quote",
+          action: "complete",
+          tokenId: "token-base-test",
+          consignmentId: "nonexistent-consignment",
+          priceAtQuote: 1.0,
+          maxPriceDeviationBps: 500,
+        });
 
         // Should fail because quote doesn't exist, not validation
         expect([404, 500]).toContain(status);
@@ -689,10 +646,9 @@ describe("Service Layer E2E Tests", () => {
       test(
         "createToken and getToken roundtrip",
         async () => {
-        if (skipIfNoServer()) return;
+          if (skipIfNoServer()) return;
           const tokenAddress =
-            "0x" +
-            Math.random().toString(16).slice(2, 42).padEnd(40, "0").toLowerCase();
+            "0x" + Math.random().toString(16).slice(2, 42).padEnd(40, "0").toLowerCase();
           const tokenSymbol = "DB" + Date.now().toString(36).slice(-4).toUpperCase();
 
           // Create
@@ -737,14 +693,11 @@ describe("Service Layer E2E Tests", () => {
       test(
         "getMarketData returns null for unknown token",
         async () => {
-        if (skipIfNoServer()) return;
+          if (skipIfNoServer()) return;
           const { status, data } = await apiCall<{
             success: boolean;
             marketData: unknown;
-          }>(
-            "GET",
-            "/api/market-data/token-ethereum-0x0000000000000000000000000000000000000001",
-          );
+          }>("GET", "/api/market-data/token-ethereum-0x0000000000000000000000000000000000000001");
 
           expect([200, 404]).toContain(status);
           if (status === 200) {
@@ -760,7 +713,7 @@ describe("Service Layer E2E Tests", () => {
       test(
         "getConsignmentsByConsigner filters correctly",
         async () => {
-        if (skipIfNoServer()) return;
+          if (skipIfNoServer()) return;
           const { status, data } = await apiCall<{
             success: boolean;
             consignments: Array<{ consignerAddress: string }>;
@@ -770,9 +723,7 @@ describe("Service Layer E2E Tests", () => {
 
           // All returned consignments should be from the specified consigner
           for (const c of data.consignments) {
-            expect(c.consignerAddress.toLowerCase()).toBe(
-              ANVIL_DEPLOYER.toLowerCase(),
-            );
+            expect(c.consignerAddress.toLowerCase()).toBe(ANVIL_DEPLOYER.toLowerCase());
           }
         },
         SERVICE_TIMEOUT,
@@ -794,9 +745,7 @@ describe("Service Layer E2E Tests", () => {
 
     test("AddressSchema validates EVM and Solana addresses", () => {
       // Valid EVM
-      expect(() =>
-        AddressSchema.parse("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
-      ).not.toThrow();
+      expect(() => AddressSchema.parse("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")).not.toThrow();
 
       // Valid Solana
       expect(() =>
@@ -842,9 +791,7 @@ describe("Service Layer E2E Tests", () => {
       expect(() => TokenSchema.parse(validToken)).not.toThrow();
 
       // Missing required field
-      expect(() =>
-        TokenSchema.parse({ ...validToken, symbol: undefined }),
-      ).toThrow();
+      expect(() => TokenSchema.parse({ ...validToken, symbol: undefined })).toThrow();
     });
 
     test("OTCConsignmentSchema validates consignment objects", () => {
@@ -888,9 +835,7 @@ describe("Service Layer E2E Tests", () => {
   // ==========================================================================
   describe("Hook Schema Validation", () => {
     test("ConsignmentsFiltersSchema validates filter options", async () => {
-      const { ConsignmentsFiltersSchema } = await import(
-        "@/types/validation/hook-schemas"
-      );
+      const { ConsignmentsFiltersSchema } = await import("@/types/validation/hook-schemas");
 
       // Valid filters
       expect(() =>
@@ -905,15 +850,11 @@ describe("Service Layer E2E Tests", () => {
       expect(() => ConsignmentsFiltersSchema.parse({})).not.toThrow();
 
       // Invalid chain
-      expect(() =>
-        ConsignmentsFiltersSchema.parse({ chains: ["invalid-chain"] }),
-      ).toThrow();
+      expect(() => ConsignmentsFiltersSchema.parse({ chains: ["invalid-chain"] })).toThrow();
     });
 
     test("DealsResponseSchema validates deal response", async () => {
-      const { DealsResponseSchema } = await import(
-        "../src/types/validation/hook-schemas"
-      );
+      const { DealsResponseSchema } = await import("../src/types/validation/hook-schemas");
 
       const validResponse = {
         success: true,
@@ -956,9 +897,7 @@ describe("Service Layer E2E Tests", () => {
     });
 
     test("TokenBatchResponseSchema validates batch response", async () => {
-      const { TokenBatchResponseSchema } = await import(
-        "@/types/validation/hook-schemas"
-      );
+      const { TokenBatchResponseSchema } = await import("@/types/validation/hook-schemas");
 
       const validResponse = {
         success: true,
@@ -984,9 +923,7 @@ describe("Service Layer E2E Tests", () => {
     });
 
     test("WalletTokenSchema validates wallet token format", async () => {
-      const { WalletTokenSchema } = await import(
-        "@/types/validation/hook-schemas"
-      );
+      const { WalletTokenSchema } = await import("@/types/validation/hook-schemas");
 
       const validWalletToken = {
         id: "token-base-0x1234567890123456789012345678901234567890",
@@ -1008,15 +945,11 @@ describe("Service Layer E2E Tests", () => {
       expect(() => WalletTokenSchema.parse(validWalletToken)).not.toThrow();
 
       // Invalid balance (not a string integer)
-      expect(() =>
-        WalletTokenSchema.parse({ ...validWalletToken, balance: "1.5" }),
-      ).toThrow();
+      expect(() => WalletTokenSchema.parse({ ...validWalletToken, balance: "1.5" })).toThrow();
     });
 
     test("EvmBalancesResponseSchema validates EVM balances", async () => {
-      const { EvmBalancesResponseSchema } = await import(
-        "@/types/validation/hook-schemas"
-      );
+      const { EvmBalancesResponseSchema } = await import("@/types/validation/hook-schemas");
 
       const validResponse = {
         tokens: [
@@ -1034,9 +967,7 @@ describe("Service Layer E2E Tests", () => {
     });
 
     test("SolanaBalancesResponseSchema validates Solana balances", async () => {
-      const { SolanaBalancesResponseSchema } = await import(
-        "../src/types/validation/hook-schemas"
-      );
+      const { SolanaBalancesResponseSchema } = await import("../src/types/validation/hook-schemas");
 
       const validResponse = {
         tokens: [
@@ -1053,9 +984,7 @@ describe("Service Layer E2E Tests", () => {
         ],
       };
 
-      expect(() =>
-        SolanaBalancesResponseSchema.parse(validResponse),
-      ).not.toThrow();
+      expect(() => SolanaBalancesResponseSchema.parse(validResponse)).not.toThrow();
     });
   });
 
@@ -1067,10 +996,7 @@ describe("Service Layer E2E Tests", () => {
       "fetches ETH, BNB, SOL prices",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<Record<string, number>>(
-          "GET",
-          "/api/native-prices",
-        );
+        const { status, data } = await apiCall<Record<string, number>>("GET", "/api/native-prices");
 
         expect(status).toBe(200);
         expect(typeof data).toBe("object");
@@ -1096,13 +1022,9 @@ describe("Service Layer E2E Tests", () => {
       "sync endpoint validates chain parameter",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/tokens/sync",
-          {
-            chain: "invalid-chain",
-          },
-        );
+        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/tokens/sync", {
+          chain: "invalid-chain",
+        });
 
         expect(status).toBe(400);
         expect(data.error).toBeDefined();
@@ -1187,10 +1109,7 @@ describe("Service Layer E2E Tests", () => {
         if (skipIfNoServer()) return;
         const { status, data } = await apiCall<{
           tokens: unknown[];
-        }>(
-          "GET",
-          "/api/solana-balances?address=E6K5x45Bxfmci6FmKRQ2YJMpLz7fCdLm7r7ReCq6P5vP",
-        );
+        }>("GET", "/api/solana-balances?address=E6K5x45Bxfmci6FmKRQ2YJMpLz7fCdLm7r7ReCq6P5vP");
 
         expect(status).toBe(200);
         expect(Array.isArray(data.tokens)).toBe(true);
@@ -1265,11 +1184,7 @@ describe("Service Layer E2E Tests", () => {
       "validates offerId is required",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/otc/approve",
-          {},
-        );
+        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/otc/approve", {});
 
         expect(status).toBe(400);
         expect(data.error).toBeDefined();
@@ -1281,14 +1196,10 @@ describe("Service Layer E2E Tests", () => {
       "validates chain enum",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/otc/approve",
-          {
-            offerId: 1,
-            chain: "invalid-chain",
-          },
-        );
+        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/otc/approve", {
+          offerId: 1,
+          chain: "invalid-chain",
+        });
 
         expect(status).toBe(400);
         expect(data.error).toBeDefined();
@@ -1300,14 +1211,10 @@ describe("Service Layer E2E Tests", () => {
       "accepts numeric string offerId",
       async () => {
         if (skipIfNoServer()) return;
-        const { status } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/otc/approve",
-          {
-            offerId: "123",
-            chain: "base",
-          },
-        );
+        const { status } = await apiCall<{ error?: string }>("POST", "/api/otc/approve", {
+          offerId: "123",
+          chain: "base",
+        });
 
         // Should not be 400 validation error
         // 404 or 500 expected since offer doesn't exist
@@ -1325,11 +1232,7 @@ describe("Service Layer E2E Tests", () => {
       "validates required fields",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/solana/claim",
-          {},
-        );
+        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/solana/claim", {});
 
         expect(status).toBe(400);
         expect(data.error).toBeDefined();
@@ -1341,14 +1244,10 @@ describe("Service Layer E2E Tests", () => {
       "validates Solana address format",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/solana/claim",
-          {
-            offerAddress: "invalid-address",
-            beneficiary: "E6K5x45Bxfmci6FmKRQ2YJMpLz7fCdLm7r7ReCq6P5vP",
-          },
-        );
+        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/solana/claim", {
+          offerAddress: "invalid-address",
+          beneficiary: "E6K5x45Bxfmci6FmKRQ2YJMpLz7fCdLm7r7ReCq6P5vP",
+        });
 
         expect(status).toBe(400);
         expect(data.error).toBeDefined();
@@ -1360,14 +1259,10 @@ describe("Service Layer E2E Tests", () => {
       "rejects EVM addresses for Solana endpoint",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>(
-          "POST",
-          "/api/solana/claim",
-          {
-            offerAddress: ANVIL_DEPLOYER, // EVM address, not Solana
-            beneficiary: ANVIL_ACCOUNT_1,
-          },
-        );
+        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/solana/claim", {
+          offerAddress: ANVIL_DEPLOYER, // EVM address, not Solana
+          beneficiary: ANVIL_ACCOUNT_1,
+        });
 
         expect(status).toBe(400);
         expect(data.error).toBeDefined();
@@ -1477,10 +1372,7 @@ describe("Service Layer E2E Tests", () => {
         const { status } = await apiCall<{
           success: boolean;
           error?: string;
-        }>(
-          "GET",
-          "/api/solana/update-price?tokenMint=So11111111111111111111111111111111111111112",
-        );
+        }>("GET", "/api/solana/update-price?tokenMint=So11111111111111111111111111111111111111112");
 
         // Token not registered in OTC system
         expect([404, 500]).toContain(status);

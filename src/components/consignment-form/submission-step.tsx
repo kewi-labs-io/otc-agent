@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  AlertCircle,
-  ArrowLeft,
-  Check,
-  ExternalLink,
-  Loader2,
-} from "lucide-react";
+import { AlertCircle, ArrowLeft, Check, ExternalLink, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCreateConsignment } from "@/hooks/mutations";
@@ -115,16 +109,13 @@ export function SubmissionStepComponent({
     },
   ]);
 
-  const updateStepStatus = useCallback(
-    (stepId: string, updates: Partial<SubmissionStepStatus>) => {
-      const step = stepsRef.current.find((s) => s.id === stepId);
-      if (step) {
-        Object.assign(step, updates);
-        forceUpdate((n) => n + 1); // Trigger re-render
-      }
-    },
-    [],
-  );
+  const updateStepStatus = useCallback((stepId: string, updates: Partial<SubmissionStepStatus>) => {
+    const step = stepsRef.current.find((s) => s.id === stepId);
+    if (step) {
+      Object.assign(step, updates);
+      forceUpdate((n) => n + 1); // Trigger re-render
+    }
+  }, []);
 
   // Retry transient errors with exponential backoff
   const executeWithRetry = useCallback(
@@ -145,15 +136,11 @@ export function SubmissionStepComponent({
           if (NON_RETRYABLE.some((p) => msg.includes(p))) throw lastError;
 
           // Only retry transient errors, and only if we have retries left
-          const canRetry =
-            RETRYABLE.some((p) => msg.includes(p)) && attempt < MAX_RETRIES - 1;
+          const canRetry = RETRYABLE.some((p) => msg.includes(p)) && attempt < MAX_RETRIES - 1;
           if (!canRetry) throw lastError;
 
           const delayMs = 2 ** attempt * 1000;
-          console.log(
-            `[SubmissionStep] ${stepId} failed, retrying in ${delayMs}ms:`,
-            msg,
-          );
+          console.log(`[SubmissionStep] ${stepId} failed, retrying in ${delayMs}ms:`, msg);
           updateStepStatus(stepId, {
             statusMessage: `Retrying... (${attempt + 2}/${MAX_RETRIES})`,
           });
@@ -183,10 +170,8 @@ export function SubmissionStepComponent({
     const toRawAmount = (humanAmount: string): string => {
       // FAIL-FAST: Validate input is a valid number
       const parsed = parseFloat(humanAmount);
-      if (isNaN(parsed) || parsed <= 0) {
-        throw new Error(
-          `Invalid amount: ${humanAmount}. Must be a positive number.`,
-        );
+      if (Number.isNaN(parsed) || parsed <= 0) {
+        throw new Error(`Invalid amount: ${humanAmount}. Must be a positive number.`);
       }
       const raw = BigInt(Math.floor(parsed * 10 ** selectedTokenDecimals));
       return raw.toString();
@@ -240,22 +225,13 @@ export function SubmissionStepComponent({
       const currentStep = steps[stepIndex];
 
       if (!currentStep) {
-        console.log(
-          "[SubmissionStep] No step at index:",
-          stepIndex,
-          "- completing",
-        );
+        console.log("[SubmissionStep] No step at index:", stepIndex, "- completing");
         isProcessingRef.current = false;
         setIsComplete(true);
         return;
       }
 
-      console.log(
-        "[SubmissionStep] Processing step:",
-        currentStep.id,
-        "index:",
-        stepIndex,
-      );
+      console.log("[SubmissionStep] Processing step:", currentStep.id, "index:", stepIndex);
       updateStepStatus(currentStep.id, {
         status: "processing",
         statusMessage: "Please confirm in your wallet...",
@@ -263,10 +239,7 @@ export function SubmissionStepComponent({
 
       // Execute the step (executeWithRetry handles retries and throws on failure)
       if (currentStep.id === "approve") {
-        const txHash = await executeWithRetry(
-          () => onApproveToken(),
-          "approve",
-        );
+        const txHash = await executeWithRetry(() => onApproveToken(), "approve");
         updateStepStatus("approve", { txHash, statusMessage: "Confirmed" });
       } else if (currentStep.id === "create-onchain") {
         const result = await executeWithRetry(
@@ -308,13 +281,7 @@ export function SubmissionStepComponent({
         setIsComplete(true);
       }
     },
-    [
-      onApproveToken,
-      onCreateConsignment,
-      updateStepStatus,
-      executeWithRetry,
-      saveToDatabase,
-    ],
+    [onApproveToken, onCreateConsignment, updateStepStatus, executeWithRetry, saveToDatabase],
   );
 
   // Start processing on mount
@@ -324,14 +291,11 @@ export function SubmissionStepComponent({
       isProcessingRef.current = true;
       console.log("[SubmissionStep] Starting submission process...");
       processStep(0).catch((error) => {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
         console.error("[SubmissionStep] Process failed:", errorMessage);
         isProcessingRef.current = false;
         // Find the failed step and update its status
-        const failedStep = stepsRef.current.find(
-          (s) => s.status === "processing",
-        );
+        const failedStep = stepsRef.current.find((s) => s.status === "processing");
         if (failedStep) {
           updateStepStatus(failedStep.id, {
             status: "error",
@@ -361,8 +325,7 @@ export function SubmissionStepComponent({
         statusMessage: undefined,
       });
       processStep(stepIndex).catch((error) => {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
         console.error("[SubmissionStep] Retry failed:", errorMessage);
         isProcessingRef.current = false;
         updateStepStatus(stepId, {
@@ -382,7 +345,7 @@ export function SubmissionStepComponent({
   // formatAmount uses centralized formatTokenAmountFull from @/utils/format
   const formatAmount = (amount: string) => {
     const num = parseFloat(amount);
-    return isNaN(num) ? "0" : formatTokenAmountFull(num);
+    return Number.isNaN(num) ? "0" : formatTokenAmountFull(num);
   };
 
   const steps = stepsRef.current;
@@ -406,10 +369,7 @@ export function SubmissionStepComponent({
       {/* Steps */}
       <div className="space-y-4">
         {steps.map((step, index) => (
-          <div
-            key={step.id}
-            className="border border-zinc-200 dark:border-zinc-800 rounded-lg p-4"
-          >
+          <div key={step.id} className="border border-zinc-200 dark:border-zinc-800 rounded-lg p-4">
             <div className="flex items-start gap-3">
               {/* Status Icon */}
               <div className="flex-shrink-0 mt-0.5">
@@ -462,9 +422,7 @@ export function SubmissionStepComponent({
 
                 {/* Error Message */}
                 {step.errorMessage && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-2">
-                    {step.errorMessage}
-                  </p>
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-2">{step.errorMessage}</p>
                 )}
 
                 {/* Status Message - dynamic based on phase */}
@@ -484,9 +442,7 @@ export function SubmissionStepComponent({
             <div className="flex items-center gap-2">
               <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
               <div>
-                <p className="font-medium text-green-900 dark:text-green-100">
-                  Success
-                </p>
+                <p className="font-medium text-green-900 dark:text-green-100">Success</p>
                 <p className="text-sm text-green-700 dark:text-green-300">
                   Your consignment has been created and is now live.
                 </p>
@@ -508,11 +464,7 @@ export function SubmissionStepComponent({
           </Button>
         )}
         {isComplete && (
-          <Button
-            onClick={handleGoToDeals}
-            color="brand"
-            className="flex-1 py-3"
-          >
+          <Button onClick={handleGoToDeals} color="brand" className="flex-1 py-3">
             View My Listings
           </Button>
         )}

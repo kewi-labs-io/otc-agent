@@ -1,15 +1,7 @@
 import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector";
 import type { Config } from "wagmi";
 import { createConfig, http } from "wagmi";
-import {
-  base,
-  baseSepolia,
-  bsc,
-  bscTestnet,
-  foundry,
-  mainnet,
-  sepolia,
-} from "wagmi/chains";
+import { base, baseSepolia, bsc, bscTestnet, foundry, mainnet, sepolia } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 import { getAppUrl, getNetwork, LOCAL_DEFAULTS } from "@/config/env";
 
@@ -28,9 +20,9 @@ function getAvailableChains() {
   const isLocalNetwork = network === "local";
   const chains = [];
 
-  // Only add localhost when explicitly using local network
+  // Only add foundry (Anvil) chain when explicitly using local network
   if (isLocalNetwork) {
-    chains.push(localhost);
+    chains.push(foundry);
   }
 
   // Add Ethereum chains (mainnet + testnet)
@@ -54,9 +46,9 @@ function getTransports() {
   const network = getNetwork();
   const isLocalNetwork = network === "local";
 
-  // Only add localhost transport when explicitly using local network
+  // Only add foundry (Anvil) transport when explicitly using local network
   if (isLocalNetwork) {
-    transports[localhost.id] = http(LOCAL_DEFAULTS.evmRpc);
+    transports[foundry.id] = http(LOCAL_DEFAULTS.evmRpc);
   }
 
   // Add Ethereum transports - use proxy to keep Alchemy key server-side
@@ -69,9 +61,7 @@ function getTransports() {
 
   // Add BSC transports - public RPC
   transports[bsc.id] = http("https://bsc-dataseed1.binance.org");
-  transports[bscTestnet.id] = http(
-    "https://data-seed-prebsc-1-s1.binance.org:8545",
-  );
+  transports[bscTestnet.id] = http("https://data-seed-prebsc-1-s1.binance.org:8545");
 
   return transports;
 }

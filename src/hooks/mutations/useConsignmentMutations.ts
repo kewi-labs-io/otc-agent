@@ -86,9 +86,7 @@ interface UpdateConsignmentInput {
 /**
  * Create a new consignment via API
  */
-async function createConsignment(
-  input: CreateConsignmentInput,
-): Promise<OTCConsignment> {
+async function createConsignment(input: CreateConsignmentInput): Promise<OTCConsignment> {
   const response = await fetch("/api/consignments", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -96,10 +94,7 @@ async function createConsignment(
   });
 
   if (!response.ok) {
-    await throwApiError(
-      response,
-      `Failed to create consignment: ${response.status}`,
-    );
+    await throwApiError(response, `Failed to create consignment: ${response.status}`);
   }
 
   const data = (await response.json()) as CreateConsignmentResponse;
@@ -114,9 +109,7 @@ async function createConsignment(
 /**
  * Withdraw a consignment (mark as withdrawn in DB)
  */
-async function withdrawConsignment(
-  input: WithdrawConsignmentInput,
-): Promise<void> {
+async function withdrawConsignment(input: WithdrawConsignmentInput): Promise<void> {
   const response = await fetch(
     `/api/consignments/${encodeURIComponent(input.consignmentId)}?callerAddress=${encodeURIComponent(input.callerAddress)}`,
     { method: "DELETE" },
@@ -149,20 +142,15 @@ async function withdrawSolanaConsignment(
 /**
  * Update a consignment
  */
-async function updateConsignment(
-  input: UpdateConsignmentInput,
-): Promise<OTCConsignment> {
-  const response = await fetch(
-    `/api/consignments/${encodeURIComponent(input.consignmentId)}`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        callerAddress: input.callerAddress,
-        ...input.updates,
-      }),
-    },
-  );
+async function updateConsignment(input: UpdateConsignmentInput): Promise<OTCConsignment> {
+  const response = await fetch(`/api/consignments/${encodeURIComponent(input.consignmentId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      callerAddress: input.callerAddress,
+      ...input.updates,
+    }),
+  });
 
   if (!response.ok) {
     await throwApiError(response, "Failed to update consignment");
@@ -256,10 +244,7 @@ export function useUpdateConsignment() {
     mutationFn: updateConsignment,
     onSuccess: (data, variables) => {
       // Update cache with new data
-      queryClient.setQueryData(
-        consignmentKeys.single(variables.consignmentId),
-        data,
-      );
+      queryClient.setQueryData(consignmentKeys.single(variables.consignmentId), data);
       // Invalidate list queries
       queryClient.invalidateQueries({ queryKey: consignmentKeys.lists() });
     },

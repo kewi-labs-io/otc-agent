@@ -1,8 +1,8 @@
 /**
  * Test script for multi-source token logo fetching
- * 
+ *
  * Tests: Alchemy -> TrustWallet -> CoinGecko
- * 
+ *
  * Run with: bun run scripts/test-logo-sources.ts
  */
 
@@ -26,11 +26,14 @@ const TEST_TOKENS = {
   ],
 };
 
-const CHAIN_CONFIG: Record<string, { 
-  alchemyNetwork: string; 
-  trustwalletChain: string;
-  coingeckoPlatform: string;
-}> = {
+const CHAIN_CONFIG: Record<
+  string,
+  {
+    alchemyNetwork: string;
+    trustwalletChain: string;
+    coingeckoPlatform: string;
+  }
+> = {
   ethereum: {
     alchemyNetwork: "eth-mainnet",
     trustwalletChain: "ethereum",
@@ -53,10 +56,10 @@ async function testAlchemy(address: string, chain: string): Promise<string | nul
   if (!alchemyKey) {
     return null;
   }
-  
+
   const config = CHAIN_CONFIG[chain];
   const url = `https://${config.alchemyNetwork}.g.alchemy.com/v2/${alchemyKey}`;
-  
+
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -73,7 +76,7 @@ async function testAlchemy(address: string, chain: string): Promise<string | nul
     return null;
   }
 
-  const data = await response.json() as { result?: { logo?: string } };
+  const data = (await response.json()) as { result?: { logo?: string } };
   if (data.result?.logo) return data.result.logo;
   return null;
 }
@@ -109,7 +112,7 @@ async function testCoinGecko(address: string, chain: string): Promise<string | n
     return null;
   }
 
-  const data = await response.json() as { image?: { small?: string; thumb?: string } };
+  const data = (await response.json()) as { image?: { small?: string; thumb?: string } };
   if (data.image?.small) return data.image.small;
   if (data.image?.thumb) return data.image.thumb;
   return null;
@@ -135,7 +138,9 @@ async function runTests() {
     console.log(`\n--- ${chain.toUpperCase()} ---\n`);
 
     for (const token of tokens) {
-      process.stdout.write(`Testing ${token.name.padEnd(6)} (${token.address.slice(0, 10)}...)... `);
+      process.stdout.write(
+        `Testing ${token.name.padEnd(6)} (${token.address.slice(0, 10)}...)... `,
+      );
 
       const [alchemy, trustwallet, coingecko] = await Promise.all([
         testAlchemy(token.address, chain),
@@ -179,7 +184,7 @@ async function runTests() {
   for (const r of results) {
     const checkOrX = (v: boolean) => (v ? "  ✓  " : "  ✗  ");
     console.log(
-      `| ${r.chain.padEnd(8)} | ${r.token.padEnd(6)} | ${checkOrX(r.alchemy)} | ${checkOrX(r.trustwallet)}     | ${checkOrX(r.coingecko)}   |`
+      `| ${r.chain.padEnd(8)} | ${r.token.padEnd(6)} | ${checkOrX(r.alchemy)} | ${checkOrX(r.trustwallet)}     | ${checkOrX(r.coingecko)}   |`,
     );
   }
 
@@ -195,9 +200,15 @@ async function runTests() {
   const coingeckoCount = results.filter((r) => r.coingecko).length;
 
   console.log("\nSource Coverage:");
-  console.log(`  Alchemy:     ${alchemyCount}/${total} (${((alchemyCount / total) * 100).toFixed(0)}%)`);
-  console.log(`  TrustWallet: ${trustwalletCount}/${total} (${((trustwalletCount / total) * 100).toFixed(0)}%)`);
-  console.log(`  CoinGecko:   ${coingeckoCount}/${total} (${((coingeckoCount / total) * 100).toFixed(0)}%)`);
+  console.log(
+    `  Alchemy:     ${alchemyCount}/${total} (${((alchemyCount / total) * 100).toFixed(0)}%)`,
+  );
+  console.log(
+    `  TrustWallet: ${trustwalletCount}/${total} (${((trustwalletCount / total) * 100).toFixed(0)}%)`,
+  );
+  console.log(
+    `  CoinGecko:   ${coingeckoCount}/${total} (${((coingeckoCount / total) * 100).toFixed(0)}%)`,
+  );
 
   console.log("\n========================================\n");
 

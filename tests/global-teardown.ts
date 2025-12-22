@@ -5,10 +5,10 @@
  * Only stops services that were started by setup (respects shouldStop flags).
  */
 
-import { execSync } from "child_process";
-import { existsSync, readFileSync, unlinkSync } from "fs";
-import { dirname, resolve, join } from "path";
-import { fileURLToPath } from "url";
+import { execSync } from "node:child_process";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { APP_PORT, killProcessesOnPort, logTeardown } from "./test-utils";
 
 const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));

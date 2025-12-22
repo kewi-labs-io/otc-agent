@@ -26,9 +26,7 @@ export default function GlobalError({
             fontFamily: "system-ui, -apple-system, sans-serif",
           }}
         >
-          <div
-            style={{ textAlign: "center", padding: "20px", maxWidth: "500px" }}
-          >
+          <div style={{ textAlign: "center", padding: "20px", maxWidth: "500px" }}>
             <h2
               style={{
                 fontSize: "24px",
@@ -86,6 +84,7 @@ export default function GlobalError({
             )}
 
             <button
+              type="button"
               onClick={() => reset()}
               style={{
                 padding: "10px 20px",

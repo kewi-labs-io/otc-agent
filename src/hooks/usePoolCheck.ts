@@ -45,18 +45,13 @@ function validatePoolCheckResult(data: unknown): PoolCheckResult {
 /**
  * Fetch pool check data from API
  */
-async function fetchPoolCheck(
-  address: string,
-  chain: Chain,
-): Promise<PoolCheckResult> {
+async function fetchPoolCheck(address: string, chain: Chain): Promise<PoolCheckResult> {
   const response = await fetch(
     `/api/token-pool-check?address=${encodeURIComponent(address)}&chain=${chain}`,
   );
 
   if (!response.ok) {
-    throw new Error(
-      `Pool check failed: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Pool check failed: ${response.status} ${response.statusText}`);
   }
 
   const data = await response.json();
@@ -76,10 +71,7 @@ async function fetchPoolCheck(
  * @param chain - Chain to check (base, bsc, ethereum, solana)
  * @returns { poolCheck, isLoading, error }
  */
-export function usePoolCheck(
-  address: string | null | undefined,
-  chain: Chain | null | undefined,
-) {
+export function usePoolCheck(address: string | null | undefined, chain: Chain | null | undefined) {
   // Solana doesn't use pool checks
   const isSolana = chain === "solana";
   const isEnabled = !!address && !!chain && !isSolana;

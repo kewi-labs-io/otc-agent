@@ -28,10 +28,7 @@ export function parseOrThrow<T>(schema: z.ZodSchema<T>, data: unknown): T {
  * Only use this when invalid data is truly acceptable (e.g., optional user input).
  * For API boundaries and required data, use parseOrThrow instead.
  */
-export function parseOrNull<T>(
-  schema: z.ZodSchema<T>,
-  data: unknown,
-): T | null {
+export function parseOrNull<T>(schema: z.ZodSchema<T>, data: unknown): T | null {
   const result = schema.safeParse(data);
   if (!result.success) {
     return null;
@@ -56,10 +53,7 @@ export function validateAndTransform<T, U>(
  * Create a NextResponse error for validation failures
  * Returns detailed error information in development, simplified in production
  */
-export function validationErrorResponse(
-  error: z.ZodError,
-  status: number = 400,
-): NextResponse {
+export function validationErrorResponse(error: z.ZodError, status: number = 400): NextResponse {
   const isDev = process.env.NODE_ENV === "development";
 
   if (isDev) {
@@ -119,18 +113,13 @@ export function withValidation<T extends unknown[]>(
  * Validate query parameters from URLSearchParams
  * Converts URLSearchParams to an object and validates it
  */
-export function validateQueryParams<T>(
-  schema: z.ZodSchema<T>,
-  searchParams: URLSearchParams,
-): T {
+export function validateQueryParams<T>(schema: z.ZodSchema<T>, searchParams: URLSearchParams): T {
   const params: Record<string, string | string[]> = {};
   for (const [key, value] of searchParams.entries()) {
     if (params[key]) {
       // Multiple values - convert to array
       const existing = params[key];
-      params[key] = Array.isArray(existing)
-        ? [...existing, value]
-        : [existing as string, value];
+      params[key] = Array.isArray(existing) ? [...existing, value] : [existing as string, value];
     } else {
       params[key] = value;
     }

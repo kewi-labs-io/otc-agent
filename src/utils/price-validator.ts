@@ -81,8 +81,7 @@ export async function checkPriceDivergence(
       return {
         valid: false,
         error: "Token not found on price aggregator - cannot verify price",
-        warning:
-          "Price verification unavailable - transaction blocked for safety",
+        warning: "Price verification unavailable - transaction blocked for safety",
       };
     }
     // Development: allow with warning

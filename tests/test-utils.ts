@@ -4,9 +4,9 @@
  * Shared utilities for all E2E tests.
  */
 
-import { execSync } from "child_process";
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
+import { execSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Address } from "viem";
 
 // =============================================================================
@@ -196,11 +196,12 @@ export async function waitForUrl(url: string, timeoutMs: number = 60000): Promis
   }
 
   // FAIL-FAST: Extract error message - prefer Error.message, fallback to string conversion
-  const errorMessage = lastError instanceof Error
-    ? lastError.message
-    : lastError
-      ? String(lastError)
-      : "Unknown error";
+  const errorMessage =
+    lastError instanceof Error
+      ? lastError.message
+      : lastError
+        ? String(lastError)
+        : "Unknown error";
   throw new Error(`Timeout waiting for ${url} after ${timeoutMs}ms: ${errorMessage}`);
 }
 
@@ -239,7 +240,9 @@ export async function assertServerHealthy(): Promise<void> {
     }
   }
 
-  throw new Error(`Server health check failed after ${maxRetries} attempts: ${lastError?.message ?? "unknown error"}`);
+  throw new Error(
+    `Server health check failed after ${maxRetries} attempts: ${lastError?.message ?? "unknown error"}`,
+  );
 }
 
 // =============================================================================
@@ -336,7 +339,9 @@ export function loadEvmDeployment(): EvmDeployment {
     // Handle legacy contract names - fail-fast if neither exists
     const otc = deployment.contracts.otc ?? deployment.contracts.deal;
     if (!otc) {
-      throw new Error("EVM deployment missing OTC contract address (expected contracts.otc or contracts.deal)");
+      throw new Error(
+        "EVM deployment missing OTC contract address (expected contracts.otc or contracts.deal)",
+      );
     }
     const token = deployment.contracts.elizaToken;
     if (!token) {
@@ -345,7 +350,9 @@ export function loadEvmDeployment(): EvmDeployment {
     // Handle legacy USDC contract names - fail-fast if neither exists
     const usdc = deployment.contracts.usdc ?? deployment.contracts.usdcToken;
     if (!usdc) {
-      throw new Error("EVM deployment missing USDC contract address (expected contracts.usdc or contracts.usdcToken)");
+      throw new Error(
+        "EVM deployment missing USDC contract address (expected contracts.usdc or contracts.usdcToken)",
+      );
     }
 
     return {

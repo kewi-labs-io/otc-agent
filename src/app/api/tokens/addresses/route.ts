@@ -37,11 +37,7 @@ export async function GET(request: NextRequest) {
   const normalizedAddresses = addresses
     .map((a) => ({
       address: a.address,
-      chain: a.chain.replace("-mainnet", "") as
-        | "ethereum"
-        | "base"
-        | "bsc"
-        | "solana",
+      chain: a.chain.replace("-mainnet", "") as "ethereum" | "base" | "bsc" | "solana",
     }))
     .filter((a) => validChains.includes(a.chain));
 

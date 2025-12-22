@@ -43,9 +43,7 @@ async function lookupToken(address: string, chain?: Chain): Promise<TokenInfo> {
     if (response.status === 503) {
       throw new Error("Token lookup service not configured");
     }
-    throw new Error(
-      `Token lookup failed: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Token lookup failed: ${response.status} ${response.statusText}`);
   }
 
   const data = (await response.json()) as TokenLookupResponse;
@@ -83,8 +81,7 @@ export function useTokenLookup(
   const normalizedAddress = address?.trim() ?? null;
 
   // Detect chain from address format if not provided
-  const detectedChain =
-    chain ?? (normalizedAddress?.startsWith("0x") ? "base" : "solana");
+  const detectedChain = chain ?? (normalizedAddress?.startsWith("0x") ? "base" : "solana");
 
   const query = useQuery({
     queryKey: normalizedAddress
@@ -129,9 +126,7 @@ export function useInvalidateTokenLookup() {
       queryClient.invalidateQueries({
         predicate: (query) => {
           const key = query.queryKey;
-          return (
-            Array.isArray(key) && key[0] === "tokens" && key[1] === "lookup"
-          );
+          return Array.isArray(key) && key[0] === "tokens" && key[1] === "lookup";
         },
       });
     }

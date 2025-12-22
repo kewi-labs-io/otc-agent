@@ -17,10 +17,7 @@ const ChatForm = memo(
       isLoading: boolean;
       placeholder?: string;
     }
-  >(function ChatForm(
-    { input, onInputChange, onSubmit, isLoading, placeholder },
-    ref,
-  ) {
+  >(function ChatForm({ input, onInputChange, onSubmit, isLoading, placeholder }, ref) {
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
@@ -39,7 +36,6 @@ const ChatForm = memo(
         <div className="relative flex-1 w-full">
           <textarea
             ref={ref}
-            autoFocus
             aria-label="Prompt"
             value={input}
             onChange={onInputChange}
@@ -95,10 +91,7 @@ export const TextareaWithActions = memo(
       isLoading: boolean;
       placeholder?: string;
     }
-  >(function TextareaWithActions(
-    { input, onInputChange, onSubmit, isLoading, placeholder },
-    ref,
-  ) {
+  >(function TextareaWithActions({ input, onInputChange, onSubmit, isLoading, placeholder }, ref) {
     return (
       <div className="flex flex-col w-full h-[100px]">
         <span

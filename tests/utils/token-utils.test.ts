@@ -7,16 +7,16 @@
  * Run: bun test tests/utils/token-utils.test.ts
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  parseTokenId,
   buildTokenId,
-  isValidChain,
-  getChainFamily,
-  extractChainFromTokenId,
   extractAddressFromTokenId,
+  extractChainFromTokenId,
+  getChainFamily,
   isEvmToken,
   isSolanaToken,
+  isValidChain,
+  parseTokenId,
 } from "@/utils/token-utils";
 
 // =============================================================================

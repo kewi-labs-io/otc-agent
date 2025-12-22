@@ -7,7 +7,7 @@
  * Run: bun test tests/utils.integration.test.ts
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 // =============================================================================
 // PRICE FETCHER TESTS - Real API Calls
@@ -272,36 +272,30 @@ describe("Retry Cache Utilities", () => {
   });
 
   describe("fetchJsonWithRetryAndCache", () => {
-    test(
-      "fetches real JSON and caches it",
-      async () => {
-        const { fetchJsonWithRetryAndCache, getCached } = await import(
-          "@/utils/retry-cache"
-        );
+    test("fetches real JSON and caches it", async () => {
+      const { fetchJsonWithRetryAndCache, getCached } = await import("@/utils/retry-cache");
 
-        // Use httpbin.org which is more reliable for testing
-        const url = "https://httpbin.org/json";
-        const cacheKey = `json-test-${Date.now()}`;
+      // Use httpbin.org which is more reliable for testing
+      const url = "https://httpbin.org/json";
+      const cacheKey = `json-test-${Date.now()}`;
 
-        interface HttpBinResponse {
-          slideshow: { title: string };
-        }
+      interface HttpBinResponse {
+        slideshow: { title: string };
+      }
 
-        const data = await fetchJsonWithRetryAndCache<HttpBinResponse>(url, undefined, {
-          cacheKey,
-          cacheTtlMs: 60000,
-        });
+      const data = await fetchJsonWithRetryAndCache<HttpBinResponse>(url, undefined, {
+        cacheKey,
+        cacheTtlMs: 60000,
+      });
 
-        expect(data.slideshow).toBeDefined();
-        expect(data.slideshow.title).toBeDefined();
+      expect(data.slideshow).toBeDefined();
+      expect(data.slideshow.title).toBeDefined();
 
-        // Should be cached
-        const cached = getCached<HttpBinResponse>(cacheKey);
-        expect(cached).toBeDefined();
-        expect(cached!.slideshow.title).toBe(data.slideshow.title);
-      },
-      15_000,
-    );
+      // Should be cached
+      const cached = getCached<HttpBinResponse>(cacheKey);
+      expect(cached).toBeDefined();
+      expect(cached!.slideshow.title).toBe(data.slideshow.title);
+    }, 15_000);
   });
 });
 
@@ -517,9 +511,7 @@ describe("Balance Fetcher Utilities", () => {
 describe("Consignment Sanitizer", () => {
   describe("sanitizeConsignmentForBuyer", () => {
     test("hides sensitive negotiation range for negotiable consignments", async () => {
-      const { sanitizeConsignmentForBuyer } = await import(
-        "@/utils/consignment-sanitizer"
-      );
+      const { sanitizeConsignmentForBuyer } = await import("@/utils/consignment-sanitizer");
 
       const negotiableConsignment = {
         id: "test-123",
@@ -559,9 +551,7 @@ describe("Consignment Sanitizer", () => {
     });
 
     test("exposes fixed terms for fixed consignments", async () => {
-      const { sanitizeConsignmentForBuyer } = await import(
-        "@/utils/consignment-sanitizer"
-      );
+      const { sanitizeConsignmentForBuyer } = await import("@/utils/consignment-sanitizer");
 
       const fixedConsignment = {
         id: "test-456",
@@ -599,9 +589,7 @@ describe("Consignment Sanitizer", () => {
     });
 
     test("throws for negotiable consignment missing required fields", async () => {
-      const { sanitizeConsignmentForBuyer } = await import(
-        "@/utils/consignment-sanitizer"
-      );
+      const { sanitizeConsignmentForBuyer } = await import("@/utils/consignment-sanitizer");
 
       const invalidConsignment = {
         id: "test-789",
@@ -625,7 +613,9 @@ describe("Consignment Sanitizer", () => {
       };
 
       expect(() =>
-        sanitizeConsignmentForBuyer(invalidConsignment as Parameters<typeof sanitizeConsignmentForBuyer>[0]),
+        sanitizeConsignmentForBuyer(
+          invalidConsignment as Parameters<typeof sanitizeConsignmentForBuyer>[0],
+        ),
       ).toThrow(/missing required/i);
     });
   });
@@ -707,9 +697,7 @@ describe("Entity ID Utilities", () => {
       expect(id1).toBe(id2);
 
       // Should be valid UUID format
-      expect(id1).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
+      expect(id1).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     });
 
     test("normalizes EVM addresses to lowercase", async () => {
@@ -799,17 +787,13 @@ describe("Address Utils - Comprehensive", () => {
     test("detects EVM addresses", async () => {
       const { detectChainFromAddress } = await import("@/utils/address-utils");
 
-      expect(detectChainFromAddress("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")).toBe(
-        "evm",
-      );
+      expect(detectChainFromAddress("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")).toBe("evm");
     });
 
     test("detects Solana addresses", async () => {
       const { detectChainFromAddress } = await import("@/utils/address-utils");
 
-      expect(detectChainFromAddress("E6K5x45Bxfmci6FmKRQ2YJMpLz7fCdLm7r7ReCq6P5vP")).toBe(
-        "solana",
-      );
+      expect(detectChainFromAddress("E6K5x45Bxfmci6FmKRQ2YJMpLz7fCdLm7r7ReCq6P5vP")).toBe("solana");
     });
 
     test("returns null for unrecognized formats", async () => {
@@ -1027,7 +1011,7 @@ describe("Logo Fetcher - Real API Integration", () => {
 
   // Known tokens with logos on TrustWallet
   const LINK_ADDRESS = "0x514910771AF9Ca656af840dff83E8264EcF986CA"; // LINK on Ethereum
-  const USDC_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"; // USDC on Ethereum
+  const _USDC_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"; // USDC on Ethereum
 
   describe("checksumAddress", () => {
     test("checksums address for TrustWallet compatibility", async () => {
@@ -1239,9 +1223,7 @@ describe("Deal Transforms - Comprehensive", () => {
       };
 
       expect(() =>
-        transformSolanaDeal(
-          invalidDeal as Parameters<typeof transformSolanaDeal>[0],
-        ),
+        transformSolanaDeal(invalidDeal as Parameters<typeof transformSolanaDeal>[0]),
       ).toThrow(/missing offerId/i);
     });
 
@@ -1267,9 +1249,7 @@ describe("Deal Transforms - Comprehensive", () => {
       };
 
       expect(() =>
-        transformSolanaDeal(
-          invalidDeal as Parameters<typeof transformSolanaDeal>[0],
-        ),
+        transformSolanaDeal(invalidDeal as Parameters<typeof transformSolanaDeal>[0]),
       ).toThrow(/missing tokenSymbol/i);
     });
 
@@ -1295,9 +1275,7 @@ describe("Deal Transforms - Comprehensive", () => {
       };
 
       expect(() =>
-        transformSolanaDeal(
-          invalidDeal as Parameters<typeof transformSolanaDeal>[0],
-        ),
+        transformSolanaDeal(invalidDeal as Parameters<typeof transformSolanaDeal>[0]),
       ).toThrow(/missing lockupDays/i);
     });
   });
@@ -1325,11 +1303,9 @@ describe("Deal Transforms - Comprehensive", () => {
         status: "executed" as const,
       };
 
-      expect(() =>
-        transformEvmDeal(
-          invalidDeal as Parameters<typeof transformEvmDeal>[0],
-        ),
-      ).toThrow(/invalid ethUsdPrice/i);
+      expect(() => transformEvmDeal(invalidDeal as Parameters<typeof transformEvmDeal>[0])).toThrow(
+        /invalid ethUsdPrice/i,
+      );
     });
 
     test("throws for missing priceUsdPerToken", async () => {
@@ -1354,11 +1330,9 @@ describe("Deal Transforms - Comprehensive", () => {
         // Missing priceUsdPerToken
       };
 
-      expect(() =>
-        transformEvmDeal(
-          invalidDeal as Parameters<typeof transformEvmDeal>[0],
-        ),
-      ).toThrow(/missing priceUsdPerToken/i);
+      expect(() => transformEvmDeal(invalidDeal as Parameters<typeof transformEvmDeal>[0])).toThrow(
+        /missing priceUsdPerToken/i,
+      );
     });
   });
 
@@ -1492,7 +1466,7 @@ describe("Format Utilities - Edge Cases", () => {
     test("handles negative amounts", async () => {
       const { formatUsd } = await import("@/utils/format");
 
-      const result = formatUsd(-50.00);
+      const result = formatUsd(-50.0);
       expect(result).toContain("-");
       expect(result).toContain("50");
     });
@@ -1707,11 +1681,9 @@ describe("Error Handling - Fail Fast", () => {
 
       // fetchWithRetry returns the Response - it doesn't throw on non-200
       // except for 429 which triggers retries
-      const response = await fetchWithRetry(
-        "https://httpbin.org/status/500",
-        undefined,
-        { maxRetries: 0 },
-      );
+      const response = await fetchWithRetry("https://httpbin.org/status/500", undefined, {
+        maxRetries: 0,
+      });
 
       // Should get the response back, caller decides what to do with it
       expect(response.status).toBe(500);
@@ -1732,9 +1704,7 @@ describe("Error Handling - Fail Fast", () => {
       const { checksumAddress } = await import("@/utils/address-utils");
 
       expect(() => checksumAddress("0x1234")).toThrow();
-      expect(() =>
-        checksumAddress("0x123456789012345678901234567890123456789012"),
-      ).toThrow();
+      expect(() => checksumAddress("0x123456789012345678901234567890123456789012")).toThrow();
     });
   });
 
@@ -1749,9 +1719,7 @@ describe("Error Handling - Fail Fast", () => {
         c: z.array(z.string()).min(1),
       });
 
-      expect(() => parseOrThrow(schema, { a: -1, b: "ab", c: [] })).toThrow(
-        /Validation failed/,
-      );
+      expect(() => parseOrThrow(schema, { a: -1, b: "ab", c: [] })).toThrow(/Validation failed/);
     });
 
     test("handles deeply nested validation errors", async () => {
@@ -1824,12 +1792,8 @@ describe("Concurrent Behavior", () => {
 
       // Parallel fetches for different chains
       const results = await Promise.all([
-        fetchTokenPrices("ethereum", [
-          "0x514910771af9ca656af840dff83e8264ecf986ca",
-        ]),
-        fetchTokenPrices("base", [
-          "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        ]),
+        fetchTokenPrices("ethereum", ["0x514910771af9ca656af840dff83e8264ecf986ca"]),
+        fetchTokenPrices("base", ["0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"]),
       ]);
 
       // Both should return objects (may be empty due to rate limits)
@@ -1840,9 +1804,7 @@ describe("Concurrent Behavior", () => {
 
   describe("withRetryAndCache deduplication", () => {
     test("returns cached value for concurrent calls", async () => {
-      const { withRetryAndCache, getCached } = await import(
-        "@/utils/retry-cache"
-      );
+      const { withRetryAndCache, getCached } = await import("@/utils/retry-cache");
 
       let executionCount = 0;
       const key = `dedup-${Date.now()}`;
@@ -2041,9 +2003,7 @@ describe("Data Verification - Inspect Actual Outputs", () => {
       // Verify each field
       expect(parsed.consignmentId).toBe(5n);
       expect(parsed.tokenId).toBe("0x" + "ab".repeat(32));
-      expect(parsed.beneficiary).toBe(
-        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-      );
+      expect(parsed.beneficiary).toBe("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
       expect(parsed.tokenAmount).toBe(1500000000000000000n);
       expect(parsed.discountBps).toBe(750n);
       expect(parsed.createdAt).toBe(1704067200n);
@@ -2093,9 +2053,7 @@ describe("Data Verification - Inspect Actual Outputs", () => {
 
   describe("Consignment sanitization verification", () => {
     test("verifies all core fields are preserved", async () => {
-      const { sanitizeConsignmentForBuyer } = await import(
-        "@/utils/consignment-sanitizer"
-      );
+      const { sanitizeConsignmentForBuyer } = await import("@/utils/consignment-sanitizer");
 
       const consignment = {
         id: "cons-123",

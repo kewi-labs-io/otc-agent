@@ -13,9 +13,7 @@ let isListening = false;
 let connection: Connection | null = null;
 
 // register_token instruction discriminator from IDL: [32, 146, 36, 240, 80, 183, 36, 84]
-const REGISTER_TOKEN_DISCRIMINATOR = Buffer.from([
-  32, 146, 36, 240, 80, 183, 36, 84,
-]);
+const REGISTER_TOKEN_DISCRIMINATOR = Buffer.from([32, 146, 36, 240, 80, 183, 36, 84]);
 
 // Use the shared type
 type ParsedRegistration = SolanaRegistrationEvent;
@@ -33,8 +31,7 @@ export async function startSolanaListener() {
 
   // Use Helius directly for mainnet (this runs server-side)
   const network = getNetwork();
-  const rpcUrl =
-    network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
+  const rpcUrl = network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
   connection = new Connection(rpcUrl, "confirmed");
 
   console.log("[Solana Listener] Starting listener for program", programId);
@@ -70,9 +67,7 @@ export async function startSolanaListener() {
 async function handleProgramLogs(logs: Logs) {
   const logMessages = logs.logs;
   const hasRegisterToken = logMessages.some(
-    (log: string) =>
-      log.includes("Instruction: RegisterToken") ||
-      log.includes("register_token"),
+    (log: string) => log.includes("Instruction: RegisterToken") || log.includes("register_token"),
   );
 
   if (!hasRegisterToken) return;
@@ -160,10 +155,7 @@ function parseRegisterTokenTransaction(
     // 4: system_program
     const accountIndices = ix.accountKeyIndexes;
     if (accountIndices.length < 5) {
-      console.warn(
-        "[Solana Listener] Unexpected account count:",
-        accountIndices.length,
-      );
+      console.warn("[Solana Listener] Unexpected account count:", accountIndices.length);
       continue;
     }
 
@@ -207,35 +199,26 @@ function parseRegisterTokenTransaction(
     };
   }
 
-  console.warn(
-    "[Solana Listener] Could not find register_token instruction in tx",
-  );
+  console.warn("[Solana Listener] Could not find register_token instruction in tx");
   return null;
 }
 
 /**
  * Fetch token metadata from Solana and register to database
  */
-async function registerTokenToDatabase(
-  parsed: ParsedRegistration,
-): Promise<void> {
+async function registerTokenToDatabase(parsed: ParsedRegistration): Promise<void> {
   if (!connection) {
     throw new Error("No Solana connection available");
   }
 
   // Fetch token mint account to get decimals
-  const mintInfo = await connection.getParsedAccountInfo(
-    new PublicKey(parsed.tokenMint),
-  );
+  const mintInfo = await connection.getParsedAccountInfo(new PublicKey(parsed.tokenMint));
 
   // Fail fast: token mint must exist since it was just registered on-chain
   if (!mintInfo.value) {
     throw new Error(`Token mint account not found: ${parsed.tokenMint}`);
   }
-  if (
-    typeof mintInfo.value.data !== "object" ||
-    !("parsed" in mintInfo.value.data)
-  ) {
+  if (typeof mintInfo.value.data !== "object" || !("parsed" in mintInfo.value.data)) {
     throw new Error(`Could not parse mint info for ${parsed.tokenMint}`);
   }
 
@@ -245,9 +228,7 @@ async function registerTokenToDatabase(
   }
   const decimals = parsed_data.info.decimals;
   if (typeof decimals !== "number" || decimals < 0 || decimals > 255) {
-    throw new Error(
-      `Invalid decimals value for ${parsed.tokenMint}: ${decimals}`,
-    );
+    throw new Error(`Invalid decimals value for ${parsed.tokenMint}: ${decimals}`);
   }
 
   // Fetch token metadata from Metaplex
@@ -258,11 +239,7 @@ async function registerTokenToDatabase(
   let tokenVault: string | undefined;
   if (parsed.poolAddress) {
     const { findBestSolanaPool } = await import("@/utils/pool-finder-solana");
-    const pool = await findBestSolanaPool(
-      parsed.tokenMint,
-      "mainnet",
-      connection,
-    );
+    const pool = await findBestSolanaPool(parsed.tokenMint, "mainnet", connection);
     if (pool?.solVault) solVault = pool.solVault;
     if (pool?.tokenVault) tokenVault = pool.tokenVault;
   }
@@ -295,34 +272,24 @@ async function registerTokenToDatabase(
 /**
  * Fetch token metadata from Metaplex Token Metadata program
  */
-async function fetchTokenMetadata(
-  mintAddress: string,
-): Promise<{ name: string; symbol: string }> {
+async function fetchTokenMetadata(mintAddress: string): Promise<{ name: string; symbol: string }> {
   if (!connection) {
     throw new Error("No Solana connection available for metadata fetch");
   }
 
   // Metaplex Token Metadata Program
-  const METADATA_PROGRAM_ID = new PublicKey(
-    "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
-  );
+  const METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
   const mintPubkey = new PublicKey(mintAddress);
 
   // Derive metadata PDA
   const [metadataPda] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("metadata"),
-      METADATA_PROGRAM_ID.toBuffer(),
-      mintPubkey.toBuffer(),
-    ],
+    [Buffer.from("metadata"), METADATA_PROGRAM_ID.toBuffer(), mintPubkey.toBuffer()],
     METADATA_PROGRAM_ID,
   );
 
   const accountInfo = await connection.getAccountInfo(metadataPda);
   if (!accountInfo || accountInfo.data.length < 100) {
-    throw new Error(
-      `Metadata account not found or too small for ${mintAddress}`,
-    );
+    throw new Error(`Metadata account not found or too small for ${mintAddress}`);
   }
 
   // Parse Metaplex metadata (simplified - full parsing would require borsh)
@@ -366,8 +333,7 @@ export async function backfillSolanaEvents(signatures?: string[]) {
 
   // Use Helius directly for mainnet (this runs server-side)
   const network = getNetwork();
-  const rpcUrl =
-    network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
+  const rpcUrl = network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
   const conn = new Connection(rpcUrl, "confirmed");
 
   console.log("[Solana Backfill] Fetching transactions for program", programId);
@@ -394,9 +360,7 @@ export async function backfillSolanaEvents(signatures?: string[]) {
     }
 
     const hasRegisterToken = tx.meta.logMessages.some(
-      (log) =>
-        log.includes("Instruction: RegisterToken") ||
-        log.includes("register_token"),
+      (log) => log.includes("Instruction: RegisterToken") || log.includes("register_token"),
     );
 
     if (hasRegisterToken) {

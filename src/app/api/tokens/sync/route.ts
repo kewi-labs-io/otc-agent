@@ -19,15 +19,10 @@ interface SolanaParsedRegistration {
 }
 
 import { parseOrThrow } from "@/lib/validation/helpers";
-import {
-  TokenSyncRequestSchema,
-  TokenSyncResponseSchema,
-} from "@/types/validation/api-schemas";
+import { TokenSyncRequestSchema, TokenSyncResponseSchema } from "@/types/validation/api-schemas";
 
 // register_token instruction discriminator from IDL
-const REGISTER_TOKEN_DISCRIMINATOR = Buffer.from([
-  32, 146, 36, 240, 80, 183, 36, 84,
-]);
+const REGISTER_TOKEN_DISCRIMINATOR = Buffer.from([32, 146, 36, 240, 80, 183, 36, 84]);
 
 const ERC20_ABI = parseAbi([
   "function symbol() view returns (string)",
@@ -55,8 +50,7 @@ export async function POST(request: NextRequest) {
       success: false,
       error: "Unsupported chain",
     };
-    const validatedUnsupported =
-      TokenSyncResponseSchema.parse(unsupportedResponse);
+    const validatedUnsupported = TokenSyncResponseSchema.parse(unsupportedResponse);
     return NextResponse.json(validatedUnsupported, { status: 400 });
   }
 }
@@ -78,15 +72,12 @@ async function syncEvmToken(
     throw new Error("EVM chainId not configured");
   }
   const primaryChainId = evmConfig.chainId;
-  const chainId =
-    chain === "ethereum" ? 1 : chain === "bsc" ? 56 : primaryChainId;
+  const chainId = chain === "ethereum" ? 1 : chain === "bsc" ? 56 : primaryChainId;
   const registrationHelperAddress = getRegistrationHelperForChain(chainId);
 
   // FAIL-FAST: RegistrationHelper must be configured for the chain
   if (!registrationHelperAddress) {
-    throw new Error(
-      `RegistrationHelper not configured for ${chain} (chainId=${chainId})`,
-    );
+    throw new Error(`RegistrationHelper not configured for ${chain} (chainId=${chainId})`);
   }
 
   // Server-side: use Alchemy directly
@@ -102,8 +93,7 @@ async function syncEvmToken(
         ? "https://bsc-dataseed1.binance.org"
         : `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`;
 
-  const viemChain =
-    chain === "ethereum" ? mainnet : chain === "bsc" ? bsc : base;
+  const viemChain = chain === "ethereum" ? mainnet : chain === "bsc" ? bsc : base;
   const client = createPublicClient({
     chain: viemChain,
     transport: http(rpcUrl),
@@ -149,9 +139,7 @@ async function syncEvmToken(
 
   // FAIL-FAST: Transaction must contain TokenRegistered event
   if (txLogs.length === 0) {
-    throw new Error(
-      `No TokenRegistered event found in transaction ${transactionHash}`,
-    );
+    throw new Error(`No TokenRegistered event found in transaction ${transactionHash}`);
   }
 
   let processed = 0;
@@ -199,8 +187,7 @@ async function syncEvmToken(
 
     // Register to database - use the chain parameter (ethereum, base or bsc)
     const tokenService = new TokenRegistryService();
-    const dbChain =
-      chain === "ethereum" ? "ethereum" : chain === "bsc" ? "bsc" : "base";
+    const dbChain = chain === "ethereum" ? "ethereum" : chain === "bsc" ? "bsc" : "base";
     const token = await tokenService.registerToken({
       symbol: symbol as string,
       name: name as string,
@@ -214,9 +201,7 @@ async function syncEvmToken(
 
     processed++;
     processedTokens.push(token.id);
-    console.log(
-      `[Sync ${chain.toUpperCase()}] ✅ Registered ${symbol} (${tokenAddress})`,
-    );
+    console.log(`[Sync ${chain.toUpperCase()}] ✅ Registered ${symbol} (${tokenAddress})`);
   }
 
   const evmSyncResponse = {
@@ -236,8 +221,7 @@ async function syncSolanaToken(signature: string) {
   const programId = getSolanaProgramId();
 
   const network = getNetwork();
-  const rpcUrl =
-    network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
+  const rpcUrl = network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
   console.log(`[Sync Solana] Using Helius RPC`);
   const connection = new Connection(rpcUrl, "confirmed");
 
@@ -255,37 +239,27 @@ async function syncSolanaToken(signature: string) {
 
   // FAIL-FAST: Transaction metadata must exist
   if (!tx.meta) {
-    throw new Error(
-      "Transaction missing metadata - cannot parse Solana registration",
-    );
+    throw new Error("Transaction missing metadata - cannot parse Solana registration");
   }
   // FAIL-FAST: Transaction must have log messages
   if (!tx.meta.logMessages) {
-    throw new Error(
-      `Transaction ${signature} has no log messages - cannot parse registration`,
-    );
+    throw new Error(`Transaction ${signature} has no log messages - cannot parse registration`);
   }
 
   const hasRegisterToken = tx.meta.logMessages.some(
-    (log) =>
-      log.includes("Instruction: RegisterToken") ||
-      log.includes("register_token"),
+    (log) => log.includes("Instruction: RegisterToken") || log.includes("register_token"),
   );
 
   // FAIL-FAST: Transaction must contain register_token instruction
   if (!hasRegisterToken) {
-    throw new Error(
-      `Transaction ${signature} does not contain register_token instruction`,
-    );
+    throw new Error(`Transaction ${signature} does not contain register_token instruction`);
   }
 
   // Parse the transaction to extract token mint
   // FAIL-FAST: Parsing must succeed
   const parsed = parseSolanaRegisterToken(tx, programId);
   if (!parsed) {
-    throw new Error(
-      `Failed to parse register_token instruction from transaction ${signature}`,
-    );
+    throw new Error(`Failed to parse register_token instruction from transaction ${signature}`);
   }
 
   // Fetch token metadata and register
@@ -302,9 +276,7 @@ async function syncSolanaToken(signature: string) {
     description: "",
   });
 
-  console.log(
-    `[Sync Solana] ✅ Registered token: ${token.symbol} (${parsed.tokenMint})`,
-  );
+  console.log(`[Sync Solana] ✅ Registered token: ${token.symbol} (${parsed.tokenMint})`);
 
   const solanaSyncResponse = {
     success: true,
@@ -391,9 +363,7 @@ async function fetchSolanaTokenData(
   mintAddress: string,
 ): Promise<{ name: string; symbol: string; decimals: number }> {
   // Get decimals from mint account
-  const mintInfo = await connection.getParsedAccountInfo(
-    new PublicKey(mintAddress),
-  );
+  const mintInfo = await connection.getParsedAccountInfo(new PublicKey(mintAddress));
 
   // FAIL-FAST: Mint account must exist
   if (!mintInfo.value) {
@@ -414,17 +384,11 @@ async function fetchSolanaTokenData(
   }
 
   // Try Metaplex metadata
-  const METADATA_PROGRAM_ID = new PublicKey(
-    "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
-  );
+  const METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
   const mintPubkey = new PublicKey(mintAddress);
 
   const [metadataPda] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("metadata"),
-      METADATA_PROGRAM_ID.toBuffer(),
-      mintPubkey.toBuffer(),
-    ],
+    [Buffer.from("metadata"), METADATA_PROGRAM_ID.toBuffer(), mintPubkey.toBuffer()],
     METADATA_PROGRAM_ID,
   );
 

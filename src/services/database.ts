@@ -15,11 +15,7 @@ import type {
   Token,
   TokenMarketData,
 } from "@/types";
-import {
-  AddressSchema,
-  BigIntStringSchema,
-  ChainSchema,
-} from "@/types/validation/schemas";
+import { AddressSchema, BigIntStringSchema, ChainSchema } from "@/types/validation/schemas";
 import {
   ConsignmentDealOutputSchema,
   ConsignmentOutputSchema,
@@ -206,10 +202,7 @@ export class QuoteDB {
     return await service.updateQuoteExecution(quoteId, data);
   }
 
-  static async setQuoteBeneficiary(
-    quoteId: string,
-    beneficiary: string,
-  ): Promise<Quote> {
+  static async setQuoteBeneficiary(quoteId: string, beneficiary: string): Promise<Quote> {
     // FAIL-FAST: Validate inputs
     if (!quoteId || quoteId.trim() === "") {
       throw new Error("setQuoteBeneficiary: quoteId is required");
@@ -222,10 +215,7 @@ export class QuoteDB {
     return await service.setQuoteBeneficiary(quoteId, beneficiary);
   }
 
-  static async getUserQuoteHistory(
-    entityId: string,
-    limit: number,
-  ): Promise<Quote[]> {
+  static async getUserQuoteHistory(entityId: string, limit: number): Promise<Quote[]> {
     // FAIL-FAST: Validate inputs
     if (!entityId || entityId.trim() === "") {
       throw new Error("getUserQuoteHistory: entityId is required");
@@ -295,9 +285,7 @@ const TokenCreateInputSchema = z.object({
 });
 
 export class TokenDB {
-  static async createToken(
-    data: Omit<Token, "id" | "createdAt" | "updatedAt">,
-  ): Promise<Token> {
+  static async createToken(data: Omit<Token, "id" | "createdAt" | "updatedAt">): Promise<Token> {
     // FAIL-FAST: Validate input with Zod schema
     parseOrThrow(TokenCreateInputSchema, data);
 
@@ -305,9 +293,7 @@ export class TokenDB {
     // EVM addresses are case-insensitive, so lowercase for consistent ID
     // Solana addresses are Base58 encoded and case-sensitive, preserve case
     const normalizedAddress =
-      data.chain === "solana"
-        ? data.contractAddress
-        : data.contractAddress.toLowerCase();
+      data.chain === "solana" ? data.contractAddress : data.contractAddress.toLowerCase();
     const tokenId = `token-${data.chain}-${normalizedAddress}`;
 
     const existing = await runtime.getCache<Token>(`token:${tokenId}`);
@@ -319,14 +305,9 @@ export class TokenDB {
         data.symbol !== "SPL" &&
         (existing.symbol === "UNKNOWN" || existing.symbol === "SPL");
 
-      if (
-        newSymbolIsBetter ||
-        (data.decimals !== undefined && existing.decimals === undefined)
-      ) {
+      if (newSymbolIsBetter || (data.decimals !== undefined && existing.decimals === undefined)) {
         if (data.decimals === undefined && existing.decimals === undefined) {
-          throw new Error(
-            `Token ${tokenId} missing decimals - cannot update without decimals`,
-          );
+          throw new Error(`Token ${tokenId} missing decimals - cannot update without decimals`);
         }
         // name fallback: use data.name if available, otherwise data.symbol, otherwise existing.name
         const updatedName = newSymbolIsBetter
@@ -337,14 +318,12 @@ export class TokenDB {
               : existing.name
           : existing.name;
         // logoUrl: prefer new data if provided, otherwise keep existing
-        const updatedLogoUrl =
-          typeof data.logoUrl === "string" ? data.logoUrl : existing.logoUrl;
+        const updatedLogoUrl = typeof data.logoUrl === "string" ? data.logoUrl : existing.logoUrl;
         const updated: Token = {
           ...existing,
           symbol: newSymbolIsBetter ? data.symbol : existing.symbol,
           name: updatedName,
-          decimals:
-            data.decimals !== undefined ? data.decimals : existing.decimals,
+          decimals: data.decimals !== undefined ? data.decimals : existing.decimals,
           logoUrl: updatedLogoUrl,
           updatedAt: Date.now(),
         };
@@ -392,10 +371,7 @@ export class TokenDB {
     return token;
   }
 
-  static async getAllTokens(filters?: {
-    chain?: Chain;
-    isActive?: boolean;
-  }): Promise<Token[]> {
+  static async getAllTokens(filters?: { chain?: Chain; isActive?: boolean }): Promise<Token[]> {
     // FAIL-FAST: Validate filters if provided
     if (filters?.chain) {
       parseOrThrow(ChainSchema, filters.chain);
@@ -407,17 +383,13 @@ export class TokenDB {
       allTokenIds.map((id) => runtime.getCache<Token>(`token:${id}`)),
     );
     let result = tokens.filter((t): t is Token => t != null);
-    if (filters?.chain)
-      result = result.filter((t) => t.chain === filters.chain);
+    if (filters?.chain) result = result.filter((t) => t.chain === filters.chain);
     if (filters?.isActive !== undefined)
       result = result.filter((t) => t.isActive === filters.isActive);
     return result;
   }
 
-  static async updateToken(
-    tokenId: string,
-    updates: Partial<Token>,
-  ): Promise<Token> {
+  static async updateToken(tokenId: string, updates: Partial<Token>): Promise<Token> {
     const runtime = await agentRuntime.getRuntime();
     const normalizedId = normalizeTokenId(tokenId);
     const token = await runtime.getCache<Token>(`token:${normalizedId}`);
@@ -432,9 +404,7 @@ export class TokenDB {
    *
    * This maps the smart contract's `bytes32 tokenId` to a TokenDB entry.
    */
-  static async getTokenByOnChainId(
-    onChainTokenId: string,
-  ): Promise<Token | null> {
+  static async getTokenByOnChainId(onChainTokenId: string): Promise<Token | null> {
     const { encodePacked, getAddress, keccak256 } = await import("viem");
     const allTokens = await TokenDB.getAllTokens();
     const normalizedTarget = onChainTokenId.toLowerCase();
@@ -445,9 +415,7 @@ export class TokenDB {
       if (!isEvmAddress(token.contractAddress)) continue;
 
       const tokenAddress = getAddress(token.contractAddress);
-      const computedId = keccak256(
-        encodePacked(["address"], [tokenAddress]),
-      ).toLowerCase();
+      const computedId = keccak256(encodePacked(["address"], [tokenAddress])).toLowerCase();
 
       if (computedId === normalizedTarget) {
         return token;
@@ -461,10 +429,7 @@ export class TokenDB {
    */
   static async getTokenBySymbol(symbol: string): Promise<Token | null> {
     const allTokens = await TokenDB.getAllTokens();
-    return (
-      allTokens.find((t) => t.symbol.toLowerCase() === symbol.toLowerCase()) ??
-      null
-    );
+    return allTokens.find((t) => t.symbol.toLowerCase() === symbol.toLowerCase()) ?? null;
   }
 }
 
@@ -483,10 +448,7 @@ const MarketDataInputSchema = z.object({
   volume24h: z.preprocess((v) => toValidNumber(v, 0), z.number().nonnegative()),
   priceChange24h: z.preprocess((v) => toValidNumber(v, 0), z.number()),
   liquidity: z.preprocess((v) => toValidNumber(v, 0), z.number().nonnegative()),
-  lastUpdated: z.preprocess(
-    (v) => toValidNumber(v, Date.now()),
-    z.number().int().positive(),
-  ),
+  lastUpdated: z.preprocess((v) => toValidNumber(v, Date.now()), z.number().int().positive()),
 });
 
 export class MarketDataDB {
@@ -510,9 +472,7 @@ export class MarketDataDB {
 
     const runtime = await agentRuntime.getRuntime();
     const normalizedId = normalizeTokenId(tokenId);
-    const data = await runtime.getCache<TokenMarketData>(
-      `market_data:${normalizedId}`,
-    );
+    const data = await runtime.getCache<TokenMarketData>(`market_data:${normalizedId}`);
 
     if (!data) return null;
     // Validate output
@@ -587,23 +547,15 @@ export class ConsignmentDB {
       updatedAt: Date.now(),
     };
     await runtime.setCache(`consignment:${consignmentId}`, consignment);
-    const allConsignments =
-      (await runtime.getCache<string[]>("all_consignments")) || [];
+    const allConsignments = (await runtime.getCache<string[]>("all_consignments")) || [];
     allConsignments.push(consignmentId);
     await runtime.setCache("all_consignments", allConsignments);
     const tokenConsignments =
-      (await runtime.getCache<string[]>(
-        `token_consignments:${normalizedTokenId}`,
-      )) || [];
+      (await runtime.getCache<string[]>(`token_consignments:${normalizedTokenId}`)) || [];
     tokenConsignments.push(consignmentId);
-    await runtime.setCache(
-      `token_consignments:${normalizedTokenId}`,
-      tokenConsignments,
-    );
+    await runtime.setCache(`token_consignments:${normalizedTokenId}`, tokenConsignments);
     const consignerConsignments =
-      (await runtime.getCache<string[]>(
-        `consigner_consignments:${data.consignerAddress}`,
-      )) || [];
+      (await runtime.getCache<string[]>(`consigner_consignments:${data.consignerAddress}`)) || [];
     consignerConsignments.push(consignmentId);
     await runtime.setCache(
       `consigner_consignments:${data.consignerAddress}`,
@@ -619,9 +571,7 @@ export class ConsignmentDB {
     }
 
     const runtime = await agentRuntime.getRuntime();
-    const consignment = await runtime.getCache<OTCConsignment>(
-      `consignment:${consignmentId}`,
-    );
+    const consignment = await runtime.getCache<OTCConsignment>(`consignment:${consignmentId}`);
     if (!consignment) throw new Error(`Consignment ${consignmentId} not found`);
 
     // Validate output
@@ -634,32 +584,22 @@ export class ConsignmentDB {
     updates: Partial<OTCConsignment>,
   ): Promise<OTCConsignment> {
     const runtime = await agentRuntime.getRuntime();
-    const consignment = await runtime.getCache<OTCConsignment>(
-      `consignment:${consignmentId}`,
-    );
+    const consignment = await runtime.getCache<OTCConsignment>(`consignment:${consignmentId}`);
     if (!consignment) throw new Error(`Consignment ${consignmentId} not found`);
     const updated = { ...consignment, ...updates, updatedAt: Date.now() };
     await runtime.setCache(`consignment:${consignmentId}`, updated);
     return updated;
   }
 
-  static async getConsignmentsByToken(
-    tokenId: string,
-  ): Promise<OTCConsignment[]> {
+  static async getConsignmentsByToken(tokenId: string): Promise<OTCConsignment[]> {
     const runtime = await agentRuntime.getRuntime();
     const normalizedId = normalizeTokenId(tokenId);
     const consignmentIds =
-      (await runtime.getCache<string[]>(
-        `token_consignments:${normalizedId}`,
-      )) || [];
+      (await runtime.getCache<string[]>(`token_consignments:${normalizedId}`)) || [];
     const consignments = await Promise.all(
-      consignmentIds.map((id) =>
-        runtime.getCache<OTCConsignment>(`consignment:${id}`),
-      ),
+      consignmentIds.map((id) => runtime.getCache<OTCConsignment>(`consignment:${id}`)),
     );
-    return consignments.filter(
-      (c): c is OTCConsignment => c != null && c.status === "active",
-    );
+    return consignments.filter((c): c is OTCConsignment => c != null && c.status === "active");
   }
 
   static async getConsignmentsByConsigner(
@@ -668,17 +608,12 @@ export class ConsignmentDB {
   ): Promise<OTCConsignment[]> {
     const runtime = await agentRuntime.getRuntime();
     const consignmentIds =
-      (await runtime.getCache<string[]>(
-        `consigner_consignments:${consignerAddress}`,
-      )) || [];
+      (await runtime.getCache<string[]>(`consigner_consignments:${consignerAddress}`)) || [];
     const consignments = await Promise.all(
-      consignmentIds.map((id) =>
-        runtime.getCache<OTCConsignment>(`consignment:${id}`),
-      ),
+      consignmentIds.map((id) => runtime.getCache<OTCConsignment>(`consignment:${id}`)),
     );
     return consignments.filter(
-      (c): c is OTCConsignment =>
-        c != null && (includeWithdrawn || c.status !== "withdrawn"),
+      (c): c is OTCConsignment => c != null && (includeWithdrawn || c.status !== "withdrawn"),
     );
   }
 
@@ -688,18 +623,14 @@ export class ConsignmentDB {
     isNegotiable?: boolean;
   }): Promise<OTCConsignment[]> {
     const runtime = await agentRuntime.getRuntime();
-    const allConsignmentIds =
-      (await runtime.getCache<string[]>("all_consignments")) || [];
+    const allConsignmentIds = (await runtime.getCache<string[]>("all_consignments")) || [];
     const consignments = await Promise.all(
-      allConsignmentIds.map((id) =>
-        runtime.getCache<OTCConsignment>(`consignment:${id}`),
-      ),
+      allConsignmentIds.map((id) => runtime.getCache<OTCConsignment>(`consignment:${id}`)),
     );
     let result = consignments.filter(
       (c): c is OTCConsignment => c != null && c.status === "active",
     );
-    if (filters?.chain)
-      result = result.filter((c) => c.chain === filters.chain);
+    if (filters?.chain) result = result.filter((c) => c.chain === filters.chain);
     if (filters?.tokenId) {
       // Normalize the filter tokenId for consistent matching
       const normalizedFilterTokenId = normalizeTokenId(filters.tokenId);
@@ -726,9 +657,7 @@ const ConsignmentDealCreateInputSchema = z.object({
 });
 
 export class ConsignmentDealDB {
-  static async createDeal(
-    data: Omit<ConsignmentDeal, "id">,
-  ): Promise<ConsignmentDeal> {
+  static async createDeal(data: Omit<ConsignmentDeal, "id">): Promise<ConsignmentDeal> {
     // FAIL-FAST: Validate input
     parseOrThrow(ConsignmentDealCreateInputSchema, data);
 
@@ -741,37 +670,25 @@ export class ConsignmentDealDB {
     };
     await runtime.setCache(`consignment_deal:${dealId}`, deal);
     const consignmentDeals =
-      (await runtime.getCache<string[]>(
-        `consignment_deals:${data.consignmentId}`,
-      )) || [];
+      (await runtime.getCache<string[]>(`consignment_deals:${data.consignmentId}`)) || [];
     consignmentDeals.push(dealId);
-    await runtime.setCache(
-      `consignment_deals:${data.consignmentId}`,
-      consignmentDeals,
-    );
+    await runtime.setCache(`consignment_deals:${data.consignmentId}`, consignmentDeals);
 
     // Validate output
     parseOrThrow(ConsignmentDealOutputSchema, deal);
     return deal;
   }
 
-  static async getDealsByConsignment(
-    consignmentId: string,
-  ): Promise<ConsignmentDeal[]> {
+  static async getDealsByConsignment(consignmentId: string): Promise<ConsignmentDeal[]> {
     // FAIL-FAST: Validate consignmentId
     if (!consignmentId || consignmentId.trim() === "") {
       throw new Error("getDealsByConsignment: consignmentId is required");
     }
 
     const runtime = await agentRuntime.getRuntime();
-    const dealIds =
-      (await runtime.getCache<string[]>(
-        `consignment_deals:${consignmentId}`,
-      )) || [];
+    const dealIds = (await runtime.getCache<string[]>(`consignment_deals:${consignmentId}`)) || [];
     const deals = await Promise.all(
-      dealIds.map((id) =>
-        runtime.getCache<ConsignmentDeal>(`consignment_deal:${id}`),
-      ),
+      dealIds.map((id) => runtime.getCache<ConsignmentDeal>(`consignment_deal:${id}`)),
     );
     return deals.filter((d): d is ConsignmentDeal => d != null);
   }

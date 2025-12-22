@@ -13,15 +13,9 @@ import {
   UpdateConsignmentResponseSchema,
 } from "@/types/validation/api-schemas";
 import { AddressSchema } from "@/types/validation/schemas";
-import {
-  isConsignmentOwner,
-  sanitizeConsignmentForBuyer,
-} from "@/utils/consignment-sanitizer";
+import { isConsignmentOwner, sanitizeConsignmentForBuyer } from "@/utils/consignment-sanitizer";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const routeParams = await params;
 
   // Validate route params - return 400 on invalid params
@@ -69,19 +63,14 @@ export async function GET(
   const isOwner = isConsignmentOwner(consignment, callerAddress);
 
   // Sanitize response for non-owners to prevent gaming the negotiation
-  const responseConsignment = isOwner
-    ? consignment
-    : sanitizeConsignmentForBuyer(consignment);
+  const responseConsignment = isOwner ? consignment : sanitizeConsignmentForBuyer(consignment);
 
   const response = { success: true, consignment: responseConsignment };
   const validatedResponse = ConsignmentByIdResponseSchema.parse(response);
   return NextResponse.json(validatedResponse);
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const routeParams = await params;
 
   // Validate route params - return 400 on invalid params
@@ -124,9 +113,7 @@ export async function PUT(
 
   // Normalize addresses for comparison (Solana is case-sensitive, EVM is not)
   const normalizedCaller =
-    consignment.chain === "solana"
-      ? callerAddress
-      : callerAddress.toLowerCase();
+    consignment.chain === "solana" ? callerAddress : callerAddress.toLowerCase();
   const normalizedConsigner =
     consignment.chain === "solana"
       ? consignment.consignerAddress
@@ -186,8 +173,7 @@ export async function DELETE(
   if (!callerAddress) {
     return NextResponse.json(
       {
-        error:
-          "callerAddress query param or x-caller-address header is required",
+        error: "callerAddress query param or x-caller-address header is required",
       },
       { status: 400 },
     );
@@ -215,9 +201,7 @@ export async function DELETE(
 
   // Normalize addresses for comparison (Solana is case-sensitive, EVM is not)
   const normalizedCaller =
-    consignment.chain === "solana"
-      ? callerAddress
-      : callerAddress.toLowerCase();
+    consignment.chain === "solana" ? callerAddress : callerAddress.toLowerCase();
   const normalizedConsigner =
     consignment.chain === "solana"
       ? consignment.consignerAddress

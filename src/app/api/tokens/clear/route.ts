@@ -13,8 +13,7 @@ export async function POST() {
       success: false,
       error: "Not allowed in production",
     };
-    const validatedProdError =
-      ClearTokensResponseSchema.parse(prodErrorResponse);
+    const validatedProdError = ClearTokensResponseSchema.parse(prodErrorResponse);
     return NextResponse.json(validatedProdError, { status: 403 });
   }
 

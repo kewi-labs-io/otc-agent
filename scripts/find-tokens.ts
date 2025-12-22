@@ -1,4 +1,4 @@
-import { createPublicClient, http, keccak256, encodePacked } from "viem";
+import { createPublicClient, encodePacked, http, keccak256 } from "viem";
 import { base } from "viem/chains";
 
 const OTC_ADDRESS = "0x12FA61c9d77AEd9BeDA0FF4bF2E900F31bdBdc45";
@@ -17,7 +17,13 @@ const TOKENS = [
 ];
 
 const OTC_ABI = [
-  { name: "tokens", type: "function", inputs: [{ type: "bytes32" }], outputs: [{ type: "address" }, { type: "uint8" }, { type: "bool" }, { type: "address" }], stateMutability: "view" },
+  {
+    name: "tokens",
+    type: "function",
+    inputs: [{ type: "bytes32" }],
+    outputs: [{ type: "address" }, { type: "uint8" }, { type: "bool" }, { type: "address" }],
+    stateMutability: "view",
+  },
 ] as const;
 
 async function main() {
@@ -32,13 +38,13 @@ async function main() {
 
   for (const token of TOKENS) {
     const tokenId = keccak256(encodePacked(["address"], [token.address as `0x${string}`]));
-    const [tokenAddress, decimals, isActive, oracle] = await client.readContract({
+    const [tokenAddress, _decimals, isActive, oracle] = await client.readContract({
       address: OTC_ADDRESS,
       abi: OTC_ABI,
       functionName: "tokens",
       args: [tokenId],
     });
-    
+
     if (tokenAddress !== "0x0000000000000000000000000000000000000000") {
       console.log(`✅ ${token.symbol}: REGISTERED`);
       console.log(`   Address: ${tokenAddress}`);

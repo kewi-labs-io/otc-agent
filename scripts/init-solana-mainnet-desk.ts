@@ -1,20 +1,20 @@
 #!/usr/bin/env bun
+
 /**
  * Initialize Solana Mainnet Desk
  * Creates the main configuration account for the OTC program on mainnet
  */
 
 import {
+  ComputeBudgetProgram,
   Connection,
   Keypair,
   PublicKey,
   SystemProgram,
+  sendAndConfirmTransaction,
   Transaction,
   TransactionInstruction,
-  sendAndConfirmTransaction,
-  ComputeBudgetProgram,
 } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import * as bs58 from "bs58";
 
 const PROGRAM_ID = new PublicKey("3uTdWzoAcBFKTVYRd2z2jDKAcuyW64rQLxa9wMreDJKo");
@@ -22,30 +22,29 @@ const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 const RPC_URL = "https://api.mainnet-beta.solana.com";
 
 // Load deployer from file (never hardcode keys)
-import * as fs from "fs";
+import * as fs from "node:fs";
+
 const deployerKeyFile = "./solana/otc-program/mainnet-deployer.json";
 const deployerSecretKey = Uint8Array.from(JSON.parse(fs.readFileSync(deployerKeyFile, "utf-8")));
 
 // Anchor discriminator for init_desk (sha256("global:init_desk")[0..8])
-const INIT_DESK_DISCRIMINATOR = Buffer.from([
-  0xd7, 0xb5, 0x5f, 0xf5, 0x1f, 0xbe, 0x40, 0xd0
-]);
+const INIT_DESK_DISCRIMINATOR = Buffer.from([0xd7, 0xb5, 0x5f, 0xf5, 0x1f, 0xbe, 0x40, 0xd0]);
 
 function serializeInitDeskArgs(
   minUsdAmount: bigint,
   maxTokenPerOrder: bigint,
   quoteExpirySecs: bigint,
-  defaultUnlockDelaySecs: bigint
+  defaultUnlockDelaySecs: bigint,
 ): Buffer {
   const minUsdBuf = Buffer.alloc(8);
   minUsdBuf.writeBigUInt64LE(minUsdAmount);
-  
+
   const maxTokenBuf = Buffer.alloc(8);
   maxTokenBuf.writeBigUInt64LE(maxTokenPerOrder);
-  
+
   const quoteExpiryBuf = Buffer.alloc(8);
   quoteExpiryBuf.writeBigInt64LE(quoteExpirySecs);
-  
+
   const defaultUnlockBuf = Buffer.alloc(8);
   defaultUnlockBuf.writeBigInt64LE(defaultUnlockDelaySecs);
 
@@ -122,18 +121,18 @@ async function main() {
   });
 
   console.log("Sending initDesk transaction...");
-  
+
   const tx = new Transaction();
-  
+
   // Add compute budget for safety
   tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }));
   tx.add(instruction);
-  
+
   const signature = await sendAndConfirmTransaction(
-    connection, 
-    tx, 
+    connection,
+    tx,
     [keypair, deskKeypair], // Both need to sign
-    { commitment: "confirmed" }
+    { commitment: "confirmed" },
   );
 
   console.log(`✅ Desk initialized`);
@@ -142,7 +141,8 @@ async function main() {
   console.log();
 
   // CRITICAL: Save desk keypair for signing withdrawals
-  const deskKeypairPath = "/Users/shawwalters/otc-agent/solana/otc-program/desk-mainnet-keypair.json";
+  const deskKeypairPath =
+    "/Users/shawwalters/otc-agent/solana/otc-program/desk-mainnet-keypair.json";
   await Bun.write(deskKeypairPath, JSON.stringify(Array.from(deskKeypair.secretKey)));
   console.log(`IMPORTANT: Saved desk keypair to: ${deskKeypairPath}`);
   console.log(`IMPORTANT: Also set SOLANA_DESK_PRIVATE_KEY in .env.local with this base58 key:`);
@@ -155,7 +155,7 @@ async function main() {
   config.desk = deskKeypair.publicKey.toBase58();
   await Bun.write(configPath, JSON.stringify(config, null, 2));
   console.log(`Updated config: ${configPath}`);
-  
+
   console.log();
   console.log("═".repeat(70));
   console.log("  Desk Initialization Complete");

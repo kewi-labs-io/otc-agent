@@ -1,24 +1,85 @@
 #!/usr/bin/env bun
+
 /**
  * Comprehensive E2E Verification Script
  * Verifies all OTC flows on all deployed networks
  */
 
-import { createPublicClient, http, formatEther, formatUnits, type Address } from "viem";
-import { base, bsc, mainnet } from "viem/chains";
 import { Connection, PublicKey } from "@solana/web3.js";
+import { type Address, createPublicClient, http } from "viem";
+import { base, bsc, mainnet } from "viem/chains";
 
 const OTC_ABI = [
-  { name: "owner", type: "function", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
-  { name: "agent", type: "function", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
-  { name: "usdc", type: "function", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
-  { name: "paused", type: "function", inputs: [], outputs: [{ type: "bool" }], stateMutability: "view" },
-  { name: "minUsdAmount", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "quoteExpirySeconds", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "nextConsignmentId", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "nextOfferId", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "requiredApprovals", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "maxVolatilityBps", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  {
+    name: "owner",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    name: "agent",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    name: "usdc",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    name: "paused",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    name: "minUsdAmount",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    name: "quoteExpirySeconds",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    name: "nextConsignmentId",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    name: "nextOfferId",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    name: "requiredApprovals",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    name: "maxVolatilityBps",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
 ] as const;
 
 interface NetworkConfig {
@@ -86,7 +147,11 @@ async function verifyEvmNetwork(config: NetworkConfig): Promise<boolean> {
       client.readContract({ address: config.otc, abi: OTC_ABI, functionName: "usdc" }),
       client.readContract({ address: config.otc, abi: OTC_ABI, functionName: "paused" }),
       client.readContract({ address: config.otc, abi: OTC_ABI, functionName: "minUsdAmount" }),
-      client.readContract({ address: config.otc, abi: OTC_ABI, functionName: "quoteExpirySeconds" }),
+      client.readContract({
+        address: config.otc,
+        abi: OTC_ABI,
+        functionName: "quoteExpirySeconds",
+      }),
       client.readContract({ address: config.otc, abi: OTC_ABI, functionName: "nextConsignmentId" }),
       client.readContract({ address: config.otc, abi: OTC_ABI, functionName: "nextOfferId" }),
     ]);
@@ -152,17 +217,17 @@ async function main() {
 
   // Verify Solana
   await new Promise((r) => setTimeout(r, 500));
-  results["Solana"] = await verifySolana();
+  results.Solana = await verifySolana();
 
   // Summary
   console.log("\n" + "═".repeat(70));
   console.log("  DEPLOYMENT SUMMARY");
   console.log("═".repeat(70));
 
-  let allPassed = true;
+  let _allPassed = true;
   for (const [name, passed] of Object.entries(results)) {
     console.log(`  ${passed ? "✅" : "❌"} ${name}`);
-    if (!passed) allPassed = false;
+    if (!passed) _allPassed = false;
   }
 
   // P2P Feature Verification
@@ -222,4 +287,3 @@ async function main() {
 }
 
 main().catch(console.error);
-

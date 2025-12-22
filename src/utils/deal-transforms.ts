@@ -30,32 +30,25 @@ export interface OfferWithMetadata {
 
 function validateDeal(deal: DealFromAPI, type: "Solana" | "EVM"): void {
   const id = deal.quoteId || deal.offerId || "unknown";
-  if (deal.lockupDays === undefined)
-    throw new Error(`${type} deal ${id}: missing lockupDays`);
+  if (deal.lockupDays === undefined) throw new Error(`${type} deal ${id}: missing lockupDays`);
   if (!deal.offerId) throw new Error(`${type} deal ${id}: missing offerId`);
-  if (!deal.beneficiary)
-    throw new Error(`${type} deal ${id}: missing beneficiary`);
+  if (!deal.beneficiary) throw new Error(`${type} deal ${id}: missing beneficiary`);
   if (typeof deal.discountBps !== "number")
     throw new Error(`${type} deal ${id}: invalid discountBps`);
-  if (!deal.tokenAmount)
-    throw new Error(`${type} deal ${id}: missing tokenAmount`);
-  if (!deal.paymentAmount)
-    throw new Error(`${type} deal ${id}: missing paymentAmount`);
+  if (!deal.tokenAmount) throw new Error(`${type} deal ${id}: missing tokenAmount`);
+  if (!deal.paymentAmount) throw new Error(`${type} deal ${id}: missing paymentAmount`);
   if (!deal.payer) throw new Error(`${type} deal ${id}: missing payer`);
   if (!deal.chain) throw new Error(`${type} deal ${id}: missing chain`);
   if (deal.priceUsdPerToken === undefined)
     throw new Error(`${type} deal ${id}: missing priceUsdPerToken`);
-  if (!deal.tokenSymbol)
-    throw new Error(`${type} deal ${id}: missing tokenSymbol`);
+  if (!deal.tokenSymbol) throw new Error(`${type} deal ${id}: missing tokenSymbol`);
   if (!deal.tokenName) throw new Error(`${type} deal ${id}: missing tokenName`);
 }
 
 export function transformSolanaDeal(deal: DealFromAPI): OfferWithMetadata {
   validateDeal(deal, "Solana");
 
-  const createdTs = deal.createdAt
-    ? new Date(deal.createdAt).getTime() / 1000
-    : Date.now() / 1000;
+  const createdTs = deal.createdAt ? new Date(deal.createdAt).getTime() / 1000 : Date.now() / 1000;
 
   return {
     id: BigInt(deal.offerId!),
@@ -66,8 +59,7 @@ export function transformSolanaDeal(deal: DealFromAPI): OfferWithMetadata {
     unlockTime: BigInt(Math.floor(createdTs + deal.lockupDays! * 86400)),
     priceUsdPerToken: BigInt(Math.floor(deal.priceUsdPerToken! * 1e8)),
     ethUsdPrice: 0n,
-    currency:
-      deal.paymentCurrency === "SOL" || deal.paymentCurrency === "ETH" ? 0 : 1,
+    currency: deal.paymentCurrency === "SOL" || deal.paymentCurrency === "ETH" ? 0 : 1,
     approved: true,
     paid: true,
     fulfilled: false,
@@ -91,14 +83,10 @@ export function transformEvmDeal(deal: DealFromAPI): OfferWithMetadata {
     throw new Error(`EVM deal ${id}: invalid ethUsdPrice ${deal.ethUsdPrice}`);
   }
   if (deal.priceUsdPerToken! <= 0) {
-    throw new Error(
-      `EVM deal ${id}: invalid priceUsdPerToken ${deal.priceUsdPerToken}`,
-    );
+    throw new Error(`EVM deal ${id}: invalid priceUsdPerToken ${deal.priceUsdPerToken}`);
   }
 
-  const createdTs = deal.createdAt
-    ? new Date(deal.createdAt).getTime() / 1000
-    : Date.now() / 1000;
+  const createdTs = deal.createdAt ? new Date(deal.createdAt).getTime() / 1000 : Date.now() / 1000;
 
   return {
     id: BigInt(deal.offerId!),
@@ -205,14 +193,10 @@ export function mergeDealsWithOffers(
   return result;
 }
 
-export function sortOffersByDate(
-  offers: OfferWithMetadata[],
-): OfferWithMetadata[] {
+export function sortOffersByDate(offers: OfferWithMetadata[]): OfferWithMetadata[] {
   return [...offers].sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
 }
 
-export function filterActiveOffers(
-  offers: OfferWithMetadata[],
-): OfferWithMetadata[] {
+export function filterActiveOffers(offers: OfferWithMetadata[]): OfferWithMetadata[] {
   return offers.filter((o) => !o.cancelled && !o.fulfilled);
 }

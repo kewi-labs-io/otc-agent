@@ -63,6 +63,9 @@ export function useCreateRoom() {
 
   return useMutation({
     mutationFn: createRoom,
+    // Disable automatic retries - the calling code will handle retry logic
+    // This prevents cascading failures that exhaust browser connections
+    retry: 0,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.rooms() });
     },
@@ -72,10 +75,7 @@ export function useCreateRoom() {
 /**
  * Fetch messages from a room
  */
-async function fetchMessages(
-  roomId: string,
-  afterTimestamp?: number,
-): Promise<ChatMessage[]> {
+async function fetchMessages(roomId: string, afterTimestamp?: number): Promise<ChatMessage[]> {
   const url = afterTimestamp
     ? `/api/rooms/${roomId}/messages?afterTimestamp=${afterTimestamp}&_=${Date.now()}`
     : `/api/rooms/${roomId}/messages`;
@@ -89,9 +89,7 @@ async function fetchMessages(
   const data = await response.json();
 
   if (!data.messages || !Array.isArray(data.messages)) {
-    throw new Error(
-      "Invalid API response: messages array is missing or not an array",
-    );
+    throw new Error("Invalid API response: messages array is missing or not an array");
   }
 
   return data.messages as ChatMessage[];
@@ -152,9 +150,7 @@ interface SendMessageResponse {
 /**
  * Send a message to a room
  */
-async function sendMessage(
-  input: SendMessageInput,
-): Promise<SendMessageResponse> {
+async function sendMessage(input: SendMessageInput): Promise<SendMessageResponse> {
   const response = await fetch(`/api/rooms/${input.roomId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

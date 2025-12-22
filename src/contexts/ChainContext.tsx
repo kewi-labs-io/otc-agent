@@ -36,9 +36,7 @@ const defaultChainContextValue: ChainContextValue = {
   setSelectedEVMChain: () => {},
 };
 
-export const ChainContext = createContext<ChainContextValue>(
-  defaultChainContextValue,
-);
+export const ChainContext = createContext<ChainContextValue>(defaultChainContextValue);
 
 /**
  * Hook to access chain selection state

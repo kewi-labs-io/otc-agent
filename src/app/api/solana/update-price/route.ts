@@ -1,11 +1,6 @@
 import type { Wallet } from "@coral-xyz/anchor";
 import { AnchorProvider, BN, type Idl, Program } from "@coral-xyz/anchor";
-import {
-  ComputeBudgetProgram,
-  Connection,
-  Keypair,
-  PublicKey,
-} from "@solana/web3.js";
+import { ComputeBudgetProgram, Connection, Keypair, PublicKey } from "@solana/web3.js";
 import bs58 from "bs58";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSolanaConfig } from "@/config/contracts";
@@ -19,10 +14,7 @@ import {
 } from "@/types/validation/api-schemas";
 
 // Helper to sync market data database with new price
-async function syncMarketData(
-  tokenMint: string,
-  priceUsd: number,
-): Promise<void> {
+async function syncMarketData(tokenMint: string, priceUsd: number): Promise<void> {
   const tokenId = `token-solana-${tokenMint}`;
   const existing = await MarketDataDB.getMarketData(tokenId);
   await MarketDataDB.setMarketData({
@@ -95,17 +87,15 @@ async function fetchTokenPrice(mint: string): Promise<number> {
     throw new Error("Invalid CoinGecko API response: expected object");
   }
 
-  if (data[mint] && data[mint].usd) {
-    console.log(
-      `[Price Update] CoinGecko price for ${mint}: $${data[mint].usd}`,
-    );
+  if (data[mint]?.usd) {
+    console.log(`[Price Update] CoinGecko price for ${mint}: $${data[mint].usd}`);
     return data[mint].usd;
   }
 
   // Try PumpSwap / Raydium pool price (for pump.fun unbonded tokens)
   const { findBestSolanaPool } = await import("@/utils/pool-finder-solana");
   const pool = await findBestSolanaPool(mint, "mainnet");
-  if (pool && pool.priceUsd && pool.priceUsd > 0) {
+  if (pool?.priceUsd && pool.priceUsd > 0) {
     const tvlStr = pool.tvlUsd ? pool.tvlUsd.toLocaleString() : "unknown";
     console.log(
       `[Price Update] ${pool.protocol} pool price for ${mint}: $${pool.priceUsd} (TVL: $${tvlStr})`,
@@ -118,9 +108,7 @@ async function fetchTokenPrice(mint: string): Promise<number> {
 
   // Look up token by contract address to get tokenId
   const tokens = await TokenDB.getAllTokens();
-  const token = tokens.find(
-    (t) => t.chain === "solana" && t.contractAddress === mint,
-  );
+  const token = tokens.find((t) => t.chain === "solana" && t.contractAddress === mint);
 
   if (token) {
     const marketData = await MarketDataDB.getMarketData(token.id);
@@ -132,9 +120,7 @@ async function fetchTokenPrice(mint: string): Promise<number> {
           `MarketData exists for ${mint} but has invalid priceUsd: ${marketData.priceUsd}`,
         );
       }
-      console.log(
-        `[Price Update] Database price for ${mint}: $${marketData.priceUsd}`,
-      );
+      console.log(`[Price Update] Database price for ${mint}: $${marketData.priceUsd}`);
       return marketData.priceUsd;
     }
   }
@@ -181,8 +167,7 @@ export async function POST(request: NextRequest) {
   const solanaConfig = getSolanaConfig();
 
   const network = getNetwork();
-  const rpcUrl =
-    network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
+  const rpcUrl = network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
   const connection = new Connection(rpcUrl, "confirmed");
   const programId = new PublicKey(solanaConfig.programId);
   const deskPubkey = new PublicKey(solanaConfig.desk);
@@ -191,21 +176,14 @@ export async function POST(request: NextRequest) {
 
   // Find token registry PDA
   const [registryPda] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("registry"),
-      deskPubkey.toBuffer(),
-      tokenMintPubkey.toBuffer(),
-    ],
+    [Buffer.from("registry"), deskPubkey.toBuffer(), tokenMintPubkey.toBuffer()],
     programId,
   );
 
   // Fetch current registry state
   const accountInfo = await connection.getAccountInfo(registryPda);
   if (!accountInfo) {
-    return NextResponse.json(
-      { error: "Token not registered on OTC desk" },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: "Token not registered on OTC desk" }, { status: 404 });
   }
 
   const registry = parseTokenRegistryPrice(accountInfo.data);
@@ -235,9 +213,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (currentPrice === 0) {
-    console.log(
-      `[Update Price] Token ${tokenMint} has no price set - forcing update`,
-    );
+    console.log(`[Update Price] Token ${tokenMint} has no price set - forcing update`);
   }
 
   // Try to find a PumpSwap pool for on-chain price update (permissionless - no owner required)
@@ -253,9 +229,7 @@ export async function POST(request: NextRequest) {
   // Try to get cached pool info from database first (faster than searching)
   const { TokenDB } = await import("@/services/database");
   const tokens = await TokenDB.getAllTokens();
-  const token = tokens.find(
-    (t) => t.chain === "solana" && t.contractAddress === tokenMint,
-  );
+  const token = tokens.find((t) => t.chain === "solana" && t.contractAddress === tokenMint);
 
   // Pool info is optional - token may not have pool cached yet
   if (token) {
@@ -343,8 +317,7 @@ export async function POST(request: NextRequest) {
           pool: pumpSwapPool.address,
           stale: true, // On-chain price may be stale
         };
-        const validatedNoSigner =
-          SolanaUpdatePriceResponseSchema.parse(noSignerResponse);
+        const validatedNoSigner = SolanaUpdatePriceResponseSchema.parse(noSignerResponse);
         return NextResponse.json(validatedNoSigner);
       }
 
@@ -397,15 +370,12 @@ export async function POST(request: NextRequest) {
           pool: pumpSwapPool.address,
           transaction: tx,
         };
-        const validatedManual =
-          SolanaUpdatePriceResponseSchema.parse(manualResponse);
+        const validatedManual = SolanaUpdatePriceResponseSchema.parse(manualResponse);
         return NextResponse.json(validatedManual);
       }
 
       // Signer is not owner - sync database but can't update on-chain
-      console.warn(
-        `[Price Update] Signer is not desk owner - cannot do manual price update`,
-      );
+      console.warn(`[Price Update] Signer is not desk owner - cannot do manual price update`);
       await syncMarketData(tokenMint, pumpSwapPool.priceUsd);
       const notOwnerResponse = {
         success: true,
@@ -415,8 +385,7 @@ export async function POST(request: NextRequest) {
         pool: pumpSwapPool.address,
         stale: true,
       };
-      const validatedNotOwner =
-        SolanaUpdatePriceResponseSchema.parse(notOwnerResponse);
+      const validatedNotOwner = SolanaUpdatePriceResponseSchema.parse(notOwnerResponse);
       return NextResponse.json(validatedNotOwner);
     }
   }
@@ -426,9 +395,7 @@ export async function POST(request: NextRequest) {
     const pool = pumpSwapPool; // Capture for type safety
 
     // Configure pool on-chain
-    console.log(
-      `[Price Update] Using PumpSwap pool: ${pool.address}, price: $${pool.priceUsd}`,
-    );
+    console.log(`[Price Update] Using PumpSwap pool: ${pool.address}, price: $${pool.priceUsd}`);
 
     // Check if token registry has correct pool configured
     // TokenRegistry layout:
@@ -447,10 +414,7 @@ export async function POST(request: NextRequest) {
     const currentPoolType = accountInfo.data[POOL_TYPE_OFFSET];
     const expectedPoolAddress = new PublicKey(pool.address);
 
-    if (
-      !currentPoolAddress.equals(expectedPoolAddress) ||
-      currentPoolType !== 3
-    ) {
+    if (!currentPoolAddress.equals(expectedPoolAddress) || currentPoolType !== 3) {
       console.log(
         `[Price Update] Token pool config mismatch - current: ${currentPoolAddress.toBase58()} (type ${currentPoolType}), expected: ${pool.address} (type 3)`,
       );
@@ -487,8 +451,7 @@ export async function POST(request: NextRequest) {
     // Use update_token_price_from_pumpswap (permissionless)
     // pumpSwapPool already validated above - it has all required fields
     // Get current SOL price for the calculation
-    const { getSolPriceUsd } =
-      await import("@/lib/plugin-otc-desk/services/priceFeed");
+    const { getSolPriceUsd } = await import("@/lib/plugin-otc-desk/services/priceFeed");
     const solPrice = await getSolPriceUsd();
     const solPrice8d = Math.floor(solPrice * 1e8);
 
@@ -496,9 +459,7 @@ export async function POST(request: NextRequest) {
     const signerKey = process.env.SOLANA_PRIVATE_KEY;
     if (!signerKey) {
       if (!pool.priceUsd || pool.priceUsd <= 0) {
-        throw new Error(
-          "PumpSwap pool price unavailable and no signer configured",
-        );
+        throw new Error("PumpSwap pool price unavailable and no signer configured");
       }
       // Even without a signer, we can return the pool price for display
       const noSignerResponse = {
@@ -509,8 +470,7 @@ export async function POST(request: NextRequest) {
         pool: pool.address,
         stale: false,
       };
-      const validatedNoSigner =
-        SolanaUpdatePriceResponseSchema.parse(noSignerResponse);
+      const validatedNoSigner = SolanaUpdatePriceResponseSchema.parse(noSignerResponse);
       return NextResponse.json(validatedNoSigner);
     }
 
@@ -559,8 +519,7 @@ export async function POST(request: NextRequest) {
       pool: pool.address,
       transaction: tx,
     };
-    const validatedPumpswap =
-      SolanaUpdatePriceResponseSchema.parse(pumpswapResponse);
+    const validatedPumpswap = SolanaUpdatePriceResponseSchema.parse(pumpswapResponse);
     return NextResponse.json(validatedPumpswap);
   }
 
@@ -575,9 +534,7 @@ export async function POST(request: NextRequest) {
   // FAIL-FAST: Signer must be configured
   const signerKey = process.env.SOLANA_PRIVATE_KEY;
   if (!signerKey) {
-    throw new Error(
-      "SOLANA_PRIVATE_KEY not configured - cannot update price on-chain",
-    );
+    throw new Error("SOLANA_PRIVATE_KEY not configured - cannot update price on-chain");
   }
 
   // FAIL-FAST: Keypair must be valid
@@ -653,28 +610,20 @@ export async function GET(request: NextRequest) {
   const solanaConfig = getSolanaConfig();
 
   const network = getNetwork();
-  const rpcUrl =
-    network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
+  const rpcUrl = network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
   const connection = new Connection(rpcUrl, "confirmed");
   const programId = new PublicKey(solanaConfig.programId);
   const deskPubkey = new PublicKey(solanaConfig.desk);
   const tokenMintPubkey = new PublicKey(tokenMint);
 
   const [registryPda] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("registry"),
-      deskPubkey.toBuffer(),
-      tokenMintPubkey.toBuffer(),
-    ],
+    [Buffer.from("registry"), deskPubkey.toBuffer(), tokenMintPubkey.toBuffer()],
     programId,
   );
 
   const accountInfo = await connection.getAccountInfo(registryPda);
   if (!accountInfo) {
-    return NextResponse.json(
-      { error: "Token not registered" },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: "Token not registered" }, { status: 404 });
   }
 
   const registry = parseTokenRegistryPrice(accountInfo.data);

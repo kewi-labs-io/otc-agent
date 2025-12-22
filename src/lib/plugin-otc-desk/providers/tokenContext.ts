@@ -1,9 +1,4 @@
-import type {
-  IAgentRuntime,
-  Memory,
-  Provider,
-  ProviderResult,
-} from "@elizaos/core";
+import type { IAgentRuntime, Memory, Provider, ProviderResult } from "@elizaos/core";
 import { ConsignmentDB, TokenDB } from "@/services/database";
 
 export const tokenContextProvider: Provider = {
@@ -11,10 +6,7 @@ export const tokenContextProvider: Provider = {
   description: "Provides context about available tokens and OTC deals",
   position: 98,
   dynamic: true,
-  get: async (
-    runtime: IAgentRuntime,
-    message: Memory,
-  ): Promise<ProviderResult> => {
+  get: async (_runtime: IAgentRuntime, message: Memory): Promise<ProviderResult> => {
     // FAIL-FAST: message content is required
     if (!message.content || typeof message.content.text !== "string") {
       throw new Error("TOKEN_CONTEXT provider requires message.content.text");
@@ -45,9 +37,7 @@ export const tokenContextProvider: Provider = {
       const text =
         `Available tokens for OTC deals:\n` +
         consignmentCounts
-          .map(
-            ({ token, count }) => `- ${token.symbol}: ${count} active deal(s)`,
-          )
+          .map(({ token, count }) => `- ${token.symbol}: ${count} active deal(s)`)
           .join("\n");
 
       return { text };
@@ -77,10 +67,7 @@ export const tokenContextProvider: Provider = {
       // Fixed terms are public since they're non-negotiable
       text += `Fixed price deals: `;
       text += fixedConsignments
-        .map(
-          (c) =>
-            `${c.fixedDiscountBps / 100}% discount, ${c.fixedLockupDays} days lockup`,
-        )
+        .map((c) => `${c.fixedDiscountBps / 100}% discount, ${c.fixedLockupDays} days lockup`)
         .join("; ");
     }
 

@@ -1,5 +1,5 @@
-import { createPublicClient, http, formatEther } from "viem";
-import { base, mainnet, bsc } from "viem/chains";
+import { createPublicClient, http } from "viem";
+import { base, bsc, mainnet } from "viem/chains";
 
 const DEPLOYMENTS = {
   base: {
@@ -22,20 +22,22 @@ async function checkDeployment(name: string, chain: any, rpc: string, addresses:
     chain,
     transport: http(rpc),
   });
-  
+
   const code = await client.getCode({ address: addresses.otc as `0x${string}` });
   if (!code || code === "0x") {
     throw new Error(`No contract at OTC address: ${addresses.otc}`);
   }
-  
+
   console.log("  ✅ OTC deployed at:", addresses.otc);
   console.log("  Bytecode size:", code.length / 2, "bytes");
-  
-  const helperCode = await client.getCode({ address: addresses.registrationHelper as `0x${string}` });
+
+  const helperCode = await client.getCode({
+    address: addresses.registrationHelper as `0x${string}`,
+  });
   if (!helperCode || helperCode === "0x") {
     throw new Error(`No contract at RegistrationHelper address: ${addresses.registrationHelper}`);
   }
-  
+
   console.log("  ✅ RegistrationHelper:", addresses.registrationHelper);
 }
 
@@ -45,7 +47,12 @@ async function main() {
   console.log("═══════════════════════════════════════════════════════════════");
 
   await checkDeployment("Base Mainnet", base, "https://mainnet.base.org", DEPLOYMENTS.base);
-  await checkDeployment("Ethereum Mainnet", mainnet, "https://eth-mainnet.g.alchemy.com/v2/b_Ou4aeoKR4tGaTPVp36T", DEPLOYMENTS.ethereum);
+  await checkDeployment(
+    "Ethereum Mainnet",
+    mainnet,
+    "https://eth-mainnet.g.alchemy.com/v2/b_Ou4aeoKR4tGaTPVp36T",
+    DEPLOYMENTS.ethereum,
+  );
   await checkDeployment("BSC Mainnet", bsc, "https://bsc-dataseed1.binance.org", DEPLOYMENTS.bsc);
 
   // Check Solana

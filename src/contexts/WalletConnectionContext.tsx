@@ -84,10 +84,9 @@ const defaultWalletConnectionContextValue: WalletConnectionContextValue = {
   currentChainId: null,
 };
 
-export const WalletConnectionContext =
-  createContext<WalletConnectionContextValue>(
-    defaultWalletConnectionContextValue,
-  );
+export const WalletConnectionContext = createContext<WalletConnectionContextValue>(
+  defaultWalletConnectionContextValue,
+);
 
 /**
  * Hook to access wallet connection state

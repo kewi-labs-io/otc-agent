@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 /**
  * Solana OTC Desk Admin CLI
- * 
+ *
  * Consolidated admin utilities for managing the Solana OTC desk.
- * 
+ *
  * Usage:
  *   bun scripts/solana-admin.ts <command> [options]
- * 
+ *
  * Commands:
  *   create-treasury <TOKEN_MINT>           Create desk token treasury (ATA)
  *   register-token <TOKEN_MINT> [PRICE]    Register token on desk with optional price
@@ -15,24 +15,25 @@
  */
 
 import { config } from "dotenv";
+
 config({ path: ".env.local" });
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as anchor from "@coral-xyz/anchor";
-import { 
-  Connection, 
-  Keypair, 
-  PublicKey, 
-  Transaction, 
-  sendAndConfirmTransaction,
-  SystemProgram 
-} from "@solana/web3.js";
-import { 
-  getAssociatedTokenAddressSync, 
-  createAssociatedTokenAccountInstruction 
+import {
+  createAssociatedTokenAccountInstruction,
+  getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  sendAndConfirmTransaction,
+  Transaction,
+} from "@solana/web3.js";
 import bs58 from "bs58";
-import * as fs from "fs";
-import * as path from "path";
 import { getSolanaConfig } from "../src/config/contracts";
 import { getAppUrl } from "../src/config/env";
 
@@ -46,12 +47,16 @@ if (process.env.SOLANA_MAINNET_RPC) {
 } else if (solanaDeployment.rpc) {
   SOLANA_RPC = solanaDeployment.rpc;
 } else {
-  throw new Error("SOLANA_MAINNET_RPC environment variable or solanaDeployment.rpc config is required");
+  throw new Error(
+    "SOLANA_MAINNET_RPC environment variable or solanaDeployment.rpc config is required",
+  );
 }
 
 const programIdStr = process.env.SOLANA_PROGRAM_ID || solanaDeployment.programId;
 if (!programIdStr) {
-  throw new Error("SOLANA_PROGRAM_ID environment variable or solanaDeployment.programId config is required");
+  throw new Error(
+    "SOLANA_PROGRAM_ID environment variable or solanaDeployment.programId config is required",
+  );
 }
 const PROGRAM_ID = new PublicKey(programIdStr);
 
@@ -73,7 +78,7 @@ async function getWallet(): Promise<Keypair> {
   if (!privateKeyStr) {
     throw new Error("SOLANA_MAINNET_PRIVATE_KEY not set in environment");
   }
-  
+
   const secretKey = bs58.decode(privateKeyStr);
   return Keypair.fromSecretKey(secretKey);
 }
@@ -81,13 +86,12 @@ async function getWallet(): Promise<Keypair> {
 async function getProgram(connection: Connection, wallet: Keypair): Promise<anchor.Program> {
   const idlPath = path.join(process.cwd(), "solana/otc-program/target/idl/otc.json");
   const idl = JSON.parse(fs.readFileSync(idlPath, "utf8"));
-  
-  const provider = new anchor.AnchorProvider(
-    connection,
-    new anchor.Wallet(wallet),
-    { commitment: "confirmed", preflightCommitment: "confirmed" }
-  );
-  
+
+  const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(wallet), {
+    commitment: "confirmed",
+    preflightCommitment: "confirmed",
+  });
+
   return new anchor.Program(idl, provider);
 }
 
@@ -97,39 +101,39 @@ async function getProgram(connection: Connection, wallet: Keypair): Promise<anch
 
 async function createTreasury(tokenMintStr: string): Promise<void> {
   console.log("=== CREATE DESK TOKEN TREASURY ===\n");
-  
+
   const tokenMint = new PublicKey(tokenMintStr);
   const connection = await getConnection();
   const wallet = await getWallet();
-  
+
   console.log("Token Mint:", tokenMint.toBase58());
   console.log("Desk:", DESK.toBase58());
   console.log("Wallet:", wallet.publicKey.toBase58());
-  
+
   // Derive the desk's ATA for the token
   const deskTokenTreasury = getAssociatedTokenAddressSync(tokenMint, DESK, true);
   console.log("Desk Token Treasury (ATA):", deskTokenTreasury.toBase58());
-  
+
   // Check if it exists
   const ataInfo = await connection.getAccountInfo(deskTokenTreasury);
   if (ataInfo) {
     console.log("\n✅ Treasury already exists");
     return;
   }
-  
+
   console.log("\nCreating ATA for desk...");
-  
+
   const createAtaIx = createAssociatedTokenAccountInstruction(
     wallet.publicKey,
     deskTokenTreasury,
     DESK,
-    tokenMint
+    tokenMint,
   );
-  
+
   const tx = new Transaction().add(createAtaIx);
   tx.feePayer = wallet.publicKey;
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-  
+
   const sig = await sendAndConfirmTransaction(connection, tx, [wallet]);
   console.log("✅ Treasury created");
   console.log("Transaction:", sig);
@@ -138,44 +142,40 @@ async function createTreasury(tokenMintStr: string): Promise<void> {
 
 async function registerToken(tokenMintStr: string, priceUsd?: number): Promise<void> {
   console.log("=== REGISTER TOKEN ON DESK ===\n");
-  
+
   const tokenMint = new PublicKey(tokenMintStr);
   const connection = await getConnection();
   const wallet = await getWallet();
   const program = await getProgram(connection, wallet);
-  
+
   console.log("Token Mint:", tokenMint.toBase58());
   console.log("Desk:", DESK.toBase58());
   console.log("Wallet:", wallet.publicKey.toBase58());
   if (priceUsd) console.log("Initial Price: $" + priceUsd);
-  
+
   // Derive token registry PDA
   const [tokenRegistryPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("registry"), DESK.toBuffer(), tokenMint.toBuffer()],
-    PROGRAM_ID
+    PROGRAM_ID,
   );
   console.log("Token Registry PDA:", tokenRegistryPda.toBase58());
-  
+
   // Check if already registered
   const registryInfo = await connection.getAccountInfo(tokenRegistryPda);
   if (registryInfo) {
     console.log("\n✅ Token already registered");
-    
+
     // Set price if provided
     if (priceUsd) {
       await setPrice(tokenMintStr, priceUsd);
     }
     return;
   }
-  
+
   console.log("\nRegistering token...");
-  
+
   const tx = await program.methods
-    .registerToken(
-      Array.from(EMPTY_PYTH_FEED),
-      SystemProgram.programId,
-      POOL_TYPE_NONE
-    )
+    .registerToken(Array.from(EMPTY_PYTH_FEED), SystemProgram.programId, POOL_TYPE_NONE)
     .accountsStrict({
       desk: DESK,
       payer: wallet.publicKey,
@@ -184,11 +184,11 @@ async function registerToken(tokenMintStr: string, priceUsd?: number): Promise<v
       systemProgram: SystemProgram.programId,
     })
     .rpc();
-  
+
   console.log("✅ Token registered");
   console.log("Transaction:", tx);
   console.log("View on Solscan: https://solscan.io/tx/" + tx);
-  
+
   // Set price if provided
   if (priceUsd) {
     console.log("");
@@ -198,27 +198,27 @@ async function registerToken(tokenMintStr: string, priceUsd?: number): Promise<v
 
 async function setPrice(tokenMintStr: string, priceUsd: number): Promise<void> {
   console.log("=== SET TOKEN PRICE ===\n");
-  
+
   const tokenMint = new PublicKey(tokenMintStr);
   const connection = await getConnection();
   const wallet = await getWallet();
   const program = await getProgram(connection, wallet);
-  
+
   // Convert to 8 decimal fixed point
   const price8d = new anchor.BN(Math.floor(priceUsd * 1e8));
-  
+
   console.log("Token:", tokenMint.toBase58());
   console.log("Price: $" + priceUsd + " (" + price8d.toString() + " in 8d format)");
-  
+
   // Derive token registry PDA
   const [tokenRegistryPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("registry"), DESK.toBuffer(), tokenMint.toBuffer()],
-    program.programId
+    program.programId,
   );
-  
+
   console.log("Token Registry:", tokenRegistryPda.toBase58());
   console.log("\nSetting price...");
-  
+
   const tx = await program.methods
     .setManualTokenPrice(price8d)
     .accounts({
@@ -228,7 +228,7 @@ async function setPrice(tokenMintStr: string, priceUsd: number): Promise<void> {
     })
     .signers([wallet])
     .rpc();
-  
+
   console.log("✅ Price set");
   console.log("Transaction:", tx);
   console.log("View on Solscan: https://solscan.io/tx/" + tx);
@@ -239,21 +239,21 @@ async function setLimits(
   maxTokenPerOrder: number = 1000000000, // Default 1B tokens
   quoteExpirySecs: number = 3600, // Default 1 hour
   defaultUnlockDelaySecs: number = 0, // Default no minimum lockup
-  maxLockupSecs: number = 31536000 // Default 1 year
+  maxLockupSecs: number = 31536000, // Default 1 year
 ): Promise<void> {
   console.log("=== SET DESK LIMITS ===\n");
-  
+
   const connection = await getConnection();
   const wallet = await getWallet();
   const program = await getProgram(connection, wallet);
-  
+
   // Convert to 8 decimal fixed point
   const minUsd8d = new anchor.BN(Math.floor(minUsdAmount * 1e8));
   const maxToken = new anchor.BN(maxTokenPerOrder);
   const quoteExpiry = new anchor.BN(quoteExpirySecs);
   const defaultUnlock = new anchor.BN(defaultUnlockDelaySecs);
   const maxLockup = new anchor.BN(maxLockupSecs);
-  
+
   console.log("Desk:", DESK.toBase58());
   console.log("Wallet:", wallet.publicKey.toBase58());
   console.log("\nNew Limits:");
@@ -262,9 +262,9 @@ async function setLimits(
   console.log("  Quote Expiry:", quoteExpirySecs + " seconds");
   console.log("  Default Unlock Delay:", defaultUnlockDelaySecs + " seconds");
   console.log("  Max Lockup:", maxLockupSecs + " seconds");
-  
+
   console.log("\nSetting limits...");
-  
+
   const tx = await program.methods
     .setLimits(minUsd8d, maxToken, quoteExpiry, defaultUnlock, maxLockup)
     .accounts({
@@ -273,7 +273,7 @@ async function setLimits(
     })
     .signers([wallet])
     .rpc();
-  
+
   console.log("✅ Limits set");
   console.log("Transaction:", tx);
   console.log("View on Solscan: https://solscan.io/tx/" + tx);
@@ -281,60 +281,62 @@ async function setLimits(
 
 async function showStatus(): Promise<void> {
   console.log("=== SOLANA OTC DESK STATUS ===\n");
-  
+
   const connection = await getConnection();
-  
+
   console.log("Program ID:", PROGRAM_ID.toBase58());
   console.log("Desk:", DESK.toBase58());
   console.log("RPC:", SOLANA_RPC);
-  
+
   // Check desk account
   const deskInfo = await connection.getAccountInfo(DESK);
   if (!deskInfo) {
     console.log("\n❌ Desk account not found");
     return;
   }
-  
+
   console.log("\n✅ Desk exists");
   console.log("   Data size:", deskInfo.data.length, "bytes");
   console.log("   Lamports:", deskInfo.lamports / 1e9, "SOL");
-  
+
   // Try to decode desk state
   const idlPath = path.join(process.cwd(), "solana/otc-program/target/idl/otc.json");
   if (fs.existsSync(idlPath)) {
     const idl = JSON.parse(fs.readFileSync(idlPath, "utf8"));
     const dummyWallet = new anchor.Wallet(Keypair.generate());
-    const provider = new anchor.AnchorProvider(connection, dummyWallet, { commitment: "confirmed" });
+    const provider = new anchor.AnchorProvider(connection, dummyWallet, {
+      commitment: "confirmed",
+    });
     const program = new anchor.Program(idl, provider);
-    
+
     interface DeskAccount {
       owner: PublicKey;
       agent: PublicKey;
       nextConsignmentId: anchor.BN;
       nextOfferId: anchor.BN;
-      minUsdAmount8D: anchor.BN;  // Note: capital D - Anchor converts min_usd_amount_8d to minUsdAmount8D
+      minUsdAmount8D: anchor.BN; // Note: capital D - Anchor converts min_usd_amount_8d to minUsdAmount8D
       maxTokenPerOrder: anchor.BN;
       paused: boolean;
     }
-    
+
     interface ProgramAccounts {
       desk: {
         fetch: (addr: PublicKey) => Promise<DeskAccount>;
       };
     }
-    
+
     const deskAccount = await (program.account as ProgramAccounts).desk.fetch(DESK);
-    
+
     console.log("\n📊 Desk State:");
     console.log("   Owner:", deskAccount.owner.toBase58());
     console.log("   Agent:", deskAccount.agent.toBase58());
     console.log("   Consignments:", deskAccount.nextConsignmentId.toNumber() - 1);
     console.log("   Offers:", deskAccount.nextOfferId.toNumber() - 1);
-    console.log("   Min USD: $" + (deskAccount.minUsdAmount8D.toNumber() / 1e8));
+    console.log("   Min USD: $" + deskAccount.minUsdAmount8D.toNumber() / 1e8);
     console.log("   Max Token Per Order:", deskAccount.maxTokenPerOrder.toString());
     console.log("   Paused:", deskAccount.paused);
   }
-  
+
   // Check wallet balance
   const privateKeyStr = process.env.SOLANA_MAINNET_PRIVATE_KEY;
   if (privateKeyStr) {
@@ -382,12 +384,12 @@ Environment Variables:
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
-  
+
   if (!command || command === "help" || command === "--help" || command === "-h") {
     printUsage();
     process.exit(0);
   }
-  
+
   switch (command) {
     case "create-treasury":
       if (!args[1]) {
@@ -397,7 +399,7 @@ async function main(): Promise<void> {
       }
       await createTreasury(args[1]);
       break;
-      
+
     case "register-token":
       if (!args[1]) {
         console.error("Error: TOKEN_MINT required");
@@ -406,7 +408,7 @@ async function main(): Promise<void> {
       }
       await registerToken(args[1], args[2] ? parseFloat(args[2]) : undefined);
       break;
-      
+
     case "set-price":
       if (!args[1] || !args[2]) {
         console.error("Error: TOKEN_MINT and PRICE_USD required");
@@ -415,7 +417,7 @@ async function main(): Promise<void> {
       }
       await setPrice(args[1], parseFloat(args[2]));
       break;
-      
+
     case "set-limits":
       if (!args[1]) {
         console.error("Error: MIN_USD required (e.g., 0.01 for $0.01)");
@@ -424,11 +426,11 @@ async function main(): Promise<void> {
       }
       await setLimits(parseFloat(args[1]));
       break;
-      
+
     case "status":
       await showStatus();
       break;
-      
+
     default:
       console.error("Unknown command:", command);
       printUsage();
@@ -440,4 +442,3 @@ main().catch((err) => {
   console.error("Error:", err.message || err);
   process.exit(1);
 });
-

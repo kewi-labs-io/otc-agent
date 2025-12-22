@@ -51,16 +51,12 @@ export const ConsignmentParamsSchema = z
   .refine(
     (data) => {
       if (!data.isNegotiable) {
-        return (
-          data.fixedDiscountBps !== undefined &&
-          data.fixedLockupDays !== undefined
-        );
+        return data.fixedDiscountBps !== undefined && data.fixedLockupDays !== undefined;
       }
       return true;
     },
     {
-      message:
-        "Fixed consignments must specify fixedDiscountBps and fixedLockupDays",
+      message: "Fixed consignments must specify fixedDiscountBps and fixedLockupDays",
     },
   )
   .refine(
@@ -133,11 +129,9 @@ export const CreateConsignmentInputSchema = z
   );
 
 // Update consignment input (reuses API schema but omits callerAddress)
-export const UpdateConsignmentInputSchema = UpdateConsignmentRequestSchema.omit(
-  {
-    callerAddress: true,
-  },
-);
+export const UpdateConsignmentInputSchema = UpdateConsignmentRequestSchema.omit({
+  callerAddress: true,
+});
 
 // Reserve amount input
 export const ReserveAmountInputSchema = z.object({
@@ -361,16 +355,12 @@ export const ConsignmentOutputSchema = ConsignmentOutputBaseSchema.refine(
   (data) => {
     // Non-negotiable consignments MUST have fixed values
     if (!data.isNegotiable) {
-      return (
-        data.fixedDiscountBps !== undefined &&
-        data.fixedLockupDays !== undefined
-      );
+      return data.fixedDiscountBps !== undefined && data.fixedLockupDays !== undefined;
     }
     return true;
   },
   {
-    message:
-      "Non-negotiable consignments require fixedDiscountBps and fixedLockupDays",
+    message: "Non-negotiable consignments require fixedDiscountBps and fixedLockupDays",
   },
 );
 

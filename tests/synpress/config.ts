@@ -10,7 +10,7 @@
  *   TEST_ENV=mainnet npx playwright test ...
  */
 
-import type { TestEnv, EvmConfig, SolanaConfig, EnvConfig } from "@/types";
+import type { EnvConfig, EvmConfig, SolanaConfig, TestEnv } from "@/types";
 
 export type { TestEnv, EvmConfig, SolanaConfig, EnvConfig };
 

@@ -1,18 +1,18 @@
+import crypto from "node:crypto";
 import { head, put } from "@vercel/blob";
-import crypto from "crypto";
 import { type NextRequest, NextResponse } from "next/server";
 import { type Address, createPublicClient, http } from "viem";
 import { foundry } from "viem/chains";
 import { getEvmConfig } from "@/config/contracts";
 import { getNetwork, LOCAL_DEFAULTS } from "@/config/env";
 import { agentRuntime } from "@/lib/agent-runtime";
-import { checksumAddress } from "@/utils/address-utils";
 import { validationErrorResponse } from "@/lib/validation/helpers";
 import type { TokenBalance } from "@/types/api";
 import {
   EvmBalancesResponseSchema,
   GetEvmBalancesQuerySchema,
 } from "@/types/validation/api-schemas";
+import { checksumAddress } from "@/utils/address-utils";
 
 // TokenBalance type imported from @/types/api
 
@@ -35,13 +35,9 @@ interface BulkMetadataCache {
   metadata: Record<string, CachedTokenMetadata>;
 }
 
-async function getBulkMetadataCache(
-  chain: string,
-): Promise<Record<string, CachedTokenMetadata>> {
+async function getBulkMetadataCache(chain: string): Promise<Record<string, CachedTokenMetadata>> {
   const runtime = await agentRuntime.getRuntime();
-  const cached = await runtime.getCache<BulkMetadataCache>(
-    `evm-metadata-bulk:${chain}`,
-  );
+  const cached = await runtime.getCache<BulkMetadataCache>(`evm-metadata-bulk:${chain}`);
   if (!cached || !cached.metadata) {
     return {};
   }
@@ -77,9 +73,7 @@ async function getCachedWalletBalances(
   );
   if (!cached) return null;
   if (Date.now() - cached.cachedAt >= WALLET_CACHE_TTL_MS) return null;
-  console.log(
-    `[EVM Balances] Using cached wallet data (${cached.tokens.length} tokens)`,
-  );
+  console.log(`[EVM Balances] Using cached wallet data (${cached.tokens.length} tokens)`);
   return cached.tokens;
 }
 
@@ -106,9 +100,7 @@ function isBlobStorageAvailable(): boolean {
  * Cache an image URL to Vercel Blob storage
  * Returns the cached blob URL, or the original URL if caching fails/unavailable
  */
-async function cacheImageToBlob(
-  imageUrl: string | null,
-): Promise<string | null> {
+async function cacheImageToBlob(imageUrl: string | null): Promise<string | null> {
   if (!imageUrl) return null;
 
   // Skip if already a blob URL
@@ -142,15 +134,12 @@ async function cacheImageToBlob(
   });
 
   if (!response.ok) {
-    throw new Error(
-      `Image download failed: ${imageUrl} (status: ${response.status})`,
-    );
+    throw new Error(`Image download failed: ${imageUrl} (status: ${response.status})`);
   }
 
   // content-type header is optional - default to image/png if not provided
   const contentTypeHeader = response.headers.get("content-type");
-  const contentType =
-    contentTypeHeader !== null ? contentTypeHeader : "image/png";
+  const contentType = contentTypeHeader !== null ? contentTypeHeader : "image/png";
   const imageBuffer = await response.arrayBuffer();
 
   const blob = await put(blobPath, imageBuffer, {
@@ -241,22 +230,16 @@ const LOCAL_ERC20_ABI = [
   },
 ] as const;
 
-async function fetchLocalWalletBalances(
-  walletAddress: string,
-): Promise<TokenBalance[]> {
+async function fetchLocalWalletBalances(walletAddress: string): Promise<TokenBalance[]> {
   const deployment = getEvmConfig();
 
   const candidates = [
     deployment.contracts.elizaToken,
     deployment.contracts.usdcToken,
     deployment.contracts.usdc,
-  ].filter(
-    (v): v is string => typeof v === "string" && /^0x[a-fA-F0-9]{40}$/.test(v),
-  );
+  ].filter((v): v is string => typeof v === "string" && /^0x[a-fA-F0-9]{40}$/.test(v));
 
-  const tokenAddresses = Array.from(
-    new Set(candidates.map((a) => checksumAddress(a))),
-  );
+  const tokenAddresses = Array.from(new Set(candidates.map((a) => checksumAddress(a))));
 
   const account = checksumAddress(walletAddress) as Address;
 
@@ -353,10 +336,7 @@ async function fetchTrustWalletLogo(
 /**
  * Try to get logo from CoinGecko by contract address
  */
-async function fetchCoinGeckoLogo(
-  contractAddress: string,
-  chain: string,
-): Promise<string | null> {
+async function fetchCoinGeckoLogo(contractAddress: string, chain: string): Promise<string | null> {
   const config = CHAIN_CONFIG[chain];
   if (!config) return null;
 
@@ -426,7 +406,7 @@ async function fetchLogoFromMultipleSources(
 
     if (metaRes.ok) {
       const data = await metaRes.json();
-      if (data.result && data.result.logo) {
+      if (data.result?.logo) {
         console.log(
           `[EVM Balances] Found logo from Alchemy for ${contractAddress.slice(0, 10)}...`,
         );
@@ -438,9 +418,7 @@ async function fetchLogoFromMultipleSources(
   // 3. Try CoinGecko (might be rate limited on free tier)
   const coinGeckoLogo = await fetchCoinGeckoLogo(contractAddress, chain);
   if (coinGeckoLogo) {
-    console.log(
-      `[EVM Balances] Found logo from CoinGecko for ${contractAddress.slice(0, 10)}...`,
-    );
+    console.log(`[EVM Balances] Found logo from CoinGecko for ${contractAddress.slice(0, 10)}...`);
     return coinGeckoLogo;
   }
 
@@ -456,25 +434,16 @@ interface BulkPriceCache {
   cachedAt: number;
 }
 
-async function getBulkPriceCache(
-  chain: string,
-): Promise<Record<string, number>> {
+async function getBulkPriceCache(chain: string): Promise<Record<string, number>> {
   const runtime = await agentRuntime.getRuntime();
-  const cached = await runtime.getCache<BulkPriceCache>(
-    `evm-prices-bulk:${chain}`,
-  );
+  const cached = await runtime.getCache<BulkPriceCache>(`evm-prices-bulk:${chain}`);
   if (!cached) return {};
   if (Date.now() - cached.cachedAt >= PRICE_CACHE_TTL_MS) return {};
-  console.log(
-    `[EVM Balances] Using cached prices (${Object.keys(cached.prices).length} tokens)`,
-  );
+  console.log(`[EVM Balances] Using cached prices (${Object.keys(cached.prices).length} tokens)`);
   return cached.prices;
 }
 
-async function setBulkPriceCache(
-  chain: string,
-  prices: Record<string, number>,
-): Promise<void> {
+async function setBulkPriceCache(chain: string, prices: Record<string, number>): Promise<void> {
   const runtime = await agentRuntime.getRuntime();
   await runtime.setCache(`evm-prices-bulk:${chain}`, {
     prices,
@@ -520,9 +489,7 @@ async function fetchAlchemyBalances(
   ]);
 
   if (!balancesResponse.ok) {
-    throw new Error(
-      `Alchemy getTokenBalances failed: ${balancesResponse.status}`,
-    );
+    throw new Error(`Alchemy getTokenBalances failed: ${balancesResponse.status}`);
   }
 
   const balancesData = await balancesResponse.json();
@@ -542,23 +509,17 @@ async function fetchAlchemyBalances(
     throw new Error("Alchemy API returned no result field");
   }
   if (!balancesData.result.tokenBalances) {
-    throw new Error(
-      "Alchemy API returned invalid token balances data - missing tokenBalances",
-    );
+    throw new Error("Alchemy API returned invalid token balances data - missing tokenBalances");
   }
   const tokenBalances = balancesData.result.tokenBalances;
 
   // Filter non-zero balances
-  const nonZeroBalances = tokenBalances.filter(
-    (t: { tokenBalance: string }) => {
-      const bal = t.tokenBalance;
-      return bal && bal !== "0x0" && bal !== "0x" && BigInt(bal) > 0n;
-    },
-  );
+  const nonZeroBalances = tokenBalances.filter((t: { tokenBalance: string }) => {
+    const bal = t.tokenBalance;
+    return bal && bal !== "0x0" && bal !== "0x" && BigInt(bal) > 0n;
+  });
 
-  console.log(
-    `[EVM Balances] Found ${nonZeroBalances.length} tokens with balance > 0`,
-  );
+  console.log(`[EVM Balances] Found ${nonZeroBalances.length} tokens with balance > 0`);
 
   if (nonZeroBalances.length === 0) return [];
 
@@ -635,14 +596,10 @@ async function fetchAlchemyBalances(
 
           // FAIL-FAST: Alchemy metadata must exist
           if (!alchemyMeta) {
-            throw new Error(
-              `Alchemy metadata fetch returned null for ${contractAddress}`,
-            );
+            throw new Error(`Alchemy metadata fetch returned null for ${contractAddress}`);
           }
           if (!alchemyMeta.result) {
-            throw new Error(
-              `Alchemy metadata fetch returned no result for ${contractAddress}`,
-            );
+            throw new Error(`Alchemy metadata fetch returned no result for ${contractAddress}`);
           }
           const result = alchemyMeta.result;
           if (!result.symbol) {
@@ -662,8 +619,7 @@ async function fetchAlchemyBalances(
           const logoUrl = trustWalletLogo || result.logo || undefined;
 
           // If still no logo, try CoinGecko
-          const finalLogoUrl =
-            logoUrl || (await fetchCoinGeckoLogo(contractAddress, chain));
+          const finalLogoUrl = logoUrl || (await fetchCoinGeckoLogo(contractAddress, chain));
 
           return {
             contractAddress,
@@ -690,9 +646,7 @@ async function fetchAlchemyBalances(
   const tokensToRetry = needsLogoRetry.slice(0, MAX_LOGO_RETRY);
 
   if (tokensToRetry.length > 0) {
-    console.log(
-      `[EVM Balances] Retrying logo fetch for ${tokensToRetry.length} tokens`,
-    );
+    console.log(`[EVM Balances] Retrying logo fetch for ${tokensToRetry.length} tokens`);
 
     const logoResults = await Promise.all(
       tokensToRetry.map(async (contractAddress) => {
@@ -722,24 +676,17 @@ async function fetchAlchemyBalances(
   if (isBlobStorageAvailable()) {
     const logoUrls = Object.values(cachedMetadata)
       .map((m) => m.logoUrl)
-      .filter(
-        (u): u is string => !!u && !u.includes("blob.vercel-storage.com"),
-      );
+      .filter((u): u is string => !!u && !u.includes("blob.vercel-storage.com"));
 
     if (logoUrls.length > 0) {
       // Fire-and-forget blob caching - don't block response
       Promise.all(
         logoUrls.map(async (originalUrl) => {
-          const urlHash = crypto
-            .createHash("md5")
-            .update(originalUrl)
-            .digest("hex");
+          const urlHash = crypto.createHash("md5").update(originalUrl).digest("hex");
           // FAIL-FAST: Extension must be determinable for blob storage
           const extension = getExtensionFromUrl(originalUrl);
           if (!extension) {
-            throw new Error(
-              `Unable to determine extension for URL: ${originalUrl}`,
-            );
+            throw new Error(`Unable to determine extension for URL: ${originalUrl}`);
           }
           const blobPath = `token-images/${urlHash}.${extension}`;
           const existing = await head(blobPath);
@@ -819,8 +766,7 @@ async function fetchDeFiLlamaPrices(
   if (addresses.length === 0) return {};
 
   // DeFiLlama chain identifiers
-  const llamaChain =
-    chain === "base" ? "base" : chain === "bsc" ? "bsc" : chain;
+  const llamaChain = chain === "base" ? "base" : chain === "bsc" ? "bsc" : chain;
 
   // DeFiLlama accepts comma-separated list of chain:address
   const coins = addresses.map((a) => `${llamaChain}:${a}`).join(",");
@@ -861,9 +807,7 @@ async function fetchDeFiLlamaPrices(
     }
   }
 
-  console.log(
-    `[EVM Balances] DeFiLlama returned ${Object.keys(prices).length} prices`,
-  );
+  console.log(`[EVM Balances] DeFiLlama returned ${Object.keys(prices).length} prices`);
   return prices;
 }
 
@@ -918,19 +862,14 @@ async function fetchCoinGeckoPrices(
 /**
  * Fetch prices - try DeFiLlama first, then CoinGecko
  */
-async function fetchPrices(
-  chain: string,
-  addresses: string[],
-): Promise<Record<string, number>> {
+async function fetchPrices(chain: string, addresses: string[]): Promise<Record<string, number>> {
   if (addresses.length === 0) return {};
 
   // Try DeFiLlama first (better coverage for newer tokens)
   const llamaPrices = await fetchDeFiLlamaPrices(chain, addresses);
 
   // Find addresses still missing prices
-  const missingAddresses = addresses.filter(
-    (a) => !llamaPrices[a.toLowerCase()],
-  );
+  const missingAddresses = addresses.filter((a) => !llamaPrices[a.toLowerCase()]);
 
   if (missingAddresses.length === 0) {
     return llamaPrices;
@@ -946,9 +885,7 @@ async function fetchPrices(
  * Upgrade logo URLs to blob-cached URLs for a list of tokens
  * If blob storage isn't available, returns tokens unchanged
  */
-async function upgradeToBlobUrls(
-  tokens: TokenBalance[],
-): Promise<TokenBalance[]> {
+async function upgradeToBlobUrls(tokens: TokenBalance[]): Promise<TokenBalance[]> {
   // If blob storage isn't configured, skip upgrading
   if (!isBlobStorageAvailable()) {
     return tokens;
@@ -963,27 +900,19 @@ async function upgradeToBlobUrls(
     return tokens;
   }
 
-  console.log(
-    `[EVM Balances] Checking blob cache for ${tokensNeedingUpgrade.length} logo URLs`,
-  );
+  console.log(`[EVM Balances] Checking blob cache for ${tokensNeedingUpgrade.length} logo URLs`);
 
   // Check blob cache for all URLs in parallel
   const blobChecks = await Promise.all(
     tokensNeedingUpgrade.map(async (token) => {
       const originalUrl = token.logoUrl;
-      if (!originalUrl)
-        return { contractAddress: token.contractAddress, blobUrl: null };
+      if (!originalUrl) return { contractAddress: token.contractAddress, blobUrl: null };
 
-      const urlHash = crypto
-        .createHash("md5")
-        .update(originalUrl)
-        .digest("hex");
+      const urlHash = crypto.createHash("md5").update(originalUrl).digest("hex");
       // FAIL-FAST: Extension must be determinable for blob storage
       const extension = getExtensionFromUrl(originalUrl);
       if (!extension) {
-        throw new Error(
-          `Unable to determine extension for URL: ${originalUrl}`,
-        );
+        throw new Error(`Unable to determine extension for URL: ${originalUrl}`);
       }
       const blobPath = `token-images/${urlHash}.${extension}`;
       const existing = await head(blobPath);
@@ -1009,9 +938,7 @@ async function upgradeToBlobUrls(
     }
   }
 
-  console.log(
-    `[EVM Balances] Found/cached ${Object.keys(blobUrlMap).length} blob URLs`,
-  );
+  console.log(`[EVM Balances] Found/cached ${Object.keys(blobUrlMap).length} blob URLs`);
 
   // Update tokens with blob URLs
   return tokens.map((token) => {
@@ -1057,9 +984,7 @@ export async function GET(request: NextRequest) {
   if (!forceRefresh) {
     const cachedTokens = await getCachedWalletBalances(chain, address);
     if (cachedTokens) {
-      console.log(
-        `[EVM Balances] Using cached wallet data (${cachedTokens.length} tokens)`,
-      );
+      console.log(`[EVM Balances] Using cached wallet data (${cachedTokens.length} tokens)`);
 
       // Upgrade cached tokens to blob URLs if needed
       let upgradedTokens = await upgradeToBlobUrls(cachedTokens);
@@ -1120,9 +1045,7 @@ export async function GET(request: NextRequest) {
       }
 
       // If any tokens were upgraded, update the cache
-      const hasUpgrades = upgradedTokens.some(
-        (t, i) => t.logoUrl !== cachedTokens[i].logoUrl,
-      );
+      const hasUpgrades = upgradedTokens.some((t, i) => t.logoUrl !== cachedTokens[i].logoUrl);
       if (hasUpgrades) {
         console.log(
           `[EVM Balances] Updating wallet cache with ${upgradedTokens.filter((t) => t.logoUrl).length} logos`,

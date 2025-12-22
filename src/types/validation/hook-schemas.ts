@@ -162,9 +162,7 @@ export const SolanaBalancesResponseSchema = z.object({
   tokens: z.array(SolanaTokenBalanceSchema),
   error: z.string().optional(),
 });
-export type SolanaBalancesResponse = z.infer<
-  typeof SolanaBalancesResponseSchema
->;
+export type SolanaBalancesResponse = z.infer<typeof SolanaBalancesResponseSchema>;
 
 // Wallet token (unified format)
 export const WalletTokenSchema = z.object({
@@ -192,10 +190,7 @@ export const WalletTokenSchema = z.object({
 export const TokenIdSchema = z
   .string()
   .min(1)
-  .regex(
-    /^token-[a-z]+-/,
-    "Token ID must be in format: token-{chain}-{address}",
-  );
+  .regex(/^token-[a-z]+-/, "Token ID must be in format: token-{chain}-{address}");
 
 // Token cache entry
 // Uses TokenMarketDataSchema from db-schemas.ts (single source of truth)

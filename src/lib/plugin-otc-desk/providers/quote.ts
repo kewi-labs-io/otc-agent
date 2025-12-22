@@ -1,9 +1,4 @@
-import type {
-  IAgentRuntime,
-  Memory,
-  Provider,
-  ProviderResult,
-} from "@elizaos/core";
+import type { IAgentRuntime, Memory, Provider, ProviderResult } from "@elizaos/core";
 import type QuoteService from "@/lib/plugin-otc-desk/services/quoteService";
 import { formatTokenAmount } from "@/utils/format";
 import { agentRuntime } from "../../agent-runtime";
@@ -12,10 +7,7 @@ import type { PaymentCurrency, QuoteMemory } from "../types";
 
 export const quoteProvider: Provider = {
   name: "ElizaQuote",
-  get: async (
-    runtime: IAgentRuntime,
-    message: Memory,
-  ): Promise<ProviderResult> => {
+  get: async (runtime: IAgentRuntime, message: Memory): Promise<ProviderResult> => {
     // FAIL-FAST: message content is required
     if (!message.content || typeof message.content.text !== "string") {
       throw new Error("ElizaQuote provider requires message.content.text");
@@ -24,15 +16,10 @@ export const quoteProvider: Provider = {
 
     // Only provide quote context if user is asking about quotes/terms/pricing
     const isQuoteRelated =
-      /quote|discount|lockup|price|term|deal|offer|buy|purchase|%|percent/i.test(
-        messageText,
-      );
+      /quote|discount|lockup|price|term|deal|offer|buy|purchase|%|percent/i.test(messageText);
 
     if (!isQuoteRelated) {
-      console.log(
-        "[QuoteProvider] Skipping - not quote-related:",
-        messageText.substring(0, 50),
-      );
+      console.log("[QuoteProvider] Skipping - not quote-related:", messageText.substring(0, 50));
       return { text: "" }; // Return empty to not pollute context
     }
 
@@ -103,9 +90,7 @@ You'll automatically receive your tokens when the lockup period ends.`.trim(),
   },
 };
 
-export async function getUserQuote(
-  walletAddress: string,
-): Promise<QuoteMemory | null> {
+export async function getUserQuote(walletAddress: string): Promise<QuoteMemory | null> {
   const { agentRuntime } = await import("../../agent-runtime");
   const runtime = await agentRuntime.getRuntime();
 
@@ -160,7 +145,7 @@ export async function setUserQuote(
   const runtime = await agentRuntime.getRuntime();
 
   // Generate consistent quote ID using the same method as QuoteService
-  const crypto = await import("crypto");
+  const crypto = await import("node:crypto");
   const dayTimestamp = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
   const hash = crypto
     .createHash("sha256")
@@ -176,9 +161,7 @@ export async function setUserQuote(
   // Generate signature using same method as QuoteService
   const secret = process.env.WORKER_AUTH_TOKEN;
   if (!secret) {
-    throw new Error(
-      "WORKER_AUTH_TOKEN must be set for quote signature generation",
-    );
+    throw new Error("WORKER_AUTH_TOKEN must be set for quote signature generation");
   }
   const signatureData = {
     quoteId,
@@ -189,10 +172,7 @@ export async function setUserQuote(
     lockupMonths: quote.lockupMonths,
   };
   const payload = JSON.stringify(signatureData);
-  const signature = crypto
-    .createHmac("sha256", secret)
-    .update(payload)
-    .digest("hex");
+  const signature = crypto.createHmac("sha256", secret).update(payload).digest("hex");
 
   const quoteData: QuoteMemory = {
     id: (await import("uuid")).v4(),
@@ -205,8 +185,7 @@ export async function setUserQuote(
     lockupMonths: quote.lockupMonths,
     lockupDays,
     paymentCurrency: quote.paymentCurrency,
-    priceUsdPerToken:
-      quote.priceUsdPerToken !== undefined ? quote.priceUsdPerToken : 0,
+    priceUsdPerToken: quote.priceUsdPerToken !== undefined ? quote.priceUsdPerToken : 0,
     totalUsd: quote.totalUsd,
     discountUsd: quote.totalUsd - quote.discountedUsd,
     discountedUsd: quote.discountedUsd,
@@ -241,22 +220,17 @@ export async function setUserQuote(
     await runtime.setCache("all_quotes", allQuotes);
   }
 
-  const entityQuoteIds =
-    (await runtime.getCache<string[]>(`entity_quotes:${entityId}`)) || [];
+  const entityQuoteIds = (await runtime.getCache<string[]>(`entity_quotes:${entityId}`)) || [];
   if (!entityQuoteIds.includes(quoteId)) {
     entityQuoteIds.push(quoteId);
     await runtime.setCache(`entity_quotes:${entityId}`, entityQuoteIds);
   }
 
   const beneficiaryQuoteIds =
-    (await runtime.getCache<string[]>(`beneficiary_quotes:${normalized}`)) ||
-    [];
+    (await runtime.getCache<string[]>(`beneficiary_quotes:${normalized}`)) || [];
   if (!beneficiaryQuoteIds.includes(quoteId)) {
     beneficiaryQuoteIds.push(quoteId);
-    await runtime.setCache(
-      `beneficiary_quotes:${normalized}`,
-      beneficiaryQuoteIds,
-    );
+    await runtime.setCache(`beneficiary_quotes:${normalized}`, beneficiaryQuoteIds);
   }
 
   console.log(
@@ -284,23 +258,14 @@ export async function deleteUserQuote(walletAddress: string): Promise<void> {
 
   await runtime.deleteCache(`quote:${quote.quoteId}`);
 
-  const entityQuoteIds =
-    (await runtime.getCache<string[]>(`entity_quotes:${entityId}`)) || [];
-  const updatedEntityQuoteIds = entityQuoteIds.filter(
-    (id) => id !== quote.quoteId,
-  );
+  const entityQuoteIds = (await runtime.getCache<string[]>(`entity_quotes:${entityId}`)) || [];
+  const updatedEntityQuoteIds = entityQuoteIds.filter((id) => id !== quote.quoteId);
   await runtime.setCache(`entity_quotes:${entityId}`, updatedEntityQuoteIds);
 
   const beneficiaryQuoteIds =
-    (await runtime.getCache<string[]>(`beneficiary_quotes:${normalized}`)) ||
-    [];
-  const updatedBeneficiaryQuoteIds = beneficiaryQuoteIds.filter(
-    (id) => id !== quote.quoteId,
-  );
-  await runtime.setCache(
-    `beneficiary_quotes:${normalized}`,
-    updatedBeneficiaryQuoteIds,
-  );
+    (await runtime.getCache<string[]>(`beneficiary_quotes:${normalized}`)) || [];
+  const updatedBeneficiaryQuoteIds = beneficiaryQuoteIds.filter((id) => id !== quote.quoteId);
+  await runtime.setCache(`beneficiary_quotes:${normalized}`, updatedBeneficiaryQuoteIds);
 
   const allQuotes = (await runtime.getCache<string[]>("all_quotes")) || [];
   const updatedAllQuotes = allQuotes.filter((id) => id !== quote.quoteId);

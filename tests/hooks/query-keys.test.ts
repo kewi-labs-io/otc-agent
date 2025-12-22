@@ -7,16 +7,16 @@
  * Run: bun test tests/hooks/query-keys.test.ts
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  tokenKeys,
+  chatKeys,
   consignmentKeys,
   dealKeys,
-  quoteKeys,
   poolKeys,
-  walletTokenKeys,
   priceKeys,
-  chatKeys,
+  quoteKeys,
+  tokenKeys,
+  walletTokenKeys,
 } from "@/hooks/queryKeys";
 
 describe("queryKeys", () => {
@@ -87,11 +87,7 @@ describe("queryKeys", () => {
 
     test("list creates key with filters", () => {
       const key = consignmentKeys.list({ chain: "base", status: "active" });
-      expect(key).toEqual([
-        "consignments",
-        "list",
-        { chain: "base", status: "active" },
-      ]);
+      expect(key).toEqual(["consignments", "list", { chain: "base", status: "active" }]);
     });
 
     test("single creates unique key per ID", () => {
@@ -106,11 +102,7 @@ describe("queryKeys", () => {
 
     test("byToken creates filter key", () => {
       const key = consignmentKeys.byToken("token-base-0x123");
-      expect(key).toEqual([
-        "consignments",
-        "list",
-        { tokenId: "token-base-0x123" },
-      ]);
+      expect(key).toEqual(["consignments", "list", { tokenId: "token-base-0x123" }]);
     });
   });
 
@@ -202,11 +194,7 @@ describe("queryKeys", () => {
 
     test("tokenByMint creates key per mint address", () => {
       const key = priceKeys.tokenByMint("So11111111111111111111111111111111111111112");
-      expect(key).toEqual([
-        "prices",
-        "tokenByMint",
-        "So11111111111111111111111111111111111111112",
-      ]);
+      expect(key).toEqual(["prices", "tokenByMint", "So11111111111111111111111111111111111111112"]);
     });
   });
 

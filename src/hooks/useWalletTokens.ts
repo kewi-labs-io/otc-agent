@@ -45,14 +45,10 @@ const MIN_VALUE_USD = 0.001;
  */
 function transformEvmToken(token: EvmBalanceToken, chain: Chain): WalletToken {
   if (!token.symbol || typeof token.symbol !== "string") {
-    throw new Error(
-      `EVM token missing symbol for address: ${token.contractAddress}`,
-    );
+    throw new Error(`EVM token missing symbol for address: ${token.contractAddress}`);
   }
   if (!token.name || typeof token.name !== "string") {
-    throw new Error(
-      `EVM token missing name for address: ${token.contractAddress}`,
-    );
+    throw new Error(`EVM token missing name for address: ${token.contractAddress}`);
   }
 
   return {
@@ -156,19 +152,14 @@ async function fetchEvmTokens(
     throw new Error(`EVM balance fetch failed: ${data.error}`);
   }
 
-  const tokens = data.tokens.map((t) =>
-    transformEvmToken(t as EvmBalanceToken, chain),
-  );
+  const tokens = data.tokens.map((t) => transformEvmToken(t as EvmBalanceToken, chain));
   return processTokens(tokens);
 }
 
 /**
  * Fetch Solana wallet tokens
  */
-async function fetchSolanaTokens(
-  address: string,
-  forceRefresh: boolean,
-): Promise<WalletToken[]> {
+async function fetchSolanaTokens(address: string, forceRefresh: boolean): Promise<WalletToken[]> {
   // Validate address
   parseOrThrow(AddressSchema, address);
 
@@ -185,9 +176,7 @@ async function fetchSolanaTokens(
 
   const data = parseOrThrow(SolanaBalancesResponseSchema, rawData);
 
-  const tokens = data.tokens.map((t) =>
-    transformSolanaToken(t as SolanaBalanceToken),
-  );
+  const tokens = data.tokens.map((t) => transformSolanaToken(t as SolanaBalanceToken));
   return processTokens(tokens);
 }
 
@@ -208,9 +197,7 @@ export function useWalletTokens(
   const { enabled = true, forceRefresh = false } = options ?? {};
 
   return useQuery({
-    queryKey: address
-      ? walletTokenKeys.byWallet(address, chain)
-      : walletTokenKeys.byChain(chain),
+    queryKey: address ? walletTokenKeys.byWallet(address, chain) : walletTokenKeys.byChain(chain),
     queryFn: async () => {
       if (!address) return [];
 

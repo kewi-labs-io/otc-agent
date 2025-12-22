@@ -1,21 +1,20 @@
 "use client";
 
 import { usePrivy } from "@privy-io/react-auth";
+import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
 import { Button } from "@/components/button";
 import { ConsignmentRow } from "@/components/consignment-row";
-import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { CardLoading } from "@/components/ui/loading-spinner";
 import { WalletAvatar } from "@/components/wallet-avatar";
+import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { useOTC } from "@/hooks/contracts/useOTC";
+import { quoteKeys } from "@/hooks/queryKeys";
 import { useMyConsignments } from "@/hooks/useConsignments";
 import { useDeals } from "@/hooks/useDeals";
 import { usePrefetchQuote } from "@/hooks/useQuote";
-import { quoteKeys } from "@/hooks/queryKeys";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   mergeDealsWithOffers,
   type OfferWithMetadata,
@@ -35,13 +34,8 @@ export function MyDealsContent() {
   const router = useRouter();
 
   const { activeFamily } = useChain();
-  const {
-    evmAddress,
-    solanaPublicKey,
-    hasWallet,
-    networkLabel,
-    privyAuthenticated,
-  } = useWalletConnection();
+  const { evmAddress, solanaPublicKey, hasWallet, networkLabel, privyAuthenticated } =
+    useWalletConnection();
   const { disconnect, connectWallet } = useWalletActions();
   const { login, ready: privyReady } = usePrivy();
 
@@ -57,13 +51,7 @@ export function MyDealsContent() {
     await disconnect();
   }, [disconnect]);
 
-  const {
-    myOffers,
-    claim,
-    isClaiming,
-    emergencyRefund,
-    emergencyRefundsEnabled,
-  } = useOTC();
+  const { myOffers, claim, isClaiming, emergencyRefund, emergencyRefundsEnabled } = useOTC();
 
   // Prefetch quote data on hover for faster deal page loading
   const prefetchQuote = usePrefetchQuote();
@@ -155,10 +143,8 @@ export function MyDealsContent() {
   // Combined loading/error states
   const isLoadingDeals = isLoadingEvmDeals || isLoadingSolanaDeals;
   const isDealsError = isEvmDealsError && isSolanaDealsError; // Only error if BOTH fail
-  const isLoadingConsignments =
-    isLoadingEvmConsignments || isLoadingSolanaConsignments;
-  const isConsignmentsError =
-    isEvmConsignmentsError && isSolanaConsignmentsError;
+  const isLoadingConsignments = isLoadingEvmConsignments || isLoadingSolanaConsignments;
+  const isConsignmentsError = isEvmConsignmentsError && isSolanaConsignmentsError;
 
   // Refetch functions
   const refetchDeals = useCallback(async () => {
@@ -171,9 +157,7 @@ export function MyDealsContent() {
 
   // Combined loading state - true if any query is loading or we don't have any wallet address yet
   const isLoading =
-    isLoadingDeals ||
-    isLoadingConsignments ||
-    (hasWallet && !evmWalletAddr && !solanaWalletAddr);
+    isLoadingDeals || isLoadingConsignments || (hasWallet && !evmWalletAddr && !solanaWalletAddr);
 
   // Error state - only error if ALL queries fail
   const hasError = isDealsError && isConsignmentsError;
@@ -189,9 +173,7 @@ export function MyDealsContent() {
 
     // Transform Solana deals
     if (solanaDeals.length > 0 && solanaPublicKey) {
-      const solanaTransformed = solanaDeals.map((deal) =>
-        transformSolanaDeal(deal),
-      );
+      const solanaTransformed = solanaDeals.map((deal) => transformSolanaDeal(deal));
       allPurchases.push(...solanaTransformed);
     }
 
@@ -246,27 +228,20 @@ export function MyDealsContent() {
 
   // Redirect to trading desk if no deals
   const hasAnyDeals =
-    filteredListings.length > 0 ||
-    sortedPurchases.length > 0 ||
-    withdrawnCount > 0;
+    filteredListings.length > 0 || sortedPurchases.length > 0 || withdrawnCount > 0;
 
   // Track if we've successfully fetched data at least once
   const hasFetchedData = useMemo(() => {
     // Only consider redirect after queries have actually completed successfully
     // Check that at least one query has fetched (not just enabled=false returning early)
     const evmDealsLoaded = !isLoadingEvmDeals && evmDeals !== undefined;
-    const solanaDealsLoaded =
-      !isLoadingSolanaDeals && solanaDeals !== undefined;
-    const evmListingsLoaded =
-      !isLoadingEvmConsignments && evmListings !== undefined;
-    const solanaListingsLoaded =
-      !isLoadingSolanaConsignments && solanaListings !== undefined;
+    const solanaDealsLoaded = !isLoadingSolanaDeals && solanaDeals !== undefined;
+    const evmListingsLoaded = !isLoadingEvmConsignments && evmListings !== undefined;
+    const solanaListingsLoaded = !isLoadingSolanaConsignments && solanaListings !== undefined;
 
     // Need at least one query per connected wallet to have completed
-    const evmDataLoaded =
-      !evmWalletAddr || (evmDealsLoaded && evmListingsLoaded);
-    const solanaDataLoaded =
-      !solanaWalletAddr || (solanaDealsLoaded && solanaListingsLoaded);
+    const evmDataLoaded = !evmWalletAddr || (evmDealsLoaded && evmListingsLoaded);
+    const solanaDataLoaded = !solanaWalletAddr || (solanaDealsLoaded && solanaListingsLoaded);
 
     return evmDataLoaded && solanaDataLoaded;
   }, [
@@ -286,20 +261,14 @@ export function MyDealsContent() {
     return (
       <main className="flex-1 min-h-[60dvh] flex items-center justify-center">
         <div className="text-center space-y-6 max-w-md mx-auto px-4">
-          <h1 className="text-2xl sm:text-3xl font-semibold">
-            Sign In to View Your Deals
-          </h1>
+          <h1 className="text-2xl sm:text-3xl font-semibold">Sign In to View Your Deals</h1>
           <Button
             color="brand"
             onClick={handleConnect}
             disabled={!privyReady}
             className="!px-8 !py-3 !text-base"
           >
-            {privyReady
-              ? privyAuthenticated
-                ? "Connect Wallet"
-                : "Sign In"
-              : "Loading..."}
+            {privyReady ? (privyAuthenticated ? "Connect Wallet" : "Sign In") : "Loading..."}
           </Button>
         </div>
       </main>
@@ -316,9 +285,7 @@ export function MyDealsContent() {
     return (
       <main className="flex-1 min-h-[60dvh] flex items-center justify-center">
         <div className="text-center space-y-4">
-          <div className="text-zinc-600 dark:text-zinc-400">
-            Failed to load deals
-          </div>
+          <div className="text-zinc-600 dark:text-zinc-400">Failed to load deals</div>
           <Button
             color="brand"
             onClick={() => {
@@ -362,17 +329,13 @@ export function MyDealsContent() {
               <div className="space-y-1">
                 {evmAddress && (
                   <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                    <span className="text-xs text-zinc-500 dark:text-zinc-400 mr-1.5">
-                      Base
-                    </span>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400 mr-1.5">Base</span>
                     {`${evmAddress.slice(0, 6)}...${evmAddress.slice(-4)}`}
                   </p>
                 )}
                 {solanaPublicKey && (
                   <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                    <span className="text-xs text-zinc-500 dark:text-zinc-400 mr-1.5">
-                      Solana
-                    </span>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400 mr-1.5">Solana</span>
                     {`${solanaPublicKey.slice(0, 6)}...${solanaPublicKey.slice(-4)}`}
                   </p>
                 )}
@@ -385,6 +348,7 @@ export function MyDealsContent() {
             </div>
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={handleDisconnect}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
               >
@@ -407,6 +371,7 @@ export function MyDealsContent() {
           >
             <p className="text-sm">{refundStatus.message}</p>
             <button
+              type="button"
               onClick={() => setRefundStatus(null)}
               className="text-xs underline mt-1 opacity-70 hover:opacity-100"
             >
@@ -436,13 +401,11 @@ export function MyDealsContent() {
                 </h2>
                 {withdrawnCount > 0 && (
                   <button
-                    onClick={() =>
-                      setShowWithdrawnListings(!showWithdrawnListings)
-                    }
+                    type="button"
+                    onClick={() => setShowWithdrawnListings(!showWithdrawnListings)}
                     className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
                   >
-                    {showWithdrawnListings ? "Hide" : "Show"} withdrawn (
-                    {withdrawnCount})
+                    {showWithdrawnListings ? "Hide" : "Show"} withdrawn ({withdrawnCount})
                   </button>
                 )}
               </div>
@@ -472,14 +435,10 @@ export function MyDealsContent() {
                 {sortedPurchases.map((o) => {
                   // FAIL-FAST: tokenSymbol and tokenName are required for display
                   if (!o.tokenSymbol) {
-                    throw new Error(
-                      `Purchase ${o.id.toString()} missing required tokenSymbol`,
-                    );
+                    throw new Error(`Purchase ${o.id.toString()} missing required tokenSymbol`);
                   }
                   if (!o.tokenName) {
-                    throw new Error(
-                      `Purchase ${o.id.toString()} missing required tokenName`,
-                    );
+                    throw new Error(`Purchase ${o.id.toString()} missing required tokenName`);
                   }
 
                   const now = Math.floor(Date.now() / 1000);
@@ -520,12 +479,9 @@ export function MyDealsContent() {
                           </div>
                         )}
                         <div className="min-w-0">
-                          <div className="font-semibold text-sm truncate">
-                            ${o.tokenSymbol}
-                          </div>
+                          <div className="font-semibold text-sm truncate">${o.tokenSymbol}</div>
                           <div className="text-xs text-zinc-500 truncate">
-                            {o.tokenName} •{" "}
-                            {o.chain === "solana" ? "Solana" : "Base"}
+                            {o.tokenName} • {o.chain === "solana" ? "Solana" : "Base"}
                           </div>
                         </div>
                       </div>
@@ -544,9 +500,7 @@ export function MyDealsContent() {
                           <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
                             Maturity
                           </div>
-                          <div className="font-semibold text-sm">
-                            {formatDate(o.unlockTime)}
-                          </div>
+                          <div className="font-semibold text-sm">{formatDate(o.unlockTime)}</div>
                         </div>
 
                         <div>
@@ -592,9 +546,7 @@ export function MyDealsContent() {
                             const data = await queryClient.fetchQuery({
                               queryKey: quoteKeys.byOffer(o.id.toString()),
                               queryFn: async () => {
-                                const response = await fetch(
-                                  `/api/quote/by-offer/${o.id}`,
-                                );
+                                const response = await fetch(`/api/quote/by-offer/${o.id}`);
                                 if (!response.ok) return null;
                                 return response.json();
                               },
@@ -629,13 +581,10 @@ export function MyDealsContent() {
                               setRefundStatus(null);
                               const createdAt = Number(o.createdAt);
                               const now = Math.floor(Date.now() / 1000);
-                              const daysSinceCreation =
-                                (now - createdAt) / (24 * 60 * 60);
+                              const daysSinceCreation = (now - createdAt) / (24 * 60 * 60);
 
                               if (daysSinceCreation < 90) {
-                                const daysRemaining = Math.ceil(
-                                  90 - daysSinceCreation,
-                                );
+                                const daysRemaining = Math.ceil(90 - daysSinceCreation);
                                 setRefundStatus({
                                   type: "info",
                                   message: `Emergency refund available in ${daysRemaining} days`,

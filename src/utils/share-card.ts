@@ -76,11 +76,7 @@ export async function createDealShareImage(args: {
 
   ctx.fillStyle = COLORS.WHITE;
   ctx.font = "48px Inter, Arial, sans-serif";
-  ctx.fillText(
-    `Lockup: ${Math.max(1, Math.round(lockupMonths))} months`,
-    60,
-    420,
-  );
+  ctx.fillText(`Lockup: ${Math.max(1, Math.round(lockupMonths))} months`, 60, 420);
   if (paymentCurrency) {
     ctx.fillText(`Payment: ${paymentCurrency}`, 60, 480);
   }

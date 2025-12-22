@@ -97,10 +97,7 @@ const TokenSchemaRaw = z.object({
     }
   }, z.string()),
   // description can be missing in legacy data - default to empty string
-  description: z.preprocess(
-    (val) => (val === undefined || val === null ? "" : val),
-    z.string(),
-  ),
+  description: z.preprocess((val) => (val === undefined || val === null ? "" : val), z.string()),
   // website can be empty string, undefined, or valid URL - normalize to undefined or valid URL
   website: z.preprocess(
     (val) => (val === "" || val === null ? undefined : val),
@@ -108,10 +105,7 @@ const TokenSchemaRaw = z.object({
   ),
   twitter: z.string().optional(),
   // isActive can be missing in legacy data - default to true
-  isActive: z.preprocess(
-    (val) => (val === undefined || val === null ? true : val),
-    z.boolean(),
-  ),
+  isActive: z.preprocess((val) => (val === undefined || val === null ? true : val), z.boolean()),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
   poolAddress: AddressSchema.optional(),
@@ -145,10 +139,7 @@ export const TokenMarketDataSchema: z.ZodType<TokenMarketData> = z.object({
     (val) => (val === undefined || val === null ? 0 : val),
     NonNegativeNumberSchema,
   ),
-  priceChange24h: z.preprocess(
-    (val) => (val === undefined || val === null ? 0 : val),
-    z.number(),
-  ),
+  priceChange24h: z.preprocess((val) => (val === undefined || val === null ? 0 : val), z.number()),
   liquidity: z.preprocess(
     (val) => (val === undefined || val === null ? 0 : val),
     NonNegativeNumberSchema,
@@ -220,36 +211,31 @@ const OTCConsignmentBaseSchema = z.object({
 });
 
 // Add refinement: non-negotiable consignments MUST have fixed values
-export const OTCConsignmentSchema: z.ZodType<OTCConsignment> =
-  OTCConsignmentBaseSchema.refine(
+export const OTCConsignmentSchema: z.ZodType<OTCConsignment> = OTCConsignmentBaseSchema.refine(
+  (data) => {
+    if (!data.isNegotiable) {
+      return data.fixedDiscountBps !== undefined && data.fixedLockupDays !== undefined;
+    }
+    return true;
+  },
+  {
+    message: "Non-negotiable consignments require fixedDiscountBps and fixedLockupDays",
+  },
+)
+  .refine(
     (data) => {
-      if (!data.isNegotiable) {
-        return (
-          data.fixedDiscountBps !== undefined &&
-          data.fixedLockupDays !== undefined
-        );
-      }
-      return true;
+      // minDiscountBps <= maxDiscountBps
+      return data.minDiscountBps <= data.maxDiscountBps;
     },
-    {
-      message:
-        "Non-negotiable consignments require fixedDiscountBps and fixedLockupDays",
-    },
+    { message: "minDiscountBps cannot exceed maxDiscountBps" },
   )
-    .refine(
-      (data) => {
-        // minDiscountBps <= maxDiscountBps
-        return data.minDiscountBps <= data.maxDiscountBps;
-      },
-      { message: "minDiscountBps cannot exceed maxDiscountBps" },
-    )
-    .refine(
-      (data) => {
-        // minLockupDays <= maxLockupDays
-        return data.minLockupDays <= data.maxLockupDays;
-      },
-      { message: "minLockupDays cannot exceed maxLockupDays" },
-    ) as z.ZodType<OTCConsignment>;
+  .refine(
+    (data) => {
+      // minLockupDays <= maxLockupDays
+      return data.minLockupDays <= data.maxLockupDays;
+    },
+    { message: "minLockupDays cannot exceed maxLockupDays" },
+  ) as z.ZodType<OTCConsignment>;
 
 //==============================================================================
 // CONSIGNMENT DEAL SCHEMA
@@ -334,28 +320,22 @@ const QuoteMemoryBaseSchema = z.object({
 });
 
 // Add refinement: executed quotes MUST have transaction details
-export const QuoteMemorySchema: z.ZodType<QuoteMemory> =
-  QuoteMemoryBaseSchema.refine(
-    (data) => {
-      if (data.status === "executed") {
-        return (
-          data.offerId !== "" &&
-          data.transactionHash !== "" &&
-          data.blockNumber > 0
-        );
-      }
-      return true;
-    },
-    {
-      message:
-        "Executed quotes must have offerId, transactionHash, and blockNumber",
-    },
-  ).refine(
-    (data) => {
-      if (data.status === "rejected") {
-        return data.rejectionReason !== "";
-      }
-      return true;
-    },
-    { message: "Rejected quotes must have rejectionReason" },
-  ) as z.ZodType<QuoteMemory>;
+export const QuoteMemorySchema: z.ZodType<QuoteMemory> = QuoteMemoryBaseSchema.refine(
+  (data) => {
+    if (data.status === "executed") {
+      return data.offerId !== "" && data.transactionHash !== "" && data.blockNumber > 0;
+    }
+    return true;
+  },
+  {
+    message: "Executed quotes must have offerId, transactionHash, and blockNumber",
+  },
+).refine(
+  (data) => {
+    if (data.status === "rejected") {
+      return data.rejectionReason !== "";
+    }
+    return true;
+  },
+  { message: "Rejected quotes must have rejectionReason" },
+) as z.ZodType<QuoteMemory>;

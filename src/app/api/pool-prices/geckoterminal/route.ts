@@ -13,24 +13,15 @@ export async function GET(request: NextRequest) {
 
   if (!network || !tokenAddress) {
     const errorResponse = { error: "network and token parameters required" };
-    const validatedError =
-      PoolPriceProxyErrorResponseSchema.parse(errorResponse);
+    const validatedError = PoolPriceProxyErrorResponseSchema.parse(errorResponse);
     return NextResponse.json(validatedError, { status: 400 });
   }
 
   // Validate network parameter
-  const validNetworks = [
-    "base",
-    "eth",
-    "ethereum",
-    "bsc",
-    "polygon",
-    "arbitrum",
-  ];
+  const validNetworks = ["base", "eth", "ethereum", "bsc", "polygon", "arbitrum"];
   if (!validNetworks.includes(network.toLowerCase())) {
     const errorResponse = { error: `Invalid network: ${network}` };
-    const validatedError =
-      PoolPriceProxyErrorResponseSchema.parse(errorResponse);
+    const validatedError = PoolPriceProxyErrorResponseSchema.parse(errorResponse);
     return NextResponse.json(validatedError, { status: 400 });
   }
 

@@ -39,9 +39,7 @@ export const DealFilters = memo(function DealFilters({
 
   // Determine current type selection
   const currentType: DealType =
-    filters.negotiableTypes.length === 2
-      ? "all"
-      : filters.negotiableTypes[0] || "all";
+    filters.negotiableTypes.length === 2 ? "all" : filters.negotiableTypes[0] || "all";
 
   return (
     <>
@@ -53,9 +51,7 @@ export const DealFilters = memo(function DealFilters({
             type="text"
             placeholder="Search tokens..."
             value={filters.searchQuery}
-            onChange={(e) =>
-              onFiltersChange({ ...filters, searchQuery: e.target.value })
-            }
+            onChange={(e) => onFiltersChange({ ...filters, searchQuery: e.target.value })}
             className="w-full px-3 py-2 pl-9 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           <svg
@@ -117,9 +113,7 @@ export const DealFilters = memo(function DealFilters({
             type="text"
             placeholder="Search tokens..."
             value={filters.searchQuery}
-            onChange={(e) =>
-              onFiltersChange({ ...filters, searchQuery: e.target.value })
-            }
+            onChange={(e) => onFiltersChange({ ...filters, searchQuery: e.target.value })}
             className="w-full px-3 py-2 pl-9 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           <svg
@@ -149,14 +143,12 @@ export const DealFilters = memo(function DealFilters({
           {/* Type toggle - independent buttons */}
           <div className="flex-1 flex rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
             <button
+              type="button"
               onClick={() => {
                 const isOn = filters.negotiableTypes.includes("negotiable");
                 const newTypes = isOn
                   ? filters.negotiableTypes.filter((t) => t !== "negotiable")
-                  : ([...filters.negotiableTypes, "negotiable"] as (
-                      | "negotiable"
-                      | "fixed"
-                    )[]);
+                  : ([...filters.negotiableTypes, "negotiable"] as ("negotiable" | "fixed")[]);
                 onFiltersChange({ ...filters, negotiableTypes: newTypes });
               }}
               className={`
@@ -171,14 +163,12 @@ export const DealFilters = memo(function DealFilters({
               Negotiable
             </button>
             <button
+              type="button"
               onClick={() => {
                 const isOn = filters.negotiableTypes.includes("fixed");
                 const newTypes = isOn
                   ? filters.negotiableTypes.filter((t) => t !== "fixed")
-                  : ([...filters.negotiableTypes, "fixed"] as (
-                      | "negotiable"
-                      | "fixed"
-                    )[]);
+                  : ([...filters.negotiableTypes, "fixed"] as ("negotiable" | "fixed")[]);
                 onFiltersChange({ ...filters, negotiableTypes: newTypes });
               }}
               className={`

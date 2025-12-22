@@ -52,10 +52,7 @@ const getRecentInteractions = async (
   excludeRoomId: UUID,
 ): Promise<Memory[]> => {
   // Find all rooms where sourceEntityId and targetEntityId are participants
-  const rooms = await runtime.getRoomsForParticipants([
-    sourceEntityId,
-    targetEntityId,
-  ]);
+  const rooms = await runtime.getRoomsForParticipants([sourceEntityId, targetEntityId]);
 
   // Check the existing memories in the database
   return runtime.getMemoriesByRoomIds({
@@ -222,10 +219,7 @@ const sanitizeText = (input?: string): string => {
   return text;
 };
 
-const sanitizeMemoryIfUser = (
-  memory: Memory,
-  runtime: IAgentRuntime,
-): Memory => {
+const sanitizeMemoryIfUser = (memory: Memory, runtime: IAgentRuntime): Memory => {
   const isSelf = memory.entityId === runtime.agentId;
   if (isSelf) return memory;
   // FAIL-FAST: Memory.content should exist (Memory type requires it)
@@ -263,30 +257,22 @@ export const recentMessagesProvider: Provider = {
     const conversationLength = runtime.getConversationLength();
 
     // Parallelize initial data fetching operations including recentInteractions
-    const [entitiesData, room, recentMessagesData, recentInteractionsData] =
-      await Promise.all([
-        getEntityDetails({ runtime, roomId }),
-        runtime.getRoom(roomId),
-        runtime.getMemories({
-          tableName: "messages",
-          roomId,
-          count: conversationLength,
-          unique: false,
-        }),
-        message.entityId !== runtime.agentId
-          ? getRecentInteractions(
-              runtime,
-              message.entityId,
-              runtime.agentId,
-              roomId,
-            )
-          : Promise.resolve([]),
-      ]);
+    const [entitiesData, room, recentMessagesData, recentInteractionsData] = await Promise.all([
+      getEntityDetails({ runtime, roomId }),
+      runtime.getRoom(roomId),
+      runtime.getMemories({
+        tableName: "messages",
+        roomId,
+        count: conversationLength,
+        unique: false,
+      }),
+      message.entityId !== runtime.agentId
+        ? getRecentInteractions(runtime, message.entityId, runtime.agentId, roomId)
+        : Promise.resolve([]),
+    ]);
 
     // Sanitize only user-authored messages for display
-    const sanitizedRecentMessages = recentMessagesData.map((m) =>
-      sanitizeMemoryIfUser(m, runtime),
-    );
+    const sanitizedRecentMessages = recentMessagesData.map((m) => sanitizeMemoryIfUser(m, runtime));
     const sanitizedRecentInteractions = recentInteractionsData.map((m) =>
       sanitizeMemoryIfUser(m, runtime),
     );
@@ -298,8 +284,7 @@ export const recentMessagesProvider: Provider = {
       );
     }
 
-    const isPostFormat =
-      room.type === ChannelType.FEED || room.type === ChannelType.THREAD;
+    const isPostFormat = room.type === ChannelType.FEED || room.type === ChannelType.THREAD;
 
     // Format recent messages and posts in parallel
     const [formattedRecentMessages, formattedRecentPosts] = await Promise.all([
@@ -368,9 +353,7 @@ export const recentMessagesProvider: Provider = {
 
       // Get the remaining entities that weren't already loaded
       // Use Set difference for efficient filtering
-      const remainingEntityIds = uniqueEntityIds.filter(
-        (id) => !entitiesDataIdSet.has(id),
-      );
+      const remainingEntityIds = uniqueEntityIds.filter((id) => !entitiesDataIdSet.has(id));
 
       // Only fetch the entities we don't already have
       if (remainingEntityIds.length > 0) {
@@ -398,9 +381,7 @@ export const recentMessagesProvider: Provider = {
         if (isSelf) {
           sender = runtime.character.name;
         } else {
-          sender = getEntityUsername(
-            interactionEntityMap.get(message.entityId),
-          );
+          sender = getEntityUsername(interactionEntityMap.get(message.entityId));
         }
 
         return `${sender}: ${message.content.text}`;
@@ -435,11 +416,10 @@ export const recentMessagesProvider: Provider = {
     };
 
     // Process both types of interactions in parallel
-    const [recentMessageInteractions, recentPostInteractions] =
-      await Promise.all([
-        getRecentMessageInteractions(sanitizedRecentInteractions),
-        getRecentPostInteractions(sanitizedRecentInteractions, entitiesData),
-      ]);
+    const [recentMessageInteractions, recentPostInteractions] = await Promise.all([
+      getRecentMessageInteractions(sanitizedRecentInteractions),
+      getRecentPostInteractions(sanitizedRecentInteractions, entitiesData),
+    ]);
 
     const data = {
       recentMessages: sanitizedRecentMessages,
@@ -451,17 +431,11 @@ export const recentMessagesProvider: Provider = {
       recentMessages,
       recentMessageInteractions,
       recentPostInteractions,
-      recentInteractions: isPostFormat
-        ? recentPostInteractions
-        : recentMessageInteractions,
+      recentInteractions: isPostFormat ? recentPostInteractions : recentMessageInteractions,
     };
 
     // Combine all text sections
-    const text = [
-      isPostFormat
-        ? recentPosts
-        : recentMessages + receivedMessageHeader + focusHeader,
-    ]
+    const text = [isPostFormat ? recentPosts : recentMessages + receivedMessageHeader + focusHeader]
       .filter(Boolean)
       .join("\n\n");
 

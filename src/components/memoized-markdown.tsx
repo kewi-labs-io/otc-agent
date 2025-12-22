@@ -19,29 +19,19 @@ function parseMarkdownIntoBlocks(markdown: string): string[] {
 const MemoizedMarkdownBlock = memo(
   ({ content, options }: MarkdownBlockProps) => {
     // Cast to library's options type - our MarkdownOptions is a compatible subset
-    return (
-      <Markdown options={options as MarkdownComponentOptions}>
-        {content}
-      </Markdown>
-    );
+    return <Markdown options={options as MarkdownComponentOptions}>{content}</Markdown>;
   },
   (prevProps, nextProps) => prevProps.content === nextProps.content,
 );
 
 MemoizedMarkdownBlock.displayName = "MemoizedMarkdownBlock";
 
-export const MemoizedMarkdown = memo(
-  ({ content, id, options }: MemoizedMarkdownProps) => {
-    const blocks = useMemo(() => parseMarkdownIntoBlocks(content), [content]);
+export const MemoizedMarkdown = memo(({ content, id, options }: MemoizedMarkdownProps) => {
+  const blocks = useMemo(() => parseMarkdownIntoBlocks(content), [content]);
 
-    return blocks.map((block, index) => (
-      <MemoizedMarkdownBlock
-        content={block}
-        options={options}
-        key={`${id}-block_${index}`}
-      />
-    ));
-  },
-);
+  return blocks.map((block, index) => (
+    <MemoizedMarkdownBlock content={block} options={options} key={`${id}-block_${index}`} />
+  ));
+});
 
 MemoizedMarkdown.displayName = "MemoizedMarkdown";

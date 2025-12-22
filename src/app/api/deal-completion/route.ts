@@ -1,20 +1,17 @@
 import { Connection } from "@solana/web3.js";
 import { type NextRequest, NextResponse } from "next/server";
 import { type Abi, type Address, createPublicClient, http } from "viem";
+import { getOtcAddress } from "@/config/contracts";
 import { getHeliusRpcUrl, getNetwork } from "@/config/env";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 import { agentRuntime } from "@/lib/agent-runtime";
 import { walletToEntityId } from "@/lib/entityId";
 import { getChain, getRpcUrl } from "@/lib/getChain";
-import { getOtcAddress } from "@/config/contracts";
 import type QuoteService from "@/lib/plugin-otc-desk/services/quoteService";
 import type { QuoteMemory } from "@/lib/plugin-otc-desk/types";
 import { validationErrorResponse } from "@/lib/validation/helpers";
 import { safeReadContract } from "@/lib/viem-utils";
-import {
-  DealCompletionService,
-  type PaymentCurrency,
-} from "@/services/database";
+import { DealCompletionService, type PaymentCurrency } from "@/services/database";
 import {
   DealCompletionRequestSchema,
   DealCompletionResponseSchema,
@@ -41,20 +38,16 @@ export async function POST(request: NextRequest) {
 
   if (action === "complete") {
     if (consignmentId && tokenId) {
-      const { PriceProtectionService } =
-        await import("@/services/priceProtection");
+      const { PriceProtectionService } = await import("@/services/priceProtection");
       const { TokenDB } = await import("@/services/database");
-      const { ConsignmentService } =
-        await import("@/services/consignmentService");
+      const { ConsignmentService } = await import("@/services/consignmentService");
 
       const priceProtection = new PriceProtectionService();
       const consignmentService = new ConsignmentService();
       const token = await TokenDB.getToken(tokenId);
 
       if (typeof body.priceAtQuote !== "number") {
-        throw new Error(
-          `priceAtQuote is required, got: ${typeof body.priceAtQuote}`,
-        );
+        throw new Error(`priceAtQuote is required, got: ${typeof body.priceAtQuote}`);
       }
       const priceAtQuote = body.priceAtQuote;
       if (typeof body.maxPriceDeviationBps !== "number") {
@@ -120,11 +113,8 @@ export async function POST(request: NextRequest) {
         : "USDC";
     // Optional fields - validate when required for specific paths
     const offerId = body.offerId ? String(body.offerId) : undefined;
-    const transactionHash = body.transactionHash
-      ? String(body.transactionHash)
-      : undefined;
-    const blockNumber =
-      body.blockNumber !== undefined ? Number(body.blockNumber) : undefined;
+    const transactionHash = body.transactionHash ? String(body.transactionHash) : undefined;
+    const blockNumber = body.blockNumber !== undefined ? Number(body.blockNumber) : undefined;
     // FAIL-FAST: chain must be specified for deal completion
     if (!body.chain) {
       throw new Error("chain field is required for deal completion");
@@ -135,18 +125,12 @@ export async function POST(request: NextRequest) {
 
     const runtime = agentRuntime.runtime;
     if (!runtime) {
-      return NextResponse.json(
-        { error: "Runtime not initialized" },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: "Runtime not initialized" }, { status: 500 });
     }
 
     const quoteService = runtime.getService<QuoteService>("QuoteService");
     if (!quoteService) {
-      return NextResponse.json(
-        { error: "QuoteService not available" },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: "QuoteService not available" }, { status: 500 });
     }
 
     const quote = await quoteService.getQuoteByQuoteId(quoteId);
@@ -168,10 +152,7 @@ export async function POST(request: NextRequest) {
         const updatedQuote = await quoteService.getQuoteByQuoteId(quoteId);
         Object.assign(quote, updatedQuote);
 
-        console.log(
-          "[DealCompletion] Updated to new entityId:",
-          quote.entityId,
-        );
+        console.log("[DealCompletion] Updated to new entityId:", quote.entityId);
       }
     }
 
@@ -196,14 +177,11 @@ export async function POST(request: NextRequest) {
       }
 
       const network = getNetwork();
-      const rpcUrl =
-        network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
+      const rpcUrl = network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
       console.log(`[Deal Completion] Using Helius RPC for Solana`);
       const connection = new Connection(rpcUrl, "confirmed");
 
-      console.log(
-        `[DealCompletion] Verifying Solana tx: ${transactionHash} on ${rpcUrl}`,
-      );
+      console.log(`[DealCompletion] Verifying Solana tx: ${transactionHash} on ${rpcUrl}`);
 
       // Fetch transaction
       const tx = await connection.getTransaction(transactionHash, {
@@ -242,38 +220,24 @@ export async function POST(request: NextRequest) {
         // MarketData is optional - may not exist yet
         if (marketData) {
           // FAIL-FAST: If marketData exists, priceUsd should be valid
-          if (
-            typeof marketData.priceUsd !== "number" ||
-            marketData.priceUsd <= 0
-          ) {
+          if (typeof marketData.priceUsd !== "number" || marketData.priceUsd <= 0) {
             throw new Error(
               `MarketData exists for ${quote.tokenId} but has invalid priceUsd: ${marketData.priceUsd}`,
             );
           }
           tokenPrice = marketData.priceUsd;
-          console.log(
-            "[DealCompletion] Using market data token price:",
-            tokenPrice,
-          );
+          console.log("[DealCompletion] Using market data token price:", tokenPrice);
         }
       }
 
       // Fallback to quote's stored price if market data unavailable
-      if (
-        tokenPrice === 0 &&
-        quote.priceUsdPerToken &&
-        quote.priceUsdPerToken > 0
-      ) {
+      if (tokenPrice === 0 && quote.priceUsdPerToken && quote.priceUsdPerToken > 0) {
         tokenPrice = quote.priceUsdPerToken;
-        console.log(
-          "[DealCompletion] Using quote stored token price:",
-          tokenPrice,
-        );
+        console.log("[DealCompletion] Using quote stored token price:", tokenPrice);
       }
 
       // Get SOL price from price feed API
-      const { getSolPriceUsd } =
-        await import("@/lib/plugin-otc-desk/services/priceFeed");
+      const { getSolPriceUsd } = await import("@/lib/plugin-otc-desk/services/priceFeed");
       solPrice = await getSolPriceUsd();
       console.log("[DealCompletion] Using SOL price from API:", solPrice);
 
@@ -284,16 +248,13 @@ export async function POST(request: NextRequest) {
         );
         return NextResponse.json(
           {
-            error:
-              "Token price unavailable - please ensure token has market data",
+            error: "Token price unavailable - please ensure token has market data",
           },
           { status: 400 },
         );
       }
       if (body.paymentCurrency === "SOL" && solPrice === 0) {
-        console.error(
-          "[DealCompletion] CRITICAL: SOL price is $0 - cannot calculate SOL payment",
-        );
+        console.error("[DealCompletion] CRITICAL: SOL price is $0 - cannot calculate SOL payment");
         return NextResponse.json(
           { error: "SOL price unavailable - please try again later" },
           { status: 400 },
@@ -470,9 +431,7 @@ export async function POST(request: NextRequest) {
       }
       const discountBps = quote.discountBps;
       if (typeof quote.totalUsd !== "number") {
-        throw new Error(
-          "Quote missing totalUsd - cannot complete deal without offerId",
-        );
+        throw new Error("Quote missing totalUsd - cannot complete deal without offerId");
       }
       totalUsd = quote.totalUsd;
       if (typeof quote.discountUsd === "number") {
@@ -486,51 +445,37 @@ export async function POST(request: NextRequest) {
         discountedUsd = totalUsd - discountUsd;
       }
       if (!quote.paymentAmount || typeof quote.paymentAmount !== "string") {
-        throw new Error(
-          "Quote missing paymentAmount - cannot complete deal without offerId",
-        );
+        throw new Error("Quote missing paymentAmount - cannot complete deal without offerId");
       }
       actualPaymentAmount = quote.paymentAmount;
     }
 
     // VALIDATE before saving
     if (!tokenAmountStr || tokenAmountStr === "0") {
-      console.warn(
-        `[DealCompletion] tokenAmount is ${tokenAmountStr} - quote: ${quoteId}`,
-      );
+      console.warn(`[DealCompletion] tokenAmount is ${tokenAmountStr} - quote: ${quoteId}`);
       // For old quotes, skip validation and just return current state
       if (quote.status === "executed") {
-        console.log(
-          "[DealCompletion] Quote already executed, returning current state",
-        );
+        console.log("[DealCompletion] Quote already executed, returning current state");
         const alreadyExecutedResponse = {
           success: true,
           quoteId: quote.quoteId,
         };
-        const validatedAlreadyExecuted = DealCompletionResponseSchema.parse(
-          alreadyExecutedResponse,
-        );
+        const validatedAlreadyExecuted =
+          DealCompletionResponseSchema.parse(alreadyExecutedResponse);
         return NextResponse.json(validatedAlreadyExecuted);
       }
-      throw new Error(
-        `CRITICAL: tokenAmount is ${tokenAmountStr} - must be > 0`,
-      );
+      throw new Error(`CRITICAL: tokenAmount is ${tokenAmountStr} - must be > 0`);
     }
     if (totalUsd === 0 && chainType === "solana") {
-      console.warn(
-        `[DealCompletion] Solana deal has $0 value - quote: ${quoteId}`,
-      );
+      console.warn(`[DealCompletion] Solana deal has $0 value - quote: ${quoteId}`);
       if (quote.status === "executed") {
-        console.log(
-          "[DealCompletion] Quote already executed, returning current state",
-        );
+        console.log("[DealCompletion] Quote already executed, returning current state");
         const alreadyExecutedResponse = {
           success: true,
           quoteId: quote.quoteId,
         };
-        const validatedAlreadyExecuted = DealCompletionResponseSchema.parse(
-          alreadyExecutedResponse,
-        );
+        const validatedAlreadyExecuted =
+          DealCompletionResponseSchema.parse(alreadyExecutedResponse);
         return NextResponse.json(validatedAlreadyExecuted);
       }
       throw new Error("CRITICAL: Solana deal has $0 value");
@@ -580,9 +525,7 @@ export async function POST(request: NextRequest) {
 
     // VERIFY status changed
     if (updated.status !== "executed") {
-      throw new Error(
-        `CRITICAL: Status is ${updated.status}, expected executed`,
-      );
+      throw new Error(`CRITICAL: Status is ${updated.status}, expected executed`);
     }
 
     // Store chain type for proper currency display
@@ -593,13 +536,9 @@ export async function POST(request: NextRequest) {
     await runtime.setCache(`quote:${quoteId}`, updatedWithChain);
 
     // VERIFY quote is in entity's list, and fix index if missing
-    const entityQuotesCache = await runtime.getCache<string[]>(
-      `entity_quotes:${updated.entityId}`,
-    );
+    const entityQuotesCache = await runtime.getCache<string[]>(`entity_quotes:${updated.entityId}`);
     // entityQuotes is optional - default to empty array if not present
-    const entityQuotes = Array.isArray(entityQuotesCache)
-      ? entityQuotesCache
-      : [];
+    const entityQuotes = Array.isArray(entityQuotesCache) ? entityQuotesCache : [];
     if (!entityQuotes.includes(quoteId)) {
       console.warn(
         `[Deal Completion] Quote ${quoteId} not in entity ${updated.entityId} list - fixing index`,
@@ -628,26 +567,18 @@ export async function POST(request: NextRequest) {
     });
 
     const completeResponse = { success: true, quoteId: updated.quoteId };
-    const validatedComplete =
-      DealCompletionResponseSchema.parse(completeResponse);
+    const validatedComplete = DealCompletionResponseSchema.parse(completeResponse);
     return NextResponse.json(validatedComplete);
   }
 
   if (action === "share") {
     const shareRuntime = agentRuntime.runtime;
     if (!shareRuntime) {
-      return NextResponse.json(
-        { error: "Runtime not initialized" },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: "Runtime not initialized" }, { status: 500 });
     }
-    const shareQuoteService =
-      shareRuntime.getService<QuoteService>("QuoteService");
+    const shareQuoteService = shareRuntime.getService<QuoteService>("QuoteService");
     if (!shareQuoteService) {
-      return NextResponse.json(
-        { error: "QuoteService not available" },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: "QuoteService not available" }, { status: 500 });
     }
     const quote = await shareQuoteService.getQuoteByQuoteId(quoteId);
     if (!quote) {
@@ -753,14 +684,9 @@ export async function GET(request: NextRequest) {
   // active = quote created, approved = offer created/approved on-chain, executed = paid/fulfilled
   const deals = quotes.filter(
     (quote) =>
-      quote.status === "executed" ||
-      quote.status === "active" ||
-      quote.status === "approved",
+      quote.status === "executed" || quote.status === "active" || quote.status === "approved",
   );
-  console.log(
-    "[Deal Completion GET] Filtered deals (active + approved + executed):",
-    deals.length,
-  );
+  console.log("[Deal Completion GET] Filtered deals (active + approved + executed):", deals.length);
 
   // Enrich deals with token metadata - batch fetch to avoid N+1 queries
   const { TokenDB, ConsignmentDB } = await import("@/services/database");
@@ -777,11 +703,8 @@ export async function GET(request: NextRequest) {
     // FAIL-FAST: If tokenId exists, both symbol and name should exist
     if (quoteData.tokenId) {
       const hasSymbol =
-        typeof quoteData.tokenSymbol === "string" &&
-        quoteData.tokenSymbol.trim() !== "";
-      const hasName =
-        typeof quoteData.tokenName === "string" &&
-        quoteData.tokenName.trim() !== "";
+        typeof quoteData.tokenSymbol === "string" && quoteData.tokenSymbol.trim() !== "";
+      const hasName = typeof quoteData.tokenName === "string" && quoteData.tokenName.trim() !== "";
       if (!hasSymbol || !hasName) {
         tokenIdsToFetch.add(quoteData.tokenId);
       }
@@ -810,20 +733,14 @@ export async function GET(request: NextRequest) {
 
   // Also add tokens found via consignments
   for (const result of consignmentResults) {
-    if (
-      result.data &&
-      result.data.tokenId &&
-      !tokenMap.has(result.data.tokenId)
-    ) {
+    if (result.data?.tokenId && !tokenMap.has(result.data.tokenId)) {
       tokenIdsToFetch.add(result.data.tokenId);
     }
   }
 
   // Fetch any additional tokens found via consignments
   if (tokenIdsToFetch.size > tokenMap.size) {
-    const additionalTokenIds = [...tokenIdsToFetch].filter(
-      (id) => !tokenMap.has(id),
-    );
+    const additionalTokenIds = [...tokenIdsToFetch].filter((id) => !tokenMap.has(id));
     const additionalTokens = await Promise.all(
       additionalTokenIds.map(async (id) => {
         const token = await TokenDB.getToken(id);
@@ -857,10 +774,8 @@ export async function GET(request: NextRequest) {
 
       // Look up token by tokenId if we still need metadata
       if (tokenId) {
-        const hasSymbol =
-          typeof tokenSymbol === "string" && tokenSymbol.trim() !== "";
-        const hasName =
-          typeof tokenName === "string" && tokenName.trim() !== "";
+        const hasSymbol = typeof tokenSymbol === "string" && tokenSymbol.trim() !== "";
+        const hasName = typeof tokenName === "string" && tokenName.trim() !== "";
         if (!hasSymbol || !hasName) {
           const token = tokenMap.get(tokenId);
           if (token) {

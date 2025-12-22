@@ -35,11 +35,7 @@ function getSolanaEndpoint(): string {
   return configUrl;
 }
 
-export function SolanaWalletProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function SolanaWalletProvider({ children }: { children: React.ReactNode }) {
   useRenderTracker("SolanaWalletProvider");
 
   const network = useMemo(() => getSolanaNetwork(), []);
@@ -60,7 +56,5 @@ export function SolanaWalletProvider({
     }
   }, [network, endpoint]);
 
-  return (
-    <ConnectionProvider endpoint={endpoint}>{children}</ConnectionProvider>
-  );
+  return <ConnectionProvider endpoint={endpoint}>{children}</ConnectionProvider>;
 }

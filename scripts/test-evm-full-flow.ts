@@ -1,25 +1,25 @@
 /**
  * Full EVM OTC Flow Test
  * Tests: approve -> deposit (list) -> create offer (buy) -> backend approve -> verify payment
- * 
+ *
  * This replicates what happens when a user:
  * 1. Lists tokens on /consign
  * 2. Another user buys tokens via accept-quote-modal
  */
 
+import * as dotenv from "dotenv";
 import {
+  type Address,
   createPublicClient,
   createWalletClient,
-  http,
-  parseAbi,
-  type Address,
-  formatEther,
-  keccak256,
   encodePacked,
+  formatEther,
+  http,
+  keccak256,
+  parseAbi,
 } from "viem";
-import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
-import * as dotenv from "dotenv";
+import { base } from "viem/chains";
 
 dotenv.config();
 
@@ -50,7 +50,7 @@ function computeTokenId(tokenAddress: Address): `0x${string}` {
 }
 
 async function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function main() {
@@ -104,15 +104,19 @@ async function main() {
   const requiredEth = gasDeposit + BigInt(5e14); // gas deposit + buffer for gas fees
 
   if (ethBalance < requiredEth) {
-    throw new Error(`Insufficient ETH. Need ${formatEther(requiredEth)} ETH, have ${formatEther(ethBalance)}`);
+    throw new Error(
+      `Insufficient ETH. Need ${formatEther(requiredEth)} ETH, have ${formatEther(ethBalance)}`,
+    );
   }
   if (tokenBalance < depositAmount) {
-    throw new Error(`Insufficient tokens. Need ${Number(depositAmount) / 10 ** TOKEN_DECIMALS}, have ${Number(tokenBalance) / 10 ** TOKEN_DECIMALS}`);
+    throw new Error(
+      `Insufficient tokens. Need ${Number(depositAmount) / 10 ** TOKEN_DECIMALS}, have ${Number(tokenBalance) / 10 ** TOKEN_DECIMALS}`,
+    );
   }
 
   // ========== STEP 1: APPROVE TOKENS ==========
   console.log("\n--- Step 1: Approve Tokens ---");
-  
+
   const currentAllowance = await publicClient.readContract({
     address: ELIZAOS_TOKEN,
     abi: erc20Abi,
@@ -130,11 +134,11 @@ async function main() {
       args: [OTC_ADDRESS, depositAmount],
     });
     console.log("Approve tx:", approveHash);
-    
+
     // Wait for confirmation with retries
     console.log("Waiting for confirmation...");
     await sleep(3000);
-    
+
     for (let i = 0; i < 10; i++) {
       const newAllowance = await publicClient.readContract({
         address: ELIZAOS_TOKEN,
@@ -163,10 +167,10 @@ async function main() {
     tokenId,
     amount: depositAmount,
     isNegotiable: true,
-    fixedDiscountBps: 1000,    // 10%
+    fixedDiscountBps: 1000, // 10%
     fixedLockupDays: 180,
-    minDiscountBps: 500,       // 5%
-    maxDiscountBps: 2000,      // 20%
+    minDiscountBps: 500, // 5%
+    maxDiscountBps: 2000, // 20%
     minLockupDays: 7,
     maxLockupDays: 365,
     minDealAmount: BigInt(1 * 10 ** TOKEN_DECIMALS),
@@ -174,7 +178,11 @@ async function main() {
     maxPriceVolatilityBps: 1000,
   };
 
-  console.log("Creating consignment with", Number(params.amount) / 10 ** TOKEN_DECIMALS, "tokens...");
+  console.log(
+    "Creating consignment with",
+    Number(params.amount) / 10 ** TOKEN_DECIMALS,
+    "tokens...",
+  );
 
   const { request: createRequest } = await publicClient.simulateContract({
     address: OTC_ADDRESS,
@@ -246,7 +254,11 @@ async function main() {
     agentCommissionBps: 25, // 0.25%
   };
 
-  console.log("Creating offer for", Number(offerParams.tokenAmount) / 10 ** TOKEN_DECIMALS, "tokens...");
+  console.log(
+    "Creating offer for",
+    Number(offerParams.tokenAmount) / 10 ** TOKEN_DECIMALS,
+    "tokens...",
+  );
 
   const { request: offerRequest } = await publicClient.simulateContract({
     address: OTC_ADDRESS,
@@ -310,17 +322,19 @@ async function main() {
 
   if (!approveRes.ok) {
     const errorText = await approveRes.text();
-    throw new Error(`Approval API failed: ${errorText}. Make sure the dev server is running (bun run dev). Offer ID: ${offerId}`);
+    throw new Error(
+      `Approval API failed: ${errorText}. Make sure the dev server is running (bun run dev). Offer ID: ${offerId}`,
+    );
   }
 
-  const approveData = await approveRes.json() as {
+  const approveData = (await approveRes.json()) as {
     success: boolean;
     approvalTx?: string;
     txHash?: string;
     autoFulfilled?: boolean;
     fulfillTx?: string;
   };
-  
+
   // FAIL-FAST: At least one transaction hash must exist
   const approvalTxHash = approveData.approvalTx ?? approveData.txHash;
   if (!approvalTxHash) {

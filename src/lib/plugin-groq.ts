@@ -3,11 +3,7 @@
 // the ElizaOS plugin interface which has complex type requirements that
 // vary between @elizaos/core versions.
 import { createGroq } from "@ai-sdk/groq";
-import type {
-  ModelTypeName,
-  ObjectGenerationParams,
-  Plugin,
-} from "@elizaos/core";
+import type { ModelTypeName, ObjectGenerationParams, Plugin } from "@elizaos/core";
 import {
   type DetokenizeTextParams,
   type GenerateTextParams,
@@ -26,10 +22,7 @@ function getBaseURL(runtime: {
   getSetting: (key: string) => string | number | boolean | null;
 }): string {
   const setting = runtime.getSetting("GROQ_BASE_URL");
-  return (
-    (typeof setting === "string" ? setting : null) ||
-    "https://api.groq.com/openai/v1"
-  );
+  return (typeof setting === "string" ? setting : null) || "https://api.groq.com/openai/v1";
 }
 
 import { generateObject, generateText } from "ai";
@@ -146,10 +139,7 @@ export const groqPlugin: Plugin = {
     ) => {
       return await detokenizeText(modelType ?? ModelType.TEXT_LARGE, tokens);
     },
-    [ModelType.TEXT_SMALL]: async (
-      runtime,
-      { prompt, stopSequences = [] }: GenerateTextParams,
-    ) => {
+    [ModelType.TEXT_SMALL]: async (runtime, { prompt, stopSequences = [] }: GenerateTextParams) => {
       const temperature = 0.7;
       const frequency_penalty = 0.7;
       const presence_penalty = 0.7;
@@ -171,10 +161,7 @@ export const groqPlugin: Plugin = {
         runtime.getSetting("GROQ_SMALL_MODEL") ||
         runtime.getSetting("SMALL_MODEL") ||
         "llama-3.1-8b-instant";
-      const model =
-        typeof modelSetting === "string"
-          ? modelSetting
-          : "llama-3.1-8b-instant";
+      const model = typeof modelSetting === "string" ? modelSetting : "llama-3.1-8b-instant";
 
       logger.log("generating text");
       logger.log(prompt);
@@ -231,10 +218,7 @@ export const groqPlugin: Plugin = {
         stopSequences,
       });
     },
-    [ModelType.OBJECT_SMALL]: async (
-      runtime,
-      params: ObjectGenerationParams,
-    ) => {
+    [ModelType.OBJECT_SMALL]: async (runtime, params: ObjectGenerationParams) => {
       const baseURL = getBaseURL(runtime);
       const apiKey = runtime.getSetting("GROQ_API_KEY");
       if (!apiKey || typeof apiKey !== "string") {
@@ -248,10 +232,7 @@ export const groqPlugin: Plugin = {
         runtime.getSetting("GROQ_SMALL_MODEL") ??
         runtime.getSetting("SMALL_MODEL") ??
         "llama-3.1-8b-instant";
-      const model =
-        typeof modelSetting === "string"
-          ? modelSetting
-          : "llama-3.1-8b-instant";
+      const model = typeof modelSetting === "string" ? modelSetting : "llama-3.1-8b-instant";
 
       if (params.schema) {
         logger.info("Using OBJECT_SMALL without schema validation");
@@ -259,10 +240,7 @@ export const groqPlugin: Plugin = {
 
       return await generateGroqObject(groq, model, params);
     },
-    [ModelType.OBJECT_LARGE]: async (
-      runtime,
-      params: ObjectGenerationParams,
-    ) => {
+    [ModelType.OBJECT_LARGE]: async (runtime, params: ObjectGenerationParams) => {
       const baseURL = getBaseURL(runtime);
       const apiKey = runtime.getSetting("GROQ_API_KEY");
       if (!apiKey || typeof apiKey !== "string") {
@@ -295,8 +273,7 @@ export const groqPlugin: Plugin = {
         {
           name: "groq_test_url_and_api_key_validation",
           fn: async (runtime) => {
-            const baseURL =
-              getBaseURL(runtime) ?? "https://api.groq.com/openai/v1";
+            const baseURL = getBaseURL(runtime) ?? "https://api.groq.com/openai/v1";
             const response = await fetch(`${baseURL}/models`, {
               headers: {
                 Authorization: `Bearer ${runtime.getSetting("GROQ_API_KEY")}`,
@@ -319,9 +296,7 @@ export const groqPlugin: Plugin = {
             const data = (await response.json()) as GroqModelsResponse;
             logger.log(`Models Available: ${data.data?.length}`);
             if (!response.ok) {
-              throw new Error(
-                `Failed to validate Groq API key: ${response.statusText}`,
-              );
+              throw new Error(`Failed to validate Groq API key: ${response.statusText}`);
             }
           },
         },
@@ -358,9 +333,7 @@ export const groqPlugin: Plugin = {
               n: 1,
               size: "1024x1024",
             });
-            logger.log(
-              `generated with test_image_generation: ${JSON.stringify(image)}`,
-            );
+            logger.log(`generated with test_image_generation: ${JSON.stringify(image)}`);
           },
         },
         {
@@ -371,9 +344,7 @@ export const groqPlugin: Plugin = {
               "https://upload.wikimedia.org/wikipedia/en/4/40/Chris_Benoit_Voice_Message.ogg",
             );
             if (!response.ok) {
-              throw new Error(
-                `Failed to fetch audio sample: ${response.statusText}`,
-              );
+              throw new Error(`Failed to fetch audio sample: ${response.statusText}`);
             }
             const arrayBuffer = await response.arrayBuffer();
             const transcription = await runtime.useModel(
@@ -387,14 +358,9 @@ export const groqPlugin: Plugin = {
           name: "groq_test_text_tokenizer_encode",
           fn: async (runtime) => {
             const prompt = "Hello tokenizer encode!";
-            const tokens = await runtime.useModel(
-              ModelType.TEXT_TOKENIZER_ENCODE,
-              { prompt },
-            );
+            const tokens = await runtime.useModel(ModelType.TEXT_TOKENIZER_ENCODE, { prompt });
             if (!Array.isArray(tokens) || tokens.length === 0) {
-              throw new Error(
-                "Failed to tokenize text: expected non-empty array of tokens",
-              );
+              throw new Error("Failed to tokenize text: expected non-empty array of tokens");
             }
             logger.log(`Tokenized output: ${JSON.stringify(tokens)}`);
           },
@@ -404,17 +370,11 @@ export const groqPlugin: Plugin = {
           fn: async (runtime) => {
             const prompt = "Hello tokenizer decode!";
             // Encode the string into tokens first
-            const tokens = await runtime.useModel(
-              ModelType.TEXT_TOKENIZER_ENCODE,
-              { prompt },
-            );
+            const tokens = await runtime.useModel(ModelType.TEXT_TOKENIZER_ENCODE, { prompt });
             // Now decode tokens back into text
-            const decodedText = await runtime.useModel(
-              ModelType.TEXT_TOKENIZER_DECODE,
-              {
-                tokens,
-              },
-            );
+            const decodedText = await runtime.useModel(ModelType.TEXT_TOKENIZER_DECODE, {
+              tokens,
+            });
             if (decodedText !== prompt) {
               throw new Error(
                 `Decoded text does not match original. Expected "${prompt}", got "${decodedText}"`,

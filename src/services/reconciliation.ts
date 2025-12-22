@@ -7,9 +7,9 @@
  */
 
 import { type Abi, type Address, createPublicClient, http } from "viem";
+import { getOtcAddress } from "@/config/contracts";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 import { getChain, getRpcUrl } from "@/lib/getChain";
-import { getOtcAddress } from "@/config/contracts";
 import { parseOrThrow } from "@/lib/validation/helpers";
 import type { MinimalPublicClient } from "@/lib/viem-utils";
 import {
@@ -163,9 +163,7 @@ export class ReconciliationService {
       return parseOrThrow(ReconciliationResultSchema, result);
     }
 
-    console.log(
-      `[Reconciliation] ${quoteId}: ${dbQuote.status} → ${contractStatus}`,
-    );
+    console.log(`[Reconciliation] ${quoteId}: ${dbQuote.status} → ${contractStatus}`);
     // FAIL-FAST: offerId should exist if quote has been executed/approved
     // Empty string is acceptable for quotes that haven't been executed yet
     const offerId = dbQuote.offerId || "";
@@ -198,9 +196,7 @@ export class ReconciliationService {
     );
 
     const updated = results.filter((r) => r.updated).length;
-    console.log(
-      `[Reconciliation] Complete: ${updated}/${results.length} updated`,
-    );
+    console.log(`[Reconciliation] Complete: ${updated}/${results.length} updated`);
 
     const result = { total: results.length, updated };
     return parseOrThrow(ReconciliationSummarySchema, result);
@@ -261,7 +257,5 @@ export async function runReconciliationTask(): Promise<void> {
   );
 
   const result = await service.reconcileAllActive();
-  console.log(
-    `\n✅ [Reconciliation] Complete: ${result.updated}/${result.total} updated\n`,
-  );
+  console.log(`\n✅ [Reconciliation] Complete: ${result.updated}/${result.total} updated\n`);
 }

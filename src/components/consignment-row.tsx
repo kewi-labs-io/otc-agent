@@ -9,11 +9,9 @@ import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useChainId } from "wagmi";
 import { type Chain, isSolanaChain, SUPPORTED_CHAINS } from "@/config/chains";
+import { useWalletConnection } from "@/contexts";
 import { useOTC } from "@/hooks/contracts/useOTC";
-import {
-  useSolanaWithdrawConsignment,
-  useWithdrawConsignment,
-} from "@/hooks/mutations";
+import { useSolanaWithdrawConsignment, useWithdrawConsignment } from "@/hooks/mutations";
 import { useToken } from "@/hooks/useToken";
 import type { OTCConsignment } from "@/services/database";
 // Shared Solana OTC utilities
@@ -25,7 +23,6 @@ import {
   SOLANA_DESK,
   SOLANA_RPC,
 } from "@/utils/solana-otc";
-import { useWalletConnection } from "@/contexts";
 import { Button } from "./button";
 
 interface ConsignmentRowProps {
@@ -41,9 +38,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [withdrawTxHash, setWithdrawTxHash] = useState<string | null>(null);
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
-  const [isWithdrawn, setIsWithdrawn] = useState(
-    consignment.status === "withdrawn",
-  );
+  const [isWithdrawn, setIsWithdrawn] = useState(consignment.status === "withdrawn");
   const { withdrawConsignment, switchToChain } = useOTC();
   const { address } = useAccount();
   const chainId = useChainId();
@@ -68,9 +63,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
     if (isSolana) return false;
     // FAIL-FAST: EVM chains must have chainId (optional in interface but required for EVM)
     if (chainConfig.chainId == null) {
-      throw new Error(
-        `Chain config missing chainId for EVM chain: ${consignmentChain}`,
-      );
+      throw new Error(`Chain config missing chainId for EVM chain: ${consignmentChain}`);
     }
     return chainId === chainConfig.chainId;
   }, [isSolana, chainConfig, chainId, consignmentChain]);
@@ -87,13 +80,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
     if (!address) return "Connect wallet";
     if (!consignment.contractConsignmentId) return "Not deployed on-chain";
     return null;
-  }, [
-    isSolana,
-    solanaPublicKey,
-    solanaWallet,
-    address,
-    consignment.contractConsignmentId,
-  ]);
+  }, [isSolana, solanaPublicKey, solanaWallet, address, consignment.contractConsignmentId]);
 
   // Calculate deal count based on sold amount (memoized)
   const calculatedDealCount = useMemo(() => {
@@ -101,8 +88,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
     const remainingAmount = BigInt(consignment.remainingAmount);
     const soldAmount = totalAmount - remainingAmount;
     if (soldAmount > 0n && consignment.isFractionalized) {
-      const avgDealSize =
-        BigInt(consignment.minDealAmount) + BigInt(consignment.maxDealAmount);
+      const avgDealSize = BigInt(consignment.minDealAmount) + BigInt(consignment.maxDealAmount);
       const estimatedDeals = Number(soldAmount / (avgDealSize / 2n));
       return Math.max(1, estimatedDeals);
     }
@@ -138,12 +124,10 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
   const tokenLogoUrl = token?.logoUrl;
 
   // formatAmount uses centralized formatRawTokenAmount from @/utils/format
-  const formatAmount = (amount: string) =>
-    formatRawTokenAmount(amount, tokenDecimals);
+  const formatAmount = (amount: string) => formatRawTokenAmount(amount, tokenDecimals);
 
   const percentRemaining =
-    (Number(consignment.remainingAmount) / Number(consignment.totalAmount)) *
-    100;
+    (Number(consignment.remainingAmount) / Number(consignment.totalAmount)) * 100;
 
   const handleWithdraw = async () => {
     setWithdrawError(null);
@@ -167,9 +151,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
         );
       }
       if (!consignment.contractConsignmentId) {
-        setWithdrawError(
-          "Consignment not deployed on-chain (missing contractConsignmentId)",
-        );
+        setWithdrawError("Consignment not deployed on-chain (missing contractConsignmentId)");
         return;
       }
       if (!SOLANA_DESK) {
@@ -196,9 +178,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
       // Fetch IDL and create program
       const idl = await fetchSolanaIdl();
       const desk = new SolPubkey(SOLANA_DESK);
-      const consignmentPubkey = new SolPubkey(
-        consignment.contractConsignmentId,
-      );
+      const consignmentPubkey = new SolPubkey(consignment.contractConsignmentId);
       const consignerPk = new SolPubkey(solanaPublicKey);
 
       // Adapt wallet to Anchor's Wallet interface
@@ -210,8 +190,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
       const anchorWallet = {
         publicKey: consignerPk,
         signTransaction: signTransaction as Wallet["signTransaction"],
-        signAllTransactions:
-          solanaWallet.signAllTransactions as Wallet["signAllTransactions"],
+        signAllTransactions: solanaWallet.signAllTransactions as Wallet["signAllTransactions"],
       } as Wallet;
 
       const provider = new anchor.AnchorProvider(connection, anchorWallet, {
@@ -234,8 +213,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
       }
 
       const programAccounts = program.account as ConsignmentAccountProgram;
-      const consignmentData =
-        await programAccounts.consignment.fetch(consignmentPubkey);
+      const consignmentData = await programAccounts.consignment.fetch(consignmentPubkey);
 
       if (!consignmentData) {
         throw new Error("Consignment not found on-chain");
@@ -266,9 +244,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
 
       // Detect token program (Token or Token-2022)
       const tokenProgramId = await getTokenProgramId(connection, tokenMintPk);
-      console.log(
-        `[ConsignmentRow] Using token program: ${tokenProgramId.toString()}`,
-      );
+      console.log(`[ConsignmentRow] Using token program: ${tokenProgramId.toString()}`);
 
       // Get consigner's token ATA (must exist to receive tokens)
       const consignerTokenAta = await getAssociatedTokenAddress(
@@ -279,8 +255,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
       );
 
       // Verify consigner ATA exists (SPL Token program requires it for transfers)
-      const consignerAtaInfo =
-        await connection.getAccountInfo(consignerTokenAta);
+      const consignerAtaInfo = await connection.getAccountInfo(consignerTokenAta);
       if (!consignerAtaInfo) {
         throw new Error(
           "Your token account does not exist. You need to have a token account for this token to receive the withdrawal.",
@@ -328,16 +303,12 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
       tx.feePayer = consignerPk;
 
       // Sign with user wallet (consigner signature)
-      console.log(
-        "[ConsignmentRow] Signing transaction with consigner wallet...",
-      );
+      console.log("[ConsignmentRow] Signing transaction with consigner wallet...");
       const signedTx = await signTransaction(tx);
       console.log("[ConsignmentRow] Transaction signed by consigner");
 
       // Send to API to add desk signature and submit
-      const signedTxBase64 = signedTx
-        .serialize({ requireAllSignatures: false })
-        .toString("base64");
+      const signedTxBase64 = signedTx.serialize({ requireAllSignatures: false }).toString("base64");
 
       // Use mutation for API call - handles cache invalidation automatically
       const apiResult = await solanaWithdrawMutation.mutateAsync({
@@ -368,9 +339,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
         return;
       }
       if (!consignment.contractConsignmentId) {
-        setWithdrawError(
-          "Consignment not deployed on-chain (missing contractConsignmentId)",
-        );
+        setWithdrawError("Consignment not deployed on-chain (missing contractConsignmentId)");
         return;
       }
 
@@ -502,9 +471,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
               className="!py-2 !px-3 sm:!px-4 !text-xs"
               title={withdrawDisabledReason || "Withdraw remaining tokens"}
             >
-              {isWithdrawing
-                ? "Withdrawing..."
-                : withdrawDisabledReason || "Withdraw"}
+              {isWithdrawing ? "Withdrawing..." : withdrawDisabledReason || "Withdraw"}
             </Button>
           )}
         </div>
@@ -513,17 +480,11 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div>
           <div className="text-sm text-zinc-600 dark:text-zinc-400">Total</div>
-          <div className="font-medium">
-            {formatAmount(consignment.totalAmount)}
-          </div>
+          <div className="font-medium">{formatAmount(consignment.totalAmount)}</div>
         </div>
         <div>
-          <div className="text-sm text-zinc-600 dark:text-zinc-400">
-            Remaining
-          </div>
-          <div className="font-medium">
-            {formatAmount(consignment.remainingAmount)}
-          </div>
+          <div className="text-sm text-zinc-600 dark:text-zinc-400">Remaining</div>
+          <div className="font-medium">{formatAmount(consignment.remainingAmount)}</div>
         </div>
         <div>
           <div className="text-sm text-zinc-600 dark:text-zinc-400">Deals</div>
@@ -531,9 +492,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
         </div>
         <div>
           <div className="text-sm text-zinc-600 dark:text-zinc-400">% Sold</div>
-          <div className="font-medium">
-            {(100 - percentRemaining).toFixed(1)}%
-          </div>
+          <div className="font-medium">{(100 - percentRemaining).toFixed(1)}%</div>
         </div>
       </div>
 
@@ -543,12 +502,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
           {withdrawTxHash && !withdrawError && (
             <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
               <div className="flex items-center gap-2 text-green-800 dark:text-green-200">
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -556,9 +510,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
                     d="M5 13l4 4L19 7"
                   />
                 </svg>
-                <span className="text-sm font-medium">
-                  Withdrawal Successful
-                </span>
+                <span className="text-sm font-medium">Withdrawal Successful</span>
               </div>
               <p className="text-xs text-green-700 dark:text-green-300 mt-1 break-all">
                 Tx: {withdrawTxHash}
@@ -581,9 +533,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
                     d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                <p className="text-sm text-red-800 dark:text-red-200">
-                  {withdrawError}
-                </p>
+                <p className="text-sm text-red-800 dark:text-red-200">{withdrawError}</p>
               </div>
             </div>
           )}

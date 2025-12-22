@@ -1,18 +1,10 @@
-import {
-  ChannelType,
-  type Memory,
-  stringToUuid,
-  type UUID,
-} from "@elizaos/core";
+import { ChannelType, type Memory, stringToUuid, type UUID } from "@elizaos/core";
 import { type NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { agentRuntime } from "@/lib/agent-runtime";
 import { walletToEntityId } from "@/lib/entityId";
 import { parseOrThrow } from "@/lib/validation/helpers";
-import {
-  CreateRoomRequestSchema,
-  RoomsResponseSchema,
-} from "@/types/validation/api-schemas";
+import { CreateRoomRequestSchema, RoomsResponseSchema } from "@/types/validation/api-schemas";
 
 // GET /api/rooms - Get user's rooms
 export async function GET(request: NextRequest) {
@@ -20,16 +12,11 @@ export async function GET(request: NextRequest) {
   const entityId = searchParams.get("entityId");
 
   if (!entityId) {
-    return NextResponse.json(
-      { error: "entityId is required" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "entityId is required" }, { status: 400 });
   }
 
   const runtime = await agentRuntime.getRuntime();
-  const roomIds = await runtime.getRoomsForParticipants([
-    stringToUuid(entityId),
-  ]);
+  const roomIds = await runtime.getRoomsForParticipants([stringToUuid(entityId)]);
 
   // Get room details
   const rooms = await Promise.all(
@@ -77,10 +64,7 @@ export async function POST(request: NextRequest) {
   console.log("[Rooms API] Created room:", roomIdStr, "for entity:", entityId);
 
   // Create initial welcome message with default quote
-  console.log(
-    "[Rooms API] Creating initial welcome message for wallet:",
-    entityId,
-  );
+  console.log("[Rooms API] Creating initial welcome message for wallet:", entityId);
 
   // FAIL-FAST: entityId is validated by Zod schema, but TypeScript needs assertion
   const validatedEntityId = entityId as string;
@@ -99,7 +83,7 @@ export async function POST(request: NextRequest) {
   });
 
   // Save initial quote to cache with consistent ID generation
-  const crypto = await import("crypto");
+  const crypto = await import("node:crypto");
   const dayTimestamp = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
   const hash = crypto
     .createHash("sha256")
@@ -154,25 +138,15 @@ export async function POST(request: NextRequest) {
     await runtime.setCache("all_quotes", allQuotesArray);
   }
 
-  const entityQuoteIds = await runtime.getCache<string[]>(
-    `entity_quotes:${userEntityId}`,
-  );
+  const entityQuoteIds = await runtime.getCache<string[]>(`entity_quotes:${userEntityId}`);
   // entityQuoteIds is optional - default to empty array if not present
-  const entityQuoteIdsArray = Array.isArray(entityQuoteIds)
-    ? entityQuoteIds
-    : [];
+  const entityQuoteIdsArray = Array.isArray(entityQuoteIds) ? entityQuoteIds : [];
   if (!entityQuoteIdsArray.includes(initialQuoteId)) {
     entityQuoteIdsArray.push(initialQuoteId);
-    await runtime.setCache(
-      `entity_quotes:${userEntityId}`,
-      entityQuoteIdsArray,
-    );
+    await runtime.setCache(`entity_quotes:${userEntityId}`, entityQuoteIdsArray);
   }
 
-  console.log(
-    "[Rooms API] Initial quote saved to cache and indexed:",
-    initialQuoteId,
-  );
+  console.log("[Rooms API] Initial quote saved to cache and indexed:", initialQuoteId);
 
   // Create a welcome message explaining base terms - no quote XML until user specifies a token
   // This prevents the Accept button from appearing before a real token is negotiated

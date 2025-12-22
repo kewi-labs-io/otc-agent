@@ -29,7 +29,7 @@ export function MiniappProvider({ children }: { children: React.ReactNode }) {
 
       // Send welcome notification on first load
       // Note: Neynar handles deduplication
-      if (context.user && context.user.fid) {
+      if (context.user?.fid) {
         await sendWelcomeNotification(context.user.fid);
       }
 

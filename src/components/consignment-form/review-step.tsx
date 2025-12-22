@@ -55,15 +55,10 @@ export function ReviewStep({
   const [error, setError] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
 
-  const { chain: tokenChain, address: rawTokenAddress } = parseTokenId(
-    formData.tokenId,
-  );
+  const { chain: tokenChain, address: rawTokenAddress } = parseTokenId(formData.tokenId);
 
   // Use React Query for pool checking - automatic caching and deduplication
-  const { poolCheck, isCheckingPool } = usePoolCheck(
-    rawTokenAddress,
-    tokenChain,
-  );
+  const { poolCheck, isCheckingPool } = usePoolCheck(rawTokenAddress, tokenChain);
 
   // getDisplayAddress uses centralized formatAddress from @/utils/format
   const getDisplayAddress = (addr: string) => (addr ? formatAddress(addr) : "");
@@ -76,8 +71,7 @@ export function ReviewStep({
 
   const handleProceed = () => {
     setError(null);
-    const consignerAddress =
-      activeFamily === "solana" ? solanaPublicKey : evmAddress;
+    const consignerAddress = activeFamily === "solana" ? solanaPublicKey : evmAddress;
 
     if (!consignerAddress) {
       setError("Please connect your wallet before creating a consignment");
@@ -109,7 +103,7 @@ export function ReviewStep({
   // formatAmount uses centralized formatTokenAmountFull from @/utils/format
   const formatAmount = (amount: string) => {
     const num = parseFloat(amount);
-    return isNaN(num) ? "0" : formatTokenAmountFull(num);
+    return Number.isNaN(num) ? "0" : formatTokenAmountFull(num);
   };
 
   return (
@@ -119,9 +113,7 @@ export function ReviewStep({
         <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
           Review Your Listing
         </h3>
-        <p className="text-sm text-zinc-500">
-          Confirm the details before creating
-        </p>
+        <p className="text-sm text-zinc-500">Confirm the details before creating</p>
       </div>
 
       {/* Token Info */}
@@ -137,9 +129,7 @@ export function ReviewStep({
           />
         ) : (
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-400 to-brand-500 flex items-center justify-center">
-            <span className="text-white font-bold text-lg">
-              {selectedTokenSymbol.charAt(0)}
-            </span>
+            <span className="text-white font-bold text-lg">{selectedTokenSymbol.charAt(0)}</span>
           </div>
         )}
         <div className="flex-1">
@@ -151,6 +141,7 @@ export function ReviewStep({
               {getDisplayAddress(rawTokenAddress)}
             </span>
             <button
+              type="button"
               onClick={handleCopyToken}
               className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors"
               title="Copy token address"
@@ -180,18 +171,13 @@ export function ReviewStep({
         {formData.isNegotiable ? (
           <>
             <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
-              <span className="text-zinc-600 dark:text-zinc-400">
-                Discount Range
-              </span>
+              <span className="text-zinc-600 dark:text-zinc-400">Discount Range</span>
               <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                {formData.minDiscountBps / 100}% –{" "}
-                {formData.maxDiscountBps / 100}%
+                {formData.minDiscountBps / 100}% – {formData.maxDiscountBps / 100}%
               </span>
             </div>
             <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
-              <span className="text-zinc-600 dark:text-zinc-400">
-                Lockup Range
-              </span>
+              <span className="text-zinc-600 dark:text-zinc-400">Lockup Range</span>
               <span className="font-medium text-zinc-900 dark:text-zinc-100">
                 {formData.minLockupDays} – {formData.maxLockupDays} days
               </span>
@@ -232,11 +218,7 @@ export function ReviewStep({
 
       {/* Actions */}
       <div className="flex gap-3 pt-4">
-        <Button
-          onClick={onBack}
-          color="dark"
-          className="flex items-center gap-2 px-6 py-3"
-        >
+        <Button onClick={onBack} color="dark" className="flex items-center gap-2 px-6 py-3">
           <ArrowLeft className="w-4 h-4" />
           Back
         </Button>
@@ -244,11 +226,7 @@ export function ReviewStep({
           <Button
             onClick={onConnect}
             disabled={!privyReady}
-            color={
-              requiredChain === "solana"
-                ? ("purple" as const)
-                : ("blue" as const)
-            }
+            color={requiredChain === "solana" ? ("purple" as const) : ("blue" as const)}
             className="flex-1 py-3"
           >
             {privyReady
@@ -258,9 +236,7 @@ export function ReviewStep({
         ) : (
           <Button
             onClick={handleProceed}
-            disabled={
-              tokenChain !== "solana" && (isCheckingPool || !poolCheck?.hasPool)
-            }
+            disabled={tokenChain !== "solana" && (isCheckingPool || !poolCheck?.hasPool)}
             color="brand"
             className="flex-1 py-3"
             data-testid="consign-create-button"

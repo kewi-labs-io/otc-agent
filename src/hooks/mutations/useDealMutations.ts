@@ -10,12 +10,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Currency } from "@/types";
 import { throwApiError } from "../lib/api-helpers";
-import {
-  consignmentKeys,
-  dealKeys,
-  quoteKeys,
-  walletTokenKeys,
-} from "../queryKeys";
+import { consignmentKeys, dealKeys, quoteKeys, walletTokenKeys } from "../queryKeys";
 
 /**
  * Input for completing a deal
@@ -90,9 +85,7 @@ interface ClaimTokensResponse {
 /**
  * Complete a deal via API
  */
-async function completeDeal(
-  input: CompleteDealInput,
-): Promise<DealCompletionResponse> {
+async function completeDeal(input: CompleteDealInput): Promise<DealCompletionResponse> {
   const response = await fetch("/api/deal-completion", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -100,10 +93,7 @@ async function completeDeal(
   });
 
   if (!response.ok) {
-    await throwApiError(
-      response,
-      `Failed to complete deal: ${response.status}`,
-    );
+    await throwApiError(response, `Failed to complete deal: ${response.status}`);
   }
 
   const data = (await response.json()) as DealCompletionResponse;
@@ -118,9 +108,7 @@ async function completeDeal(
 /**
  * Approve an offer via backend
  */
-async function approveOffer(
-  input: ApproveOfferInput,
-): Promise<ApproveOfferResponse> {
+async function approveOffer(input: ApproveOfferInput): Promise<ApproveOfferResponse> {
   const response = await fetch("/api/otc/approve", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -138,9 +126,7 @@ async function approveOffer(
 /**
  * Claim tokens (Solana)
  */
-async function claimTokens(
-  input: ClaimTokensInput,
-): Promise<ClaimTokensResponse> {
+async function claimTokens(input: ClaimTokensInput): Promise<ClaimTokensResponse> {
   const response = await fetch("/api/solana/claim", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -166,7 +152,7 @@ export function useCompleteDeal() {
 
   return useMutation({
     mutationFn: completeDeal,
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       // Invalidate quote cache
       queryClient.invalidateQueries({
         queryKey: quoteKeys.executed(variables.quoteId),
@@ -242,9 +228,7 @@ interface UpdateQuoteInput {
 /**
  * Update quote data (for pre-transaction updates)
  */
-async function updateQuote(
-  input: UpdateQuoteInput,
-): Promise<{ success: boolean }> {
+async function updateQuote(input: UpdateQuoteInput): Promise<{ success: boolean }> {
   const response = await fetch("/api/quote/latest", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

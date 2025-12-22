@@ -45,11 +45,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!response.ok) {
-    console.error(
-      "[RPC Proxy] Alchemy error:",
-      response.status,
-      response.statusText,
-    );
+    console.error("[RPC Proxy] Alchemy error:", response.status, response.statusText);
     const errorResponse = { error: "RPC request failed" };
     const validatedError = RpcProxyErrorResponseSchema.parse(errorResponse);
     return NextResponse.json(validatedError, { status: response.status });

@@ -4,20 +4,14 @@ import { walletToEntityId } from "@/lib/entityId";
 import type QuoteService from "@/lib/plugin-otc-desk/services/quoteService";
 import { parseOrThrow } from "@/lib/validation/helpers";
 import type { QuoteMemory } from "@/types";
-import {
-  GetLatestQuoteRequestSchema,
-  QuoteResponseSchema,
-} from "@/types/validation/api-schemas";
+import { GetLatestQuoteRequestSchema, QuoteResponseSchema } from "@/types/validation/api-schemas";
 
 export async function GET(request: NextRequest) {
   const runtime = await agentRuntime.getRuntime();
   const quoteService = runtime.getService<QuoteService>("QuoteService");
 
   if (!quoteService) {
-    return NextResponse.json(
-      { error: "QuoteService not available" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "QuoteService not available" }, { status: 500 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -45,9 +39,7 @@ export async function GET(request: NextRequest) {
 
   // FAIL-FAST: Token MUST exist (quotes are always for a specific token)
   if (!token) {
-    throw new Error(
-      `Token ${tokenId} not found - cannot create quote for non-existent token`,
-    );
+    throw new Error(`Token ${tokenId} not found - cannot create quote for non-existent token`);
   }
 
   if (!quote) {
@@ -87,9 +79,7 @@ export async function GET(request: NextRequest) {
 
   // FAIL-FAST: Quote must exist at this point
   if (!quote) {
-    throw new Error(
-      `Quote not found for token ${tokenId} and entity ${entityId}`,
-    );
+    throw new Error(`Quote not found for token ${tokenId} and entity ${entityId}`);
   }
   const tokenChain = token.chain;
   const tokenSymbol = token.symbol;
@@ -120,12 +110,7 @@ export async function GET(request: NextRequest) {
     tokenSymbol,
   };
 
-  console.log(
-    "[Quote API] Returning:",
-    formattedQuote.quoteId,
-    "chain:",
-    tokenChain,
-  );
+  console.log("[Quote API] Returning:", formattedQuote.quoteId, "chain:", tokenChain);
   const response = { success: true, quote: formattedQuote };
   const validatedResponse = QuoteResponseSchema.parse(response);
   return NextResponse.json(validatedResponse);
@@ -136,10 +121,7 @@ export async function POST(request: NextRequest) {
   const quoteService = runtime.getService<QuoteService>("QuoteService");
 
   if (!quoteService) {
-    return NextResponse.json(
-      { error: "QuoteService not available" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "QuoteService not available" }, { status: 500 });
   }
 
   const body = await request.json();

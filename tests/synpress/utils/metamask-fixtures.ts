@@ -1,19 +1,15 @@
 import path from "node:path";
 
-import { chromium, test as base, type BrowserContext, type Page } from "@playwright/test";
+import { type BrowserContext, test as base, chromium, type Page } from "@playwright/test";
 import {
   CACHE_DIR_NAME,
   createTempContextDir,
-  defineWalletSetup,
+  type defineWalletSetup,
   prepareExtension,
   removeTempContextDir,
 } from "@synthetixio/synpress-cache";
+import { getExtensionId, unlockForFixture } from "@synthetixio/synpress-metamask/playwright";
 import fs from "fs-extra";
-
-import {
-  getExtensionId,
-  unlockForFixture,
-} from "@synthetixio/synpress-metamask/playwright";
 import type { MetaMaskFixtures } from "@/types";
 
 async function persistLocalStorage(
@@ -71,10 +67,7 @@ async function getExtensionIdWithRetry(
  * Fixes upstream behavior where MetaMask may not be loaded from a cached profile
  * because `--load-extension` is omitted.
  */
-export const metaMaskFixtures = (
-  walletSetup: ReturnType<typeof defineWalletSetup>,
-  slowMo = 0,
-) => {
+export const metaMaskFixtures = (walletSetup: ReturnType<typeof defineWalletSetup>, slowMo = 0) => {
   return base.extend<MetaMaskFixtures>({
     _contextPath: async ({ browserName }, use, testInfo) => {
       const contextPath = await createTempContextDir(browserName, testInfo.testId);
@@ -173,7 +166,9 @@ export const metaMaskFixtures = (
         } catch (e) {
           lastError = e instanceof Error ? e : new Error(String(e));
           if (i < maxRetries - 1) {
-            console.log(`[MetaMask Fixtures] Waiting for server (attempt ${i + 1}/${maxRetries})...`);
+            console.log(
+              `[MetaMask Fixtures] Waiting for server (attempt ${i + 1}/${maxRetries})...`,
+            );
             await new Promise((r) => setTimeout(r, retryDelay));
           }
         }

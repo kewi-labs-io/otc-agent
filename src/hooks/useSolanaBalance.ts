@@ -9,9 +9,9 @@
  * - accept-quote-modal for showing user's payment currency balance
  */
 
+import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { type Connection, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import { useQuery } from "@tanstack/react-query";
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from "@solana/spl-token";
 import { getSolanaConfig } from "@/config/contracts";
 import { createSolanaConnection } from "@/utils/solana-otc";
 import { walletTokenKeys } from "./queryKeys";
@@ -109,16 +109,11 @@ async function fetchSplTokenBalance(
  * @param publicKey - Solana public key as string or PublicKey
  * @returns { data, isLoading, error }
  */
-export function useSolBalance(
-  publicKey: string | PublicKey | null | undefined,
-) {
-  const pubkeyString =
-    typeof publicKey === "string" ? publicKey : (publicKey?.toBase58() ?? null);
+export function useSolBalance(publicKey: string | PublicKey | null | undefined) {
+  const pubkeyString = typeof publicKey === "string" ? publicKey : (publicKey?.toBase58() ?? null);
 
   return useQuery({
-    queryKey: pubkeyString
-      ? walletTokenKeys.solBalance(pubkeyString)
-      : ["sol-balance", "none"],
+    queryKey: pubkeyString ? walletTokenKeys.solBalance(pubkeyString) : ["sol-balance", "none"],
     queryFn: async (): Promise<SolanaBalanceData> => {
       if (!pubkeyString) {
         throw new Error("No public key provided");
@@ -147,11 +142,8 @@ export function useSolBalance(
  * @param publicKey - Solana public key as string or PublicKey
  * @returns { data, isLoading, error }
  */
-export function useSolanaUsdcBalance(
-  publicKey: string | PublicKey | null | undefined,
-) {
-  const pubkeyString =
-    typeof publicKey === "string" ? publicKey : (publicKey?.toBase58() ?? null);
+export function useSolanaUsdcBalance(publicKey: string | PublicKey | null | undefined) {
+  const pubkeyString = typeof publicKey === "string" ? publicKey : (publicKey?.toBase58() ?? null);
 
   const solanaConfig = getSolanaConfig();
   const usdcMint = solanaConfig.usdcMint;
@@ -198,8 +190,7 @@ export function useSplTokenBalance(
   decimals: number,
   symbol: string,
 ) {
-  const pubkeyString =
-    typeof publicKey === "string" ? publicKey : (publicKey?.toBase58() ?? null);
+  const pubkeyString = typeof publicKey === "string" ? publicKey : (publicKey?.toBase58() ?? null);
 
   return useQuery({
     queryKey:
@@ -218,13 +209,7 @@ export function useSplTokenBalance(
       const walletPk = new PublicKey(pubkeyString);
       const mintPk = new PublicKey(mintAddress);
 
-      return fetchSplTokenBalance(
-        connection,
-        walletPk,
-        mintPk,
-        decimals,
-        symbol,
-      );
+      return fetchSplTokenBalance(connection, walletPk, mintPk, decimals, symbol);
     },
     staleTime: 30_000,
     gcTime: 300_000,
@@ -248,9 +233,7 @@ export function useSolanaPaymentBalance(
   currency: "SOL" | "USDC",
 ) {
   const solBalance = useSolBalance(currency === "SOL" ? publicKey : null);
-  const usdcBalance = useSolanaUsdcBalance(
-    currency === "USDC" ? publicKey : null,
-  );
+  const usdcBalance = useSolanaUsdcBalance(currency === "USDC" ? publicKey : null);
 
   if (currency === "SOL") {
     return solBalance;

@@ -8,18 +8,14 @@ import {
 } from "@/types/validation/hook-schemas";
 import { consignmentKeys } from "./queryKeys";
 
-async function fetchConsignments(
-  filters: ConsignmentsFilters,
-): Promise<OTCConsignment[]> {
+async function fetchConsignments(filters: ConsignmentsFilters): Promise<OTCConsignment[]> {
   const params = new URLSearchParams();
 
   if (filters.chains && Array.isArray(filters.chains)) {
     filters.chains.forEach((chain) => params.append("chains", chain));
   }
   if (filters.negotiableTypes && Array.isArray(filters.negotiableTypes)) {
-    filters.negotiableTypes.forEach((type) =>
-      params.append("negotiableTypes", type),
-    );
+    filters.negotiableTypes.forEach((type) => params.append("negotiableTypes", type));
   }
   if (filters.tokenId) params.set("tokenId", filters.tokenId);
   if (filters.consigner) params.set("consigner", filters.consigner);
@@ -27,9 +23,7 @@ async function fetchConsignments(
 
   const response = await fetch(`/api/consignments?${params.toString()}`);
   if (!response.ok) {
-    throw new Error(
-      `Consignments API failed: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Consignments API failed: ${response.status} ${response.statusText}`);
   }
   const rawData = await response.json();
 

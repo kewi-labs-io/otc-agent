@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
+
 /**
  * Complete Local E2E Test - Full OTC Flow
- * 
+ *
  * This script tests the entire OTC flow on local Anvil:
  * 1. Deploy a new mock token
  * 2. Create a price feed for it
@@ -11,33 +12,32 @@
  * 6. Backend approves and fulfills
  * 7. Wallet 2 claims tokens after lockup
  * 8. Verify all state on-chain
- * 
+ *
  * Run: bun run scripts/e2e-local-full-flow.ts
  */
 
+import { execSync } from "node:child_process";
 import {
+  type Address,
   createPublicClient,
   createWalletClient,
-  http,
-  parseEther,
-  parseUnits,
   formatEther,
   formatUnits,
-  keccak256,
-  encodePacked,
-  type Address,
   type Hex,
+  http,
+  keccak256,
+  parseEther,
+  parseUnits,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
-import { execSync } from "child_process";
 
 // ============================================================================
 // CONFIG
 // ============================================================================
 
 const RPC_URL = "http://127.0.0.1:8545";
-const APP_URL = "http://localhost:4444";
+const _APP_URL = "http://localhost:4444";
 
 // Anvil default accounts (deterministic)
 const ANVIL_ACCOUNTS = {
@@ -70,36 +70,252 @@ const ANVIL_ACCOUNTS = {
 
 // ABIs
 const ERC20_ABI = [
-  { name: "name", type: "function", inputs: [], outputs: [{ type: "string" }], stateMutability: "view" },
-  { name: "symbol", type: "function", inputs: [], outputs: [{ type: "string" }], stateMutability: "view" },
-  { name: "decimals", type: "function", inputs: [], outputs: [{ type: "uint8" }], stateMutability: "view" },
-  { name: "totalSupply", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "balanceOf", type: "function", inputs: [{ name: "account", type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "transfer", type: "function", inputs: [{ name: "to", type: "address" }, { name: "amount", type: "uint256" }], outputs: [{ type: "bool" }], stateMutability: "nonpayable" },
-  { name: "approve", type: "function", inputs: [{ name: "spender", type: "address" }, { name: "amount", type: "uint256" }], outputs: [{ type: "bool" }], stateMutability: "nonpayable" },
-  { name: "allowance", type: "function", inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  {
+    name: "name",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "string" }],
+    stateMutability: "view",
+  },
+  {
+    name: "symbol",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "string" }],
+    stateMutability: "view",
+  },
+  {
+    name: "decimals",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint8" }],
+    stateMutability: "view",
+  },
+  {
+    name: "totalSupply",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    name: "balanceOf",
+    type: "function",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    name: "transfer",
+    type: "function",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "bool" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "approve",
+    type: "function",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "bool" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "allowance",
+    type: "function",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
 ] as const;
 
-const MOCK_ERC20_BYTECODE = "0x60806040523480156200001157600080fd5b50604051620012f0380380620012f0833981810160405281019062000037919062000283565b8383816003908162000049919062000532565b5080600490816200005a919062000532565b5050508160ff1660001b600560006101000a81548160ff021916908360ff16021790555062000090338262000099640100000000026401000000009004565b50505050620006e8565b600073ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff160362000105576000604051632e0a0d8360e01b8152600401620000fc91906200066a565b60405180910390fd5b806002600082825462000119919062000687565b92505081905550806000808473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff168152602001908152602001600020600082825401925050819055508173ffffffffffffffffffffffffffffffffffffffff16600073ffffffffffffffffffffffffffffffffffffffff167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef83604051620001cd9190620006c2565b60405180910390a35050565b600080fd5b600073ffffffffffffffffffffffffffffffffffffffff82169050919050565b60006200020b82620001de565b9050919050565b6200021d81620001fe565b81146200022957600080fd5b50565b6000815190506200023d8162000212565b92915050565b6000819050919050565b620002588162000243565b81146200026457600080fd5b50565b60008151905062000278816200024d565b92915050565b600080600080608085870312156200029b576200029a620001d9565b5b6000620002ab878288016200022c565b9450506020620002be8782880162000267565b935050604085015160ff81168114620002d657600080fd5b60608601519092506200024d811681146200030157600080fd5b809150509295919450925056fe";
+const _MOCK_ERC20_BYTECODE =
+  "0x60806040523480156200001157600080fd5b50604051620012f0380380620012f0833981810160405281019062000037919062000283565b8383816003908162000049919062000532565b5080600490816200005a919062000532565b5050508160ff1660001b600560006101000a81548160ff021916908360ff16021790555062000090338262000099640100000000026401000000009004565b50505050620006e8565b600073ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff160362000105576000604051632e0a0d8360e01b8152600401620000fc91906200066a565b60405180910390fd5b806002600082825462000119919062000687565b92505081905550806000808473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff168152602001908152602001600020600082825401925050819055508173ffffffffffffffffffffffffffffffffffffffff16600073ffffffffffffffffffffffffffffffffffffffff167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef83604051620001cd9190620006c2565b60405180910390a35050565b600080fd5b600073ffffffffffffffffffffffffffffffffffffffff82169050919050565b60006200020b82620001de565b9050919050565b6200021d81620001fe565b81146200022957600080fd5b50565b6000815190506200023d8162000212565b92915050565b6000819050919050565b620002588162000243565b81146200026457600080fd5b50565b60008151905062000278816200024d565b92915050565b600080600080608085870312156200029b576200029a620001d9565b5b6000620002ab878288016200022c565b9450506020620002be8782880162000267565b935050604085015160ff81168114620002d657600080fd5b60608601519092506200024d811681146200030157600080fd5b809150509295919450925056fe";
 
 const OTC_ABI = [
-  { name: "registerToken", type: "function", inputs: [{ name: "tokenId", type: "bytes32" }, { name: "tokenAddress", type: "address" }, { name: "priceOracle", type: "address" }], outputs: [], stateMutability: "nonpayable" },
-  { name: "tokens", type: "function", inputs: [{ name: "tokenId", type: "bytes32" }], outputs: [{ name: "tokenAddress", type: "address" }, { name: "decimals", type: "uint8" }, { name: "isRegistered", type: "bool" }, { name: "priceOracle", type: "address" }], stateMutability: "view" },
-  { name: "createConsignment", type: "function", inputs: [{ name: "tokenId", type: "bytes32" }, { name: "amount", type: "uint256" }, { name: "isNegotiable", type: "bool" }, { name: "fixedDiscountBps", type: "uint16" }, { name: "fixedLockupDays", type: "uint32" }, { name: "minDiscountBps", type: "uint16" }, { name: "maxDiscountBps", type: "uint16" }, { name: "minLockupDays", type: "uint32" }, { name: "maxLockupDays", type: "uint32" }, { name: "minDealAmount", type: "uint256" }, { name: "maxDealAmount", type: "uint256" }, { name: "maxPriceVolatilityBps", type: "uint16" }], outputs: [{ type: "uint256" }], stateMutability: "payable" },
-  { name: "consignments", type: "function", inputs: [{ name: "id", type: "uint256" }], outputs: [{ name: "tokenId", type: "bytes32" }, { name: "consigner", type: "address" }, { name: "totalAmount", type: "uint256" }, { name: "remainingAmount", type: "uint256" }, { name: "isNegotiable", type: "bool" }, { name: "fixedDiscountBps", type: "uint16" }, { name: "fixedLockupDays", type: "uint32" }, { name: "minDiscountBps", type: "uint16" }, { name: "maxDiscountBps", type: "uint16" }, { name: "minLockupDays", type: "uint32" }, { name: "maxLockupDays", type: "uint32" }, { name: "minDealAmount", type: "uint256" }, { name: "maxDealAmount", type: "uint256" }, { name: "maxPriceVolatilityBps", type: "uint16" }, { name: "isActive", type: "bool" }, { name: "createdAt", type: "uint256" }], stateMutability: "view" },
-  { name: "nextConsignmentId", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "createOfferFromConsignment", type: "function", inputs: [{ name: "consignmentId", type: "uint256" }, { name: "tokenAmount", type: "uint256" }, { name: "discountBps", type: "uint256" }, { name: "currency", type: "uint8" }, { name: "lockupSeconds", type: "uint256" }, { name: "agentCommissionBps", type: "uint16" }], outputs: [{ type: "uint256" }], stateMutability: "nonpayable" },
-  { name: "offers", type: "function", inputs: [{ name: "id", type: "uint256" }], outputs: [{ name: "consignmentId", type: "uint256" }, { name: "tokenId", type: "bytes32" }, { name: "beneficiary", type: "address" }, { name: "tokenAmount", type: "uint256" }, { name: "discountBps", type: "uint256" }, { name: "createdAt", type: "uint256" }, { name: "unlockTime", type: "uint256" }, { name: "priceUsdPerToken", type: "uint256" }, { name: "maxPriceDeviation", type: "uint256" }, { name: "ethUsdPrice", type: "uint256" }, { name: "currency", type: "uint8" }, { name: "approved", type: "bool" }, { name: "paid", type: "bool" }, { name: "fulfilled", type: "bool" }, { name: "cancelled", type: "bool" }, { name: "payer", type: "address" }, { name: "amountPaid", type: "uint256" }, { name: "agentCommissionBps", type: "uint16" }], stateMutability: "view" },
-  { name: "nextOfferId", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "approveOffer", type: "function", inputs: [{ name: "offerId", type: "uint256" }], outputs: [], stateMutability: "nonpayable" },
-  { name: "fulfillOffer", type: "function", inputs: [{ name: "offerId", type: "uint256" }], outputs: [], stateMutability: "payable" },
-  { name: "claim", type: "function", inputs: [{ name: "offerId", type: "uint256" }], outputs: [], stateMutability: "nonpayable" },
-  { name: "setApprover", type: "function", inputs: [{ name: "approver", type: "address" }, { name: "isApprover", type: "bool" }], outputs: [], stateMutability: "nonpayable" },
+  {
+    name: "registerToken",
+    type: "function",
+    inputs: [
+      { name: "tokenId", type: "bytes32" },
+      { name: "tokenAddress", type: "address" },
+      { name: "priceOracle", type: "address" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "tokens",
+    type: "function",
+    inputs: [{ name: "tokenId", type: "bytes32" }],
+    outputs: [
+      { name: "tokenAddress", type: "address" },
+      { name: "decimals", type: "uint8" },
+      { name: "isRegistered", type: "bool" },
+      { name: "priceOracle", type: "address" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    name: "createConsignment",
+    type: "function",
+    inputs: [
+      { name: "tokenId", type: "bytes32" },
+      { name: "amount", type: "uint256" },
+      { name: "isNegotiable", type: "bool" },
+      { name: "fixedDiscountBps", type: "uint16" },
+      { name: "fixedLockupDays", type: "uint32" },
+      { name: "minDiscountBps", type: "uint16" },
+      { name: "maxDiscountBps", type: "uint16" },
+      { name: "minLockupDays", type: "uint32" },
+      { name: "maxLockupDays", type: "uint32" },
+      { name: "minDealAmount", type: "uint256" },
+      { name: "maxDealAmount", type: "uint256" },
+      { name: "maxPriceVolatilityBps", type: "uint16" },
+    ],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "payable",
+  },
+  {
+    name: "consignments",
+    type: "function",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [
+      { name: "tokenId", type: "bytes32" },
+      { name: "consigner", type: "address" },
+      { name: "totalAmount", type: "uint256" },
+      { name: "remainingAmount", type: "uint256" },
+      { name: "isNegotiable", type: "bool" },
+      { name: "fixedDiscountBps", type: "uint16" },
+      { name: "fixedLockupDays", type: "uint32" },
+      { name: "minDiscountBps", type: "uint16" },
+      { name: "maxDiscountBps", type: "uint16" },
+      { name: "minLockupDays", type: "uint32" },
+      { name: "maxLockupDays", type: "uint32" },
+      { name: "minDealAmount", type: "uint256" },
+      { name: "maxDealAmount", type: "uint256" },
+      { name: "maxPriceVolatilityBps", type: "uint16" },
+      { name: "isActive", type: "bool" },
+      { name: "createdAt", type: "uint256" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    name: "nextConsignmentId",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    name: "createOfferFromConsignment",
+    type: "function",
+    inputs: [
+      { name: "consignmentId", type: "uint256" },
+      { name: "tokenAmount", type: "uint256" },
+      { name: "discountBps", type: "uint256" },
+      { name: "currency", type: "uint8" },
+      { name: "lockupSeconds", type: "uint256" },
+      { name: "agentCommissionBps", type: "uint16" },
+    ],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "offers",
+    type: "function",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [
+      { name: "consignmentId", type: "uint256" },
+      { name: "tokenId", type: "bytes32" },
+      { name: "beneficiary", type: "address" },
+      { name: "tokenAmount", type: "uint256" },
+      { name: "discountBps", type: "uint256" },
+      { name: "createdAt", type: "uint256" },
+      { name: "unlockTime", type: "uint256" },
+      { name: "priceUsdPerToken", type: "uint256" },
+      { name: "maxPriceDeviation", type: "uint256" },
+      { name: "ethUsdPrice", type: "uint256" },
+      { name: "currency", type: "uint8" },
+      { name: "approved", type: "bool" },
+      { name: "paid", type: "bool" },
+      { name: "fulfilled", type: "bool" },
+      { name: "cancelled", type: "bool" },
+      { name: "payer", type: "address" },
+      { name: "amountPaid", type: "uint256" },
+      { name: "agentCommissionBps", type: "uint16" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    name: "nextOfferId",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    name: "approveOffer",
+    type: "function",
+    inputs: [{ name: "offerId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "fulfillOffer",
+    type: "function",
+    inputs: [{ name: "offerId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "payable",
+  },
+  {
+    name: "claim",
+    type: "function",
+    inputs: [{ name: "offerId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "setApprover",
+    type: "function",
+    inputs: [
+      { name: "approver", type: "address" },
+      { name: "isApprover", type: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
 ] as const;
 
-const AGGREGATOR_ABI = [
-  { name: "latestRoundData", type: "function", inputs: [], outputs: [{ name: "roundId", type: "uint80" }, { name: "answer", type: "int256" }, { name: "startedAt", type: "uint256" }, { name: "updatedAt", type: "uint256" }, { name: "answeredInRound", type: "uint80" }], stateMutability: "view" },
-  { name: "decimals", type: "function", inputs: [], outputs: [{ type: "uint8" }], stateMutability: "view" },
+const _AGGREGATOR_ABI = [
+  {
+    name: "latestRoundData",
+    type: "function",
+    inputs: [],
+    outputs: [
+      { name: "roundId", type: "uint80" },
+      { name: "answer", type: "int256" },
+      { name: "startedAt", type: "uint256" },
+      { name: "updatedAt", type: "uint256" },
+      { name: "answeredInRound", type: "uint80" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    name: "decimals",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint8" }],
+    stateMutability: "view",
+  },
 ] as const;
 
 // ============================================================================
@@ -160,9 +376,7 @@ async function main() {
   });
 
   // Load deployment config
-  const config = JSON.parse(
-    await Bun.file("src/config/deployments/local-evm.json").text()
-  );
+  const config = JSON.parse(await Bun.file("src/config/deployments/local-evm.json").text());
   const otcAddress = config.contracts.otc as Address;
   const usdcAddress = config.contracts.usdc as Address;
 
@@ -185,7 +399,7 @@ async function main() {
       --broadcast \
       --constructor-args "TestCoin" "TEST" 18 1000000000000000000000000 \
       2>&1`,
-    { encoding: "utf-8" }
+    { encoding: "utf-8" },
   );
 
   const tokenMatch = deployOutput.match(/Deployed to: (0x[a-fA-F0-9]+)/);
@@ -204,7 +418,7 @@ async function main() {
       --broadcast \
       --constructor-args 8 100000000 \
       2>&1`,
-    { encoding: "utf-8" }
+    { encoding: "utf-8" },
   );
 
   const feedMatch = feedOutput.match(/Deployed to: (0x[a-fA-F0-9]+)/);
@@ -300,9 +514,12 @@ async function main() {
       tokenId,
       listAmount,
       true, // negotiable
-      0, 0, // fixed discount/lockup (not used when negotiable)
-      100, 2000, // min/max discount bps (1% - 20%)
-      7, 90, // min/max lockup days
+      0,
+      0, // fixed discount/lockup (not used when negotiable)
+      100,
+      2000, // min/max discount bps (1% - 20%)
+      7,
+      90, // min/max lockup days
       parseEther("100"), // min deal amount
       parseEther("50000"), // max deal amount
       2000, // max price volatility bps (20%)
@@ -319,7 +536,9 @@ async function main() {
   });
 
   // consignment tuple: [tokenId, consigner, totalAmount, remainingAmount, isNegotiable, ...]
-  success(`Consignment #${consignmentId} created: ${formatEther(consignment[2] as bigint)} TEST tokens`);
+  success(
+    `Consignment #${consignmentId} created: ${formatEther(consignment[2] as bigint)} TEST tokens`,
+  );
   log(`  Seller: ${consignment[1]}`);
   log(`  Active: ${consignment[14]}`);
   console.log();
@@ -474,10 +693,9 @@ async function main() {
 
   // Advance time past lockup
   const lockupSecondsToSkip = lockupDays * 24 * 60 * 60 + 60; // Add 1 minute buffer
-  execSync(
-    `cast rpc anvil_increaseTime ${lockupSecondsToSkip} --rpc-url ${RPC_URL}`,
-    { encoding: "utf-8" }
-  );
+  execSync(`cast rpc anvil_increaseTime ${lockupSecondsToSkip} --rpc-url ${RPC_URL}`, {
+    encoding: "utf-8",
+  });
   execSync(`cast rpc anvil_mine 1 --rpc-url ${RPC_URL}`, { encoding: "utf-8" });
 
   const buyerTokensBefore = await publicClient.readContract({

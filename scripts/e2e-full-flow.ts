@@ -1,22 +1,22 @@
 #!/usr/bin/env bun
 /**
  * E2E Full Flow Validation Script
- * 
+ *
  * Tests the complete OTC flows for both P2P (non-negotiable) and agent-negotiated deals:
- * 
+ *
  * P2P Flow (Non-Negotiable):
  * 1. Consigner lists tokens with fixed terms (isNegotiable = false)
  * 2. Buyer creates offer -> auto-approved at creation
  * 3. Buyer fulfills payment immediately
  * 4. Buyer claims tokens after lockup
- * 
+ *
  * Negotiable Flow:
  * 1. Consigner lists tokens with negotiable terms (isNegotiable = true)
  * 2. Buyer creates offer with custom terms
  * 3. Agent/approver approves the offer
  * 4. Buyer fulfills payment
  * 5. Buyer claims tokens after lockup
- * 
+ *
  * Usage:
  *   bun scripts/e2e-full-flow.ts           # Dry run (read-only)
  *   EXECUTE_TX=true bun scripts/e2e-full-flow.ts  # Execute transactions
@@ -24,25 +24,22 @@
  */
 
 import { config } from "dotenv";
+
 config({ path: ".env.local" });
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import {
+  type Address,
   createPublicClient,
   createWalletClient,
-  http,
-  type Address,
   formatEther,
-  parseEther,
-  keccak256,
-  stringToBytes,
   formatUnits,
-  parseUnits,
   type Hex,
+  http,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { mainnet, base, bsc, sepolia, baseSepolia, bscTestnet } from "viem/chains";
-import * as fs from "fs";
-import * as path from "path";
+import { base, bsc, mainnet } from "viem/chains";
 
 // =============================================================================
 // CONFIGURATION
@@ -53,7 +50,7 @@ const CHAIN = process.env.CHAIN || "anvil"; // anvil, base, bsc, mainnet
 
 // Private keys from environment
 const DEPLOYER_KEY = process.env.MAINNET_PRIVATE_KEY as Hex | undefined;
-const AGENT_KEY = process.env.AGENT_PRIVATE_KEY as Hex | undefined;
+const _AGENT_KEY = process.env.AGENT_PRIVATE_KEY as Hex | undefined;
 
 if (EXECUTE_TX && !DEPLOYER_KEY) {
   console.error("MAINNET_PRIVATE_KEY required for transaction execution");
@@ -61,7 +58,10 @@ if (EXECUTE_TX && !DEPLOYER_KEY) {
 }
 
 // Chain configuration
-const CHAIN_CONFIGS: Record<string, { chain: typeof mainnet; rpc: string; deploymentFile: string }> = {
+const CHAIN_CONFIGS: Record<
+  string,
+  { chain: typeof mainnet; rpc: string; deploymentFile: string }
+> = {
   anvil: {
     chain: { ...mainnet, id: 31337, name: "Anvil" } as typeof mainnet,
     rpc: "http://127.0.0.1:8545",
@@ -140,7 +140,7 @@ const OTC_ABI = parseAbi([
   "function requiredEthWei(uint256) view returns (uint256)",
   "function requiredUsdcAmount(uint256) view returns (uint256)",
   "function requiredGasDepositPerConsignment() view returns (uint256)",
-  
+
   // Write functions
   "function registerToken(bytes32 tokenId, address tokenAddress, address priceOracle)",
   "function createConsignment(bytes32 tokenId, uint256 amount, bool isNegotiable, uint16 fixedDiscountBps, uint32 fixedLockupDays, uint16 minDiscountBps, uint16 maxDiscountBps, uint32 minLockupDays, uint32 maxLockupDays, uint256 minDealAmount, uint256 maxDealAmount, uint16 maxPriceVolatilityBps) payable returns (uint256)",
@@ -149,7 +149,7 @@ const OTC_ABI = parseAbi([
   "function fulfillOffer(uint256 offerId) payable",
   "function claim(uint256 offerId)",
   "function withdrawConsignment(uint256 consignmentId)",
-  
+
   // Events
   "event OfferCreated(uint256 indexed offerId, address indexed beneficiary, uint256 tokenAmount, uint256 discountBps, uint8 currency)",
   "event OfferApproved(uint256 indexed offerId, address indexed approver)",
@@ -157,7 +157,7 @@ const OTC_ABI = parseAbi([
   "event OfferFulfilled(uint256 indexed offerId, address indexed beneficiary, uint256 tokenAmount)",
 ]);
 
-const ERC20_ABI = parseAbi([
+const _ERC20_ABI = parseAbi([
   "function balanceOf(address) view returns (uint256)",
   "function allowance(address owner, address spender) view returns (uint256)",
   "function approve(address spender, uint256 amount) returns (bool)",
@@ -183,7 +183,7 @@ function log(category: string, message: string, data?: Record<string, unknown>) 
     P2P: "🤝",
     NEGOTIABLE: "🤖",
   };
-  
+
   console.log(`${prefix[category] || "•"} ${message}`);
   if (data) {
     Object.entries(data).forEach(([key, value]) => {
@@ -204,7 +204,7 @@ function section(title: string) {
 
 async function runE2ETests() {
   section(`E2E OTC Flow Validation - ${CHAIN.toUpperCase()}`);
-  
+
   log("INFO", `Mode: ${EXECUTE_TX ? "EXECUTE TRANSACTIONS" : "DRY RUN (read-only)"}`);
   log("INFO", `RPC: ${chainConfig.rpc}`);
 
@@ -242,14 +242,35 @@ async function runE2ETests() {
   log("SUCCESS", "OTC contract deployed and verified");
 
   // Read contract state
-  const [nextConsignmentId, nextOfferId, minUsdAmount, agent, requiredApprovals, gasDeposit] = await Promise.all([
-    publicClient.readContract({ address: OTC_ADDRESS, abi: OTC_ABI, functionName: "nextConsignmentId" }),
-    publicClient.readContract({ address: OTC_ADDRESS, abi: OTC_ABI, functionName: "nextOfferId" }),
-    publicClient.readContract({ address: OTC_ADDRESS, abi: OTC_ABI, functionName: "minUsdAmount" }),
-    publicClient.readContract({ address: OTC_ADDRESS, abi: OTC_ABI, functionName: "agent" }),
-    publicClient.readContract({ address: OTC_ADDRESS, abi: OTC_ABI, functionName: "requiredApprovals" }),
-    publicClient.readContract({ address: OTC_ADDRESS, abi: OTC_ABI, functionName: "requiredGasDepositPerConsignment" }),
-  ]);
+  const [nextConsignmentId, nextOfferId, minUsdAmount, agent, requiredApprovals, gasDeposit] =
+    await Promise.all([
+      publicClient.readContract({
+        address: OTC_ADDRESS,
+        abi: OTC_ABI,
+        functionName: "nextConsignmentId",
+      }),
+      publicClient.readContract({
+        address: OTC_ADDRESS,
+        abi: OTC_ABI,
+        functionName: "nextOfferId",
+      }),
+      publicClient.readContract({
+        address: OTC_ADDRESS,
+        abi: OTC_ABI,
+        functionName: "minUsdAmount",
+      }),
+      publicClient.readContract({ address: OTC_ADDRESS, abi: OTC_ABI, functionName: "agent" }),
+      publicClient.readContract({
+        address: OTC_ADDRESS,
+        abi: OTC_ABI,
+        functionName: "requiredApprovals",
+      }),
+      publicClient.readContract({
+        address: OTC_ADDRESS,
+        abi: OTC_ABI,
+        functionName: "requiredGasDepositPerConsignment",
+      }),
+    ]);
 
   log("INFO", "Contract State:", {
     nextConsignmentId: nextConsignmentId.toString(),
@@ -263,12 +284,12 @@ async function runE2ETests() {
   // =============================================================================
   // P2P FLOW DEMONSTRATION (Non-Negotiable)
   // =============================================================================
-  
+
   section("P2P FLOW (Non-Negotiable) - Auto-Approved");
-  
+
   log("P2P", "Non-negotiable offers are auto-approved at creation time");
   log("P2P", "No agent intervention required - fully permissionless");
-  
+
   // If there are existing consignments, analyze them
   if (nextConsignmentId > 1n) {
     log("CHECK", "Analyzing existing consignments...");
@@ -279,19 +300,37 @@ async function runE2ETests() {
         functionName: "consignments",
         args: [i],
       });
-      
-      const [tokenId, consigner, totalAmount, remainingAmount, isNegotiable, fixedDiscountBps, fixedLockupDays, , , , , , , , isActive] = consignment;
-      
+
+      const [
+        _tokenId,
+        consigner,
+        totalAmount,
+        remainingAmount,
+        isNegotiable,
+        fixedDiscountBps,
+        fixedLockupDays,
+        ,
+        ,
+        ,
+        ,
+        ,
+        ,
+        ,
+        isActive,
+      ] = consignment;
+
       log("INFO", `Consignment #${i}:`, {
         isNegotiable: isNegotiable ? "YES (Agent Required)" : "NO (P2P Auto-Approved)",
         consigner: consigner.slice(0, 10) + "...",
         totalAmount: formatEther(totalAmount),
         remainingAmount: formatEther(remainingAmount),
         isActive: isActive ? "ACTIVE" : "INACTIVE",
-        ...(isNegotiable ? {} : {
-          fixedDiscountBps: `${Number(fixedDiscountBps) / 100}%`,
-          fixedLockupDays: fixedLockupDays.toString() + " days",
-        }),
+        ...(isNegotiable
+          ? {}
+          : {
+              fixedDiscountBps: `${Number(fixedDiscountBps) / 100}%`,
+              fixedLockupDays: fixedLockupDays.toString() + " days",
+            }),
       });
     }
   }
@@ -301,7 +340,7 @@ async function runE2ETests() {
     log("CHECK", "Analyzing existing offers for approval status...");
     let p2pOffers = 0;
     let negotiableOffers = 0;
-    
+
     for (let i = 1n; i < nextOfferId && i < 10n; i++) {
       const offer = await publicClient.readContract({
         address: OTC_ADDRESS,
@@ -309,11 +348,27 @@ async function runE2ETests() {
         functionName: "offers",
         args: [i],
       });
-      
-      const [consignmentId, , beneficiary, tokenAmount, discountBps, createdAt, unlockTime, , , , , approved, paid, fulfilled, cancelled] = offer;
-      
+
+      const [
+        consignmentId,
+        ,
+        beneficiary,
+        tokenAmount,
+        discountBps,
+        _createdAt,
+        _unlockTime,
+        ,
+        ,
+        ,
+        ,
+        approved,
+        paid,
+        fulfilled,
+        cancelled,
+      ] = offer;
+
       if (beneficiary === "0x0000000000000000000000000000000000000000") continue;
-      
+
       // Check if this was from a negotiable consignment
       const consignment = await publicClient.readContract({
         address: OTC_ADDRESS,
@@ -322,13 +377,13 @@ async function runE2ETests() {
         args: [consignmentId],
       });
       const isNegotiable = consignment[4];
-      
+
       if (isNegotiable) {
         negotiableOffers++;
       } else {
         p2pOffers++;
       }
-      
+
       log("INFO", `Offer #${i}:`, {
         type: isNegotiable ? "NEGOTIABLE" : "P2P",
         approved: approved ? "YES" : "NO",
@@ -339,7 +394,7 @@ async function runE2ETests() {
         discountBps: `${Number(discountBps) / 100}%`,
       });
     }
-    
+
     log("INFO", "Offer Summary:", {
       p2pOffers,
       negotiableOffers,
@@ -349,12 +404,12 @@ async function runE2ETests() {
   // =============================================================================
   // NEGOTIABLE FLOW DEMONSTRATION
   // =============================================================================
-  
+
   section("NEGOTIABLE FLOW - Agent Approval Required");
-  
+
   log("NEGOTIABLE", "Negotiable offers require agent/approver approval");
   log("NEGOTIABLE", "Agent validates price, discount, and lockup terms");
-  
+
   // Check agent configuration
   const isAgentApprover = await publicClient.readContract({
     address: OTC_ADDRESS,
@@ -362,7 +417,7 @@ async function runE2ETests() {
     functionName: "isApprover",
     args: [agent],
   });
-  
+
   log("INFO", "Agent Configuration:", {
     agent,
     isApprover: isAgentApprover ? "YES" : "NO",
@@ -372,15 +427,15 @@ async function runE2ETests() {
   // =============================================================================
   // EXECUTE TRANSACTIONS (if enabled)
   // =============================================================================
-  
+
   if (EXECUTE_TX && walletClient && account) {
     section("EXECUTING TEST TRANSACTIONS");
-    
+
     log("WARNING", "Transaction execution enabled - this will cost gas");
-    
+
     // For now, we would implement actual transaction execution here
     // This is skipped in dry-run mode
-    
+
     log("INFO", "Transaction execution would happen here");
     log("INFO", "Use EXECUTE_TX=true to run real transactions");
   } else {
@@ -391,19 +446,19 @@ async function runE2ETests() {
   // =============================================================================
   // SUMMARY
   // =============================================================================
-  
+
   section("VALIDATION SUMMARY");
-  
+
   log("SUCCESS", "P2P Flow (Non-Negotiable):", {
     "Auto-Approval": "Offers from non-negotiable consignments are auto-approved",
-    "Permissionless": "No agent intervention required",
+    Permissionless: "No agent intervention required",
     "Gas Efficient": "One less transaction for buyers",
   });
-  
+
   log("SUCCESS", "Negotiable Flow:", {
     "Agent Required": "Offers require agent/approver approval",
     "Price Protection": "Agent validates current price vs offer price",
-    "Flexibility": "Buyers can negotiate discount and lockup terms",
+    Flexibility: "Buyers can negotiate discount and lockup terms",
   });
 }
 
@@ -420,5 +475,3 @@ runE2ETests()
     console.error("\n❌ Error:", error);
     process.exit(1);
   });
-
-

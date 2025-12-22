@@ -33,9 +33,7 @@ export function isContractAddress(address: string): boolean {
  * Detect chain from address format
  * Returns 'solana', 'evm', or null if unrecognized
  */
-export function detectChainFromAddress(
-  address: string,
-): "solana" | "evm" | null {
+export function detectChainFromAddress(address: string): "solana" | "evm" | null {
   if (isSolanaAddress(address)) return "solana";
   if (isEvmAddress(address)) return "evm";
   return null;

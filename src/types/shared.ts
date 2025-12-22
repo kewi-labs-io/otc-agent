@@ -61,12 +61,8 @@ export interface WalletSigner {
  */
 export interface AnchorWallet {
   publicKey: SolanaPublicKey;
-  signTransaction: <T extends Transaction | VersionedTransaction>(
-    tx: T,
-  ) => Promise<T>;
-  signAllTransactions: <T extends Transaction | VersionedTransaction>(
-    txs: T[],
-  ) => Promise<T[]>;
+  signTransaction: <T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>;
+  signAllTransactions: <T extends Transaction | VersionedTransaction>(txs: T[]) => Promise<T[]>;
 }
 
 /**
@@ -203,7 +199,8 @@ export interface AnchorConsignmentAccountAccessor {
  * Used to type `program.account` with all account types
  */
 export interface AnchorProgramAccountAccessor
-  extends AnchorDeskAccountAccessor, AnchorConsignmentAccountAccessor {}
+  extends AnchorDeskAccountAccessor,
+    AnchorConsignmentAccountAccessor {}
 
 /**
  * Price update response from API
@@ -227,12 +224,7 @@ export interface PriceUpdateResponse {
 /**
  * Step status for multi-step flows
  */
-export type StepStatus =
-  | "pending"
-  | "running"
-  | "success"
-  | "error"
-  | "skipped";
+export type StepStatus = "pending" | "running" | "success" | "error" | "skipped";
 
 /**
  * Step definition for flow tests
@@ -262,13 +254,7 @@ export interface TestState {
 /**
  * Modal step state for accept quote modal
  */
-export type StepState =
-  | "amount"
-  | "sign"
-  | "creating"
-  | "await_approval"
-  | "paying"
-  | "complete";
+export type StepState = "amount" | "sign" | "creating" | "await_approval" | "paying" | "complete";
 
 /**
  * Token metadata for UI display
@@ -769,10 +755,7 @@ export type OfferTuple = readonly [
  * Markdown override component config (from markdown-to-jsx)
  */
 export interface MarkdownOverrideConfig {
-  component:
-    | React.ComponentType<Record<string, unknown>>
-    | string
-    | (() => null);
+  component: React.ComponentType<Record<string, unknown>> | string | (() => null);
   props?: Record<string, unknown>;
 }
 
@@ -781,10 +764,7 @@ export interface MarkdownOverrideConfig {
  * Note: This is a simplified subset of the library's Options type
  */
 export interface MarkdownOptions {
-  overrides?: Record<
-    string,
-    React.ComponentType<Record<string, unknown>> | MarkdownOverrideConfig
-  >;
+  overrides?: Record<string, React.ComponentType<Record<string, unknown>> | MarkdownOverrideConfig>;
   wrapper?: React.ComponentType<Record<string, unknown>> | string | null;
   forceBlock?: boolean;
   forceInline?: boolean;

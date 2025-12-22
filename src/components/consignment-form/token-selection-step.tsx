@@ -5,26 +5,15 @@ import { ExternalLink, Loader2, RefreshCw, Search, X } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useChainId } from "wagmi";
-import {
-  base,
-  baseSepolia,
-  bsc,
-  bscTestnet,
-  mainnet,
-  sepolia,
-} from "wagmi/chains";
+import { base, baseSepolia, bsc, bscTestnet, mainnet, sepolia } from "wagmi/chains";
 import { InlineLoading } from "@/components/ui/loading-spinner";
 import type { Chain } from "@/config/chains";
+import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { usePrefetchPoolCheck } from "@/hooks/usePoolCheck";
 import { useTokenLookup } from "@/hooks/useTokenLookup";
-import {
-  useRefetchWalletTokens,
-  useWalletTokens,
-  type WalletToken,
-} from "@/hooks/useWalletTokens";
+import { useRefetchWalletTokens, useWalletTokens, type WalletToken } from "@/hooks/useWalletTokens";
 import { isContractAddress, isSolanaAddress } from "@/utils/address-utils";
 import { formatRawTokenAmount, formatUsdCompact } from "@/utils/format";
-import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { Button } from "../button";
 
 // Token avatar component with fallback on image error
@@ -44,7 +33,7 @@ function TokenAvatar({
   // Reset error state when logoUrl changes
   useEffect(() => {
     setHasError(false);
-  }, [logoUrl]);
+  }, []);
 
   if (!logoUrl || hasError) {
     return (
@@ -287,11 +276,7 @@ export function TokenSelectionStep({
           disabled={!privyReady}
           className="!px-8 !py-3"
         >
-          {privyReady
-            ? privyAuthenticated
-              ? "Connect Wallet"
-              : "Sign In"
-            : "Loading..."}
+          {privyReady ? (privyAuthenticated ? "Connect Wallet" : "Sign In") : "Loading..."}
         </Button>
       </div>
     );
@@ -302,12 +287,11 @@ export function TokenSelectionStep({
       {/* Chain switcher - show available chains */}
       {availableChains.length > 1 && (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
-            Chain:
-          </span>
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">Chain:</span>
           <div className="flex gap-1">
             {availableChains.includes("ethereum") && (
               <button
+                type="button"
                 onClick={() => handleChainSelect("ethereum")}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
                   selectedChain === "ethereum"
@@ -320,6 +304,7 @@ export function TokenSelectionStep({
             )}
             {availableChains.includes("base") && (
               <button
+                type="button"
                 onClick={() => handleChainSelect("base")}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
                   selectedChain === "base"
@@ -332,6 +317,7 @@ export function TokenSelectionStep({
             )}
             {availableChains.includes("bsc") && (
               <button
+                type="button"
                 onClick={() => handleChainSelect("bsc")}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
                   selectedChain === "bsc"
@@ -344,6 +330,7 @@ export function TokenSelectionStep({
             )}
             {availableChains.includes("solana") && (
               <button
+                type="button"
                 onClick={() => handleChainSelect("solana")}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
                   selectedChain === "solana"
@@ -371,6 +358,7 @@ export function TokenSelectionStep({
           />
           {searchQuery && (
             <button
+              type="button"
               onClick={() => setSearchQuery("")}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
             >
@@ -379,14 +367,13 @@ export function TokenSelectionStep({
           )}
         </div>
         <button
+          type="button"
           onClick={handleRefresh}
           disabled={isRefreshing || loading}
           className="flex items-center gap-1.5 px-3 py-2.5 text-xs text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full transition-colors disabled:opacity-50"
           title="Refresh token list"
         >
-          <RefreshCw
-            className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`}
-          />
+          <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
         </button>
       </div>
 
@@ -425,9 +412,7 @@ export function TokenSelectionStep({
                         {searchedToken.chain}
                       </span>
                     </div>
-                    <div className="text-sm text-zinc-500 truncate">
-                      {searchedToken.name}
-                    </div>
+                    <div className="text-sm text-zinc-500 truncate">{searchedToken.name}</div>
                   </div>
                   <svg
                     className="w-5 h-5 text-brand-500"
@@ -461,14 +446,9 @@ export function TokenSelectionStep({
         </p>
       )}
 
-      {filteredTokens.length === 0 &&
-        searchQuery &&
-        searchIsAddress &&
-        addressFoundInWallet && (
-          <p className="text-sm text-zinc-500 text-center py-6">
-            Token found in your wallet
-          </p>
-        )}
+      {filteredTokens.length === 0 && searchQuery && searchIsAddress && addressFoundInWallet && (
+        <p className="text-sm text-zinc-500 text-center py-6">Token found in your wallet</p>
+      )}
 
       {/* Divider when showing both searched token and wallet tokens */}
       {searchedToken && !addressFoundInWallet && filteredTokens.length > 0 && (
@@ -482,14 +462,11 @@ export function TokenSelectionStep({
       {/* Token list - no inner scroll, flows naturally */}
       <div className="space-y-2">
         {loading && <InlineLoading message="Loading tokens..." />}
-        {!loading &&
-          filteredTokens.length === 0 &&
-          !searchQuery &&
-          hasLoadedOnce && (
-            <div className="text-center py-8 text-zinc-500 dark:text-zinc-400 text-sm">
-              No tokens found in your wallet
-            </div>
-          )}
+        {!loading && filteredTokens.length === 0 && !searchQuery && hasLoadedOnce && (
+          <div className="text-center py-8 text-zinc-500 dark:text-zinc-400 text-sm">
+            No tokens found in your wallet
+          </div>
+        )}
         {!loading &&
           filteredTokens.map((token) => (
             <div
@@ -504,12 +481,7 @@ export function TokenSelectionStep({
               }`}
             >
               <div className="flex items-center gap-3">
-                <TokenAvatar
-                  logoUrl={token.logoUrl}
-                  symbol={token.symbol}
-                  size={40}
-                  ringClass=""
-                />
+                <TokenAvatar logoUrl={token.logoUrl} symbol={token.symbol} size={40} ringClass="" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-zinc-900 dark:text-zinc-100">
@@ -520,9 +492,7 @@ export function TokenSelectionStep({
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-zinc-500 truncate pr-2">
-                      {token.name}
-                    </span>
+                    <span className="text-sm text-zinc-500 truncate pr-2">{token.name}</span>
                     <span className="text-xs text-zinc-400 whitespace-nowrap">
                       {formatRawTokenAmount(token.balance, token.decimals)}
                     </span>

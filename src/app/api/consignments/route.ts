@@ -26,9 +26,7 @@ export async function GET(request: NextRequest) {
     const existing = params[key];
     if (existing !== undefined) {
       // Multiple values - convert to array
-      params[key] = Array.isArray(existing)
-        ? [...existing, value]
-        : [existing, value];
+      params[key] = Array.isArray(existing) ? [...existing, value] : [existing, value];
     } else {
       params[key] = value;
     }
@@ -68,9 +66,7 @@ export async function GET(request: NextRequest) {
 
   // Filter by chains if specified
   if (chains && chains.length > 0) {
-    consignments = consignments.filter((c) =>
-      chains.includes(c.chain as Chain),
-    );
+    consignments = consignments.filter((c) => chains.includes(c.chain as Chain));
   }
 
   // Filter by negotiable types if specified
@@ -100,9 +96,7 @@ export async function GET(request: NextRequest) {
     consignments = consignments.filter((c) => {
       // FAIL-FAST: Consignment must exist (already filtered above, but double-check)
       if (!c) {
-        throw new Error(
-          "Null consignment found in filtered list - data corruption",
-        );
+        throw new Error("Null consignment found in filtered list - data corruption");
       }
       // FAIL-FAST: Consignment must have consignerAddress
       if (!c.consignerAddress) {
@@ -112,9 +106,7 @@ export async function GET(request: NextRequest) {
       if (c.chain === "solana") {
         return c.consignerAddress === consignerAddress;
       }
-      return (
-        c.consignerAddress.toLowerCase() === consignerAddress.toLowerCase()
-      );
+      return c.consignerAddress.toLowerCase() === consignerAddress.toLowerCase();
     });
   }
 
@@ -130,10 +122,7 @@ export async function GET(request: NextRequest) {
       if (c.chain === "solana") {
         if (c.consignerAddress === requesterAddress) return true;
         // allowedBuyers is optional array - check if present and includes requester
-        if (
-          Array.isArray(c.allowedBuyers) &&
-          c.allowedBuyers.includes(requesterAddress)
-        )
+        if (Array.isArray(c.allowedBuyers) && c.allowedBuyers.includes(requesterAddress))
           return true;
       } else {
         const requester = requesterAddress.toLowerCase();
@@ -155,9 +144,7 @@ export async function GET(request: NextRequest) {
   // (consigners can still see their own dust listings via consignerAddress filter)
   if (!consignerAddress) {
     // Batch fetch all unique tokens using serverless cache
-    const uniqueTokenIds = Array.from(
-      new Set(consignments.map((c) => c.tokenId)),
-    );
+    const uniqueTokenIds = Array.from(new Set(consignments.map((c) => c.tokenId)));
     const tokenMap = new Map<string, { decimals: number }>();
 
     // Fetch all tokens in parallel using cached function
@@ -172,9 +159,7 @@ export async function GET(request: NextRequest) {
           return null;
         } catch {
           // Token not found in database - log and skip
-          console.warn(
-            `[Consignments] Token ${tokenId} not found - consignment may be orphaned`,
-          );
+          console.warn(`[Consignments] Token ${tokenId} not found - consignment may be orphaned`);
           return null;
         }
       }),
@@ -316,10 +301,7 @@ export async function POST(request: NextRequest) {
   // FAIL-FAST: Validate chain is a valid Chain type (schema should ensure this, but double-check)
   const validChains: Chain[] = ["ethereum", "base", "bsc", "solana"];
   if (!validChains.includes(chain as Chain)) {
-    return NextResponse.json(
-      { success: false, error: `Invalid chain: ${chain}` },
-      { status: 400 },
-    );
+    return NextResponse.json({ success: false, error: `Invalid chain: ${chain}` }, { status: 400 });
   }
 
   // Auto-fetch decimals if not provided
@@ -330,8 +312,7 @@ export async function POST(request: NextRequest) {
     );
     try {
       // Build absolute URL for internal API call
-      const baseUrl =
-        process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
       const decimalsUrl = `${baseUrl}/api/tokens/decimals?address=${encodeURIComponent(tokenAddress)}&chain=${chain}`;
       const decimalsResponse = await fetch(decimalsUrl);
       if (!decimalsResponse.ok) {
@@ -352,9 +333,7 @@ export async function POST(request: NextRequest) {
         );
       }
       resolvedDecimals = decimalsData.decimals;
-      console.log(
-        `[Consignments] Fetched decimals: ${resolvedDecimals} for ${tokenAddress}`,
-      );
+      console.log(`[Consignments] Fetched decimals: ${resolvedDecimals} for ${tokenAddress}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return NextResponse.json(
@@ -422,12 +401,9 @@ export async function POST(request: NextRequest) {
     isFractionalized: isFractionalized === true,
     isPrivate: isPrivate === true,
     allowedBuyers: Array.isArray(allowedBuyers) ? allowedBuyers : undefined,
-    maxPriceVolatilityBps:
-      typeof maxPriceVolatilityBps === "number" ? maxPriceVolatilityBps : 1000,
+    maxPriceVolatilityBps: typeof maxPriceVolatilityBps === "number" ? maxPriceVolatilityBps : 1000,
     maxTimeToExecuteSeconds:
-      typeof maxTimeToExecuteSeconds === "number"
-        ? maxTimeToExecuteSeconds
-        : 3600,
+      typeof maxTimeToExecuteSeconds === "number" ? maxTimeToExecuteSeconds : 3600,
     chain,
     contractConsignmentId,
   });

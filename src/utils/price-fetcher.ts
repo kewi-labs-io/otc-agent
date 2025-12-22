@@ -59,18 +59,13 @@ export async function fetchNativePrices(
     `https://api.coingecko.com/api/v3/simple/price?ids=${coinIds}&vs_currencies=usd`,
     {
       headers: { Accept: "application/json" },
-      signal:
-        options.signal !== undefined
-          ? options.signal
-          : AbortSignal.timeout(timeout),
+      signal: options.signal !== undefined ? options.signal : AbortSignal.timeout(timeout),
     },
   );
 
   if (!response.ok) {
     // Rate limited or other error - return empty prices, don't throw
-    console.warn(
-      `[Price Fetcher] Native prices API error: HTTP ${response.status}`,
-    );
+    console.warn(`[Price Fetcher] Native prices API error: HTTP ${response.status}`);
     return prices;
   }
 
@@ -81,16 +76,11 @@ export async function fetchNativePrices(
   }
 
   for (const [coinId, priceData] of Object.entries(data)) {
-    const symbolEntry = Object.entries(NATIVE_TOKEN_IDS).find(
-      ([, id]) => id === coinId,
-    );
+    const symbolEntry = Object.entries(NATIVE_TOKEN_IDS).find(([, id]) => id === coinId);
     if (!symbolEntry) continue;
     const symbol = symbolEntry[0];
     const priceDataTyped = priceData as CoinGeckoPriceData;
-    if (
-      priceDataTyped.usd !== undefined &&
-      typeof priceDataTyped.usd === "number"
-    ) {
+    if (priceDataTyped.usd !== undefined && typeof priceDataTyped.usd === "number") {
       prices[symbol] = priceDataTyped.usd;
     }
   }
@@ -126,17 +116,12 @@ export async function fetchCoinGeckoPrices(
 
   const response = await fetch(url, {
     headers,
-    signal:
-      options.signal !== undefined
-        ? options.signal
-        : AbortSignal.timeout(timeout),
+    signal: options.signal !== undefined ? options.signal : AbortSignal.timeout(timeout),
   });
 
   if (!response.ok) {
     // Rate limited or other error - return empty prices, don't throw
-    console.warn(
-      `[Price Fetcher] CoinGecko API error: HTTP ${response.status}`,
-    );
+    console.warn(`[Price Fetcher] CoinGecko API error: HTTP ${response.status}`);
     return {};
   }
 
@@ -144,10 +129,7 @@ export async function fetchCoinGeckoPrices(
     usd?: number;
   }
 
-  const data = (await response.json()) as Record<
-    string,
-    CoinGeckoTokenPriceData
-  >;
+  const data = (await response.json()) as Record<string, CoinGeckoTokenPriceData>;
   const prices: Record<string, number> = {};
 
   for (const [address, priceData] of Object.entries(data)) {
@@ -177,10 +159,7 @@ export async function fetchDeFiLlamaPrices(
   const url = `https://coins.llama.fi/prices/current/${coins}`;
 
   const response = await fetch(url, {
-    signal:
-      options.signal !== undefined
-        ? options.signal
-        : AbortSignal.timeout(timeout),
+    signal: options.signal !== undefined ? options.signal : AbortSignal.timeout(timeout),
   });
 
   if (!response.ok) {
@@ -211,9 +190,7 @@ export async function fetchDeFiLlamaPrices(
     }
   }
 
-  console.log(
-    `[Price Fetcher] DeFiLlama returned ${Object.keys(prices).length} prices`,
-  );
+  console.log(`[Price Fetcher] DeFiLlama returned ${Object.keys(prices).length} prices`);
   return prices;
 }
 
@@ -238,16 +215,11 @@ export async function fetchJupiterPrices(
   for (const chunk of chunks) {
     const ids = chunk.join(",");
     const response = await fetch(`https://api.jup.ag/price/v2?ids=${ids}`, {
-      signal:
-        options.signal !== undefined
-          ? options.signal
-          : AbortSignal.timeout(timeout),
+      signal: options.signal !== undefined ? options.signal : AbortSignal.timeout(timeout),
     });
 
     if (!response.ok) {
-      console.warn(
-        `[Price Fetcher] Jupiter API error: HTTP ${response.status}`,
-      );
+      console.warn(`[Price Fetcher] Jupiter API error: HTTP ${response.status}`);
       continue; // Skip this chunk, return what we have
     }
 
@@ -268,7 +240,7 @@ export async function fetchJupiterPrices(
       const price = priceData.price;
       if (price && typeof price === "string") {
         const parsedPrice = parseFloat(price);
-        if (!isNaN(parsedPrice)) {
+        if (!Number.isNaN(parsedPrice)) {
           allPrices[mint] = parsedPrice;
         }
       }
@@ -292,20 +264,14 @@ export async function fetchEvmPrices(
   const llamaPrices = await fetchDeFiLlamaPrices(chain, addresses, options);
 
   // Find addresses still missing prices
-  const missingAddresses = addresses.filter(
-    (a) => !llamaPrices[a.toLowerCase()],
-  );
+  const missingAddresses = addresses.filter((a) => !llamaPrices[a.toLowerCase()]);
 
   if (missingAddresses.length === 0) {
     return llamaPrices;
   }
 
   // Try CoinGecko for remaining
-  const geckoPrices = await fetchCoinGeckoPrices(
-    chain,
-    missingAddresses,
-    options,
-  );
+  const geckoPrices = await fetchCoinGeckoPrices(chain, missingAddresses, options);
 
   return { ...llamaPrices, ...geckoPrices };
 }

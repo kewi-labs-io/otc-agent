@@ -47,9 +47,7 @@ function getDisplayLockup(c: OTCConsignment): number {
  *   - displayDiscountBps = fixedDiscountBps
  *   - displayLockupDays = fixedLockupDays
  */
-export function sanitizeConsignmentForBuyer(
-  consignment: OTCConsignment,
-): ConsignmentWithDisplay {
+export function sanitizeConsignmentForBuyer(consignment: OTCConsignment): ConsignmentWithDisplay {
   return {
     // Core fields
     id: consignment.id,
@@ -96,9 +94,7 @@ export function isConsignmentOwner(
   if (!callerAddress) return false;
 
   const normalizedCaller =
-    consignment.chain === "solana"
-      ? callerAddress
-      : callerAddress.toLowerCase();
+    consignment.chain === "solana" ? callerAddress : callerAddress.toLowerCase();
   const normalizedConsigner =
     consignment.chain === "solana"
       ? consignment.consignerAddress

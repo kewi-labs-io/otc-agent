@@ -7,7 +7,7 @@
  * Run: bun test tests/utils/retry-cache.test.ts
  */
 
-import { describe, test, expect, beforeEach, afterEach, mock, setSystemTime } from "bun:test";
+import { beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 
 // =============================================================================
 // MODULE ISOLATION
@@ -220,7 +220,7 @@ describe("Retry Cache - Max Size & Eviction", () => {
   test("cache set and get works for many entries", () => {
     // Test that we can store and retrieve many entries with unique prefixes
     const prefix = `evict-test-${Date.now()}-`;
-    
+
     for (let i = 0; i < 100; i++) {
       setCache(`${prefix}${i}`, `value-${i}`);
     }
@@ -234,7 +234,7 @@ describe("Retry Cache - Max Size & Eviction", () => {
     // This is a behavioral test - we verify the function doesn't throw
     // when we add entries. The actual eviction is tested via integration.
     const prefix = `boundary-${Date.now()}-`;
-    
+
     // Add entries - should not throw even if eviction occurs
     for (let i = 0; i < 50; i++) {
       expect(() => setCache(`${prefix}${i}`, i)).not.toThrow();
@@ -476,7 +476,7 @@ describe("Retry Cache - Concurrency", () => {
   });
 
   test("parallel withRetryAndCache calls execute independently", async () => {
-    let callCounts: Record<string, number> = {};
+    const callCounts: Record<string, number> = {};
 
     const createFn = (key: string) => async () => {
       callCounts[key] = (callCounts[key] || 0) + 1;
@@ -508,7 +508,15 @@ describe("Retry Cache - Data Verification", () => {
   });
 
   test("preserves exact numeric values", () => {
-    const values = [0, -1, 1.5, Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER, Infinity, -Infinity];
+    const values = [
+      0,
+      -1,
+      1.5,
+      Number.MAX_SAFE_INTEGER,
+      Number.MIN_SAFE_INTEGER,
+      Infinity,
+      -Infinity,
+    ];
 
     for (const val of values) {
       setCache(`num-${val}`, val);

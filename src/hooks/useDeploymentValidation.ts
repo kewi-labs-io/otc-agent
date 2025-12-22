@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import {
-  type Chain,
-  getChainConfig,
-  isEVMChain,
-  isSolanaChain,
-} from "@/config/chains";
+import { type Chain, getChainConfig, isEVMChain, isSolanaChain } from "@/config/chains";
 
 export function useDeploymentValidation() {
   useEffect(() => {

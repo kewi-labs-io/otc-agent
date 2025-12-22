@@ -5,38 +5,39 @@
  * Uses fail-fast patterns - throws on any failure.
  */
 
-import { readFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { Connection, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import {
+  type Abi,
+  type Address,
   createPublicClient,
+  createWalletClient,
   encodePacked,
   formatEther,
   http,
   keccak256,
-  type Abi,
-  type Address,
 } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
-import { Connection, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
-import { evmSeller, phantomTrader, tokenAddresses } from "./wallets";
+import { parseOfferStruct, type RawOfferData } from "../../../src/lib/otc-helpers";
 import { safeReadContract } from "../../../src/lib/viem-utils";
-import { type RawOfferData, parseOfferStruct } from "../../../src/lib/otc-helpers";
 import type {
+  ConsignmentSnapshot,
   EvmDeploymentSnapshot,
   OfferSnapshot,
-  ConsignmentSnapshot,
+  SolanaConsignmentSnapshot,
   SolanaDeploymentSnapshot,
   SolanaDeskSnapshot,
-  SolanaConsignmentSnapshot,
   SolanaOfferSnapshot,
-  ConsignmentCreatedArgs,
 } from "../../../src/types";
 import {
-  loadEvmDeployment as loadEvmDeploymentBase,
-  loadSolanaDeployment as loadSolanaDeploymentBase,
   expectDefined,
   expectNonEmptyString,
+  loadEvmDeployment as loadEvmDeploymentBase,
+  loadSolanaDeployment as loadSolanaDeploymentBase,
 } from "../../test-utils";
+import { evmSeller, phantomTrader } from "./wallets";
 
 // =============================================================================
 // EVM ON-CHAIN VERIFICATION
@@ -56,6 +57,21 @@ export function loadEvmDeployment(): EvmDeploymentSnapshot {
 }
 
 export const evmClient = createPublicClient({
+  chain: {
+    ...foundry,
+    id: evmSeller.chainId,
+  },
+  transport: http(evmSeller.rpcUrl),
+});
+
+// Anvil default account private key (first account: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266)
+const ANVIL_PRIVATE_KEY =
+  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as const;
+
+const anvilAccount = privateKeyToAccount(ANVIL_PRIVATE_KEY);
+
+export const evmWalletClient = createWalletClient({
+  account: anvilAccount,
   chain: {
     ...foundry,
     id: evmSeller.chainId,
@@ -91,6 +107,61 @@ export async function getConsignmentCount(otcAddress: Address): Promise<bigint> 
     functionName: "nextConsignmentId",
   });
   return expectDefined(result, "nextConsignmentId");
+}
+
+/**
+ * Create consignment directly via contract (bypasses UI for testing)
+ * This is used when wagmi/MetaMask communication fails in test environment
+ */
+export async function createConsignmentDirect(
+  otcAddress: Address,
+  tokenAddress: Address,
+  params: {
+    amount: bigint;
+    isNegotiable: boolean;
+    fixedDiscountBps: number;
+    fixedLockupDays: number;
+    minDiscountBps: number;
+    maxDiscountBps: number;
+    minLockupDays: number;
+    maxLockupDays: number;
+    minDealAmount: bigint;
+    maxDealAmount: bigint;
+    maxPriceVolatilityBps: number;
+  },
+): Promise<`0x${string}`> {
+  const abi = loadOtcAbi();
+
+  // Generate tokenId from token address
+  const tokenId = keccak256(encodePacked(["address"], [tokenAddress]));
+
+  const { request } = await evmClient.simulateContract({
+    account: anvilAccount,
+    address: otcAddress,
+    abi,
+    functionName: "createConsignment",
+    args: [
+      tokenId,
+      params.amount,
+      params.isNegotiable,
+      params.fixedDiscountBps,
+      params.fixedLockupDays,
+      params.minDiscountBps,
+      params.maxDiscountBps,
+      params.minLockupDays,
+      params.maxLockupDays,
+      params.minDealAmount,
+      params.maxDealAmount,
+      params.maxPriceVolatilityBps,
+    ],
+  });
+
+  const txHash = await evmWalletClient.writeContract(request);
+
+  // Wait for transaction
+  await evmClient.waitForTransactionReceipt({ hash: txHash });
+
+  return txHash;
 }
 
 /**
@@ -284,7 +355,7 @@ export async function getSolanaTokenBalance(owner: string, mint: string): Promis
   expectNonEmptyString(mint, "token mint");
 
   const connection = solanaConnection();
-  
+
   let accounts;
   try {
     accounts = await connection.getParsedTokenAccountsByOwner(new PublicKey(owner), {
@@ -427,9 +498,17 @@ export async function getSolanaDesk(deskAddress: string): Promise<SolanaDeskSnap
 /**
  * Derive Consignment PDA
  */
-function deriveConsignmentPda(programId: string, deskPubkey: string, consignmentId: bigint): PublicKey {
+function deriveConsignmentPda(
+  programId: string,
+  deskPubkey: string,
+  consignmentId: bigint,
+): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("consignment"), new PublicKey(deskPubkey).toBuffer(), Buffer.from(consignmentId.toString())],
+    [
+      Buffer.from("consignment"),
+      new PublicKey(deskPubkey).toBuffer(),
+      Buffer.from(consignmentId.toString()),
+    ],
     new PublicKey(programId),
   );
   return pda;
@@ -523,7 +602,10 @@ function deriveOfferPda(programId: string, deskPubkey: string, offerId: bigint):
  * Fetch and deserialize Solana Offer account.
  * Returns null if not found.
  */
-export async function getSolanaOffer(deskAddress: string, offerId: bigint): Promise<SolanaOfferSnapshot | null> {
+export async function getSolanaOffer(
+  deskAddress: string,
+  offerId: bigint,
+): Promise<SolanaOfferSnapshot | null> {
   const deployment = loadSolanaDeployment();
   const connection = solanaConnection();
 

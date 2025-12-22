@@ -11,23 +11,16 @@ import {
   SystemProgram as SolSystemProgram,
 } from "@solana/web3.js";
 import dynamic from "next/dynamic";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TokenWithBalance } from "@/components/consignment-form/token-selection-step";
-import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { type Chain, SUPPORTED_CHAINS } from "@/config/chains";
+import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { useOTC } from "@/hooks/contracts/useOTC";
 import { getExplorerTxUrl } from "@/utils/format";
 import { useRenderTracker } from "@/utils/render-tracker";
-import {
-  extractAddressFromTokenId,
-  extractChainFromTokenId,
-  getChainFamily,
-} from "@/utils/token-utils";
-
 // Shared Solana OTC utilities - consolidated to avoid duplication
 import {
-  waitForSolanaTx as confirmTransactionPolling,
   createSolanaConnection,
   ensureTokenRegistered,
   ensureTreasuryExists,
@@ -36,31 +29,28 @@ import {
   SOLANA_DESK,
   SOLANA_RPC,
 } from "@/utils/solana-otc";
+import {
+  extractAddressFromTokenId,
+  extractChainFromTokenId,
+  getChainFamily,
+} from "@/utils/token-utils";
 
 const TokenSelectionStep = dynamic(
   () =>
-    import("@/components/consignment-form/token-selection-step").then(
-      (m) => m.TokenSelectionStep,
-    ),
+    import("@/components/consignment-form/token-selection-step").then((m) => m.TokenSelectionStep),
   { ssr: false },
 );
 const FormStep = dynamic(
-  () =>
-    import("@/components/consignment-form/form-step").then((m) => m.FormStep),
+  () => import("@/components/consignment-form/form-step").then((m) => m.FormStep),
   { ssr: false },
 );
 const ReviewStep = dynamic(
-  () =>
-    import("@/components/consignment-form/review-step").then(
-      (m) => m.ReviewStep,
-    ),
+  () => import("@/components/consignment-form/review-step").then((m) => m.ReviewStep),
   { ssr: false },
 );
 const SubmissionStepComponent = dynamic(
   () =>
-    import("@/components/consignment-form/submission-step").then(
-      (m) => m.SubmissionStepComponent,
-    ),
+    import("@/components/consignment-form/submission-step").then((m) => m.SubmissionStepComponent),
   { ssr: false },
 );
 
@@ -100,26 +90,19 @@ export default function ConsignPageClient() {
   const { disconnect, connectWallet } = useWalletActions();
   const { login, ready: privyReady } = usePrivy();
   useWallets(); // Keeping hook for wallet state sync
-  const { createConsignmentOnChain, approveToken, getRequiredGasDeposit } =
-    useOTC();
+  const { createConsignmentOnChain, approveToken, getRequiredGasDeposit } = useOTC();
 
   const [step, setStep] = useState(1);
-  const [selectedToken, setSelectedToken] = useState<TokenWithBalance | null>(
-    null,
-  );
+  const [selectedToken, setSelectedToken] = useState<TokenWithBalance | null>(null);
   const [formData, setFormData] = useState(INITIAL_FORM_DATA);
   const [gasDeposit, setGasDeposit] = useState<bigint | null>(null);
 
-  const currentAddress =
-    activeFamily === "solana" ? solanaPublicKey : evmAddress;
+  const currentAddress = activeFamily === "solana" ? solanaPublicKey : evmAddress;
   const displayAddress = currentAddress
     ? `${currentAddress.slice(0, 6)}...${currentAddress.slice(-4)}`
     : null;
 
-  const requiredChain = useMemo(
-    () => getChainFamily(formData.tokenId),
-    [formData.tokenId],
-  );
+  const requiredChain = useMemo(() => getChainFamily(formData.tokenId), [formData.tokenId]);
   const { tokenChain, rawTokenAddress } = useMemo(() => {
     // Return empty values when tokenId is not yet set (initial state)
     if (!formData.tokenId) {
@@ -160,9 +143,7 @@ export default function ConsignPageClient() {
     if (step === 3 && activeFamily !== "solana" && rawTokenAddress) {
       // Use the token's chain for fetching gas deposit
       const chain = (
-        tokenChain === "ethereum" ||
-        tokenChain === "base" ||
-        tokenChain === "bsc"
+        tokenChain === "ethereum" || tokenChain === "base" || tokenChain === "bsc"
           ? tokenChain
           : "base"
       ) as Chain;
@@ -183,7 +164,7 @@ export default function ConsignPageClient() {
       if (updates.amount !== undefined) {
         // FAIL-FAST: Validate amount is a valid number
         const amount = parseFloat(updates.amount);
-        if (isNaN(amount) || amount <= 0) {
+        if (Number.isNaN(amount) || amount <= 0) {
           throw new Error(`Invalid amount value: ${updates.amount}`);
         }
         if (amount > 0) {
@@ -252,9 +233,7 @@ export default function ConsignPageClient() {
     }
     // Token type requires decimals field - always exists
     const decimals = selectedToken.decimals;
-    const rawAmount = BigInt(
-      Math.floor(parseFloat(formData.amount) * 10 ** decimals),
-    );
+    const rawAmount = BigInt(Math.floor(parseFloat(formData.amount) * 10 ** decimals));
 
     // Pass the token's chain to ensure we use the correct OTC address
     // and switch to the correct chain if needed
@@ -265,11 +244,7 @@ export default function ConsignPageClient() {
     ) as Chain;
     console.log(`[ConsignPage] Approving token on chain: ${chain}`);
 
-    const txHash = await approveToken(
-      rawTokenAddress as `0x${string}`,
-      rawAmount,
-      chain,
-    );
+    const txHash = await approveToken(rawTokenAddress as `0x${string}`, rawAmount, chain);
 
     // Wait for approval confirmation to prevent nonce race with deposit tx
     console.log(`[ConsignPage] Waiting for approval confirmation: ${txHash}`);
@@ -284,9 +259,17 @@ export default function ConsignPageClient() {
     const { getViemChainForType } = await import("@/lib/getChain");
     const { waitForEvmTx } = await import("@/utils/tx-helpers");
     const viemChain = getViemChainForType(chain);
-    // Use direct RPC for confirmation polling (proxy might have caching)
-    const directRpc =
-      chain === "base"
+
+    // Check if we're running locally (Anvil/Foundry)
+    const isLocalDev =
+      chainConfig.rpcUrl.includes("127.0.0.1") || chainConfig.rpcUrl.includes("localhost");
+
+    // Use direct RPC for confirmation polling
+    // For local dev: use local RPC (Anvil)
+    // For mainnet: use direct public RPC (proxy might have caching issues)
+    const directRpc = isLocalDev
+      ? chainConfig.rpcUrl
+      : chain === "base"
         ? "https://mainnet.base.org"
         : chain === "ethereum"
           ? "https://eth.merkle.io"
@@ -306,19 +289,10 @@ export default function ConsignPageClient() {
       throw new Error("Approval transaction reverted");
     }
     console.log(`[ConsignPage] Approval tx status: ${status}`);
-    console.log(
-      `[ConsignPage] Approval confirmed, proceeding with consignment`,
-    );
+    console.log(`[ConsignPage] Approval confirmed, proceeding with consignment`);
 
     return txHash as string;
-  }, [
-    activeFamily,
-    rawTokenAddress,
-    selectedToken,
-    formData.amount,
-    approveToken,
-    tokenChain,
-  ]);
+  }, [activeFamily, rawTokenAddress, selectedToken, formData.amount, approveToken, tokenChain]);
 
   const handleCreateConsignment = useCallback(
     async (
@@ -338,7 +312,7 @@ export default function ConsignPageClient() {
         throw new Error("Consignment amount is required");
       }
       const amountValue = parseFloat(formData.amount);
-      if (isNaN(amountValue) || amountValue <= 0) {
+      if (Number.isNaN(amountValue) || amountValue <= 0) {
         throw new Error("Consignment amount must be greater than 0");
       }
 
@@ -349,26 +323,18 @@ export default function ConsignPageClient() {
       if (activeFamily === "solana") {
         // FAIL-FAST: Validate Solana-specific requirements
         if (!SOLANA_DESK) {
-          throw new Error(
-            "SOLANA_DESK address not configured. Check environment variables.",
-          );
+          throw new Error("SOLANA_DESK address not configured. Check environment variables.");
         }
         if (!SOLANA_RPC) {
-          throw new Error(
-            "SOLANA_RPC URL not configured. Check environment variables.",
-          );
+          throw new Error("SOLANA_RPC URL not configured. Check environment variables.");
         }
         if (!solanaPublicKey) {
-          throw new Error(
-            "Solana wallet not connected. Please connect your wallet.",
-          );
+          throw new Error("Solana wallet not connected. Please connect your wallet.");
         }
 
         // FAIL-FAST: Validate Solana address format
         if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(rawTokenAddress)) {
-          throw new Error(
-            `Invalid Solana token address format: ${rawTokenAddress}`,
-          );
+          throw new Error(`Invalid Solana token address format: ${rawTokenAddress}`);
         }
 
         // Use HTTP-only connection (no WebSocket) since we're using a proxy
@@ -398,8 +364,7 @@ export default function ConsignPageClient() {
         const anchorWallet = {
           publicKey: new SolPubkey(solanaPublicKey),
           signTransaction: signTransaction as Wallet["signTransaction"],
-          signAllTransactions:
-            signAllTransactions as Wallet["signAllTransactions"],
+          signAllTransactions: signAllTransactions as Wallet["signAllTransactions"],
         } as Wallet;
 
         const provider = new anchor.AnchorProvider(connection, anchorWallet, {
@@ -417,9 +382,7 @@ export default function ConsignPageClient() {
 
         // Detect token program (Token or Token-2022)
         const tokenProgramId = await getTokenProgramId(connection, tokenMintPk);
-        console.log(
-          `[ConsignPage] Using token program: ${tokenProgramId.toString()}`,
-        );
+        console.log(`[ConsignPage] Using token program: ${tokenProgramId.toString()}`);
 
         // Get consigner's token ATA
         const consignerTokenAta = await getAssociatedTokenAddress(
@@ -431,9 +394,7 @@ export default function ConsignPageClient() {
 
         // Ensure token is registered using shared utility
         console.log("[ConsignPage] Checking token registration...");
-        const signTx = signTransaction as <T extends anchor.web3.Transaction>(
-          tx: T,
-        ) => Promise<T>;
+        const signTx = signTransaction as <T extends anchor.web3.Transaction>(tx: T) => Promise<T>;
         const regResult = await ensureTokenRegistered(
           connection,
           program,
@@ -460,9 +421,7 @@ export default function ConsignPageClient() {
         );
         const deskTokenTreasury = treasuryResult.address;
         if (treasuryResult.signature) {
-          console.log(
-            `[ConsignPage] Desk treasury created: ${treasuryResult.signature}`,
-          );
+          console.log(`[ConsignPage] Desk treasury created: ${treasuryResult.signature}`);
         }
 
         // Generate consignment keypair (required as signer in the program)
@@ -473,14 +432,10 @@ export default function ConsignPageClient() {
           Math.floor(parseFloat(formData.amount) * 10 ** decimals).toString(),
         );
         const rawMinDeal = new anchor.BN(
-          Math.floor(
-            parseFloat(formData.minDealAmount) * 10 ** decimals,
-          ).toString(),
+          Math.floor(parseFloat(formData.minDealAmount) * 10 ** decimals).toString(),
         );
         const rawMaxDeal = new anchor.BN(
-          Math.floor(
-            parseFloat(formData.maxDealAmount) * 10 ** decimals,
-          ).toString(),
+          Math.floor(parseFloat(formData.maxDealAmount) * 10 ** decimals).toString(),
         );
 
         // Call createConsignment instruction - build tx manually to avoid WebSocket confirmation
@@ -514,28 +469,93 @@ export default function ConsignPageClient() {
           })
           .transaction();
 
-        // Set recent blockhash and fee payer
-        const { blockhash } = await connection.getLatestBlockhash();
-        tx.recentBlockhash = blockhash;
-        tx.feePayer = consignerPk;
+        // Get blockhash with retry support for long signing times
+        // Note: If signing takes too long, we'll get a fresh blockhash and retry
+        const sendWithFreshBlockhash = async (
+          transaction: anchor.web3.Transaction,
+          consignmentKp: anchor.web3.Keypair,
+        ): Promise<string> => {
+          // Get fresh blockhash right before sending
+          const { blockhash, lastValidBlockHeight } =
+            await connection.getLatestBlockhash("confirmed");
+          transaction.recentBlockhash = blockhash;
+          transaction.feePayer = consignerPk;
 
-        // Sign with consignment keypair first
-        tx.partialSign(consignmentKeypair);
+          // Sign with consignment keypair
+          transaction.partialSign(consignmentKp);
 
-        // Sign with wallet
-        const signedTx = await signTransaction(tx);
+          // Sign with wallet
+          const signedTx = await signTransaction(transaction);
 
-        // Send raw transaction (skipPreflight=false for better error messages)
-        const txSignature = await connection.sendRawTransaction(
-          signedTx.serialize(),
-          {
+          // Send raw transaction
+          const signature = await connection.sendRawTransaction(signedTx.serialize(), {
             skipPreflight: false,
             preflightCommitment: "confirmed",
-          },
-        );
+          });
 
-        // Confirm using polling (avoids WebSocket)
-        await confirmTransactionPolling(connection, txSignature, "confirmed");
+          // Confirm with blockhash context for proper expiry handling
+          const confirmation = await connection.confirmTransaction(
+            {
+              signature,
+              blockhash,
+              lastValidBlockHeight,
+            },
+            "confirmed",
+          );
+
+          if (confirmation.value.err) {
+            throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+          }
+
+          return signature;
+        };
+
+        // Send with fresh blockhash (retry once if blockhash expired)
+        let txSignature: string;
+        try {
+          txSignature = await sendWithFreshBlockhash(tx, consignmentKeypair);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (
+            errorMessage.includes("Blockhash not found") ||
+            errorMessage.includes("block height exceeded")
+          ) {
+            console.log("[ConsignPage] Blockhash expired, retrying with fresh blockhash...");
+            // Rebuild transaction and retry with fresh blockhash
+            const freshTx = await program.methods
+              .createConsignment(
+                rawAmount,
+                formData.isNegotiable,
+                formData.fixedDiscountBps,
+                formData.fixedLockupDays,
+                formData.minDiscountBps,
+                formData.maxDiscountBps,
+                formData.minLockupDays,
+                formData.maxLockupDays,
+                rawMinDeal,
+                rawMaxDeal,
+                formData.isFractionalized,
+                formData.isPrivate,
+                formData.maxPriceVolatilityBps,
+                new anchor.BN(formData.maxTimeToExecuteSeconds),
+              )
+              .accounts({
+                desk: desk,
+                consigner: consignerPk,
+                tokenMint: tokenMintPk,
+                consignerTokenAta: consignerTokenAta,
+                deskTokenTreasury: deskTokenTreasury,
+                consignment: consignmentKeypair.publicKey,
+                tokenProgram: tokenProgramId,
+                systemProgram: SolSystemProgram.programId,
+              })
+              .transaction();
+
+            txSignature = await sendWithFreshBlockhash(freshTx, consignmentKeypair);
+          } else {
+            throw error;
+          }
+        }
 
         // Notify that tx was submitted (Solana confirms fast so this is immediate)
         if (onTxSubmitted) {
@@ -558,14 +578,8 @@ export default function ConsignPageClient() {
       }
 
       // FAIL-FAST: Validate chain is a valid EVM chain
-      if (
-        tokenChain !== "ethereum" &&
-        tokenChain !== "base" &&
-        tokenChain !== "bsc"
-      ) {
-        throw new Error(
-          `Invalid EVM chain: ${tokenChain}. Must be ethereum, base, or bsc`,
-        );
+      if (tokenChain !== "ethereum" && tokenChain !== "base" && tokenChain !== "bsc") {
+        throw new Error(`Invalid EVM chain: ${tokenChain}. Must be ethereum, base, or bsc`);
       }
       const chain = tokenChain as Chain;
 
@@ -584,29 +598,18 @@ export default function ConsignPageClient() {
 
       let currentGasDeposit = gasDeposit;
       if (!currentGasDeposit) {
-        console.log(
-          `[ConsignPage] Gas deposit not cached, fetching for chain: ${chain}...`,
-        );
+        console.log(`[ConsignPage] Gas deposit not cached, fetching for chain: ${chain}...`);
         currentGasDeposit = await getRequiredGasDeposit(chain);
-        console.log(
-          "[ConsignPage] Gas deposit fetched:",
-          currentGasDeposit.toString(),
-        );
+        console.log("[ConsignPage] Gas deposit fetched:", currentGasDeposit.toString());
       }
       if (!currentGasDeposit) {
         throw new Error("Gas deposit is required but not available");
       }
 
       // Convert human-readable amounts to raw amounts with decimals
-      const rawAmount = BigInt(
-        Math.floor(parseFloat(formData.amount) * 10 ** decimals),
-      );
-      const rawMinDeal = BigInt(
-        Math.floor(parseFloat(formData.minDealAmount) * 10 ** decimals),
-      );
-      const rawMaxDeal = BigInt(
-        Math.floor(parseFloat(formData.maxDealAmount) * 10 ** decimals),
-      );
+      const rawAmount = BigInt(Math.floor(parseFloat(formData.amount) * 10 ** decimals));
+      const rawMinDeal = BigInt(Math.floor(parseFloat(formData.minDealAmount) * 10 ** decimals));
+      const rawMaxDeal = BigInt(Math.floor(parseFloat(formData.maxDealAmount) * 10 ** decimals));
 
       // FAIL-FAST: Validate amounts are positive
       if (rawAmount <= 0n) {
@@ -641,7 +644,8 @@ export default function ConsignPageClient() {
           maxPriceVolatilityBps: formData.maxPriceVolatilityBps,
           maxTimeToExecute: formData.maxTimeToExecuteSeconds,
           gasDeposit: currentGasDeposit,
-          selectedPoolAddress: formData.selectedPoolAddress,
+          // Only pass selectedPoolAddress if it's set (empty string should be undefined)
+          selectedPoolAddress: formData.selectedPoolAddress || undefined,
           chain: chain,
         },
         onTxSubmitted,
@@ -687,6 +691,7 @@ export default function ConsignPageClient() {
               </div>
               {!isFarcasterContext && (
                 <button
+                  type="button"
                   onClick={disconnect}
                   className="w-8 h-8 flex items-center justify-center text-lg font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full transition-colors"
                 >
@@ -711,10 +716,7 @@ export default function ConsignPageClient() {
           </div>
           <div className="flex justify-between text-xs text-zinc-500">
             {STEP_LABELS.map((label, idx) => (
-              <span
-                key={label}
-                className={step === idx + 1 ? "text-brand-500 font-medium" : ""}
-              >
+              <span key={label} className={step === idx + 1 ? "text-brand-500 font-medium" : ""}>
                 {label}
               </span>
             ))}
@@ -780,17 +782,12 @@ export default function ConsignPageClient() {
                       return solanaPublicKey;
                     } else {
                       if (!evmAddress) {
-                        throw new Error(
-                          "EVM wallet address is required for consignment creation",
-                        );
+                        throw new Error("EVM wallet address is required for consignment creation");
                       }
                       return evmAddress;
                     }
                   })()}
-                  chain={
-                    tokenChain ||
-                    (activeFamily === "solana" ? "solana" : "base")
-                  }
+                  chain={tokenChain || (activeFamily === "solana" ? "solana" : "base")}
                   activeFamily={activeFamily}
                   selectedTokenDecimals={decimals}
                   selectedTokenSymbol={symbol}

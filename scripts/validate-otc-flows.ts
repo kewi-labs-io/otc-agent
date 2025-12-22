@@ -16,27 +16,23 @@
  */
 
 import { config } from "dotenv";
+
 config({ path: ".env.local" });
 
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as anchor from "@coral-xyz/anchor";
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import {
+  type Address,
   createPublicClient,
   createWalletClient,
-  http,
-  type Address,
   formatEther,
+  http,
   parseEther,
-  keccak256,
-  stringToBytes,
-  formatUnits,
-  parseUnits,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
-import { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import * as anchor from "@coral-xyz/anchor";
-import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import * as fs from "fs";
-import * as path from "path";
 import { getEvmConfig, getSolanaConfig } from "../src/config/contracts";
 
 // =============================================================================
@@ -70,7 +66,7 @@ if (process.env.SOLANA_MAINNET_RPC) {
 }
 
 const OTC_ADDRESS = evmConfig.contracts.otc as Address;
-const USDC_ADDRESS = evmConfig.contracts.usdc as Address;
+const _USDC_ADDRESS = evmConfig.contracts.usdc as Address;
 const SOLANA_DESK = solanaConfig.desk;
 const SOLANA_PROGRAM_ID = solanaConfig.programId;
 
@@ -107,7 +103,7 @@ const OTC_ABI = parseAbi([
   "function claim(uint256 offerId)",
 ]);
 
-const ERC20_ABI = parseAbi([
+const _ERC20_ABI = parseAbi([
   "function balanceOf(address) view returns (uint256)",
   "function allowance(address owner, address spender) view returns (uint256)",
   "function approve(address spender, uint256 amount) returns (bool)",

@@ -7,14 +7,14 @@
  * Run: bun test tests/lib/balance-fetcher.test.ts
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  filterDustTokens,
-  sortTokensByValue,
   enrichEvmTokensWithPrices,
   enrichSolanaTokensWithPrices,
+  filterDustTokens,
+  sortTokensByValue,
 } from "@/lib/balance-fetcher";
-import type { TokenBalance, SolanaTokenBalance } from "@/types/api";
+import type { SolanaTokenBalance, TokenBalance } from "@/types/api";
 import { expectDefined } from "../test-utils";
 
 describe("balance-fetcher", () => {

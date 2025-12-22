@@ -36,9 +36,7 @@ function splitTokenId(tokenId: string): string[] {
   if (!tokenId) throw new Error("Token ID is required");
   const parts = tokenId.split("-");
   if (parts.length < 3) {
-    throw new Error(
-      `Invalid token ID format: "${tokenId}". Expected "token-{chain}-{address}"`,
-    );
+    throw new Error(`Invalid token ID format: "${tokenId}". Expected "token-{chain}-{address}"`);
   }
   return parts;
 }
@@ -56,9 +54,7 @@ export function parseTokenId(tokenId: string): ParsedTokenId {
 
   const chainStr = parts[1];
   if (!isValidChain(chainStr)) {
-    throw new Error(
-      `Invalid chain: "${chainStr}". Valid: ${[...VALID_CHAINS].join(", ")}`,
-    );
+    throw new Error(`Invalid chain: "${chainStr}". Valid: ${[...VALID_CHAINS].join(", ")}`);
   }
 
   const address = parts.slice(2).join("-");
@@ -76,11 +72,7 @@ export function getChainFamily(tokenId: string): ChainFamily | null {
 
   // Quick check via string matching (most common cases)
   if (tokenId.includes("-solana-")) return "solana";
-  if (
-    tokenId.includes("-ethereum-") ||
-    tokenId.includes("-base-") ||
-    tokenId.includes("-bsc-")
-  ) {
+  if (tokenId.includes("-ethereum-") || tokenId.includes("-base-") || tokenId.includes("-bsc-")) {
     return "evm";
   }
 
@@ -105,9 +97,7 @@ export function buildTokenId(chain: Chain, address: string): string {
   if (!chain) throw new Error("Chain is required");
   if (!address) throw new Error("Address is required");
   if (!isValidChain(chain)) {
-    throw new Error(
-      `Invalid chain: "${chain}". Valid: ${[...VALID_CHAINS].join(", ")}`,
-    );
+    throw new Error(`Invalid chain: "${chain}". Valid: ${[...VALID_CHAINS].join(", ")}`);
   }
   return `token-${chain}-${address}`;
 }

@@ -68,9 +68,7 @@ function summarizeValue(value: unknown): string {
 /**
  * Get a props summary for debugging
  */
-function getPropsSnapshot(
-  props: Record<string, unknown>,
-): Record<string, string> {
+function getPropsSnapshot(props: Record<string, unknown>): Record<string, string> {
   const snapshot: Record<string, string> = {};
   for (const [key, value] of Object.entries(props)) {
     if (key === "children") {
@@ -141,9 +139,7 @@ export function trackRender(
   }
 
   // Clean up old timestamps outside the window
-  record.timestamps = record.timestamps.filter(
-    (ts) => now - ts < CONFIG.timeWindowMs,
-  );
+  record.timestamps = record.timestamps.filter((ts) => now - ts < CONFIG.timeWindowMs);
 
   // Add current timestamp
   record.timestamps.push(now);
@@ -158,19 +154,12 @@ export function trackRender(
 
   // Determine if we're in initial mount grace period
   const timeSinceFirstRender = now - record.firstRenderTime;
-  const isInitialMount =
-    timeSinceFirstRender < CONFIG.initialMountGracePeriodMs;
-  const maxAllowed = isInitialMount
-    ? CONFIG.maxRendersInitialMount
-    : CONFIG.maxRenders;
+  const isInitialMount = timeSinceFirstRender < CONFIG.initialMountGracePeriodMs;
+  const maxAllowed = isInitialMount ? CONFIG.maxRendersInitialMount : CONFIG.maxRenders;
 
   if (CONFIG.verboseLogging) {
-    const propsChanges = propsSnapshot
-      ? findChanges(record.lastProps, propsSnapshot)
-      : [];
-    const stateChanges = stateSnapshot
-      ? findChanges(record.lastState, stateSnapshot)
-      : [];
+    const propsChanges = propsSnapshot ? findChanges(record.lastProps, propsSnapshot) : [];
+    const stateChanges = stateSnapshot ? findChanges(record.lastState, stateSnapshot) : [];
     console.log(
       `[RenderTracker] ${componentName} render #${record.count} (${recentRenders} in ${CONFIG.timeWindowMs}ms)`,
       { propsChanges, stateChanges, isInitialMount },
@@ -178,12 +167,8 @@ export function trackRender(
   }
 
   if (recentRenders > maxAllowed) {
-    const propsChanges = propsSnapshot
-      ? findChanges(record.lastProps, propsSnapshot)
-      : [];
-    const stateChanges = stateSnapshot
-      ? findChanges(record.lastState, stateSnapshot)
-      : [];
+    const propsChanges = propsSnapshot ? findChanges(record.lastProps, propsSnapshot) : [];
+    const stateChanges = stateSnapshot ? findChanges(record.lastState, stateSnapshot) : [];
 
     const error = new Error(
       `[RenderTracker] EXCESSIVE RENDERS DETECTED: ${componentName} rendered ${recentRenders} times in ${CONFIG.timeWindowMs}ms.\n\n` +

@@ -17,8 +17,7 @@ export async function GET(request: NextRequest) {
 
   if (!network || !tokenAddress) {
     const errorResponse = { error: "network and token parameters required" };
-    const validatedError =
-      PoolPriceProxyErrorResponseSchema.parse(errorResponse);
+    const validatedError = PoolPriceProxyErrorResponseSchema.parse(errorResponse);
     return NextResponse.json(validatedError, { status: 400 });
   }
 
@@ -35,8 +34,7 @@ export async function GET(request: NextRequest) {
   const platformId = platformMap[network.toLowerCase()];
   if (!platformId) {
     const errorResponse = { error: `Unsupported network: ${network}` };
-    const validatedError =
-      PoolPriceProxyErrorResponseSchema.parse(errorResponse);
+    const validatedError = PoolPriceProxyErrorResponseSchema.parse(errorResponse);
     return NextResponse.json(validatedError, { status: 400 });
   }
 

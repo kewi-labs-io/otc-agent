@@ -64,8 +64,7 @@ export async function GET() {
       status: "error",
       message: "HELIUS_API_KEY not configured",
     };
-    const validatedHealthError =
-      SolanaRpcHealthResponseSchema.parse(healthErrorResponse);
+    const validatedHealthError = SolanaRpcHealthResponseSchema.parse(healthErrorResponse);
     return NextResponse.json(validatedHealthError, { status: 500 });
   }
 

@@ -7,8 +7,8 @@
  * Run: bun test tests/solana-utils.e2e.test.ts
  */
 
-import { describe, test, expect, beforeAll } from "bun:test";
-import { PublicKey, Connection } from "@solana/web3.js";
+import { beforeAll, describe, expect, test } from "bun:test";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { BASE_URL, expectDefined } from "./test-utils";
 
 const TEST_TIMEOUT = 30_000;
@@ -25,7 +25,7 @@ async function waitForServer(maxWaitMs: number = 3000): Promise<boolean> {
     const res = await fetch(`${BASE_URL}/api/tokens`, {
       signal: AbortSignal.timeout(2000),
     }).catch(() => null);
-    if (res && res.ok) return true;
+    if (res?.ok) return true;
     await new Promise((r) => setTimeout(r, 500));
   }
   return false;
@@ -50,7 +50,7 @@ const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
 describe("Solana Utility Functions", () => {
   beforeAll(async () => {
-        if (skipIfNoServer()) return;
+    if (skipIfNoServer()) return;
     serverAvailable = await waitForServer();
     if (!serverAvailable) {
       console.log("\n  Server not available - skipping Solana E2E tests.\n");

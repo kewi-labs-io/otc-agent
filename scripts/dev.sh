@@ -22,7 +22,7 @@ fi
 
 # Start services
 if [ "$USE_LOCAL_SOLANA" = true ]; then
-    concurrently --kill-others-on-fail \
+    npx concurrently --kill-others-on-fail \
         --names "anvil,solana,prices,next,seed" \
         "./scripts/start-rpc.sh" \
         "./scripts/start-solana.sh" \
@@ -30,7 +30,7 @@ if [ "$USE_LOCAL_SOLANA" = true ]; then
         "sleep 8 && next dev -p 4444" \
         "sleep 20 && bun run seed && tail -f /dev/null"
 else
-    concurrently --kill-others-on-fail \
+    npx concurrently --kill-others-on-fail \
         --names "anvil,prices,next,seed" \
         "./scripts/start-rpc.sh" \
         "sleep 15 && ./scripts/keep-prices-fresh.sh" \

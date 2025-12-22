@@ -13,18 +13,16 @@
  */
 
 // Chain selection
-export { ChainContext, useChain, type ChainContextValue } from "./ChainContext";
-
-// Wallet connection state (read-only)
-export {
-  WalletConnectionContext,
-  useWalletConnection,
-  type WalletConnectionContextValue,
-} from "./WalletConnectionContext";
-
+export { ChainContext, type ChainContextValue, useChain } from "./ChainContext";
 // Wallet actions (stable refs)
 export {
-  WalletActionsContext,
   useWalletActions,
+  WalletActionsContext,
   type WalletActionsContextValue,
 } from "./WalletActionsContext";
+// Wallet connection state (read-only)
+export {
+  useWalletConnection,
+  WalletConnectionContext,
+  type WalletConnectionContextValue,
+} from "./WalletConnectionContext";

@@ -21,9 +21,7 @@ interface NotificationResponse {
 /**
  * Send a notification via the API
  */
-async function sendNotification(
-  input: SendNotificationInput,
-): Promise<NotificationResponse> {
+async function sendNotification(input: SendNotificationInput): Promise<NotificationResponse> {
   const response = await fetch("/api/notifications/send", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

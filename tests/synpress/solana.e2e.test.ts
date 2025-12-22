@@ -15,6 +15,7 @@ import { testWithSynpress } from "@synthetixio/synpress";
 import { Phantom, phantomFixtures } from "@synthetixio/synpress/playwright";
 
 import phantomSetup, { phantomPassword } from "../phantom-setup/phantom.setup";
+import { assertServerHealthy, BASE_URL, log, sleep } from "../test-utils";
 import { connectPhantomWallet, waitForAppReady } from "./utils/login";
 import {
   getSolanaDesk,
@@ -23,8 +24,8 @@ import {
   loadSolanaDeployment,
   solanaConnection,
 } from "./utils/onchain";
+import { confirmPhantomTransaction } from "./utils/wallet-confirm";
 import { phantomTrader } from "./utils/wallets";
-import { BASE_URL, assertServerHealthy, log, sleep } from "../test-utils";
 
 const test = testWithSynpress(phantomFixtures(phantomSetup));
 const { expect } = test;
@@ -146,8 +147,14 @@ test.describe("Solana Additional Scenarios", () => {
     await withdrawButtons.first().click();
     log("Solana-Withdraw", "Clicked withdraw");
 
-    await phantom.confirmTransaction();
-    log("Solana-Withdraw", "Approved in Phantom");
+    const withdrawConfirm = await confirmPhantomTransaction(page, context, phantom, {
+      maxRetries: 5,
+      timeout: 45000,
+    });
+    if (!withdrawConfirm) {
+      throw new Error("Withdraw transaction confirmation failed");
+    }
+    log("Solana-Withdraw", "Withdraw transaction confirmed");
 
     // Wait for transaction to complete
     await sleep(10000);
@@ -188,7 +195,7 @@ test.describe("Solana Additional Scenarios", () => {
 
     // Check for consignment rows or empty state
     const consignmentRows = page.locator('[data-testid*="consignment-row"]');
-    const emptyState = page.locator('text=/no consignments|no deals|empty/i');
+    const emptyState = page.locator("text=/no consignments|no deals|empty/i");
 
     const hasConsignments = (await consignmentRows.count()) > 0;
     const hasEmptyState = await emptyState.isVisible({ timeout: 5000 }).catch(() => false);

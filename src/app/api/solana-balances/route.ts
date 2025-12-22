@@ -1,5 +1,5 @@
+import crypto from "node:crypto";
 import { head, put } from "@vercel/blob";
-import crypto from "crypto";
 import { type NextRequest, NextResponse } from "next/server";
 import { agentRuntime } from "@/lib/agent-runtime";
 import { validationErrorResponse } from "@/lib/validation/helpers";
@@ -21,19 +21,14 @@ const SOLANA_NETWORK_ID = 1399811149;
 
 // Bulk metadata cache for Solana tokens (permanent - metadata doesn't change)
 interface SolanaMetadataCache {
-  metadata: Record<
-    string,
-    { symbol: string; name: string; logoURI: string | null }
-  >;
+  metadata: Record<string, { symbol: string; name: string; logoURI: string | null }>;
 }
 
 async function getSolanaMetadataCache(): Promise<
   Record<string, { symbol: string; name: string; logoURI: string | null }>
 > {
   const runtime = await agentRuntime.getRuntime();
-  const cached = await runtime.getCache<SolanaMetadataCache>(
-    "solana-metadata-bulk",
-  );
+  const cached = await runtime.getCache<SolanaMetadataCache>("solana-metadata-bulk");
   if (!cached || !cached.metadata) {
     return {};
   }
@@ -41,10 +36,7 @@ async function getSolanaMetadataCache(): Promise<
 }
 
 async function setSolanaMetadataCache(
-  metadata: Record<
-    string,
-    { symbol: string; name: string; logoURI: string | null }
-  >,
+  metadata: Record<string, { symbol: string; name: string; logoURI: string | null }>,
 ): Promise<void> {
   const runtime = await agentRuntime.getRuntime();
   await runtime.setCache("solana-metadata-bulk", { metadata });
@@ -67,9 +59,7 @@ async function getSolanaPriceCache(): Promise<Record<string, number>> {
   return cached.prices;
 }
 
-async function setSolanaPriceCache(
-  prices: Record<string, number>,
-): Promise<void> {
+async function setSolanaPriceCache(prices: Record<string, number>): Promise<void> {
   const runtime = await agentRuntime.getRuntime();
   await runtime.setCache("solana-prices-bulk", {
     prices,
@@ -95,14 +85,10 @@ async function getCachedWalletResponse(
   address: string,
 ): Promise<CachedWalletResponse["tokens"] | null> {
   const runtime = await agentRuntime.getRuntime();
-  const cached = await runtime.getCache<CachedWalletResponse>(
-    `solana-wallet:${address}`,
-  );
+  const cached = await runtime.getCache<CachedWalletResponse>(`solana-wallet:${address}`);
   if (!cached) return null;
   if (Date.now() - cached.cachedAt >= WALLET_CACHE_TTL_MS) return null;
-  console.log(
-    `[Solana Balances] Using cached wallet data (${cached.tokens.length} tokens)`,
-  );
+  console.log(`[Solana Balances] Using cached wallet data (${cached.tokens.length} tokens)`);
   return cached.tokens;
 }
 
@@ -128,9 +114,7 @@ const IPFS_GATEWAYS = [
 /**
  * Fetch image from IPFS or direct URL
  */
-async function fetchWithIpfsGatewayFallback(
-  imageUrl: string,
-): Promise<Response> {
+async function fetchWithIpfsGatewayFallback(imageUrl: string): Promise<Response> {
   // Extract IPFS hash from various URL formats
   let ipfsHash: string | null = null;
 
@@ -159,9 +143,7 @@ async function fetchWithIpfsGatewayFallback(
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) {
-      throw new Error(
-        `IPFS gateway failed: ${gatewayUrl} (status: ${response.status})`,
-      );
+      throw new Error(`IPFS gateway failed: ${gatewayUrl} (status: ${response.status})`);
     }
     return response;
   }
@@ -172,9 +154,7 @@ async function fetchWithIpfsGatewayFallback(
     signal: AbortSignal.timeout(8000),
   });
   if (!response.ok) {
-    throw new Error(
-      `Image fetch failed: ${imageUrl} (status: ${response.status})`,
-    );
+    throw new Error(`Image fetch failed: ${imageUrl} (status: ${response.status})`);
   }
   return response;
 }
@@ -199,10 +179,7 @@ async function cacheImageToBlob(imageUrl: string): Promise<string> {
   try {
     existing = await head(blobPath);
   } catch (err) {
-    if (
-      !(err instanceof Error) ||
-      !err.message.toLowerCase().includes("not found")
-    ) {
+    if (!(err instanceof Error) || !err.message.toLowerCase().includes("not found")) {
       throw err;
     }
     existing = null;
@@ -217,15 +194,12 @@ async function cacheImageToBlob(imageUrl: string): Promise<string> {
   const response = await fetchWithIpfsGatewayFallback(imageUrl);
 
   if (!response.ok) {
-    throw new Error(
-      `Failed to fetch image: ${imageUrl} (status: ${response.status})`,
-    );
+    throw new Error(`Failed to fetch image: ${imageUrl} (status: ${response.status})`);
   }
 
   // content-type header is optional - default to image/png if not provided
   const contentTypeHeader = response.headers.get("content-type");
-  const contentType =
-    contentTypeHeader !== null ? contentTypeHeader : "image/png";
+  const contentType = contentTypeHeader !== null ? contentTypeHeader : "image/png";
   const imageBuffer = await response.arrayBuffer();
 
   const blob = await put(blobPath, imageBuffer, {
@@ -257,9 +231,7 @@ function getExtensionFromUrl(url: string): string | null {
  * Fetch balances from local Solana RPC (for local testing)
  * Uses getTokenAccountsByOwner and getParsedAccountInfo for metadata
  */
-async function fetchFromLocalRpc(
-  walletAddress: string,
-): Promise<CachedWalletResponse["tokens"]> {
+async function fetchFromLocalRpc(walletAddress: string): Promise<CachedWalletResponse["tokens"]> {
   const localRpc = process.env.SOLANA_RPC_URL || "http://127.0.0.1:8899";
   console.log(`[Solana Balances] Fetching from local RPC: ${localRpc}`);
 
@@ -323,7 +295,7 @@ async function fetchFromLocalRpc(
   const tokens = accounts
     .map((acc) => {
       const info = acc.account.data.parsed.info;
-      const rawAmount = parseInt(info.tokenAmount.amount);
+      const rawAmount = parseInt(info.tokenAmount.amount, 10);
       if (rawAmount === 0) return null;
 
       return {
@@ -396,9 +368,7 @@ async function fetchFromCodex(
   });
 
   if (!response.ok) {
-    throw new Error(
-      `Codex API HTTP error: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Codex API HTTP error: ${response.status} ${response.statusText}`);
   }
 
   interface CodexGraphQLError {
@@ -433,9 +403,7 @@ async function fetchFromCodex(
   const tokens = items
     .map((item) => {
       if (!item.token) {
-        throw new Error(
-          `Codex item missing token metadata: ${item.tokenAddress}`,
-        );
+        throw new Error(`Codex item missing token metadata: ${item.tokenAddress}`);
       }
       const token = item.token;
       // For native SOL, use Wrapped SOL mint
@@ -456,14 +424,11 @@ async function fetchFromCodex(
 
       return {
         mint,
-        amount: parseInt(item.balance),
+        amount: parseInt(item.balance, 10),
         decimals: token.decimals,
         symbol: token.symbol,
         name: token.name,
-        logoURI:
-          token.info && token.info.imageSmallUrl
-            ? token.info.imageSmallUrl
-            : null,
+        logoURI: token.info?.imageSmallUrl ? token.info.imageSmallUrl : null,
         priceUsd:
           item.balanceUsd && item.shiftedBalance > 0
             ? parseFloat(item.balanceUsd) / item.shiftedBalance
@@ -473,8 +438,7 @@ async function fetchFromCodex(
     })
     .filter((t) => t.balanceUsd >= 0.01 || t.amount > 100 * 10 ** t.decimals)
     .sort((a, b) => {
-      if (a.balanceUsd > 0 && b.balanceUsd > 0)
-        return b.balanceUsd - a.balanceUsd;
+      if (a.balanceUsd > 0 && b.balanceUsd > 0) return b.balanceUsd - a.balanceUsd;
       if (a.balanceUsd > 0) return -1;
       if (b.balanceUsd > 0) return 1;
       return b.amount - a.amount;
@@ -506,8 +470,7 @@ export async function GET(request: NextRequest) {
 
   // Local mode: use local RPC directly (mainnet APIs won't see local tokens)
   const isLocalMode =
-    process.env.NEXT_PUBLIC_NETWORK === "local" ||
-    process.env.NETWORK === "local";
+    process.env.NEXT_PUBLIC_NETWORK === "local" || process.env.NETWORK === "local";
 
   if (isLocalMode) {
     console.log("[Solana Balances] Local mode - using direct RPC");
@@ -529,9 +492,7 @@ export async function GET(request: NextRequest) {
 
   // FAIL-FAST: Require at least one API key
   if (!codexKey && !heliusKey) {
-    throw new Error(
-      "Either CODEX_API_KEY or HELIUS_API_KEY must be configured",
-    );
+    throw new Error("Either CODEX_API_KEY or HELIUS_API_KEY must be configured");
   }
 
   if (codexKey) {
@@ -543,9 +504,7 @@ export async function GET(request: NextRequest) {
       const validatedEmpty = SolanaBalancesResponseSchema.parse(emptyResponse);
       return NextResponse.json(validatedEmpty);
     }
-    console.log(
-      `[Solana Balances] Codex returned ${codexTokens.length} tokens`,
-    );
+    console.log(`[Solana Balances] Codex returned ${codexTokens.length} tokens`);
 
     // Check blob cache for unreliable image URLs (parallel)
     const unreliableUrls = codexTokens
@@ -578,9 +537,7 @@ export async function GET(request: NextRequest) {
         }
       }
     }
-    console.log(
-      `[Solana Balances] Found ${Object.keys(cachedBlobUrls).length} cached blob images`,
-    );
+    console.log(`[Solana Balances] Found ${Object.keys(cachedBlobUrls).length} cached blob images`);
 
     // Upgrade tokens with cached blob URLs
     const enrichedTokens = codexTokens.map((token) => {
@@ -635,24 +592,21 @@ export async function GET(request: NextRequest) {
   }
 
   // Step 1: Get token balances from Helius (fast, single call)
-  const balancesResponse = await fetch(
-    `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: "balances",
-        method: "getTokenAccountsByOwner",
-        params: [
-          walletAddress,
-          { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" },
-          { encoding: "jsonParsed" },
-        ],
-      }),
-      signal: AbortSignal.timeout(10000),
-    },
-  );
+  const balancesResponse = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "balances",
+      method: "getTokenAccountsByOwner",
+      params: [
+        walletAddress,
+        { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" },
+        { encoding: "jsonParsed" },
+      ],
+    }),
+    signal: AbortSignal.timeout(10000),
+  });
 
   if (!balancesResponse.ok) {
     throw new Error(`Helius balances API failed: ${balancesResponse.status}`);
@@ -687,9 +641,7 @@ export async function GET(request: NextRequest) {
   }
   const accounts = balancesData.result.value;
 
-  console.log(
-    `[Solana Balances] RPC returned ${accounts.length} token accounts`,
-  );
+  console.log(`[Solana Balances] RPC returned ${accounts.length} token accounts`);
 
   // Filter to tokens with balance > 0
   const tokensWithBalance = accounts
@@ -699,7 +651,7 @@ export async function GET(request: NextRequest) {
       if (!info.tokenAmount || !info.tokenAmount.amount) {
         throw new Error(`Token ${info.mint} missing amount in tokenAmount`);
       }
-      const rawAmount = parseInt(info.tokenAmount.amount);
+      const rawAmount = parseInt(info.tokenAmount.amount, 10);
       // Calculate humanBalance ourselves in case uiAmount is null
       const humanBalance =
         typeof info.tokenAmount.uiAmount === "number"
@@ -714,9 +666,7 @@ export async function GET(request: NextRequest) {
     })
     .filter((t) => t.amount > 0); // Any non-zero balance
 
-  console.log(
-    `[Solana Balances] Found ${tokensWithBalance.length} tokens with balance > 0`,
-  );
+  console.log(`[Solana Balances] Found ${tokensWithBalance.length} tokens with balance > 0`);
 
   if (tokensWithBalance.length === 0) {
     // Empty wallet is valid - return empty array
@@ -737,10 +687,9 @@ export async function GET(request: NextRequest) {
 
   const allMints = tokensWithBalance.map((t) => t.mint);
   const cachedMetadata = await getSolanaMetadataCache();
-  const metadata: Record<
-    string,
-    { symbol: string; name: string; logoURI: string | null }
-  > = { ...cachedMetadata };
+  const metadata: Record<string, { symbol: string; name: string; logoURI: string | null }> = {
+    ...cachedMetadata,
+  };
 
   // Find mints that need metadata
   const mintsNeedingMetadata = allMints.filter((mint) => !metadata[mint]);
@@ -752,25 +701,20 @@ export async function GET(request: NextRequest) {
   if (mintsNeedingMetadata.length > 0) {
     for (let i = 0; i < mintsNeedingMetadata.length; i += 100) {
       const batch = mintsNeedingMetadata.slice(i, i + 100);
-      const metadataResponse = await fetch(
-        `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: "metadata",
-            method: "getAssetBatch",
-            params: { ids: batch },
-          }),
-          signal: AbortSignal.timeout(8000),
-        },
-      );
+      const metadataResponse = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "metadata",
+          method: "getAssetBatch",
+          params: { ids: batch },
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
 
       if (!metadataResponse.ok) {
-        throw new Error(
-          `Helius metadata fetch failed: ${metadataResponse.status}`,
-        );
+        throw new Error(`Helius metadata fetch failed: ${metadataResponse.status}`);
       }
 
       interface HeliusMetadataResponse {
@@ -782,9 +726,7 @@ export async function GET(request: NextRequest) {
         throw new Error("Helius metadata API response missing result field");
       }
       if (!Array.isArray(data.result)) {
-        throw new Error(
-          "Helius metadata API returned invalid response structure",
-        );
+        throw new Error("Helius metadata API returned invalid response structure");
       }
       const assets = data.result;
       for (const asset of assets) {
@@ -798,8 +740,7 @@ export async function GET(request: NextRequest) {
             ? asset.content.metadata.symbol
             : undefined;
         const tokenInfoSymbol =
-          typeof asset.token_info?.symbol === "string" &&
-          asset.token_info.symbol.trim() !== ""
+          typeof asset.token_info?.symbol === "string" && asset.token_info.symbol.trim() !== ""
             ? asset.token_info.symbol
             : undefined;
         const symbol = contentSymbol ?? tokenInfoSymbol;
@@ -826,9 +767,7 @@ export async function GET(request: NextRequest) {
     await setSolanaMetadataCache(merged);
   }
 
-  console.log(
-    `[Solana Balances] Got metadata for ${Object.keys(metadata).length} tokens`,
-  );
+  console.log(`[Solana Balances] Got metadata for ${Object.keys(metadata).length} tokens`);
 
   // Step 3: Get prices from cache first, then fetch missing from Jupiter
   const mints = tokensWithBalance.map((t) => t.mint);
@@ -845,10 +784,9 @@ export async function GET(request: NextRequest) {
   if (mintsNeedingPrices.length > 0) {
     for (let i = 0; i < mintsNeedingPrices.length; i += 100) {
       const batch = mintsNeedingPrices.slice(i, i + 100);
-      const priceResponse = await fetch(
-        `https://api.jup.ag/price/v2?ids=${batch.join(",")}`,
-        { signal: AbortSignal.timeout(10000) },
-      );
+      const priceResponse = await fetch(`https://api.jup.ag/price/v2?ids=${batch.join(",")}`, {
+        signal: AbortSignal.timeout(10000),
+      });
 
       if (!priceResponse.ok) {
         throw new Error(`Jupiter price fetch failed: ${priceResponse.status}`);
@@ -878,9 +816,7 @@ export async function GET(request: NextRequest) {
     const merged = { ...existing, ...prices };
     await setSolanaPriceCache(merged);
   }
-  console.log(
-    `[Solana Balances] Have prices for ${Object.keys(prices).length} tokens`,
-  );
+  console.log(`[Solana Balances] Have prices for ${Object.keys(prices).length} tokens`);
 
   // Step 4: Check blob cache for unreliable image URLs (parallel)
   const unreliableUrls = Object.values(metadata)
@@ -913,9 +849,7 @@ export async function GET(request: NextRequest) {
       }
     }
   }
-  console.log(
-    `[Solana Balances] Found ${Object.keys(cachedBlobUrls).length} cached blob images`,
-  );
+  console.log(`[Solana Balances] Found ${Object.keys(cachedBlobUrls).length} cached blob images`);
 
   // Step 5: Combine everything
   const tokensWithData = tokensWithBalance.map((token) => {
@@ -976,8 +910,7 @@ export async function GET(request: NextRequest) {
 
   // Sort: priced tokens by value, then unpriced by balance
   filteredTokens.sort((a, b) => {
-    if (a.balanceUsd > 0 && b.balanceUsd > 0)
-      return b.balanceUsd - a.balanceUsd;
+    if (a.balanceUsd > 0 && b.balanceUsd > 0) return b.balanceUsd - a.balanceUsd;
     if (a.balanceUsd > 0) return -1;
     if (b.balanceUsd > 0) return 1;
     return b.humanBalance - a.humanBalance;

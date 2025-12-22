@@ -12,18 +12,14 @@ export type { OTCQuote, QuoteAccepted } from "@/types";
  */
 export function extractXMLFromMessage(messageText: string): string | null {
   // Try to find XML between comment markers first
-  const commentMatch = messageText.match(
-    /<!-- XML_START -->([\s\S]*?)<!-- XML_END -->/,
-  );
-  if (commentMatch && commentMatch[1]) {
+  const commentMatch = messageText.match(/<!-- XML_START -->([\s\S]*?)<!-- XML_END -->/);
+  if (commentMatch?.[1]) {
     return commentMatch[1].trim();
   }
 
   // Try to find quote XML (supports lower and PascalCase)
-  const quoteMatch = messageText.match(
-    /<(quote|Quote)>([\s\S]*?)<\/(quote|Quote)>/,
-  );
-  if (quoteMatch && quoteMatch[0]) {
+  const quoteMatch = messageText.match(/<(quote|Quote)>([\s\S]*?)<\/(quote|Quote)>/);
+  if (quoteMatch?.[0]) {
     return quoteMatch[0];
   }
 
@@ -31,7 +27,7 @@ export function extractXMLFromMessage(messageText: string): string | null {
   const acceptedMatch = messageText.match(
     /<(quoteAccepted|QuoteAccepted)>([\s\S]*?)<\/(quoteAccepted|QuoteAccepted)>/,
   );
-  if (acceptedMatch && acceptedMatch[0]) {
+  if (acceptedMatch?.[0]) {
     return acceptedMatch[0];
   }
 
@@ -63,8 +59,7 @@ export function parseOTCQuoteXML(xmlString: string): OTCQuote | null {
   };
 
   // Support both lowercase and PascalCase root tags
-  const rootTag =
-    xmlDoc.querySelector("Quote") || xmlDoc.querySelector("quote");
+  const rootTag = xmlDoc.querySelector("Quote") || xmlDoc.querySelector("quote");
   if (!rootTag) {
     console.error("No quote root element found");
     return null;
@@ -73,8 +68,7 @@ export function parseOTCQuoteXML(xmlString: string): OTCQuote | null {
   const tokenChainRaw = getElementText("tokenChain") || getElementText("chain");
   // Default to "base" if no chain specified - quotes require a chain
   const tokenChain: Chain = (
-    tokenChainRaw &&
-    ["ethereum", "base", "bsc", "solana"].includes(tokenChainRaw)
+    tokenChainRaw && ["ethereum", "base", "bsc", "solana"].includes(tokenChainRaw)
       ? tokenChainRaw
       : "base"
   ) as Chain;
@@ -127,7 +121,7 @@ export function parseOTCQuoteXML(xmlString: string): OTCQuote | null {
         throw new Error("Quote XML missing required discountBps field");
       }
       const value = parseFloat(text);
-      if (isNaN(value)) {
+      if (Number.isNaN(value)) {
         throw new Error(`Quote XML has invalid discountBps value: ${text}`);
       }
       return value;
@@ -138,11 +132,7 @@ export function parseOTCQuoteXML(xmlString: string): OTCQuote | null {
       const finalPriceUsd = getElementNumber("finalPriceUsd");
       const discountedUsd = getElementNumber("discountedUsd");
       // Return first available value, or undefined if neither exists (optional field)
-      return finalPriceUsd !== 0
-        ? finalPriceUsd
-        : discountedUsd !== 0
-          ? discountedUsd
-          : undefined;
+      return finalPriceUsd !== 0 ? finalPriceUsd : discountedUsd !== 0 ? discountedUsd : undefined;
     })(),
     // FAIL-FAST: paymentCurrency is required
     paymentCurrency: (() => {

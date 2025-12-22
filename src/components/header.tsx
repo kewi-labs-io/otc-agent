@@ -114,11 +114,7 @@ export const Header = memo(function Header() {
             <NavLinks />
           </div>
           <div className="flex items-center justify-end whitespace-nowrap shrink-0 gap-1.5 sm:gap-2">
-            <Button
-              href="/consign"
-              color="brand"
-              className="hidden lg:block !px-4 !py-2 !text-sm"
-            >
+            <Button href="/consign" color="brand" className="hidden lg:block !px-4 !py-2 !text-sm">
               Create Listing
             </Button>
             <button
@@ -157,9 +153,7 @@ export const Header = memo(function Header() {
                       : "text-zinc-600 dark:text-zinc-400",
                   )}
                   onClick={() => setMobileMenuOpen(false)}
-                  aria-current={
-                    pathname === "/trading-desk" ? "page" : undefined
-                  }
+                  aria-current={pathname === "/trading-desk" ? "page" : undefined}
                 >
                   AI Trading Desk
                 </Link>

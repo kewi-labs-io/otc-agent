@@ -21,10 +21,7 @@ async function getNeynarClient(): Promise<NeynarAPIClient> {
 
 export async function POST(request: NextRequest) {
   const rawBody = await request.json();
-  const { fid, title, body } = parseOrThrow(
-    SendNotificationRequestSchema,
-    rawBody,
-  );
+  const { fid, title, body } = parseOrThrow(SendNotificationRequestSchema, rawBody);
 
   // Dev mode simulation when API key is not configured
   if (!process.env.NEYNAR_API_KEY) {
@@ -49,7 +46,6 @@ export async function POST(request: NextRequest) {
     state: "success",
     deliveries: result.notification_deliveries,
   };
-  const validatedNotification =
-    NotificationResponseSchema.parse(notificationResponse);
+  const validatedNotification = NotificationResponseSchema.parse(notificationResponse);
   return NextResponse.json(validatedNotification);
 }

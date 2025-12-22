@@ -66,9 +66,7 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
     // registrationHelper is only required for mainnet/testnet (token registration feature)
     // Skip this check for local development
     if (isMainnet && !evmConfig.contracts.registrationHelper) {
-      throw new Error(
-        "EVM config missing contracts.registrationHelper for mainnet",
-      );
+      throw new Error("EVM config missing contracts.registrationHelper for mainnet");
     }
 
     // RPC URL: local uses Anvil, mainnet/testnet use proxy to keep API key server-side
@@ -95,8 +93,7 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
               ? evmConfig.contracts.usdc
               : "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"), // USDC on Sepolia
         registrationHelper:
-          networkConfig?.registrationHelper ??
-          evmConfig.contracts.registrationHelper,
+          networkConfig?.registrationHelper ?? evmConfig.contracts.registrationHelper,
       },
       type: "evm" as ChainFamily,
       viemChain: chain,
@@ -113,9 +110,7 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
     const networkConfig = evmConfig.networks?.base ?? null;
     // If networks exists but base doesn't, that's a config bug (networks should be complete)
     if (evmConfig.networks && !evmConfig.networks.base) {
-      throw new Error(
-        "EVM config has networks but missing base network config",
-      );
+      throw new Error("EVM config has networks but missing base network config");
     }
 
     // Use proxy route to keep Alchemy key server-side
@@ -140,8 +135,7 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
             ? "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
             : "0x036CbD53842c5426634e7929541eC2318f3dCF7e"),
         registrationHelper:
-          networkConfig?.registrationHelper ??
-          evmConfig.contracts.registrationHelper,
+          networkConfig?.registrationHelper ?? evmConfig.contracts.registrationHelper,
       },
       type: "evm" as ChainFamily,
       viemChain: chain,
@@ -196,25 +190,20 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
       rpcUrl: isMainnet
         ? "https://bsc-dataseed1.binance.org"
         : "https://data-seed-prebsc-1-s1.binance.org:8545",
-      explorerUrl: isMainnet
-        ? "https://bscscan.com"
-        : "https://testnet.bscscan.com",
+      explorerUrl: isMainnet ? "https://bscscan.com" : "https://testnet.bscscan.com",
       nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
       contracts: {
         otc: networkConfig.otc,
         // FAIL-FAST: USDC address must be provided in config
         usdc:
-          typeof networkConfig.usdc === "string" &&
-          networkConfig.usdc.trim() !== ""
+          typeof networkConfig.usdc === "string" && networkConfig.usdc.trim() !== ""
             ? networkConfig.usdc
             : (() => {
                 // Only use hardcoded fallback for mainnet (known address)
                 if (isMainnet) {
                   return "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
                 }
-                throw new Error(
-                  "BSC network config missing usdc contract address",
-                );
+                throw new Error("BSC network config missing usdc contract address");
               })(),
         registrationHelper: networkConfig.registrationHelper,
       },
@@ -236,16 +225,8 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
         : "https://api.devnet.solana.com";
 
     return {
-      id: isMainnet
-        ? "solana-mainnet"
-        : isLocal
-          ? "solana-localnet"
-          : "solana-devnet",
-      name: isMainnet
-        ? "Solana"
-        : isLocal
-          ? "Solana Localnet"
-          : "Solana Devnet",
+      id: isMainnet ? "solana-mainnet" : isLocal ? "solana-localnet" : "solana-devnet",
+      name: isMainnet ? "Solana" : isLocal ? "Solana Localnet" : "Solana Devnet",
       rpcUrl,
       explorerUrl: "https://explorer.solana.com",
       nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },

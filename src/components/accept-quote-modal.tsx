@@ -14,33 +14,21 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import type { Abi, Address } from "viem";
 import { createPublicClient, erc20Abi, formatUnits, http } from "viem";
-import {
-  base,
-  baseSepolia,
-  bsc,
-  bscTestnet,
-  mainnet,
-  sepolia,
-} from "viem/chains";
+import { base, baseSepolia, bsc, bscTestnet, mainnet, sepolia } from "viem/chains";
 import { useAccount, useBalance, useReadContracts } from "wagmi";
 import { Button } from "@/components/button";
 import { Dialog } from "@/components/dialog";
-import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { ChainConfig } from "@/config/chains";
 import { SUPPORTED_CHAINS } from "@/config/chains";
-import {
-  getCurrentNetwork,
-  getSolanaConfig,
-  getSolanaDesk,
-} from "@/config/contracts";
+import { getCurrentNetwork, getSolanaConfig, getSolanaDesk } from "@/config/contracts";
+import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 import { useOTC } from "@/hooks/contracts/useOTC";
 import { useNativePrices } from "@/hooks/useNativePrices";
 import { useSolanaPaymentBalance } from "@/hooks/useSolanaBalance";
 import { useTransactionErrorHandler } from "@/hooks/useTransactionErrorHandler";
 import { safeReadContract } from "@/lib/viem-utils";
-import { getExplorerTxUrl } from "@/utils/format";
 import type {
   Currency,
   ModalAction,
@@ -49,6 +37,7 @@ import type {
   TokenMetadata,
   TransactionError,
 } from "@/types";
+import { getExplorerTxUrl } from "@/utils/format";
 // Shared Solana OTC utilities
 import {
   createSolanaConnection,
@@ -73,10 +62,7 @@ function tokenCacheKey(chain: string, symbol: string): string {
   return `${chain}:${symbol.toUpperCase()}`;
 }
 
-function loadCachedTokenMetadata(
-  chain: string,
-  symbol: string,
-): TokenMetadata | null {
+function loadCachedTokenMetadata(chain: string, symbol: string): TokenMetadata | null {
   const key = tokenCacheKey(chain, symbol);
   const cached = tokenMetadataCache.get(key);
   if (cached) return cached;
@@ -92,11 +78,7 @@ function loadCachedTokenMetadata(
   return null;
 }
 
-function setCachedTokenMetadata(
-  chain: string,
-  symbol: string,
-  metadata: TokenMetadata,
-): void {
+function setCachedTokenMetadata(chain: string, symbol: string, metadata: TokenMetadata): void {
   const key = tokenCacheKey(chain, symbol);
   tokenMetadataCache.set(key, metadata);
   if (typeof window !== "undefined" && window.sessionStorage) {
@@ -105,10 +87,7 @@ function setCachedTokenMetadata(
 }
 
 const CONTRACT_CACHE_TTL_MS = 5 * 60 * 1000;
-const contractExistsCache = new Map<
-  string,
-  { exists: boolean; cachedAt: number }
->();
+const contractExistsCache = new Map<string, { exists: boolean; cachedAt: number }>();
 
 function getContractExists(key: string): boolean | null {
   const entry = contractExistsCache.get(key);
@@ -211,25 +190,15 @@ export function AcceptQuoteModal({
   }
   const quoteChain = initialQuote.tokenChain as Exclude<QuoteChain, null>;
   const requiredFamily = quoteChain === "solana" ? "solana" : "evm";
-  const isChainMismatch =
-    activeFamily !== null && activeFamily !== requiredFamily;
+  const isChainMismatch = activeFamily !== null && activeFamily !== requiredFamily;
 
   // Auto-switch networks when mismatch detected
   useEffect(() => {
     if (isOpen && isChainMismatch && requiredFamily && walletConnected) {
-      console.log(
-        `[AcceptQuote] Auto-switching from ${activeFamily} to ${requiredFamily}`,
-      );
+      console.log(`[AcceptQuote] Auto-switching from ${activeFamily} to ${requiredFamily}`);
       setActiveFamily(requiredFamily);
     }
-  }, [
-    isOpen,
-    isChainMismatch,
-    requiredFamily,
-    activeFamily,
-    setActiveFamily,
-    walletConnected,
-  ]);
+  }, [isOpen, isChainMismatch, requiredFamily, activeFamily, setActiveFamily, walletConnected]);
   const router = useRouter();
   const {
     otcAddress,
@@ -248,8 +217,7 @@ export function AcceptQuoteModal({
 
   // Determine chain type first (used throughout component)
   const isSolanaToken = quoteChain === "solana";
-  const isEvmToken =
-    quoteChain === "base" || quoteChain === "bsc" || quoteChain === "ethereum";
+  const isEvmToken = quoteChain === "base" || quoteChain === "bsc" || quoteChain === "ethereum";
 
   // For EVM tokens, determine target chain and validate config
   const targetEvmChain: QuoteChain | null = isEvmToken ? quoteChain : null;
@@ -287,15 +255,9 @@ export function AcceptQuoteModal({
     // For EVM chains, targetEvmChain is guaranteed to be non-null (set from quoteChain when isEvmToken is true)
     // TypeScript should narrow this, but we assert for clarity
     if (!targetEvmChain) {
-      throw new Error(
-        `targetEvmChain is null for EVM token - type system should prevent this`,
-      );
+      throw new Error(`targetEvmChain is null for EVM token - type system should prevent this`);
     }
-    return targetEvmChain === "bsc"
-      ? "BNB"
-      : targetEvmChain === "ethereum"
-        ? "ETH"
-        : "ETH";
+    return targetEvmChain === "bsc" ? "BNB" : targetEvmChain === "ethereum" ? "ETH" : "ETH";
   }, [isSolanaToken, targetEvmChain]);
 
   const rpcUrl = useMemo(() => {
@@ -320,10 +282,7 @@ export function AcceptQuoteModal({
     if (targetEvmChain === "bsc" && process.env.NEXT_PUBLIC_BSC_RPC_URL) {
       return process.env.NEXT_PUBLIC_BSC_RPC_URL;
     }
-    if (
-      targetEvmChain === "ethereum" &&
-      process.env.NEXT_PUBLIC_ETHEREUM_RPC_URL
-    ) {
+    if (targetEvmChain === "ethereum" && process.env.NEXT_PUBLIC_ETHEREUM_RPC_URL) {
       return process.env.NEXT_PUBLIC_ETHEREUM_RPC_URL;
     }
     if (targetEvmChain === "base" && process.env.NEXT_PUBLIC_BASE_RPC_URL) {
@@ -333,10 +292,7 @@ export function AcceptQuoteModal({
     return chainContracts.rpcUrl;
   }, [isLocal, isSolanaToken, targetEvmChain, chainContracts]);
 
-  const isLocalRpc = useMemo(
-    () => /localhost|127\.0\.0\.1/.test(rpcUrl),
-    [rpcUrl],
-  );
+  const isLocalRpc = useMemo(() => /localhost|127\.0\.0\.1/.test(rpcUrl), [rpcUrl]);
 
   const readChain = useMemo(() => {
     // For Solana tokens, readChain is not used (Solana uses different client)
@@ -347,9 +303,7 @@ export function AcceptQuoteModal({
 
     // For EVM chains, targetEvmChain is guaranteed to be non-null (set from quoteChain when isEvmToken is true)
     if (!targetEvmChain) {
-      throw new Error(
-        `targetEvmChain is null for EVM token - type system should prevent this`,
-      );
+      throw new Error(`targetEvmChain is null for EVM token - type system should prevent this`);
     }
 
     if (isLocalRpc) {
@@ -377,15 +331,10 @@ export function AcceptQuoteModal({
         return getExplorerTxUrl(txHash, "solana");
       }
       if (!targetEvmChain) {
-        throw new Error(
-          `targetEvmChain is null for EVM token - type system should prevent this`,
-        );
+        throw new Error(`targetEvmChain is null for EVM token - type system should prevent this`);
       }
       // Testnet chain IDs: BSC testnet = 97, Sepolia = 11155111, Base Sepolia = 84532
-      const isTestnet =
-        readChain.id === 97 ||
-        readChain.id === 11155111 ||
-        readChain.id === 84532;
+      const isTestnet = readChain.id === 97 || readChain.id === 11155111 || readChain.id === 84532;
       return getExplorerTxUrl(txHash, targetEvmChain, isTestnet);
     },
     [readChain.id, targetEvmChain, isSolanaToken],
@@ -403,19 +352,15 @@ export function AcceptQuoteModal({
   const maxAvailableTokens = useMemo(() => {
     // Prefer the formatted (human-readable) amount
     if (initialQuote.tokenAmountFormatted) {
-      const formatted = Number(
-        initialQuote.tokenAmountFormatted.replace(/,/g, ""),
-      );
+      const formatted = Number(initialQuote.tokenAmountFormatted.replace(/,/g, ""));
       if (formatted > 0) {
         return Math.floor(formatted);
       }
     }
     // Parse tokenAmount - must be valid
     const available = Number(initialQuote.tokenAmount);
-    if (isNaN(available) || available <= 0) {
-      throw new Error(
-        `Invalid tokenAmount in quote: ${initialQuote.tokenAmount}`,
-      );
+    if (Number.isNaN(available) || available <= 0) {
+      throw new Error(`Invalid tokenAmount in quote: ${initialQuote.tokenAmount}`);
     }
     // If it's a reasonable human amount (< 100 billion), use it directly
     if (available < 100_000_000_000) {
@@ -429,7 +374,7 @@ export function AcceptQuoteModal({
     ? Number(initialQuote.tokenAmountFormatted.replace(/,/g, ""))
     : (() => {
         const amount = Number(initialQuote.tokenAmount);
-        if (isNaN(amount) || amount <= 0) {
+        if (Number.isNaN(amount) || amount <= 0) {
           return null;
         }
         return amount < 100_000_000_000 ? amount : null;
@@ -458,11 +403,7 @@ export function AcceptQuoteModal({
 
   const initialState: ModalState = {
     tokenAmount: initialTokenAmount,
-    currency: isSolanaToken
-      ? "SOL"
-      : isEvmToken && quoteChain === "bsc"
-        ? "BNB"
-        : "ETH",
+    currency: isSolanaToken ? "SOL" : isEvmToken && quoteChain === "bsc" ? "BNB" : "ETH",
     step: "amount",
     isProcessing: false,
     error: null,
@@ -478,9 +419,7 @@ export function AcceptQuoteModal({
   };
 
   const [state, dispatch] = useReducer(modalReducer, initialState);
-  const [evmUsdcAddress, setEvmUsdcAddress] = useState<
-    `0x${string}` | undefined
-  >(undefined);
+  const [evmUsdcAddress, setEvmUsdcAddress] = useState<`0x${string}` | undefined>(undefined);
 
   // Use React Query for native prices - auto-caching and deduplication
   const { prices: nativePrices } = useNativePrices();
@@ -523,20 +462,14 @@ export function AcceptQuoteModal({
 
     // Need to fetch price - use quote address (always available) or metadata if loaded
     // Try multiple sources for token address (quote > metadata > solana mint)
-    const tokenAddressFromQuote =
-      initialQuote.tokenAddress?.trim() || undefined;
-    const tokenAddressFromMetadata =
-      tokenMetadata?.contractAddress?.trim() || undefined;
+    const tokenAddressFromQuote = initialQuote.tokenAddress?.trim() || undefined;
+    const tokenAddressFromMetadata = tokenMetadata?.contractAddress?.trim() || undefined;
     const tokenAddressFromSolana = solanaTokenMint?.trim() || undefined;
     const tokenAddress =
-      tokenAddressFromQuote ??
-      tokenAddressFromMetadata ??
-      tokenAddressFromSolana;
+      tokenAddressFromQuote ?? tokenAddressFromMetadata ?? tokenAddressFromSolana;
     // tokenAddress may be missing for some quotes - that's OK, we just can't fetch price
     if (!tokenAddress) {
-      console.warn(
-        "[AcceptQuote] Cannot fetch price: no token address available",
-      );
+      console.warn("[AcceptQuote] Cannot fetch price: no token address available");
       return;
     }
 
@@ -604,17 +537,12 @@ export function AcceptQuoteModal({
     if (!ethBalanceQuery.data) return null;
     return {
       ...ethBalanceQuery.data,
-      formatted: formatUnits(
-        ethBalanceQuery.data.value,
-        ethBalanceQuery.data.decimals,
-      ),
+      formatted: formatUnits(ethBalanceQuery.data.value, ethBalanceQuery.data.decimals),
     };
   }, [ethBalanceQuery.data]);
 
   // Use evmUsdcAddress if available, otherwise fall back to usdcAddress
-  const effectiveUsdcAddress = (evmUsdcAddress ?? usdcAddress) as
-    | `0x${string}`
-    | undefined;
+  const effectiveUsdcAddress = (evmUsdcAddress ?? usdcAddress) as `0x${string}` | undefined;
 
   // ERC20 USDC balance (wagmi v3 uses useReadContracts for token balances)
   const usdcBalanceQuery = useReadContracts({
@@ -642,10 +570,7 @@ export function AcceptQuoteModal({
     const balanceResult = results[0];
     const decimalsResult = results[1];
     if (!balanceResult || !decimalsResult) return { data: null };
-    if (
-      balanceResult.status !== "success" ||
-      decimalsResult.status !== "success"
-    ) {
+    if (balanceResult.status !== "success" || decimalsResult.status !== "success") {
       return { data: null };
     }
     const value = balanceResult.result as bigint;
@@ -666,11 +591,7 @@ export function AcceptQuoteModal({
         type: "RESET",
         payload: {
           tokenAmount: initialTokenAmount,
-          currency: isSolanaToken
-            ? "SOL"
-            : quoteChain === "bsc"
-              ? "BNB"
-              : "ETH",
+          currency: isSolanaToken ? "SOL" : quoteChain === "bsc" ? "BNB" : "ETH",
         },
       });
     }
@@ -688,10 +609,7 @@ export function AcceptQuoteModal({
 
     // If quote has token address directly, use it for metadata but still need decimals
     if (initialQuote.tokenAddress) {
-      console.log(
-        "[AcceptQuote] Using token address from quote:",
-        initialQuote.tokenAddress,
-      );
+      console.log("[AcceptQuote] Using token address from quote:", initialQuote.tokenAddress);
       const metadata: TokenMetadata = {
         symbol: symbol,
         name: symbol, // Name not critical for transaction
@@ -708,9 +626,7 @@ export function AcceptQuoteModal({
       // Still need to fetch decimals from DB - don't return early
       // Fall through to DB lookup for decimals
     } else {
-      console.warn(
-        "[AcceptQuote] Quote missing tokenAddress - will fetch from DB",
-      );
+      console.warn("[AcceptQuote] Quote missing tokenAddress - will fetch from DB");
     }
 
     const cached = loadCachedTokenMetadata(chain, symbol);
@@ -752,9 +668,7 @@ export function AcceptQuoteModal({
               dispatch({ type: "SET_TOKEN_METADATA", payload: metadata });
             }
             if (typeof token.decimals === "number") {
-              console.log(
-                `[AcceptQuote] Setting token decimals: ${token.decimals}`,
-              );
+              console.log(`[AcceptQuote] Setting token decimals: ${token.decimals}`);
               dispatch({
                 type: "SET_SOLANA_DECIMALS",
                 payload: token.decimals,
@@ -773,18 +687,14 @@ export function AcceptQuoteModal({
 
       // Fallback: fetch decimals directly from chain if DB lookup failed
       if (tokenAddress) {
-        console.log(
-          `[AcceptQuote] Token not in DB, fetching decimals from chain...`,
-        );
+        console.log(`[AcceptQuote] Token not in DB, fetching decimals from chain...`);
         const res = await fetch(
           `/api/tokens/decimals?address=${encodeURIComponent(tokenAddress)}&chain=${chain}`,
         );
         if (res.ok) {
           const data = await res.json();
           if (data.success && typeof data.decimals === "number") {
-            console.log(
-              `[AcceptQuote] Got decimals from chain: ${data.decimals}`,
-            );
+            console.log(`[AcceptQuote] Got decimals from chain: ${data.decimals}`);
             dispatch({ type: "SET_SOLANA_DECIMALS", payload: data.decimals });
           }
         }
@@ -792,13 +702,7 @@ export function AcceptQuoteModal({
     })().catch((err) => {
       console.error("[AcceptQuote] Failed to fetch token metadata:", err);
     });
-  }, [
-    isOpen,
-    isSolanaToken,
-    initialQuote.tokenSymbol,
-    initialQuote.tokenChain,
-    initialQuote.tokenAddress,
-  ]);
+  }, [isOpen, initialQuote.tokenSymbol, initialQuote.tokenChain, initialQuote.tokenAddress]);
 
   // Fetch consignment data for Solana tokens (to get actual remaining balance AND on-chain address)
   useEffect(() => {
@@ -824,15 +728,11 @@ export function AcceptQuoteModal({
 
     (async () => {
       // Fetch consignment by DB ID (validated above that it exists)
-      console.log(
-        `[AcceptQuote] Fetching consignment by DB ID: ${consignmentDbId}`,
-      );
+      console.log(`[AcceptQuote] Fetching consignment by DB ID: ${consignmentDbId}`);
       const res = await fetch(`/api/consignments/${consignmentDbId}`);
 
       if (!res.ok) {
-        throw new Error(
-          `Failed to fetch consignment ${consignmentDbId}: ${res.status}`,
-        );
+        throw new Error(`Failed to fetch consignment ${consignmentDbId}: ${res.status}`);
       }
 
       const data = await res.json();
@@ -849,9 +749,7 @@ export function AcceptQuoteModal({
       });
 
       if (!data.consignment.contractConsignmentId) {
-        throw new Error(
-          `Consignment ${consignmentDbId} missing contractConsignmentId`,
-        );
+        throw new Error(`Consignment ${consignmentDbId} missing contractConsignmentId`);
       }
 
       console.log(
@@ -870,9 +768,7 @@ export function AcceptQuoteModal({
         const parts = tokenId.split("-");
         if (parts.length >= 3 && parts[1] === "solana") {
           const contractAddress = parts.slice(2).join("-"); // Handle addresses with dashes
-          console.log(
-            `[AcceptQuote] Token mint from tokenId: ${contractAddress}`,
-          );
+          console.log(`[AcceptQuote] Token mint from tokenId: ${contractAddress}`);
           dispatch({
             type: "SET_SOLANA_TOKEN_MINT",
             payload: contractAddress,
@@ -904,18 +800,12 @@ export function AcceptQuoteModal({
 
         if (decimals === null) {
           // Log warning but don't throw - decimals may be set later by token fetch
-          console.warn(
-            `[AcceptQuote] Token decimals not yet available - will retry when set`,
-          );
+          console.warn(`[AcceptQuote] Token decimals not yet available - will retry when set`);
           return;
         }
 
-        const remaining = Number(
-          BigInt(data.consignment.remainingAmount) / BigInt(10 ** decimals),
-        );
-        console.log(
-          `[AcceptQuote] Solana consignment remaining: ${remaining} tokens`,
-        );
+        const remaining = Number(BigInt(data.consignment.remainingAmount) / BigInt(10 ** decimals));
+        console.log(`[AcceptQuote] Solana consignment remaining: ${remaining} tokens`);
         dispatch({
           type: "SET_CONSIGNMENT_REMAINING_TOKENS",
           payload: remaining,
@@ -923,8 +813,7 @@ export function AcceptQuoteModal({
       }
     })().catch((err) => {
       console.error("[AcceptQuote] Failed to fetch Solana consignment:", err);
-      const errorMsg =
-        err instanceof Error ? err.message : "Failed to load consignment";
+      const errorMsg = err instanceof Error ? err.message : "Failed to load consignment";
       dispatch({ type: "SET_ERROR", payload: errorMsg });
     });
   }, [isOpen, isSolanaToken, initialQuote, solanaTokenDecimals]);
@@ -945,9 +834,7 @@ export function AcceptQuoteModal({
       const res = await fetch(`/api/consignments/${consignmentDbId}`);
 
       if (!res.ok) {
-        throw new Error(
-          `Failed to fetch consignment ${consignmentDbId}: ${res.status}`,
-        );
+        throw new Error(`Failed to fetch consignment ${consignmentDbId}: ${res.status}`);
       }
 
       const data = await res.json();
@@ -956,9 +843,7 @@ export function AcceptQuoteModal({
       }
 
       if (!data.consignment.contractConsignmentId) {
-        throw new Error(
-          `Consignment ${consignmentDbId} missing contractConsignmentId`,
-        );
+        throw new Error(`Consignment ${consignmentDbId} missing contractConsignmentId`);
       }
 
       dispatch({
@@ -968,22 +853,17 @@ export function AcceptQuoteModal({
 
       if (data.consignment.remainingAmount) {
         if (typeof data.consignment.tokenDecimals !== "number") {
-          throw new Error(
-            `Consignment missing tokenDecimals - cannot display remaining amount`,
-          );
+          throw new Error(`Consignment missing tokenDecimals - cannot display remaining amount`);
         }
         const decimals = data.consignment.tokenDecimals;
         dispatch({
           type: "SET_CONSIGNMENT_REMAINING_TOKENS",
-          payload: Number(
-            BigInt(data.consignment.remainingAmount) / BigInt(10 ** decimals),
-          ),
+          payload: Number(BigInt(data.consignment.remainingAmount) / BigInt(10 ** decimals)),
         });
       }
     })().catch((err) => {
       console.error("[AcceptQuote] Failed to fetch EVM consignment:", err);
-      const errorMsg =
-        err instanceof Error ? err.message : "Failed to load consignment";
+      const errorMsg = err instanceof Error ? err.message : "Failed to load consignment";
       dispatch({ type: "SET_ERROR", payload: errorMsg });
     });
   }, [isOpen, isSolanaToken, initialQuote]);
@@ -1004,6 +884,7 @@ export function AcceptQuoteModal({
 
   // Validate contract exists and read config - with caching
   // Use isSolanaToken (from quote data) not activeFamily (from wallet) to determine path
+  // biome-ignore lint/correctness/useExhaustiveDependencies: readContract is defined after this hook but uses effectiveOtcAddress/publicClient/abi from closure
   useEffect(() => {
     (async () => {
       // For Solana tokens, validate Solana desk account
@@ -1018,9 +899,7 @@ export function AcceptQuoteModal({
           return;
         }
         const connection = createSolanaConnection();
-        const info = await connection.getAccountInfo(
-          new SolPubkey(SOLANA_DESK),
-        );
+        const info = await connection.getAccountInfo(new SolPubkey(SOLANA_DESK));
         const valid = Boolean(info);
         dispatch({ type: "SET_CONTRACT_VALID", payload: valid });
         dispatch({ type: "SET_REQUIRE_APPROVER", payload: false });
@@ -1049,8 +928,7 @@ export function AcceptQuoteModal({
         if (!cachedExists) {
           dispatch({
             type: "SET_ERROR",
-            payload:
-              "Contract not found. Ensure Anvil node is running and contracts are deployed.",
+            payload: "Contract not found. Ensure Anvil node is running and contracts are deployed.",
           });
         }
         return;
@@ -1064,14 +942,11 @@ export function AcceptQuoteModal({
       setContractExists(cacheKey, exists);
 
       if (!exists) {
-        console.error(
-          `[AcceptQuote] No contract at ${effectiveOtcAddress} on ${readChain.name}.`,
-        );
+        console.error(`[AcceptQuote] No contract at ${effectiveOtcAddress} on ${readChain.name}.`);
         dispatch({ type: "SET_CONTRACT_VALID", payload: false });
         dispatch({
           type: "SET_ERROR",
-          payload:
-            "Contract not found. Ensure Anvil node is running and contracts are deployed.",
+          payload: "Contract not found. Ensure Anvil node is running and contracts are deployed.",
         });
         return;
       }
@@ -1095,16 +970,7 @@ export function AcceptQuoteModal({
         payload: `Contract validation failed: ${err instanceof Error ? err.message : String(err)}`,
       });
     });
-    // readContract and SOLANA_DESK are stable refs - excluding from deps to prevent unnecessary re-runs
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    isOpen,
-    effectiveOtcAddress,
-    publicClient,
-    abi,
-    isSolanaToken,
-    readChain,
-  ]);
+  }, [isOpen, effectiveOtcAddress, publicClient, abi, isSolanaToken, readChain, SOLANA_DESK]);
 
   const discountBps = useMemo(() => {
     const bps = initialQuote.discountBps;
@@ -1152,19 +1018,12 @@ export function AcceptQuoteModal({
   const isWaitingForNativePrice = currency !== "USDC" && nativeUsdPrice === 0;
 
   const lockupDays = useMemo(() => {
-    if (typeof initialQuote.lockupDays === "number")
-      return initialQuote.lockupDays;
+    if (typeof initialQuote.lockupDays === "number") return initialQuote.lockupDays;
     if (typeof initialQuote.lockupMonths === "number")
       return Math.max(1, initialQuote.lockupMonths * 30);
     // Fallback to contract default if quote doesn't specify
-    return Number(
-      defaultUnlockDelaySeconds ? defaultUnlockDelaySeconds / 86400n : 180n,
-    );
-  }, [
-    initialQuote.lockupDays,
-    initialQuote.lockupMonths,
-    defaultUnlockDelaySeconds,
-  ]);
+    return Number(defaultUnlockDelaySeconds ? defaultUnlockDelaySeconds / 86400n : 180n);
+  }, [initialQuote.lockupDays, initialQuote.lockupMonths, defaultUnlockDelaySeconds]);
 
   const contractMaxTokens = useMemo(() => {
     // For Solana, we don't have an on-chain maxTokenPerOrder - use fallback
@@ -1172,21 +1031,18 @@ export function AcceptQuoteModal({
       return ONE_MILLION;
     }
     // For EVM, use the contract's maxTokenPerOrder with actual token decimals
+    // If decimals not loaded yet, use default (will be updated when decimals load)
     if (typeof solanaTokenDecimals !== "number") {
-      throw new Error("Token decimals not set for EVM token");
+      // Return default while decimals are loading - this is not an error state
+      return ONE_MILLION;
     }
     const decimals = solanaTokenDecimals;
-    const v = maxTokenPerOrder
-      ? Number(maxTokenPerOrder / BigInt(10 ** decimals))
-      : ONE_MILLION;
+    const v = maxTokenPerOrder ? Number(maxTokenPerOrder / BigInt(10 ** decimals)) : ONE_MILLION;
     return Math.max(1, Math.min(ONE_MILLION, v));
   }, [maxTokenPerOrder, isSolanaToken, solanaTokenDecimals]);
 
   const effectiveMaxTokens = useMemo(() => {
-    if (
-      typeof consignmentRemainingTokens === "number" &&
-      consignmentRemainingTokens > 0
-    ) {
+    if (typeof consignmentRemainingTokens === "number" && consignmentRemainingTokens > 0) {
       return Math.min(contractMaxTokens, consignmentRemainingTokens);
     }
     return Math.min(contractMaxTokens, maxAvailableTokens);
@@ -1231,10 +1087,7 @@ export function AcceptQuoteModal({
     bigint,
   ];
 
-  async function readContract<T>(
-    fn: string,
-    args: readonly bigint[] = [],
-  ): Promise<T> {
+  async function readContract<T>(fn: string, args: readonly bigint[] = []): Promise<T> {
     if (!effectiveOtcAddress) throw new Error("Missing OTC address");
     return safeReadContract<T>(publicClient, {
       address: effectiveOtcAddress as Address,
@@ -1246,6 +1099,7 @@ export function AcceptQuoteModal({
 
   const readNextOfferId = () => readContract<bigint>("nextOfferId");
   const readOffer = (id: bigint) => readContract<OfferTuple>("offers", [id]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: executeTransaction is stable within same render, readContract is internal helper
   const handleConfirm = useCallback(async () => {
     // Check if user needs to connect a wallet first
     if (!walletConnected) {
@@ -1264,13 +1118,10 @@ export function AcceptQuoteModal({
 
     // Check if the correct wallet type is connected for this token's chain
     if (isSolanaToken && activeFamily !== "solana") {
-      console.log(
-        "[AcceptQuote] Solana token but no Solana wallet, switching...",
-      );
+      console.log("[AcceptQuote] Solana token but no Solana wallet, switching...");
       dispatch({
         type: "SET_ERROR",
-        payload:
-          "This token requires a Solana wallet. Please connect a Solana wallet.",
+        payload: "This token requires a Solana wallet. Please connect a Solana wallet.",
       });
       setActiveFamily("solana");
       // Close modal so Privy wallet selector is visible
@@ -1285,13 +1136,10 @@ export function AcceptQuoteModal({
     }
 
     if (isEvmToken && activeFamily === "solana") {
-      console.log(
-        "[AcceptQuote] EVM token but Solana wallet active, switching...",
-      );
+      console.log("[AcceptQuote] EVM token but Solana wallet active, switching...");
       dispatch({
         type: "SET_ERROR",
-        payload:
-          "This token requires an EVM wallet. Please connect an EVM wallet.",
+        payload: "This token requires an EVM wallet. Please connect an EVM wallet.",
       });
       setActiveFamily("evm");
       // Close modal so Privy wallet selector is visible
@@ -1307,9 +1155,7 @@ export function AcceptQuoteModal({
 
     // For Solana tokens, verify we actually have a Solana wallet with publicKey
     if (isSolanaToken && (!solanaWallet || !solanaPublicKey)) {
-      console.log(
-        "[AcceptQuote] Solana wallet not ready, prompting connection...",
-      );
+      console.log("[AcceptQuote] Solana wallet not ready, prompting connection...");
       dispatch({
         type: "SET_ERROR",
         payload: "Please connect your Solana wallet to continue.",
@@ -1327,9 +1173,7 @@ export function AcceptQuoteModal({
 
     // For EVM tokens, verify we have an address
     if (isEvmToken && !address) {
-      console.log(
-        "[AcceptQuote] EVM wallet not ready, prompting connection...",
-      );
+      console.log("[AcceptQuote] EVM wallet not ready, prompting connection...");
       dispatch({
         type: "SET_ERROR",
         payload: "Please connect your EVM wallet to continue.",
@@ -1367,9 +1211,7 @@ export function AcceptQuoteModal({
       const txError: TransactionError = {
         ...error,
         message: error.message,
-        cause: error.cause as
-          | { reason?: string; code?: string | number }
-          | undefined,
+        cause: error.cause as { reason?: string; code?: string | number } | undefined,
         details: (error as TransactionError).details,
         shortMessage: (error as TransactionError).shortMessage,
       };
@@ -1378,7 +1220,6 @@ export function AcceptQuoteModal({
       throw err; // Re-throw to fail fast
     });
     console.log("[AcceptQuote] executeTransaction completed successfully");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     walletConnected,
     privyAuthenticated,
@@ -1388,12 +1229,12 @@ export function AcceptQuoteModal({
     solanaWallet,
     solanaPublicKey,
     address,
-    initialQuote.quoteId,
     contractValid,
     handleTransactionError,
     connectWallet,
     login,
     setActiveFamily,
+    onClose,
   ]);
 
   const executeTransaction = async () => {
@@ -1448,9 +1289,7 @@ export function AcceptQuoteModal({
         throw new Error("Solana wallet not connected");
       }
       if (!solanaWallet.publicKey) {
-        throw new Error(
-          "Solana wallet public key not available - wallet not ready",
-        );
+        throw new Error("Solana wallet public key not available - wallet not ready");
       }
 
       // Use HTTP-only connection (no WebSocket) since we're using a proxy
@@ -1483,16 +1322,8 @@ export function AcceptQuoteModal({
       console.log("USDC mint PK:", usdcMintPk.toString());
       console.log("Desk:", desk.toString());
 
-      const deskTokenTreasury = await getAssociatedTokenAddress(
-        tokenMintPk,
-        desk,
-        true,
-      );
-      const deskUsdcTreasury = await getAssociatedTokenAddress(
-        usdcMintPk,
-        desk,
-        true,
-      );
+      const deskTokenTreasury = await getAssociatedTokenAddress(tokenMintPk, desk, true);
+      const deskUsdcTreasury = await getAssociatedTokenAddress(usdcMintPk, desk, true);
 
       console.log("Desk token treasury:", deskTokenTreasury.toString());
       console.log("Desk USDC treasury:", deskUsdcTreasury.toString());
@@ -1505,19 +1336,14 @@ export function AcceptQuoteModal({
         };
       }
 
-      const deskAccount = await (
-        program.account as DeskAccountProgram
-      ).desk.fetch(desk);
+      const deskAccount = await (program.account as DeskAccountProgram).desk.fetch(desk);
       const nextOfferId = new anchor.BN(deskAccount.nextOfferId.toString());
 
       console.log("Next offer ID:", nextOfferId.toString());
 
       // Generate offer keypair (IDL expects signer)
       const offerKeypair = Keypair.generate();
-      console.log(
-        "Generated offer keypair:",
-        offerKeypair.publicKey.toString(),
-      );
+      console.log("Generated offer keypair:", offerKeypair.publicKey.toString());
 
       // Create offer on Solana
       // Get decimals from state or fetch from API (handles race condition)
@@ -1526,23 +1352,16 @@ export function AcceptQuoteModal({
         solDecimals = BigInt(solanaTokenDecimals);
       } else {
         // Fetch decimals from API as fallback
-        console.log(
-          "[AcceptQuote] Solana decimals not in state, fetching from API...",
-        );
-        const tokenAddress =
-          initialQuote.tokenAddress?.trim() || solanaTokenMint?.trim();
+        console.log("[AcceptQuote] Solana decimals not in state, fetching from API...");
+        const tokenAddress = initialQuote.tokenAddress?.trim() || solanaTokenMint?.trim();
         if (!tokenAddress) {
-          throw new Error(
-            "Token address not available - cannot fetch decimals",
-          );
+          throw new Error("Token address not available - cannot fetch decimals");
         }
         const decRes = await fetch(
           `/api/tokens/decimals?address=${encodeURIComponent(tokenAddress)}&chain=solana`,
         );
         if (!decRes.ok) {
-          throw new Error(
-            `Failed to fetch Solana decimals: HTTP ${decRes.status}`,
-          );
+          throw new Error(`Failed to fetch Solana decimals: HTTP ${decRes.status}`);
         }
         const decData = await decRes.json();
         if (!decData.success || typeof decData.decimals !== "number") {
@@ -1551,9 +1370,7 @@ export function AcceptQuoteModal({
         solDecimals = BigInt(decData.decimals);
         console.log(`[AcceptQuote] Fetched Solana decimals: ${solDecimals}`);
       }
-      const tokenAmountWei = new anchor.BN(
-        (BigInt(tokenAmount) * 10n ** solDecimals).toString(),
-      );
+      const tokenAmountWei = new anchor.BN((BigInt(tokenAmount) * 10n ** solDecimals).toString());
       const lockupSeconds = new anchor.BN(lockupDays * 24 * 60 * 60);
       const paymentCurrencySol = currency === "USDC" ? 1 : 0; // 0 SOL, 1 USDC
 
@@ -1562,11 +1379,7 @@ export function AcceptQuoteModal({
       console.log("Payment currency:", paymentCurrencySol);
 
       // Derive token registry PDA using shared utility
-      const tokenRegistryPda = deriveTokenRegistryPda(
-        desk,
-        tokenMintPk,
-        program.programId,
-      );
+      const tokenRegistryPda = deriveTokenRegistryPda(desk, tokenMintPk, program.programId);
       console.log("Token registry PDA:", tokenRegistryPda.toString());
 
       // CRITICAL: Ensure token has a price set on-chain before creating offer
@@ -1586,12 +1399,8 @@ export function AcceptQuoteModal({
 
       if (!priceRes.ok) {
         // If we have a price but couldn't update on-chain, show detailed error
-        const poolInfo = priceData.pool
-          ? ` (found pool: ${priceData.pool.slice(0, 8)}...)`
-          : "";
-        const priceInfo = priceData.priceUsd
-          ? ` Price: $${priceData.priceUsd.toFixed(8)}`
-          : "";
+        const poolInfo = priceData.pool ? ` (found pool: ${priceData.pool.slice(0, 8)}...)` : "";
+        const priceInfo = priceData.priceUsd ? ` Price: $${priceData.priceUsd.toFixed(8)}` : "";
         // error message is optional - use default if not provided
         const errorMsg =
           typeof priceData.error === "string" && priceData.error.trim() !== ""
@@ -1612,10 +1421,7 @@ export function AcceptQuoteModal({
       } else if (priceData.stale) {
         // Price was fetched but couldn't be written on-chain
         // price is optional - use "?" if not available
-        const priceDisplay =
-          typeof priceData.price === "number"
-            ? priceData.price.toFixed(8)
-            : "?";
+        const priceDisplay = typeof priceData.price === "number" ? priceData.price.toFixed(8) : "?";
         // reason is optional - use empty string if not provided
         const reasonText =
           typeof priceData.reason === "string" && priceData.reason.trim() !== ""
@@ -1633,8 +1439,7 @@ export function AcceptQuoteModal({
         `[AcceptQuote] At transaction time, contractConsignmentId: ${contractConsignmentId}`,
       );
       if (!initialQuote.tokenChain) throw new Error("Quote missing tokenChain");
-      if (!initialQuote.tokenSymbol)
-        throw new Error("Quote missing tokenSymbol");
+      if (!initialQuote.tokenSymbol) throw new Error("Quote missing tokenSymbol");
       console.log(`[AcceptQuote] Quote data:`, {
         consignmentId: initialQuote.consignmentId, // Optional field
         tokenAddress: initialQuote.tokenAddress, // Optional field
@@ -1649,9 +1454,7 @@ export function AcceptQuoteModal({
 
       // Fetch consignment's numeric ID from on-chain account
       const consignmentPubkey = new SolPubkey(contractConsignmentId);
-      console.log(
-        `[AcceptQuote] Fetching consignment account: ${contractConsignmentId}`,
-      );
+      console.log(`[AcceptQuote] Fetching consignment account: ${contractConsignmentId}`);
 
       interface ConsignmentAccountProgram {
         consignment: {
@@ -1663,15 +1466,11 @@ export function AcceptQuoteModal({
         program.account as ConsignmentAccountProgram
       ).consignment.fetch(consignmentPubkey);
       const consignmentId = new anchor.BN(consignmentAccount.id.toString());
-      console.log(
-        `[AcceptQuote] Consignment numeric ID: ${consignmentId.toString()}`,
-      );
+      console.log(`[AcceptQuote] Consignment numeric ID: ${consignmentId.toString()}`);
 
       // Get agent commission from quote (0 for P2P, 25-150 for negotiated)
       const agentCommissionBps =
-        typeof initialQuote.agentCommissionBps === "number"
-          ? initialQuote.agentCommissionBps
-          : 25;
+        typeof initialQuote.agentCommissionBps === "number" ? initialQuote.agentCommissionBps : 25;
 
       // Build transaction using createOfferFromConsignment (matches FlowTest pattern)
       const tx = await program.methods
@@ -1708,13 +1507,10 @@ export function AcceptQuoteModal({
       const signedTx = await solanaWallet.signTransaction(tx);
 
       // Send raw transaction
-      const txSignature = await connection.sendRawTransaction(
-        signedTx.serialize(),
-        {
-          skipPreflight: false,
-          preflightCommitment: "confirmed",
-        },
-      );
+      const txSignature = await connection.sendRawTransaction(signedTx.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+      });
 
       // Confirm using polling (avoids WebSocket)
       await confirmTransactionPolling(connection, txSignature, "confirmed");
@@ -1776,9 +1572,7 @@ export function AcceptQuoteModal({
           console.log("✅ Tokens immediately distributed");
         }
       } else {
-        console.warn(
-          "Claim scheduling failed, tokens will be claimable manually",
-        );
+        console.warn("Claim scheduling failed, tokens will be claimable manually");
       }
 
       // Quote ID already validated at component mount
@@ -1833,9 +1627,7 @@ export function AcceptQuoteModal({
         throw new Error("Deal save didn't return quote data");
       }
       if (saveResult.quote.status !== "executed") {
-        throw new Error(
-          `Deal saved but status is ${saveResult.quote.status}, not executed`,
-        );
+        throw new Error(`Deal saved but status is ${saveResult.quote.status}, not executed`);
       }
 
       console.log("✅ VERIFIED deal is in database as executed");
@@ -1887,10 +1679,7 @@ export function AcceptQuoteModal({
         }),
       }).catch((err) => {
         // Log but don't block - actual data saved in deal-completion
-        console.warn(
-          "[AcceptQuote] Pre-transaction quote update failed (non-critical):",
-          err,
-        );
+        console.warn("[AcceptQuote] Pre-transaction quote update failed (non-critical):", err);
       }),
     ]);
     const newOfferId = nextId;
@@ -1917,9 +1706,7 @@ export function AcceptQuoteModal({
       }
       // Use quote tokenAddress if available, otherwise fall back to solanaTokenMint
       const tokenAddress =
-        initialQuote.tokenAddress?.trim() ||
-        solanaTokenMint?.trim() ||
-        undefined;
+        initialQuote.tokenAddress?.trim() || solanaTokenMint?.trim() || undefined;
       if (!tokenAddress) {
         throw new Error("Token address not available - cannot fetch decimals");
       }
@@ -1955,14 +1742,10 @@ export function AcceptQuoteModal({
 
     // Get agent commission from quote (0 for P2P, 25-150 for negotiated)
     const agentCommissionBps =
-      typeof initialQuote.agentCommissionBps === "number"
-        ? initialQuote.agentCommissionBps
-        : 0;
+      typeof initialQuote.agentCommissionBps === "number" ? initialQuote.agentCommissionBps : 0;
 
     console.log(`[AcceptQuote] Using consignment ID: ${contractConsignmentId}`);
-    console.log(
-      `[AcceptQuote] Token decimals: ${tokenDecimals}, amount wei: ${tokenAmountWei}`,
-    );
+    console.log(`[AcceptQuote] Token decimals: ${tokenDecimals}, amount wei: ${tokenAmountWei}`);
     console.log(`[AcceptQuote] Agent commission: ${agentCommissionBps} bps`);
 
     const createTxHash = (await createOfferFromConsignment({
@@ -1976,16 +1759,12 @@ export function AcceptQuoteModal({
       otcOverride: effectiveOtcAddress,
     })) as `0x${string}`;
 
-    console.log(
-      `[AcceptQuote] ✅ Offer created: ${newOfferId}, tx: ${createTxHash}`,
-    );
+    console.log(`[AcceptQuote] ✅ Offer created: ${newOfferId}, tx: ${createTxHash}`);
 
     // Don't wait for receipt - immediately trigger backend approval
     // Backend will verify on-chain state directly via Alchemy (faster than frontend polling)
     console.log("[AcceptQuote] Transaction hash:", createTxHash);
-    console.log(
-      "[AcceptQuote] View on explorer: https://basescan.org/tx/" + createTxHash,
-    );
+    console.log("[AcceptQuote] View on explorer: https://basescan.org/tx/" + createTxHash);
 
     // Step 2: Immediately trigger backend approval
     console.log("[AcceptQuote] Updating UI to await_approval step...");
@@ -1994,9 +1773,7 @@ export function AcceptQuoteModal({
     // Small delay for UI update
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    console.log(
-      `[AcceptQuote] Triggering backend approval for offer ${newOfferId}...`,
-    );
+    console.log(`[AcceptQuote] Triggering backend approval for offer ${newOfferId}...`);
 
     // Call backend with retry logic - backend verifies on-chain state (idempotent)
     let approveRes: Response | undefined;
@@ -2018,22 +1795,15 @@ export function AcceptQuoteModal({
           }),
         });
 
-        console.log(
-          "[AcceptQuote] /api/otc/approve response status:",
-          approveRes.status,
-        );
+        console.log("[AcceptQuote] /api/otc/approve response status:", approveRes.status);
 
         if (approveRes.ok) break;
         if (approveRes.status >= 400 && approveRes.status < 500) break; // Don't retry client errors
 
         lastApproveError = `HTTP ${approveRes.status}`;
       } catch (fetchError) {
-        console.warn(
-          `[AcceptQuote] Approve attempt ${attempt} failed:`,
-          fetchError,
-        );
-        lastApproveError =
-          fetchError instanceof Error ? fetchError : String(fetchError);
+        console.warn(`[AcceptQuote] Approve attempt ${attempt} failed:`, fetchError);
+        lastApproveError = fetchError instanceof Error ? fetchError : String(fetchError);
       }
 
       if (attempt < maxApproveAttempts) {
@@ -2044,9 +1814,7 @@ export function AcceptQuoteModal({
     }
 
     if (!approveRes) {
-      throw new Error(
-        `Network error calling approval API: ${lastApproveError}`,
-      );
+      throw new Error(`Network error calling approval API: ${lastApproveError}`);
     }
 
     if (!approveRes.ok) {
@@ -2074,20 +1842,15 @@ export function AcceptQuoteModal({
       // Check if offer was already paid
       const [, , , , , , , , , isPaid] = await readOffer(newOfferId);
       if (isPaid) {
-        console.log(
-          "[AcceptQuote] Offer was already paid by another transaction",
-        );
+        console.log("[AcceptQuote] Offer was already paid by another transaction");
         // Continue to verification - this is actually fine
       } else {
         // Something went wrong - offer is approved but not paid
-        console.error(
-          "[AcceptQuote] Backend approval succeeded but auto-fulfill failed:",
-          {
-            approveData,
-            requireApprover,
-            offerId: newOfferId.toString(),
-          },
-        );
+        console.error("[AcceptQuote] Backend approval succeeded but auto-fulfill failed:", {
+          approveData,
+          requireApprover,
+          offerId: newOfferId.toString(),
+        });
 
         throw new Error(
           `Backend approval succeeded but payment failed. Your offer (ID: ${newOfferId}) is approved but not paid. Please contact support with this offer ID.`,
@@ -2095,23 +1858,17 @@ export function AcceptQuoteModal({
       }
     }
 
-    const paymentTxHashTyped = (approveData.fulfillTx ??
-      approveData.approvalTx) as `0x${string}` | undefined;
+    const paymentTxHashTyped = (approveData.fulfillTx ?? approveData.approvalTx) as
+      | `0x${string}`
+      | undefined;
     if (!paymentTxHashTyped) {
-      throw new Error(
-        "Payment transaction hash not available in approval response",
-      );
+      throw new Error("Payment transaction hash not available in approval response");
     }
 
     if (approveData.fulfillTx) {
-      console.log(
-        `[AcceptQuote] ✅ Backend auto-fulfilled:`,
-        paymentTxHashTyped,
-      );
+      console.log(`[AcceptQuote] ✅ Backend auto-fulfilled:`, paymentTxHashTyped);
     } else {
-      console.log(
-        `[AcceptQuote] ✅ Offer was already fulfilled, continuing...`,
-      );
+      console.log(`[AcceptQuote] ✅ Offer was already fulfilled, continuing...`);
     }
 
     // Verify payment was actually made on-chain
@@ -2194,11 +1951,7 @@ export function AcceptQuoteModal({
     const discountBps = initialQuote.discountBps;
     const discountMultiplier = 1 - discountBps / 10000;
     return basePrice * discountMultiplier;
-  }, [
-    initialQuote.pricePerToken,
-    initialQuote.discountBps,
-    fallbackTokenPrice,
-  ]);
+  }, [initialQuote.pricePerToken, initialQuote.discountBps, fallbackTokenPrice]);
 
   const balanceDisplay = useMemo(() => {
     // For Solana tokens, use the Solana balance hook
@@ -2310,25 +2063,14 @@ export function AcceptQuoteModal({
     if (tokenAmount < 1) return "You must buy at least 1 token.";
     if (tokenAmount > effectiveMaxTokens)
       return `Exceeds available supply (~${effectiveMaxTokens.toLocaleString()} max).`;
-    if (
-      !isSolanaToken &&
-      estPerTokenUsd > 0 &&
-      tokenAmount > maxAffordableTokens
-    ) {
+    if (!isSolanaToken && estPerTokenUsd > 0 && tokenAmount > maxAffordableTokens) {
       return `Exceeds what you can afford (~${maxAffordableTokens.toLocaleString()} max).`;
     }
     return null;
-  }, [
-    tokenAmount,
-    effectiveMaxTokens,
-    estPerTokenUsd,
-    maxAffordableTokens,
-    isSolanaToken,
-  ]);
+  }, [tokenAmount, effectiveMaxTokens, estPerTokenUsd, maxAffordableTokens, isSolanaToken]);
 
   const estimatedPayment = useMemo(() => {
-    if (estPerTokenUsd <= 0)
-      return { usdc: undefined, native: undefined, usd: undefined };
+    if (estPerTokenUsd <= 0) return { usdc: undefined, native: undefined, usd: undefined };
     const totalUsd = tokenAmount * estPerTokenUsd;
     const usd = totalUsd.toFixed(2);
     if (currency === "USDC") return { usdc: usd, native: undefined, usd };
@@ -2342,71 +2084,75 @@ export function AcceptQuoteModal({
 
   const insufficientFunds = useMemo(() => {
     if (isSolanaToken || estPerTokenUsd <= 0) return false;
-    if ((currency === "ETH" || currency === "BNB") && !nativeUsdPrice)
-      return false;
+    if ((currency === "ETH" || currency === "BNB") && !nativeUsdPrice) return false;
     return tokenAmount > maxAffordableTokens;
-  }, [
-    isSolanaToken,
-    estPerTokenUsd,
-    tokenAmount,
-    maxAffordableTokens,
-    currency,
-    nativeUsdPrice,
-  ]);
+  }, [isSolanaToken, estPerTokenUsd, tokenAmount, maxAffordableTokens, currency, nativeUsdPrice]);
 
   return (
-    <>
-      <Dialog
-        open={isOpen}
-        onClose={onClose}
-        size="3xl"
-        data-testid="accept-quote-modal"
-      >
-        <div className="w-full max-w-[720px] mx-auto p-0 rounded-2xl bg-zinc-950 text-white ring-1 ring-white/10 max-h-[95dvh] overflow-y-auto">
-          {/* Chain Mismatch or Not Connected Warning */}
-          {(isChainMismatch ||
-            (isSolanaToken && !solanaPublicKey) ||
-            (isEvmToken && !address)) && (
-            <div className="bg-blue-500/10 border-b border-blue-500/20 p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center">
+    <Dialog open={isOpen} onClose={onClose} size="3xl" data-testid="accept-quote-modal">
+      <div className="w-full max-w-[720px] mx-auto p-0 rounded-2xl bg-zinc-950 text-white ring-1 ring-white/10 max-h-[95dvh] overflow-y-auto">
+        {/* Chain Mismatch or Not Connected Warning */}
+        {(isChainMismatch || (isSolanaToken && !solanaPublicKey) || (isEvmToken && !address)) && (
+          <div className="bg-blue-500/10 border-b border-blue-500/20 p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center">
+                {walletConnected &&
+                isChainMismatch &&
+                ((quoteChain === "solana" && Boolean(solanaPublicKey)) ||
+                  (quoteChain !== "solana" && Boolean(address))) ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent" />
+                ) : (
+                  <svg
+                    className="w-4 h-4 text-blue-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                    />
+                  </svg>
+                )}
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-blue-400">
                   {walletConnected &&
                   isChainMismatch &&
                   ((quoteChain === "solana" && Boolean(solanaPublicKey)) ||
-                    (quoteChain !== "solana" && Boolean(address))) ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent" />
-                  ) : (
-                    <svg
-                      className="w-4 h-4 text-blue-400"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                      />
-                    </svg>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-sm font-semibold text-blue-400">
-                    {walletConnected &&
-                    isChainMismatch &&
-                    ((quoteChain === "solana" && Boolean(solanaPublicKey)) ||
-                      (quoteChain !== "solana" && Boolean(address)))
-                      ? `Switching to ${quoteChain === "solana" ? "Solana" : "EVM"}...`
-                      : `Connect ${quoteChain === "solana" ? "Solana" : "EVM"} Wallet`}
-                  </h3>
-                  <p className="text-xs text-zinc-400">
-                    This token requires a{" "}
-                    {quoteChain === "solana" ? "Solana" : "EVM"} wallet.
-                  </p>
-                </div>
-                {/* Show connect button when not connected */}
-                {!walletConnected && (
+                    (quoteChain !== "solana" && Boolean(address)))
+                    ? `Switching to ${quoteChain === "solana" ? "Solana" : "EVM"}...`
+                    : `Connect ${quoteChain === "solana" ? "Solana" : "EVM"} Wallet`}
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  This token requires a {quoteChain === "solana" ? "Solana" : "EVM"} wallet.
+                </p>
+              </div>
+              {/* Show connect button when not connected */}
+              {!walletConnected && (
+                <button
+                  type="button"
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    privyReady
+                      ? "bg-blue-500 hover:bg-blue-600 text-white"
+                      : "bg-zinc-700 text-zinc-300 cursor-not-allowed"
+                  }`}
+                  disabled={!privyReady}
+                  onClick={async () => {
+                    setActiveFamily(quoteChain === "solana" ? "solana" : "evm");
+                    onClose();
+                    await new Promise((resolve) => setTimeout(resolve, 100));
+                    handleConnect();
+                  }}
+                >
+                  {privyReady ? "Connect" : "Loading..."}
+                </button>
+              )}
+              {/* Show connect button when wrong wallet type connected */}
+              {walletConnected &&
+                ((isSolanaToken && !solanaPublicKey) || (isEvmToken && !address)) && (
                   <button
                     type="button"
                     className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
@@ -2416,447 +2162,376 @@ export function AcceptQuoteModal({
                     }`}
                     disabled={!privyReady}
                     onClick={async () => {
-                      setActiveFamily(
-                        quoteChain === "solana" ? "solana" : "evm",
-                      );
+                      setActiveFamily(quoteChain === "solana" ? "solana" : "evm");
                       onClose();
                       await new Promise((resolve) => setTimeout(resolve, 100));
                       handleConnect();
                     }}
                   >
-                    {privyReady ? "Connect" : "Loading..."}
+                    {privyReady
+                      ? `Connect ${quoteChain === "solana" ? "Phantom" : "MetaMask"}`
+                      : "Loading..."}
                   </button>
                 )}
-                {/* Show connect button when wrong wallet type connected */}
-                {walletConnected &&
-                  ((isSolanaToken && !solanaPublicKey) ||
-                    (isEvmToken && !address)) && (
-                    <button
-                      type="button"
-                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                        privyReady
-                          ? "bg-blue-500 hover:bg-blue-600 text-white"
-                          : "bg-zinc-700 text-zinc-300 cursor-not-allowed"
-                      }`}
-                      disabled={!privyReady}
-                      onClick={async () => {
-                        setActiveFamily(
-                          quoteChain === "solana" ? "solana" : "evm",
-                        );
-                        onClose();
-                        await new Promise((resolve) =>
-                          setTimeout(resolve, 100),
-                        );
-                        handleConnect();
-                      }}
-                    >
-                      {privyReady
-                        ? `Connect ${quoteChain === "solana" ? "Phantom" : "MetaMask"}`
-                        : "Loading..."}
-                    </button>
-                  )}
-              </div>
-            </div>
-          )}
-
-          {/* Header */}
-          <div className="flex items-center justify-between px-3 sm:px-5 pt-4 sm:pt-5">
-            <div className="text-base sm:text-lg font-semibold tracking-wide">
-              Your Quote
-            </div>
-            <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm">
-              <button
-                type="button"
-                className={`px-2 py-1 rounded-md ${isChainMismatch ? "cursor-not-allowed opacity-50" : ""} ${currency === "USDC" ? "bg-white text-black" : "text-zinc-300"}`}
-                onClick={() => setCurrency("USDC")}
-                disabled={isChainMismatch}
-              >
-                USDC
-              </button>
-              <span className="text-zinc-600">|</span>
-              <button
-                type="button"
-                className={`px-2 py-1 rounded-md ${isChainMismatch ? "cursor-not-allowed opacity-50" : ""} ${currency !== "USDC" ? "bg-white text-black" : "text-zinc-300"}`}
-                onClick={() =>
-                  // Use quoteChain (token's chain), not activeFamily (user's wallet)
-                  setCurrency(
-                    isSolanaToken
-                      ? "SOL"
-                      : nativeSymbol === "BNB"
-                        ? "BNB"
-                        : "ETH",
-                  )
-                }
-                disabled={isChainMismatch}
-              >
-                {/* Show SOL for Solana tokens, ETH for EVM tokens */}
-                {isSolanaToken ? "SOL" : nativeSymbol}
-              </button>
             </div>
           </div>
+        )}
 
-          {/* Main amount card */}
-          <div className="m-3 sm:m-5 rounded-xl bg-zinc-900 ring-1 ring-white/10">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-3 sm:px-5 pt-3 sm:pt-4 gap-2">
-              <div className="text-xs sm:text-sm text-zinc-400">
-                {isFixedPriceDeal ? "Fixed Amount" : "Amount to Buy"}
-              </div>
-              {/* Only show balance and MAX button for fractional deals */}
-              {!isFixedPriceDeal && (
-                <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-zinc-400">
-                  <span className="whitespace-nowrap">
-                    Balance: {balanceDisplay}
-                  </span>
-                  <button
-                    type="button"
-                    className={`font-medium ${isChainMismatch ? "text-zinc-600 cursor-not-allowed" : "text-brand-400 hover:text-brand-300"}`}
-                    onClick={handleMaxClick}
-                    disabled={isChainMismatch}
-                  >
-                    MAX
-                  </button>
-                </div>
-              )}
+        {/* Header */}
+        <div className="flex items-center justify-between px-3 sm:px-5 pt-4 sm:pt-5">
+          <div className="text-base sm:text-lg font-semibold tracking-wide">Your Quote</div>
+          <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm">
+            <button
+              type="button"
+              className={`px-2 py-1 rounded-md ${isChainMismatch ? "cursor-not-allowed opacity-50" : ""} ${currency === "USDC" ? "bg-white text-black" : "text-zinc-300"}`}
+              onClick={() => setCurrency("USDC")}
+              disabled={isChainMismatch}
+            >
+              USDC
+            </button>
+            <span className="text-zinc-600">|</span>
+            <button
+              type="button"
+              className={`px-2 py-1 rounded-md ${isChainMismatch ? "cursor-not-allowed opacity-50" : ""} ${currency !== "USDC" ? "bg-white text-black" : "text-zinc-300"}`}
+              onClick={() =>
+                // Use quoteChain (token's chain), not activeFamily (user's wallet)
+                setCurrency(isSolanaToken ? "SOL" : nativeSymbol === "BNB" ? "BNB" : "ETH")
+              }
+              disabled={isChainMismatch}
+            >
+              {/* Show SOL for Solana tokens, ETH for EVM tokens */}
+              {isSolanaToken ? "SOL" : nativeSymbol}
+            </button>
+          </div>
+        </div>
+
+        {/* Main amount card */}
+        <div className="m-3 sm:m-5 rounded-xl bg-zinc-900 ring-1 ring-white/10">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-3 sm:px-5 pt-3 sm:pt-4 gap-2">
+            <div className="text-xs sm:text-sm text-zinc-400">
+              {isFixedPriceDeal ? "Fixed Amount" : "Amount to Buy"}
             </div>
-            <div className="px-3 sm:px-5 pb-3 sm:pb-4">
-              <div className="flex items-center justify-between gap-2 sm:gap-3">
-                {isFixedPriceDeal ? (
-                  /* Fixed price: Show amount as static text */
-                  <div className="text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white">
-                    {tokenAmount.toLocaleString()}
+            {/* Only show balance and MAX button for fractional deals */}
+            {!isFixedPriceDeal && (
+              <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-zinc-400">
+                <span className="whitespace-nowrap">Balance: {balanceDisplay}</span>
+                <button
+                  type="button"
+                  className={`font-medium ${isChainMismatch ? "text-zinc-600 cursor-not-allowed" : "text-brand-400 hover:text-brand-300"}`}
+                  onClick={handleMaxClick}
+                  disabled={isChainMismatch}
+                >
+                  MAX
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="px-3 sm:px-5 pb-3 sm:pb-4">
+            <div className="flex items-center justify-between gap-2 sm:gap-3">
+              {isFixedPriceDeal ? (
+                /* Fixed price: Show amount as static text */
+                <div className="text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white">
+                  {tokenAmount.toLocaleString()}
+                </div>
+              ) : (
+                /* Fractional: Show editable input */
+                <input
+                  data-testid="token-amount-input"
+                  type="number"
+                  value={tokenAmount}
+                  onChange={(e) => setTokenAmount(Number(e.target.value))}
+                  min={1}
+                  max={effectiveMaxTokens}
+                  disabled={isChainMismatch}
+                  className={`w-full bg-transparent border-none outline-none text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight ${isChainMismatch ? "text-zinc-500 cursor-not-allowed" : "text-white"}`}
+                />
+              )}
+              <div className="flex items-center gap-3 text-right flex-shrink-0">
+                {/* Token Logo */}
+                <div className="h-10 w-10 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden ring-1 ring-white/10 relative">
+                  {/* Use tokenMetadata if loaded, otherwise fallback to quote data (always available) */}
+                  {tokenMetadata?.logoUrl ? (
+                    <Image
+                      src={tokenMetadata.logoUrl}
+                      alt={tokenMetadata.symbol}
+                      fill
+                      className="object-cover"
+                      unoptimized
+                      onError={(e) => {
+                        // Fallback to symbol if image fails - hide the image
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
+                  ) : null}
+                  {/* Fallback symbol - shown when no logo or logo fails to load */}
+                  {(!tokenMetadata || !tokenMetadata.logoUrl) && (
+                    <span className="text-brand-400 text-sm font-bold">
+                      {(tokenMetadata?.symbol || initialQuote.tokenSymbol).slice(0, 2)}
+                    </span>
+                  )}
+                </div>
+                {/* Token Name & Symbol */}
+                <div className="text-right min-w-0">
+                  <div className="text-sm font-semibold truncate">
+                    {tokenMetadata ? tokenMetadata.symbol : initialQuote.tokenSymbol}
                   </div>
-                ) : (
-                  /* Fractional: Show editable input */
+                  <div className="text-xs text-zinc-400 truncate max-w-[120px]">
+                    {tokenMetadata ? tokenMetadata.name : initialQuote.tokenSymbol}
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* Only show range info and slider for fractional deals */}
+            {!isFixedPriceDeal && (
+              <>
+                <div className="mt-1 text-[10px] sm:text-xs text-zinc-500">
+                  {`1 - ${effectiveMaxTokens.toLocaleString()} ${initialQuote.tokenSymbol} available`}
+                </div>
+                <div className="mt-2">
                   <input
-                    data-testid="token-amount-input"
-                    type="number"
-                    value={tokenAmount}
-                    onChange={(e) => setTokenAmount(Number(e.target.value))}
+                    data-testid="token-amount-slider"
+                    type="range"
                     min={1}
                     max={effectiveMaxTokens}
+                    value={tokenAmount}
+                    onChange={(e) => setTokenAmount(Number(e.target.value))}
                     disabled={isChainMismatch}
-                    className={`w-full bg-transparent border-none outline-none text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight ${isChainMismatch ? "text-zinc-500 cursor-not-allowed" : "text-white"}`}
+                    className={`w-full ${isChainMismatch ? "accent-zinc-600 cursor-not-allowed opacity-50" : "accent-brand-500"}`}
                   />
-                )}
-                <div className="flex items-center gap-3 text-right flex-shrink-0">
-                  {/* Token Logo */}
-                  <div className="h-10 w-10 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden ring-1 ring-white/10 relative">
-                    {/* Use tokenMetadata if loaded, otherwise fallback to quote data (always available) */}
-                    {tokenMetadata && tokenMetadata.logoUrl ? (
-                      <Image
-                        src={tokenMetadata.logoUrl}
-                        alt={tokenMetadata.symbol}
-                        fill
-                        className="object-cover"
-                        unoptimized
-                        onError={(e) => {
-                          // Fallback to symbol if image fails - hide the image
-                          e.currentTarget.style.display = "none";
-                        }}
-                      />
-                    ) : null}
-                    {/* Fallback symbol - shown when no logo or logo fails to load */}
-                    {(!tokenMetadata || !tokenMetadata.logoUrl) && (
-                      <span className="text-brand-400 text-sm font-bold">
-                        {(
-                          tokenMetadata?.symbol || initialQuote.tokenSymbol
-                        ).slice(0, 2)}
-                      </span>
-                    )}
-                  </div>
-                  {/* Token Name & Symbol */}
-                  <div className="text-right min-w-0">
-                    <div className="text-sm font-semibold truncate">
-                      {tokenMetadata
-                        ? tokenMetadata.symbol
-                        : initialQuote.tokenSymbol}
-                    </div>
-                    <div className="text-xs text-zinc-400 truncate max-w-[120px]">
-                      {tokenMetadata
-                        ? tokenMetadata.name
-                        : initialQuote.tokenSymbol}
-                    </div>
-                  </div>
                 </div>
+              </>
+            )}
+            {/* Show "Fixed Price Deal" label for non-fractional */}
+            {isFixedPriceDeal && (
+              <div className="mt-2 text-[10px] sm:text-xs text-brand-400">
+                This is a fixed-price deal — buy the entire allocation
               </div>
-              {/* Only show range info and slider for fractional deals */}
-              {!isFixedPriceDeal && (
-                <>
-                  <div className="mt-1 text-[10px] sm:text-xs text-zinc-500">
-                    {`1 - ${effectiveMaxTokens.toLocaleString()} ${initialQuote.tokenSymbol} available`}
-                  </div>
-                  <div className="mt-2">
-                    <input
-                      data-testid="token-amount-slider"
-                      type="range"
-                      min={1}
-                      max={effectiveMaxTokens}
-                      value={tokenAmount}
-                      onChange={(e) => setTokenAmount(Number(e.target.value))}
-                      disabled={isChainMismatch}
-                      className={`w-full ${isChainMismatch ? "accent-zinc-600 cursor-not-allowed opacity-50" : "accent-brand-500"}`}
-                    />
-                  </div>
-                </>
-              )}
-              {/* Show "Fixed Price Deal" label for non-fractional */}
-              {isFixedPriceDeal && (
-                <div className="mt-2 text-[10px] sm:text-xs text-brand-400">
-                  This is a fixed-price deal — buy the entire allocation
-                </div>
-              )}
-            </div>
+            )}
           </div>
+        </div>
 
-          {/* Stats row */}
-          <div className="px-3 sm:px-5 pb-1">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6 text-xs sm:text-sm">
-              <div>
-                <div className="text-zinc-500 text-xs">Your Discount</div>
-                <div className="text-base sm:text-lg font-semibold">
-                  {(discountBps / 100).toFixed(0)}%
-                </div>
+        {/* Stats row */}
+        <div className="px-3 sm:px-5 pb-1">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6 text-xs sm:text-sm">
+            <div>
+              <div className="text-zinc-500 text-xs">Your Discount</div>
+              <div className="text-base sm:text-lg font-semibold">
+                {(discountBps / 100).toFixed(0)}%
               </div>
-              <div>
-                <div className="text-zinc-500 text-xs">Maturity</div>
-                <div className="text-base sm:text-lg font-semibold">
-                  {Math.round(lockupDays / 30)} mo
-                </div>
+            </div>
+            <div>
+              <div className="text-zinc-500 text-xs">Maturity</div>
+              <div className="text-base sm:text-lg font-semibold">
+                {Math.round(lockupDays / 30)} mo
               </div>
-              <div>
-                <div className="text-zinc-500 text-xs">Maturity date</div>
-                <div className="text-base sm:text-lg font-semibold">
-                  {new Date(
-                    Date.now() + lockupDays * 24 * 60 * 60 * 1000,
-                  ).toLocaleDateString(undefined, {
+            </div>
+            <div>
+              <div className="text-zinc-500 text-xs">Maturity date</div>
+              <div className="text-base sm:text-lg font-semibold">
+                {new Date(Date.now() + lockupDays * 24 * 60 * 60 * 1000).toLocaleDateString(
+                  undefined,
+                  {
                     month: "2-digit",
                     day: "2-digit",
                     year: "2-digit",
-                  })}
-                </div>
+                  },
+                )}
               </div>
-              <div>
-                <div className="text-zinc-500 text-xs">Est. Payment</div>
-                <div className="text-base sm:text-lg font-semibold">
-                  {currency === "USDC" && estimatedPayment.usdc
-                    ? `$${Number(estimatedPayment.usdc).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-                    : (currency === "ETH" || currency === "BNB") &&
-                        estimatedPayment.native
-                      ? `${estimatedPayment.native} ${nativeSymbol}`
-                      : (currency === "ETH" || currency === "BNB") &&
-                          estimatedPayment.usd
+            </div>
+            <div>
+              <div className="text-zinc-500 text-xs">Est. Payment</div>
+              <div className="text-base sm:text-lg font-semibold">
+                {currency === "USDC" && estimatedPayment.usdc
+                  ? `$${Number(estimatedPayment.usdc).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                  : (currency === "ETH" || currency === "BNB") && estimatedPayment.native
+                    ? `${estimatedPayment.native} ${nativeSymbol}`
+                    : (currency === "ETH" || currency === "BNB") && estimatedPayment.usd
+                      ? `~$${Number(estimatedPayment.usd).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                      : currency === "SOL" && estimatedPayment.usd
                         ? `~$${Number(estimatedPayment.usd).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-                        : currency === "SOL" && estimatedPayment.usd
-                          ? `~$${Number(estimatedPayment.usd).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-                          : "—"}
-                </div>
+                        : "—"}
               </div>
             </div>
           </div>
+        </div>
 
-          {requireApprover && (
-            <div className="px-3 sm:px-5 pb-1 text-xs text-zinc-400">
-              Payment will be executed by the desk&apos;s whitelisted approver
-              wallet on your behalf after approval.
-            </div>
-          )}
+        {requireApprover && (
+          <div className="px-3 sm:px-5 pb-1 text-xs text-zinc-400">
+            Payment will be executed by the desk&apos;s whitelisted approver wallet on your behalf
+            after approval.
+          </div>
+        )}
 
-          {(error || validationError || insufficientFunds) && (
-            <div className="px-3 sm:px-5 pt-2 text-xs text-red-400">
-              {error ||
-                validationError ||
-                (insufficientFunds
-                  ? `Insufficient ${currency} balance for this purchase.`
-                  : null)}
-            </div>
-          )}
+        {(error || validationError || insufficientFunds) && (
+          <div className="px-3 sm:px-5 pt-2 text-xs text-red-400">
+            {error ||
+              validationError ||
+              (insufficientFunds ? `Insufficient ${currency} balance for this purchase.` : null)}
+          </div>
+        )}
 
-          {/* Actions / Connect state */}
-          {!walletConnected ? (
-            <div className="px-3 sm:px-5 pb-4 sm:pb-5">
-              <div className="rounded-xl overflow-hidden ring-1 ring-white/10 bg-zinc-900">
-                <div className="relative">
-                  <div className="relative min-h-[200px] sm:min-h-[280px] w-full bg-gradient-to-br from-zinc-900 to-zinc-800 py-6 sm:py-8">
-                    <div
-                      aria-hidden
-                      className="absolute inset-0 opacity-30 bg-no-repeat bg-right-bottom"
-                      style={{
-                        backgroundImage: "url('/business.png')",
-                        backgroundSize: "contain",
-                      }}
-                    />
-                    <div className="relative z-10 h-full w-full flex flex-col items-center justify-center text-center px-4 sm:px-6">
-                      <h3 className="text-lg sm:text-xl font-semibold text-white tracking-tight mb-2">
-                        Sign in to continue
-                      </h3>
-                      <p className="text-zinc-300 text-sm sm:text-md mb-4">
-                        Let&apos;s deal, anon.
-                      </p>
-                      {/* Single connect button - Privy handles wallet detection */}
-                      <Button
-                        onClick={handleConnect}
-                        disabled={!privyReady}
-                        color="brand"
-                        className="!px-6 sm:!px-8 !py-2 sm:!py-3 !text-base sm:!text-lg"
-                      >
-                        {privyReady ? "Connect Wallet" : "Loading..."}
-                      </Button>
-                      <p className="text-xs text-zinc-500 mt-3 sm:mt-4">
-                        Supports Farcaster, MetaMask, Phantom, Coinbase Wallet &
-                        more
-                      </p>
-                    </div>
+        {/* Actions / Connect state */}
+        {!walletConnected ? (
+          <div className="px-3 sm:px-5 pb-4 sm:pb-5">
+            <div className="rounded-xl overflow-hidden ring-1 ring-white/10 bg-zinc-900">
+              <div className="relative">
+                <div className="relative min-h-[200px] sm:min-h-[280px] w-full bg-gradient-to-br from-zinc-900 to-zinc-800 py-6 sm:py-8">
+                  <div
+                    aria-hidden
+                    className="absolute inset-0 opacity-30 bg-no-repeat bg-right-bottom"
+                    style={{
+                      backgroundImage: "url('/business.png')",
+                      backgroundSize: "contain",
+                    }}
+                  />
+                  <div className="relative z-10 h-full w-full flex flex-col items-center justify-center text-center px-4 sm:px-6">
+                    <h3 className="text-lg sm:text-xl font-semibold text-white tracking-tight mb-2">
+                      Sign in to continue
+                    </h3>
+                    <p className="text-zinc-300 text-sm sm:text-md mb-4">Let&apos;s deal, anon.</p>
+                    {/* Single connect button - Privy handles wallet detection */}
+                    <Button
+                      onClick={handleConnect}
+                      disabled={!privyReady}
+                      color="brand"
+                      className="!px-6 sm:!px-8 !py-2 sm:!py-3 !text-base sm:!text-lg"
+                    >
+                      {privyReady ? "Connect Wallet" : "Loading..."}
+                    </Button>
+                    <p className="text-xs text-zinc-500 mt-3 sm:mt-4">
+                      Supports Farcaster, MetaMask, Phantom, Coinbase Wallet & more
+                    </p>
                   </div>
                 </div>
-                <div className="p-3 sm:p-4 text-xs text-zinc-400">
-                  This token is on{" "}
-                  <span className="font-semibold">
-                    {quoteChain === "solana"
-                      ? "Solana"
-                      : quoteChain === "base"
-                        ? "BASE"
-                        : quoteChain === "bsc"
-                          ? "BSC"
-                          : quoteChain === "ethereum"
-                            ? "ETHEREUM"
-                            : String(quoteChain).toUpperCase()}
-                  </span>
-                  . Connect a compatible wallet to buy.
-                </div>
               </div>
-              <div className="flex items-center justify-end gap-2 sm:gap-3 mt-3 sm:mt-4">
-                <Button onClick={onClose} color="dark">
-                  <div className="px-3 sm:px-4 py-2">Cancel</div>
-                </Button>
+              <div className="p-3 sm:p-4 text-xs text-zinc-400">
+                This token is on{" "}
+                <span className="font-semibold">
+                  {quoteChain === "solana"
+                    ? "Solana"
+                    : quoteChain === "base"
+                      ? "BASE"
+                      : quoteChain === "bsc"
+                        ? "BSC"
+                        : quoteChain === "ethereum"
+                          ? "ETHEREUM"
+                          : String(quoteChain).toUpperCase()}
+                </span>
+                . Connect a compatible wallet to buy.
               </div>
             </div>
-          ) : step !== "complete" ? (
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 px-3 sm:px-5 py-4 sm:py-5">
-              <Button
-                onClick={onClose}
-                color="dark"
-                className="w-full sm:w-auto"
-              >
-                <div className="px-4 py-2">Cancel</div>
-              </Button>
-              <Button
-                data-testid="confirm-amount-button"
-                onClick={handleConfirm}
-                color="brand"
-                className="w-full sm:w-auto"
-                disabled={
-                  Boolean(validationError) ||
-                  insufficientFunds ||
-                  isProcessing ||
-                  isChainMismatch ||
-                  isWaitingForNativePrice
-                }
-                title={
-                  isChainMismatch
-                    ? `Switch to ${quoteChain === "solana" ? "Solana" : "EVM"} first`
-                    : isWaitingForNativePrice
-                      ? "Loading prices..."
-                      : undefined
-                }
-              >
-                <div className="px-4 py-2">
-                  {isWaitingForNativePrice ? "Loading Prices..." : "Buy Now"}
-                </div>
+            <div className="flex items-center justify-end gap-2 sm:gap-3 mt-3 sm:mt-4">
+              <Button onClick={onClose} color="dark">
+                <div className="px-3 sm:px-4 py-2">Cancel</div>
               </Button>
             </div>
-          ) : null}
-
-          {/* Progress states */}
-          {step === "creating" && (
-            <div className="px-5 pb-6">
-              <div className="text-center py-6">
-                <LoadingSpinner size={48} className="mx-auto mb-4" />
-                <h3 className="font-semibold mb-2">Creating Offer</h3>
-                <p className="text-sm text-zinc-400">
-                  Confirm the transaction in your wallet to create your offer
-                  on-chain.
-                </p>
+          </div>
+        ) : step !== "complete" ? (
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 px-3 sm:px-5 py-4 sm:py-5">
+            <Button onClick={onClose} color="dark" className="w-full sm:w-auto">
+              <div className="px-4 py-2">Cancel</div>
+            </Button>
+            <Button
+              data-testid="confirm-amount-button"
+              onClick={handleConfirm}
+              color="brand"
+              className="w-full sm:w-auto"
+              disabled={
+                Boolean(validationError) ||
+                insufficientFunds ||
+                isProcessing ||
+                isChainMismatch ||
+                isWaitingForNativePrice
+              }
+              title={
+                isChainMismatch
+                  ? `Switch to ${quoteChain === "solana" ? "Solana" : "EVM"} first`
+                  : isWaitingForNativePrice
+                    ? "Loading prices..."
+                    : undefined
+              }
+            >
+              <div className="px-4 py-2">
+                {isWaitingForNativePrice ? "Loading Prices..." : "Buy Now"}
               </div>
-            </div>
-          )}
+            </Button>
+          </div>
+        ) : null}
 
-          {step === "await_approval" && (
-            <div className="px-5 pb-6">
-              <div className="text-center py-6">
-                <LoadingSpinner
-                  size={48}
-                  colorClass="border-green-500"
-                  className="mx-auto mb-4"
-                />
-                <h3 className="font-semibold mb-2">Processing Deal</h3>
-                <p className="text-sm text-zinc-400">
-                  Our desk is reviewing and completing your purchase. Payment
-                  will be processed automatically.
-                </p>
-                <p className="text-xs text-zinc-500 mt-2">
-                  This usually takes a few seconds...
-                </p>
-              </div>
+        {/* Progress states */}
+        {step === "creating" && (
+          <div className="px-5 pb-6">
+            <div className="text-center py-6">
+              <LoadingSpinner size={48} className="mx-auto mb-4" />
+              <h3 className="font-semibold mb-2">Creating Offer</h3>
+              <p className="text-sm text-zinc-400">
+                Confirm the transaction in your wallet to create your offer on-chain.
+              </p>
             </div>
-          )}
+          </div>
+        )}
 
-          {step === "paying" && (
-            <div className="px-5 pb-6">
-              <div className="text-center py-6">
-                <LoadingSpinner
-                  size={48}
-                  colorClass="border-blue-500"
-                  className="mx-auto mb-4"
-                />
-                <h3 className="font-semibold mb-2">Completing Payment</h3>
-                <p className="text-sm text-zinc-400">
-                  Finalizing your purchase on-chain...
-                </p>
-              </div>
+        {step === "await_approval" && (
+          <div className="px-5 pb-6">
+            <div className="text-center py-6">
+              <LoadingSpinner size={48} colorClass="border-green-500" className="mx-auto mb-4" />
+              <h3 className="font-semibold mb-2">Processing Deal</h3>
+              <p className="text-sm text-zinc-400">
+                Our desk is reviewing and completing your purchase. Payment will be processed
+                automatically.
+              </p>
+              <p className="text-xs text-zinc-500 mt-2">This usually takes a few seconds...</p>
             </div>
-          )}
+          </div>
+        )}
 
-          {step === "complete" && (
-            <div className="px-5 pb-6">
-              <div className="text-center py-6">
-                <div className="w-12 h-12 rounded-full bg-green-900/30 flex items-center justify-center mx-auto mb-4">
-                  <svg
-                    className="w-6 h-6 text-green-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                </div>
-                <h3 className="font-semibold mb-2">Deal Complete</h3>
-                <p className="text-sm text-zinc-400">
-                  Your purchase is complete. You&apos;ll receive your tokens at
-                  maturity.
-                </p>
-                {completedTxHash && (
-                  <a
-                    href={getExplorerUrl(completedTxHash)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300 mt-3"
-                  >
-                    View transaction ↗
-                  </a>
-                )}
-                <p className="text-xs text-zinc-500 mt-3">
-                  Redirecting to your deal page...
-                </p>
-              </div>
+        {step === "paying" && (
+          <div className="px-5 pb-6">
+            <div className="text-center py-6">
+              <LoadingSpinner size={48} colorClass="border-blue-500" className="mx-auto mb-4" />
+              <h3 className="font-semibold mb-2">Completing Payment</h3>
+              <p className="text-sm text-zinc-400">Finalizing your purchase on-chain...</p>
             </div>
-          )}
-        </div>
-      </Dialog>
-    </>
+          </div>
+        )}
+
+        {step === "complete" && (
+          <div className="px-5 pb-6">
+            <div className="text-center py-6">
+              <div className="w-12 h-12 rounded-full bg-green-900/30 flex items-center justify-center mx-auto mb-4">
+                <svg
+                  className="w-6 h-6 text-green-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              </div>
+              <h3 className="font-semibold mb-2">Deal Complete</h3>
+              <p className="text-sm text-zinc-400">
+                Your purchase is complete. You&apos;ll receive your tokens at maturity.
+              </p>
+              {completedTxHash && (
+                <a
+                  href={getExplorerUrl(completedTxHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300 mt-3"
+                >
+                  View transaction ↗
+                </a>
+              )}
+              <p className="text-xs text-zinc-500 mt-3">Redirecting to your deal page...</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </Dialog>
   );
 }

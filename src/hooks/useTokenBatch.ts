@@ -9,17 +9,13 @@ import { tokenKeys } from "./queryKeys";
 const TokenIdsArraySchema = z.array(z.string().min(1));
 
 // API returns flat Token objects (not wrapped in { token, marketData })
-async function fetchTokenBatch(
-  tokenIds: string[],
-): Promise<Record<string, Token | null>> {
+async function fetchTokenBatch(tokenIds: string[]): Promise<Record<string, Token | null>> {
   if (tokenIds.length === 0) return {};
 
   // Validate token IDs
   parseOrThrow(TokenIdsArraySchema, tokenIds);
 
-  const response = await fetch(
-    `/api/tokens/batch?ids=${encodeURIComponent(tokenIds.join(","))}`,
-  );
+  const response = await fetch(`/api/tokens/batch?ids=${encodeURIComponent(tokenIds.join(","))}`);
   const rawData = await response.json();
 
   // Validate response structure

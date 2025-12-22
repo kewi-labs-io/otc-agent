@@ -40,9 +40,7 @@ export async function GET(request: NextRequest) {
     try {
       const token = await TokenDB.getToken(tokenId);
       // Token type requires decimals - no optional chaining needed
-      console.log(
-        `[Token Decimals] Found in DB: ${token.decimals} for ${tokenId}`,
-      );
+      console.log(`[Token Decimals] Found in DB: ${token.decimals} for ${tokenId}`);
       const response = {
         success: true,
         decimals: token.decimals,
@@ -52,9 +50,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(validatedResponse);
     } catch {
       // Token not in DB - proceed to on-chain fetch
-      console.log(
-        `[Token Decimals] Not in DB, fetching from chain: ${tokenId}`,
-      );
+      console.log(`[Token Decimals] Not in DB, fetching from chain: ${tokenId}`);
     }
 
     // Fetch from on-chain
@@ -66,13 +62,10 @@ export async function GET(request: NextRequest) {
       const mintPubkey = new PublicKey(address);
       const mintInfo = await getMint(connection, mintPubkey);
       decimals = mintInfo.decimals;
-      console.log(
-        `[Token Decimals] Fetched from Solana chain: ${decimals} for ${address}`,
-      );
+      console.log(`[Token Decimals] Fetched from Solana chain: ${decimals} for ${address}`);
     } else {
       // EVM chains
-      const chainConfig =
-        chain === "ethereum" ? mainnet : chain === "bsc" ? bsc : base;
+      const chainConfig = chain === "ethereum" ? mainnet : chain === "bsc" ? bsc : base;
       let rpcUrl: string;
       if (chain === "ethereum") {
         if (!process.env.ETHEREUM_RPC_URL) {
@@ -109,9 +102,7 @@ export async function GET(request: NextRequest) {
         functionName: "decimals",
       });
       decimals = Number(result);
-      console.log(
-        `[Token Decimals] Fetched from ${chain} chain: ${decimals} for ${address}`,
-      );
+      console.log(`[Token Decimals] Fetched from ${chain} chain: ${decimals} for ${address}`);
     }
 
     // FAIL-FAST: Validate chain is a valid Chain type
@@ -145,10 +136,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to fetch token decimals",
+        error: error instanceof Error ? error.message : "Failed to fetch token decimals",
       },
       { status: 500 },
     );

@@ -24,9 +24,7 @@ export const otcDeskProvider: Provider = {
       const token = allTokens.find((t) => t.symbol === symbol);
 
       if (token) {
-        currentConsignments = await ConsignmentDB.getConsignmentsByToken(
-          token.id,
-        );
+        currentConsignments = await ConsignmentDB.getConsignmentsByToken(token.id);
       }
     }
 
@@ -45,16 +43,11 @@ General guidelines:
       if (negotiable.length === 0) {
         const fixed = currentConsignments[0];
         if (!fixed) {
-          throw new Error(
-            "OTC_DESK: currentConsignments not empty but no first element",
-          );
+          throw new Error("OTC_DESK: currentConsignments not empty but no first element");
         }
         // For fixed-price deals, the terms are public since they're non-negotiable
         // FAIL-FAST: Fixed consignments must have fixedDiscountBps and fixedLockupDays
-        if (
-          fixed.fixedDiscountBps === undefined ||
-          fixed.fixedLockupDays === undefined
-        ) {
+        if (fixed.fixedDiscountBps === undefined || fixed.fixedLockupDays === undefined) {
           throw new Error(
             `Fixed consignment ${fixed.id} missing fixedDiscountBps or fixedLockupDays`,
           );

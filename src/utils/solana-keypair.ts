@@ -6,15 +6,11 @@
  * - File-based keypair (development/localnet)
  */
 
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import type { Wallet } from "@coral-xyz/anchor";
-import {
-  Keypair,
-  type Transaction,
-  type VersionedTransaction,
-} from "@solana/web3.js";
+import { Keypair, type Transaction, type VersionedTransaction } from "@solana/web3.js";
 import bs58 from "bs58";
-import { promises as fs } from "fs";
-import path from "path";
 
 /**
  * Load Solana keypair from environment variable or file
@@ -95,9 +91,7 @@ export class KeypairWallet implements Wallet {
     return this.payer.publicKey;
   }
 
-  async signTransaction<T extends Transaction | VersionedTransaction>(
-    tx: T,
-  ): Promise<T> {
+  async signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T> {
     if ("version" in tx) {
       tx.sign([this.payer]);
     } else {
@@ -106,9 +100,7 @@ export class KeypairWallet implements Wallet {
     return tx;
   }
 
-  async signAllTransactions<T extends Transaction | VersionedTransaction>(
-    txs: T[],
-  ): Promise<T[]> {
+  async signAllTransactions<T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> {
     return Promise.all(txs.map((tx) => this.signTransaction(tx)));
   }
 }
@@ -121,12 +113,8 @@ export class KeypairWallet implements Wallet {
  */
 export interface AnchorWallet {
   publicKey: import("@solana/web3.js").PublicKey;
-  signTransaction<T extends Transaction | VersionedTransaction>(
-    tx: T,
-  ): Promise<T>;
-  signAllTransactions<T extends Transaction | VersionedTransaction>(
-    txs: T[],
-  ): Promise<T[]>;
+  signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T>;
+  signAllTransactions<T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]>;
 }
 
 /**
@@ -136,15 +124,11 @@ export interface AnchorWallet {
 export function createAnchorWallet(keypair: Keypair): AnchorWallet {
   return {
     publicKey: keypair.publicKey,
-    signTransaction: async <T extends Transaction | VersionedTransaction>(
-      tx: T,
-    ) => {
+    signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T) => {
       (tx as Transaction).partialSign(keypair);
       return tx;
     },
-    signAllTransactions: async <T extends Transaction | VersionedTransaction>(
-      txs: T[],
-    ) => {
+    signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]) => {
       txs.forEach((tx) => (tx as Transaction).partialSign(keypair));
       return txs;
     },

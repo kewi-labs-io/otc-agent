@@ -87,12 +87,12 @@ export async function GET(request: Request, ctx: RouteContext) {
   const messages = (await runtime.getMemories({
     tableName: "messages",
     roomId: roomId as UUID,
-    count: limit ? parseInt(limit) : 100, // Higher count for polling to catch all new messages
+    count: limit ? parseInt(limit, 10) : 100, // Higher count for polling to catch all new messages
     unique: false,
   })) as MemoryWithTimestamp[];
 
   // Filter messages by timestamp if provided (for polling)
-  const afterTimestampNum = afterTimestamp ? parseInt(afterTimestamp) : 0;
+  const afterTimestampNum = afterTimestamp ? parseInt(afterTimestamp, 10) : 0;
   const filteredMessages = afterTimestamp
     ? messages.filter((msg) => {
         // FAIL-FAST: createdAt should always exist for messages
@@ -128,8 +128,7 @@ export async function GET(request: Request, ctx: RouteContext) {
     success: true as const,
     messages: simple,
     hasMore: false,
-    lastTimestamp:
-      simple.length > 0 ? simple[simple.length - 1].createdAt : Date.now(),
+    lastTimestamp: simple.length > 0 ? simple[simple.length - 1].createdAt : Date.now(),
   };
   const validatedResponse = RoomMessagesResponseSchema.parse(response);
   return NextResponse.json(validatedResponse, {

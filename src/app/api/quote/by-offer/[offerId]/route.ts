@@ -14,10 +14,7 @@ export async function GET(
   await agentRuntime.getRuntime();
 
   const routeParams = await params;
-  const validatedParams = validateRouteParams(
-    GetQuoteByOfferParamsSchema,
-    routeParams,
-  );
+  const validatedParams = validateRouteParams(GetQuoteByOfferParamsSchema, routeParams);
 
   const { offerId } = validatedParams;
 
@@ -26,9 +23,7 @@ export async function GET(
 
   // FAIL-FAST: QuoteService must be available
   if (!quoteService) {
-    throw new Error(
-      "QuoteService not available - agent runtime not properly initialized",
-    );
+    throw new Error("QuoteService not available - agent runtime not properly initialized");
   }
 
   // Search for quote with matching offerId
@@ -36,13 +31,10 @@ export async function GET(
 
   if (!matchingQuote) {
     const notFoundResponse = { error: "Quote not found for this offer" };
-    const validatedNotFound =
-      QuoteByOfferErrorResponseSchema.parse(notFoundResponse);
+    const validatedNotFound = QuoteByOfferErrorResponseSchema.parse(notFoundResponse);
     return NextResponse.json(validatedNotFound, { status: 404 });
   }
 
   // Redirect to the deal page
-  return NextResponse.redirect(
-    new URL(`/deal/${matchingQuote.quoteId}`, request.url),
-  );
+  return NextResponse.redirect(new URL(`/deal/${matchingQuote.quoteId}`, request.url));
 }

@@ -5,8 +5,8 @@
  * Falls back gracefully when blob storage is not available.
  */
 
+import crypto from "node:crypto";
 import { head, put } from "@vercel/blob";
-import crypto from "crypto";
 
 /**
  * Check if blob storage is available (BLOB_READ_WRITE_TOKEN is set)
@@ -103,9 +103,7 @@ export async function fetchWithIpfsGatewayFallback(
         console.log(`[Blob Storage] IPFS fetched from ${gateway}`);
         return response;
       }
-      errors.push(
-        new Error(`Gateway ${gateway} returned HTTP ${response.status}`),
-      );
+      errors.push(new Error(`Gateway ${gateway} returned HTTP ${response.status}`));
     }
     throw new Error(
       `Failed to fetch IPFS content from all gateways: ${errors.map((e) => e.message).join(", ")}`,
@@ -120,9 +118,7 @@ export async function fetchWithIpfsGatewayFallback(
 
   // FAIL-FAST: Check response status
   if (!response.ok) {
-    throw new Error(
-      `Failed to fetch image: ${imageUrl} (HTTP ${response.status})`,
-    );
+    throw new Error(`Failed to fetch image: ${imageUrl} (HTTP ${response.status})`);
   }
 
   return response;
@@ -164,9 +160,7 @@ export async function checkBlobCache(imageUrl: string): Promise<string | null> {
 
   // FAIL-FAST: If head() succeeded, existing.url MUST exist (required field in Vercel Blob response)
   if (!existing.url) {
-    throw new Error(
-      `Blob head() succeeded but missing url field for ${blobPath}`,
-    );
+    throw new Error(`Blob head() succeeded but missing url field for ${blobPath}`);
   }
   return existing.url;
 }
@@ -177,9 +171,7 @@ export async function checkBlobCache(imageUrl: string): Promise<string | null> {
  *
  * @param imageUrl - The original image URL to cache
  */
-export async function cacheImageToBlob(
-  imageUrl: string | null,
-): Promise<string | null> {
+export async function cacheImageToBlob(imageUrl: string | null): Promise<string | null> {
   if (!imageUrl) return null;
 
   // Skip if already a blob URL
@@ -214,9 +206,7 @@ export async function cacheImageToBlob(
   // FAIL-FAST: If head() succeeded, existing.url MUST exist (required field in Vercel Blob response)
   if (existing) {
     if (!existing.url) {
-      throw new Error(
-        `Blob head() succeeded but missing url field for ${blobPath}`,
-      );
+      throw new Error(`Blob head() succeeded but missing url field for ${blobPath}`);
     }
     return existing.url;
   }
@@ -246,9 +236,7 @@ export async function cacheImageToBlob(
 /**
  * Batch check blob cache for multiple URLs
  */
-export async function batchCheckBlobCache(
-  imageUrls: string[],
-): Promise<Record<string, string>> {
+export async function batchCheckBlobCache(imageUrls: string[]): Promise<Record<string, string>> {
   if (!isBlobStorageAvailable() || imageUrls.length === 0) return {};
 
   const results = await Promise.all(

@@ -1,9 +1,9 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import * as anchor from "@coral-xyz/anchor";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { promises as fs } from "fs";
 import { type NextRequest, NextResponse } from "next/server";
-import path from "path";
 import { getSolanaConfig } from "@/config/contracts";
 import { getHeliusRpcUrl, getNetwork } from "@/config/env";
 import { validationErrorResponse } from "@/lib/validation/helpers";
@@ -34,8 +34,7 @@ export async function POST(request: NextRequest) {
   // Get Solana config from deployment
   const network = getNetwork();
   const solanaConfig = getSolanaConfig();
-  const SOLANA_RPC =
-    network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
+  const SOLANA_RPC = network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
   const SOLANA_DESK = solanaConfig.desk;
 
   if (!SOLANA_DESK) {
@@ -59,17 +58,11 @@ export async function POST(request: NextRequest) {
       "Got:",
       deskKeypair.publicKey.toBase58(),
     );
-    return NextResponse.json(
-      { error: "Desk keypair mismatch" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Desk keypair mismatch" }, { status: 500 });
   }
 
   // Load IDL
-  const idlPath = path.join(
-    process.cwd(),
-    "solana/otc-program/target/idl/otc.json",
-  );
+  const idlPath = path.join(process.cwd(), "solana/otc-program/target/idl/otc.json");
   const idl = JSON.parse(await fs.readFile(idlPath, "utf8"));
 
   const connection = new Connection(SOLANA_RPC, "confirmed");
@@ -116,18 +109,12 @@ export async function POST(request: NextRequest) {
       );
     }
     console.error("[Solana Claim API] Error fetching offer:", message);
-    return NextResponse.json(
-      { error: `Failed to fetch offer: ${message}` },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: `Failed to fetch offer: ${message}` }, { status: 500 });
   }
 
   // Check offer state
   if (!offerData) {
-    return NextResponse.json(
-      { error: `Offer account is empty: ${offerAddress}` },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: `Offer account is empty: ${offerAddress}` }, { status: 404 });
   }
 
   if (offerData.fulfilled) {
@@ -136,9 +123,7 @@ export async function POST(request: NextRequest) {
       alreadyClaimed: true,
       message: "Offer already claimed",
     };
-    const validatedAlreadyClaimed = SolanaClaimResponseSchema.parse(
-      alreadyClaimedResponse,
-    );
+    const validatedAlreadyClaimed = SolanaClaimResponseSchema.parse(alreadyClaimedResponse);
     return NextResponse.json(validatedAlreadyClaimed);
   }
 
@@ -159,15 +144,12 @@ export async function POST(request: NextRequest) {
 
   const now = Math.floor(Date.now() / 1000);
   if (now < offerData.unlockTime) {
-    console.log(
-      `[Solana Claim] Lockup not expired yet. Will auto-claim at unlock time.`,
-    );
+    console.log(`[Solana Claim] Lockup not expired yet. Will auto-claim at unlock time.`);
     return NextResponse.json(
       {
         success: true,
         scheduled: true,
-        message:
-          "Tokens will be automatically distributed after lockup expires",
+        message: "Tokens will be automatically distributed after lockup expires",
         unlockTime: offerData.unlockTime,
         secondsRemaining: offerData.unlockTime - now,
       },
@@ -181,16 +163,9 @@ export async function POST(request: NextRequest) {
 
   // Detect token program (Token or Token-2022)
   const tokenProgramId = await getTokenProgramId(connection, tokenMint);
-  console.log(
-    `[Solana Claim] Using token program: ${tokenProgramId.toString()}`,
-  );
+  console.log(`[Solana Claim] Using token program: ${tokenProgramId.toString()}`);
 
-  const deskTokenTreasury = await getAssociatedTokenAddress(
-    tokenMint,
-    desk,
-    true,
-    tokenProgramId,
-  );
+  const deskTokenTreasury = await getAssociatedTokenAddress(tokenMint, desk, true, tokenProgramId);
   const beneficiaryPk = new PublicKey(beneficiary);
   const beneficiaryTokenAta = await getAssociatedTokenAddress(
     tokenMint,

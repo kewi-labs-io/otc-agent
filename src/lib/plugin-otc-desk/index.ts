@@ -30,17 +30,10 @@ import { tokenProvider as shawProvider } from "./providers/shaw";
 import { tokenProvider as elizaTokenProvider } from "./providers/token";
 import QuoteService from "./services/quoteService";
 import { UserSessionStorageService } from "./services/userSessionStorage";
-import type {
-  EntitySourceMetadata,
-  PaymentCurrency,
-  QuoteMemory,
-} from "./types";
+import type { EntitySourceMetadata, PaymentCurrency, QuoteMemory } from "./types";
 
 // Helper function to safely get entity metadata for a source
-function getEntitySourceMetadata(
-  entity: Entity | null,
-  source: string,
-): EntitySourceMetadata {
+function getEntitySourceMetadata(entity: Entity | null, source: string): EntitySourceMetadata {
   if (!entity?.metadata) return {};
   const sourceData = entity.metadata[source];
   if (!sourceData || typeof sourceData !== "object") return {};
@@ -49,10 +42,7 @@ function getEntitySourceMetadata(
 
 // Interface for websocket service with sendMessage capability
 interface WebSocketServiceWithSendMessage {
-  sendMessage(message: {
-    type: string;
-    payload: Record<string, unknown>;
-  }): Promise<void>;
+  sendMessage(message: { type: string; payload: Record<string, unknown> }): Promise<void>;
 }
 
 /**
@@ -71,9 +61,7 @@ function extractResponseText(text: string): string | null {
     // Attempt to find *any* XML block as a fallback, but log that it wasn't the expected <response>
     const fallbackMatch = text.match(/<(\w+)>([\s\S]*?)<\/\1>/);
     if (fallbackMatch && fallbackMatch[2] !== undefined) {
-      logger.warn(
-        `Found <${fallbackMatch[1]}> tag instead of <response>. Using its content.`,
-      );
+      logger.warn(`Found <${fallbackMatch[1]}> tag instead of <response>. Using its content.`);
       const fallbackContent = fallbackMatch[2].trim();
       return fallbackContent || null; // Return null if content is empty after trimming
     }
@@ -158,15 +146,8 @@ type MediaData = {
 };
 
 // Helper functions for response ID tracking in serverless environment
-async function getLatestResponseId(
-  runtime: IAgentRuntime,
-  roomId: string,
-): Promise<string | null> {
-  return (
-    (await runtime.getCache<string>(
-      `response_id:${runtime.agentId}:${roomId}`,
-    )) || null
-  );
+async function getLatestResponseId(runtime: IAgentRuntime, roomId: string): Promise<string | null> {
+  return (await runtime.getCache<string>(`response_id:${runtime.agentId}:${roomId}`)) || null;
 }
 
 async function setLatestResponseId(
@@ -186,10 +167,7 @@ async function setLatestResponseId(
   await runtime.setCache(key, responseId);
 }
 
-async function clearLatestResponseId(
-  runtime: IAgentRuntime,
-  roomId: string,
-): Promise<void> {
+async function clearLatestResponseId(runtime: IAgentRuntime, roomId: string): Promise<void> {
   const key = `response_id:${runtime.agentId}:${roomId}`;
   console.log("[clearLatestResponseId] Deleting cache key:", key);
   await runtime.deleteCache(key);
@@ -206,9 +184,7 @@ async function clearLatestResponseId(
  * @param {Media[]} attachments - Array of Media objects to fetch data from.
  * @returns {Promise<MediaData[]>} - A Promise that resolves with an array of MediaData objects.
  */
-export async function fetchMediaData(
-  attachments: Media[],
-): Promise<MediaData[]> {
+export async function fetchMediaData(attachments: Media[]): Promise<MediaData[]> {
   return Promise.all(
     attachments.map(async (attachment: Media) => {
       if (/^(http|https):\/\//.test(attachment.url)) {
@@ -221,9 +197,7 @@ export async function fetchMediaData(
         const mediaType = attachment.contentType || "image/png";
         return { data: mediaBuffer, mediaType };
       }
-      throw new Error(
-        `File not found: ${attachment.url}. Make sure the path is correct.`,
-      );
+      throw new Error(`File not found: ${attachment.url}. Make sure the path is correct.`);
     }),
   );
 }
@@ -245,10 +219,7 @@ const messageReceivedHandler = async ({
 }): Promise<void> => {
   // Generate a new response ID
   const responseId = v4();
-  console.log(
-    "[MessageHandler] Generated response ID:",
-    responseId.substring(0, 8),
-  );
+  console.log("[MessageHandler] Generated response ID:", responseId.substring(0, 8));
 
   // Set this as the latest response ID for this room (using runtime cache for serverless)
   await setLatestResponseId(runtime, message.roomId, responseId);
@@ -309,9 +280,7 @@ const messageReceivedHandler = async ({
 
     const prompt = composePromptFromState({
       state,
-      template:
-        runtime.character.templates?.messageHandlerTemplate ||
-        messageHandlerTemplate,
+      template: runtime.character.templates?.messageHandlerTemplate || messageHandlerTemplate,
     });
 
     console.log("*** PROMPT ***\n", prompt);
@@ -329,10 +298,7 @@ const messageReceivedHandler = async ({
 
       logger.debug(`*** Raw LLM Response ***\n${response}`);
       console.log("[MessageHandler] LLM response length:", response.length);
-      console.log(
-        "[MessageHandler] LLM response preview:",
-        response.substring(0, 500),
-      );
+      console.log("[MessageHandler] LLM response preview:", response.substring(0, 500));
 
       // Attempt to parse the XML response
       const extractedContent = extractResponseText(response);
@@ -352,16 +318,11 @@ const messageReceivedHandler = async ({
 
     // FAIL-FAST: Throw if we couldn't extract valid content after all retries
     if (!responseContent) {
-      throw new Error(
-        `Failed to extract valid response content after ${maxRetries} attempts`,
-      );
+      throw new Error(`Failed to extract valid response content after ${maxRetries} attempts`);
     }
 
     // Check if this is still the latest response ID for this room
-    const currentResponseId = await getLatestResponseId(
-      runtime,
-      message.roomId,
-    );
+    const currentResponseId = await getLatestResponseId(runtime, message.roomId);
     if (currentResponseId !== responseId) {
       logger.info(
         `Response discarded - newer message being processed for agent: ${runtime.agentId}, room: ${message.roomId}`,
@@ -374,36 +335,24 @@ const messageReceivedHandler = async ({
 
     // Parse actions from response - support both XML tags and function-call syntax
     const xmlActionMatch = responseContent.match(/<action>(.*?)<\/action>/gi);
-    const functionActionMatch = responseContent.match(
-      /\b(CREATE_OTC_QUOTE)\s*\(/gi,
-    );
+    const functionActionMatch = responseContent.match(/\b(CREATE_OTC_QUOTE)\s*\(/gi);
 
     const actionNames: string[] = [];
 
     // Parse XML format: <action>CREATE_OTC_QUOTE</action>
     if (xmlActionMatch) {
-      actionNames.push(
-        ...xmlActionMatch.map((match) =>
-          match.replace(/<\/?action>/gi, "").trim(),
-        ),
-      );
+      actionNames.push(...xmlActionMatch.map((match) => match.replace(/<\/?action>/gi, "").trim()));
     }
 
     // Parse function-call format: CREATE_OTC_QUOTE({...})
     if (functionActionMatch) {
-      actionNames.push(
-        ...functionActionMatch.map((match) =>
-          match.replace(/\s*\(.*/g, "").trim(),
-        ),
-      );
+      actionNames.push(...functionActionMatch.map((match) => match.replace(/\s*\(.*/g, "").trim()));
     }
 
     // Parse and save quote if present in response (don't trigger action handler)
     const quoteMatch = responseContent.match(/<quote>([\s\S]*?)<\/quote>/i);
     if (quoteMatch) {
-      console.log(
-        "[MessageHandler] Detected <quote> XML in response, parsing and saving",
-      );
+      console.log("[MessageHandler] Detected <quote> XML in response, parsing and saving");
       // Worst possible deal defaults (lowest discount, longest lockup)
       const DEFAULT_MIN_DISCOUNT_BPS = 100; // 1% - lowest discount
       const DEFAULT_MAX_LOCKUP_MONTHS = 12; // 12 months - longest lockup
@@ -412,9 +361,7 @@ const messageReceivedHandler = async ({
       // Simple regex-based parsing (server-side compatible)
       const quoteXml = quoteMatch[0];
       const getTag = (tag: string) => {
-        const match = quoteXml.match(
-          new RegExp(`<${tag}>([^<]*)</${tag}>`, "i"),
-        );
+        const match = quoteXml.match(new RegExp(`<${tag}>([^<]*)</${tag}>`, "i"));
         return match ? match[1].trim() : "";
       };
       const getNumTag = (tag: string, defaultVal: number = 0) => {
@@ -428,8 +375,7 @@ const messageReceivedHandler = async ({
         const entityId = message.entityId.toString();
 
         const paymentCurrencyRaw = getTag("paymentCurrency");
-        const paymentCurrency: PaymentCurrency =
-          paymentCurrencyRaw === "USDC" ? "USDC" : "ETH";
+        const paymentCurrency: PaymentCurrency = paymentCurrencyRaw === "USDC" ? "USDC" : "ETH";
 
         // FAIL-FAST: Required token metadata must be present
         // Extract and validate token metadata before creating quote
@@ -490,8 +436,7 @@ const messageReceivedHandler = async ({
 
         await runtime.setCache(`quote:${quoteId}`, quoteData);
 
-        const allQuotes =
-          (await runtime.getCache<string[]>("all_quotes")) || [];
+        const allQuotes = (await runtime.getCache<string[]>("all_quotes")) || [];
         if (!allQuotes.includes(quoteId)) {
           allQuotes.push(quoteId);
           await runtime.setCache("all_quotes", allQuotes);
@@ -499,21 +444,13 @@ const messageReceivedHandler = async ({
 
         const quoteEntityId = walletToEntityId(entityId);
         const entityQuoteIds =
-          (await runtime.getCache<string[]>(
-            `entity_quotes:${quoteEntityId}`,
-          )) || [];
+          (await runtime.getCache<string[]>(`entity_quotes:${quoteEntityId}`)) || [];
         if (!entityQuoteIds.includes(quoteId)) {
           entityQuoteIds.push(quoteId);
-          await runtime.setCache(
-            `entity_quotes:${quoteEntityId}`,
-            entityQuoteIds,
-          );
+          await runtime.setCache(`entity_quotes:${quoteEntityId}`, entityQuoteIds);
         }
 
-        console.log(
-          "[MessageHandler] Quote saved to cache and indexed:",
-          quoteId,
-        );
+        console.log("[MessageHandler] Quote saved to cache and indexed:", quoteId);
       }
     }
 
@@ -538,57 +475,46 @@ const messageReceivedHandler = async ({
       console.log("[MessageHandler] Processing actions:", actionNames);
 
       // Process actions first, which will call the action handler
-      await runtime.processActions(
-        message,
-        [responseMemory],
-        state,
-        async (content) => {
-          console.log("[MessageHandler] Action callback received:", {
-            action: content.action,
-            hasText: !!content.text,
+      await runtime.processActions(message, [responseMemory], state, async (content) => {
+        console.log("[MessageHandler] Action callback received:", {
+          action: content.action,
+          hasText: !!content.text,
+        });
+
+        // The action handler provides the actual response text
+        // FAIL-FAST: Response must have text content
+        const finalResponseText = typeof content.text === "string" ? content.text : responseContent;
+        if (typeof finalResponseText !== "string" || finalResponseText.trim() === "") {
+          throw new Error("Action response missing text content");
+        }
+
+        // Save the response to database
+        const finalResponseMemory: Memory = {
+          id: responseMemory.id,
+          entityId: runtime.agentId,
+          roomId: message.roomId,
+          worldId: message.worldId,
+          content: {
+            text: finalResponseText,
+            source: "agent",
+            inReplyTo: message.id,
+          },
+        };
+
+        await runtime.createMemory(finalResponseMemory, "messages");
+        console.log("[MessageHandler] Response saved to database");
+
+        // Send to frontend
+        if (callback) {
+          await callback({
+            text: finalResponseText,
           });
-
-          // The action handler provides the actual response text
-          // FAIL-FAST: Response must have text content
-          const finalResponseText =
-            typeof content.text === "string" ? content.text : responseContent;
-          if (
-            typeof finalResponseText !== "string" ||
-            finalResponseText.trim() === ""
-          ) {
-            throw new Error("Action response missing text content");
-          }
-
-          // Save the response to database
-          const finalResponseMemory: Memory = {
-            id: responseMemory.id,
-            entityId: runtime.agentId,
-            roomId: message.roomId,
-            worldId: message.worldId,
-            content: {
-              text: finalResponseText,
-              source: "agent",
-              inReplyTo: message.id,
-            },
-          };
-
-          await runtime.createMemory(finalResponseMemory, "messages");
-          console.log("[MessageHandler] Response saved to database");
-
-          // Send to frontend
-          if (callback) {
-            await callback({
-              text: finalResponseText,
-            });
-          }
-          return [];
-        },
-      );
+        }
+        return [];
+      });
     } else {
       // No actions - save and send the response
-      console.log(
-        "[MessageHandler] No actions, saving response and calling callback",
-      );
+      console.log("[MessageHandler] No actions, saving response and calling callback");
       await runtime.createMemory(responseMemory, "messages");
       console.log("[MessageHandler] Response saved, sending to frontend");
       await callback({
@@ -644,9 +570,7 @@ const syncSingleUser = async (
 
   // FAIL-FAST: Validate required fields
   if (!channelId) {
-    throw new Error(
-      `Cannot sync user ${entity?.id || "unknown"} without a valid channelId`,
-    );
+    throw new Error(`Cannot sync user ${entity?.id || "unknown"} without a valid channelId`);
   }
 
   const roomId = createUniqueUuid(runtime, channelId);
@@ -670,13 +594,7 @@ const syncSingleUser = async (
 /**
  * Handles standardized server data for both WORLD_JOINED and WORLD_CONNECTED events
  */
-const handleServerSync = async ({
-  runtime,
-  world,
-  rooms,
-  entities,
-  source,
-}: WorldPayload) => {
+const handleServerSync = async ({ runtime, world, rooms, entities, source }: WorldPayload) => {
   logger.debug(`Handling server sync event for server: ${world.name}`);
   // Create/ensure the world exists for this server
   await runtime.ensureWorldExists({
@@ -726,14 +644,10 @@ const handleServerSync = async ({
             entityId: entity.id,
             roomId: firstRoomUserIsIn.id,
             userName: entitySourceMeta.username || entity.id,
-            name:
-              entitySourceMeta.name ||
-              entitySourceMeta.username ||
-              `User${entity.id}`,
+            name: entitySourceMeta.name || entitySourceMeta.username || `User${entity.id}`,
             source: source,
             channelId: firstRoomUserIsIn.channelId,
-            messageServerId:
-              world.messageServerId ?? world.serverId ?? world.id,
+            messageServerId: world.messageServerId ?? world.serverId ?? world.id,
             type: firstRoomUserIsIn.type,
             worldId: world.id,
           });
@@ -747,9 +661,7 @@ const handleServerSync = async ({
     }
   }
 
-  logger.debug(
-    `Successfully synced standardized world structure for ${world.name}`,
-  );
+  logger.debug(`Successfully synced standardized world structure for ${world.name}`);
 };
 
 /**
@@ -784,8 +696,7 @@ const controlMessageHandler = async ({
   const serviceNames = Array.from(runtime.getAllServices().keys());
   const websocketServiceName = serviceNames.find(
     (name: string) =>
-      name.toLowerCase().includes("websocket") ||
-      name.toLowerCase().includes("socket"),
+      name.toLowerCase().includes("websocket") || name.toLowerCase().includes("socket"),
   );
 
   if (websocketServiceName) {
@@ -808,14 +719,10 @@ const controlMessageHandler = async ({
         `[controlMessageHandler] Control message ${message.payload.action} sent successfully`,
       );
     } else {
-      logger.error(
-        "[controlMessageHandler] WebSocket service does not have sendMessage method",
-      );
+      logger.error("[controlMessageHandler] WebSocket service does not have sendMessage method");
     }
   } else {
-    logger.error(
-      "[controlMessageHandler] No WebSocket service found to send control message",
-    );
+    logger.error("[controlMessageHandler] No WebSocket service found to send control message");
   }
 };
 

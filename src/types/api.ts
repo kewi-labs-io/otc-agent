@@ -42,9 +42,7 @@ export interface CachedPrice {
 /**
  * Cached wallet balances structure
  */
-export interface CachedWalletBalances<
-  T extends TokenBalance | SolanaTokenBalance,
-> {
+export interface CachedWalletBalances<T extends TokenBalance | SolanaTokenBalance> {
   tokens: T[];
   cachedAt: number;
 }

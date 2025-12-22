@@ -11,9 +11,7 @@ async function tokenExists(tokenId: string): Promise<boolean> {
   // Normalize: EVM addresses lowercase, Solana preserved
   const match = tokenId.match(/^token-([a-z]+)-(.+)$/);
   const normalizedId =
-    match && match[1] !== "solana"
-      ? `token-${match[1]}-${match[2].toLowerCase()}`
-      : tokenId;
+    match && match[1] !== "solana" ? `token-${match[1]}-${match[2].toLowerCase()}` : tokenId;
   const token = await runtime.getCache<Token>(`token:${normalizedId}`);
   return token !== null && token !== undefined;
 }
@@ -29,17 +27,14 @@ export async function POST() {
   const runtime = await agentRuntime.getRuntime();
 
   // Get all consignment IDs
-  const allConsignmentIds =
-    (await runtime.getCache<string[]>("all_consignments")) || [];
+  const allConsignmentIds = (await runtime.getCache<string[]>("all_consignments")) || [];
 
   const orphanedIds: string[] = [];
   const cleanedByToken: Record<string, string[]> = {};
 
   // Check each consignment
   for (const consignmentId of allConsignmentIds) {
-    const consignment = await runtime.getCache<OTCConsignment>(
-      `consignment:${consignmentId}`,
-    );
+    const consignment = await runtime.getCache<OTCConsignment>(`consignment:${consignmentId}`);
 
     if (!consignment) {
       // Consignment entry doesn't exist but ID is in list
@@ -61,12 +56,8 @@ export async function POST() {
 
       // Remove from token_consignments list
       const tokenConsignments =
-        (await runtime.getCache<string[]>(
-          `token_consignments:${consignment.tokenId}`,
-        )) || [];
-      const filteredTokenConsignments = tokenConsignments.filter(
-        (id) => id !== consignmentId,
-      );
+        (await runtime.getCache<string[]>(`token_consignments:${consignment.tokenId}`)) || [];
+      const filteredTokenConsignments = tokenConsignments.filter((id) => id !== consignmentId);
       await runtime.setCache(
         `token_consignments:${consignment.tokenId}`,
         filteredTokenConsignments,
@@ -88,9 +79,7 @@ export async function POST() {
   }
 
   // Update the all_consignments list
-  const cleanedAllConsignments = allConsignmentIds.filter(
-    (id) => !orphanedIds.includes(id),
-  );
+  const cleanedAllConsignments = allConsignmentIds.filter((id) => !orphanedIds.includes(id));
   await runtime.setCache("all_consignments", cleanedAllConsignments);
 
   return NextResponse.json({
@@ -110,16 +99,13 @@ export async function GET() {
   const runtime = await agentRuntime.getRuntime();
 
   // Get all consignment IDs
-  const allConsignmentIds =
-    (await runtime.getCache<string[]>("all_consignments")) || [];
+  const allConsignmentIds = (await runtime.getCache<string[]>("all_consignments")) || [];
 
   const orphaned: { id: string; tokenId: string; consigner: string }[] = [];
 
   // Check each consignment
   for (const consignmentId of allConsignmentIds) {
-    const consignment = await runtime.getCache<OTCConsignment>(
-      `consignment:${consignmentId}`,
-    );
+    const consignment = await runtime.getCache<OTCConsignment>(`consignment:${consignmentId}`);
 
     if (!consignment) {
       orphaned.push({

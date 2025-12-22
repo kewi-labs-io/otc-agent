@@ -59,13 +59,9 @@ export default function CallbackPage() {
 
         // entityId is required - we already validated that one exists above
         const entityId =
-          data.user_id !== undefined &&
-          data.user_id !== null &&
-          data.user_id !== ""
+          data.user_id !== undefined && data.user_id !== null && data.user_id !== ""
             ? data.user_id
-            : data.entityId !== undefined &&
-                data.entityId !== null &&
-                data.entityId !== ""
+            : data.entityId !== undefined && data.entityId !== null && data.entityId !== ""
               ? data.entityId
               : undefined;
         if (!entityId) {
@@ -73,13 +69,9 @@ export default function CallbackPage() {
         }
         // username is optional - use undefined if not present
         const username =
-          data.screen_name !== undefined &&
-          data.screen_name !== null &&
-          data.screen_name !== ""
+          data.screen_name !== undefined && data.screen_name !== null && data.screen_name !== ""
             ? data.screen_name
-            : data.username !== undefined &&
-                data.username !== null &&
-                data.username !== ""
+            : data.username !== undefined && data.username !== null && data.username !== ""
               ? data.username
               : undefined;
         const credentials: StoredCredentials = {
@@ -129,9 +121,7 @@ export default function CallbackPage() {
       window.location.href = u.toString();
     }
 
-    run().catch((e) =>
-      setError(e instanceof Error ? e.message : "OAuth failed"),
-    );
+    run().catch((e) => setError(e instanceof Error ? e.message : "OAuth failed"));
   }, []);
 
   if (error) {

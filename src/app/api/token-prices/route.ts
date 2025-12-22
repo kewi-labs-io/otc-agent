@@ -6,10 +6,7 @@ import {
   GetTokenPricesQuerySchema,
   TokenPricesResponseSchema,
 } from "@/types/validation/api-schemas";
-import {
-  fetchCoinGeckoPrices,
-  fetchJupiterPrices,
-} from "@/utils/price-fetcher";
+import { fetchCoinGeckoPrices, fetchJupiterPrices } from "@/utils/price-fetcher";
 
 // Price cache TTL: 5 minutes
 const PRICE_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -17,10 +14,7 @@ const PRICE_CACHE_TTL_MS = 5 * 60 * 1000;
 /**
  * Get cached token price
  */
-async function getCachedPrice(
-  chain: string,
-  address: string,
-): Promise<number | null> {
+async function getCachedPrice(chain: string, address: string): Promise<number | null> {
   const runtime = await agentRuntime.getRuntime();
   const cacheKey = `token-price:${chain}:${address.toLowerCase()}`;
   const cached = await runtime.getCache<CachedPrice>(cacheKey);
@@ -34,11 +28,7 @@ async function getCachedPrice(
 /**
  * Set cached token price
  */
-async function setCachedPrice(
-  chain: string,
-  address: string,
-  priceUsd: number,
-): Promise<void> {
+async function setCachedPrice(chain: string, address: string, priceUsd: number): Promise<void> {
   const runtime = await agentRuntime.getRuntime();
   const cacheKey = `token-price:${chain}:${address.toLowerCase()}`;
   await runtime.setCache(cacheKey, {
@@ -95,8 +85,7 @@ export async function GET(request: NextRequest) {
       await setCachedPrice(chain, addr, price);
       // Match original case for Solana
       const originalAddr =
-        uncachedAddresses.find((a) => a.toLowerCase() === addr.toLowerCase()) ||
-        addr;
+        uncachedAddresses.find((a) => a.toLowerCase() === addr.toLowerCase()) || addr;
       prices[originalAddr] = price;
     }
   }

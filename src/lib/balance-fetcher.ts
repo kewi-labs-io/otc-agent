@@ -6,7 +6,7 @@
  */
 
 import type { Chain } from "@/config/chains";
-import type { TokenBalance, SolanaTokenBalance } from "@/types/api";
+import type { SolanaTokenBalance, TokenBalance } from "@/types/api";
 import { fetchTokenPrices } from "@/utils/price-fetcher";
 
 /**
@@ -33,11 +33,7 @@ export function filterDustTokens(
 
     // If price is available (non-zero), also check USD value threshold
     // priceUsd === 0 or undefined means "no price available"
-    if (
-      token.priceUsd &&
-      token.priceUsd > 0 &&
-      token.balanceUsd !== undefined
-    ) {
+    if (token.priceUsd && token.priceUsd > 0 && token.balanceUsd !== undefined) {
       return token.balanceUsd >= minUsdValue;
     }
 

@@ -14,7 +14,7 @@
  * Run: bun test tests/hooks/mutations.e2e.test.ts
  */
 
-import { describe, test, expect, beforeAll, afterAll, setDefaultTimeout } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { BASE_URL, waitForServer } from "../test-utils";
 
 setDefaultTimeout(30_000);
@@ -317,14 +317,10 @@ describe("Mutation Hooks E2E Tests", () => {
 
       // Status is not in UpdateConsignmentRequestSchema, so it gets stripped
       // The request then proceeds and returns 404 for non-existent consignment
-      const { status } = await apiCall<{ error?: string }>(
-        "PUT",
-        "/api/consignments/some-id",
-        {
-          callerAddress: ANVIL_DEPLOYER,
-          status: "invalid-status", // This field is stripped by schema
-        },
-      );
+      const { status } = await apiCall<{ error?: string }>("PUT", "/api/consignments/some-id", {
+        callerAddress: ANVIL_DEPLOYER,
+        status: "invalid-status", // This field is stripped by schema
+      });
 
       // Returns 404 because consignment doesn't exist (status field was ignored)
       expect(status).toBe(404);

@@ -15,7 +15,7 @@ import { parseOrThrow } from "@/lib/validation/helpers";
 import type { Token, TokenMarketData } from "@/types";
 import { TokenResponseSchema } from "@/types/validation/hook-schemas";
 import { parseTokenId } from "@/utils/token-utils";
-import { tokenKeys, priceKeys } from "./queryKeys";
+import { priceKeys, tokenKeys } from "./queryKeys";
 
 // Chain configs for on-chain fetching (RPC endpoints via API proxy)
 const chainConfigs = {
@@ -34,9 +34,7 @@ async function fetchTokenFromChain(tokenId: string): Promise<Token> {
   const { chain, address } = parseTokenId(tokenId);
 
   if (!address.startsWith("0x")) {
-    throw new Error(
-      `Invalid EVM address in tokenId: ${tokenId}. Address must start with "0x"`,
-    );
+    throw new Error(`Invalid EVM address in tokenId: ${tokenId}. Address must start with "0x"`);
   }
 
   const chainConfig = chainConfigs[chain as SupportedEvmChain];
@@ -58,9 +56,7 @@ async function fetchTokenFromChain(tokenId: string): Promise<Token> {
     functionName: string;
   }) => Promise<unknown>;
 
-  const readContract = publicClient.readContract.bind(
-    publicClient,
-  ) as ReadContractFn;
+  const readContract = publicClient.readContract.bind(publicClient) as ReadContractFn;
 
   const [symbol, name, decimals] = await Promise.all([
     readContract({
@@ -108,9 +104,7 @@ async function fetchToken(tokenId: string): Promise<{
     // Token not in database - try on-chain fetch for EVM tokens
     const { chain } = parseTokenId(tokenId);
     if (chain === "solana") {
-      throw new Error(
-        `Token ${tokenId} not found in database. Solana tokens must be registered.`,
-      );
+      throw new Error(`Token ${tokenId} not found in database. Solana tokens must be registered.`);
     }
 
     const chainToken = await fetchTokenFromChain(tokenId);
@@ -134,12 +128,8 @@ async function fetchToken(tokenId: string): Promise<{
  * Fetch market data for a token
  * Returns null only for 404 (no market data available), throws for other errors
  */
-async function fetchMarketData(
-  tokenId: string,
-): Promise<TokenMarketData | null> {
-  const response = await fetch(
-    `/api/market-data/${encodeURIComponent(tokenId)}`,
-  );
+async function fetchMarketData(tokenId: string): Promise<TokenMarketData | null> {
+  const response = await fetch(`/api/market-data/${encodeURIComponent(tokenId)}`);
 
   if (!response.ok) {
     // 404 means no market data available for this token (expected for new/untracked tokens)
@@ -147,9 +137,7 @@ async function fetchMarketData(
       return null;
     }
     // Other errors should be thrown
-    throw new Error(
-      `Failed to fetch market data: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Failed to fetch market data: ${response.status} ${response.statusText}`);
   }
 
   const data = await response.json();

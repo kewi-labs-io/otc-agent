@@ -20,14 +20,7 @@ import {
   type PublicClient,
   parseAbi,
 } from "viem";
-import {
-  base,
-  baseSepolia,
-  bsc,
-  bscTestnet,
-  mainnet,
-  sepolia,
-} from "viem/chains";
+import { base, baseSepolia, bsc, bscTestnet, mainnet, sepolia } from "viem/chains";
 import { getCached, setCache, withRetryAndCache } from "./retry-cache";
 
 /**
@@ -132,9 +125,7 @@ const CONFIG: Record<
     pancakeswapFactory: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865", // PancakeSwap V3 Factory
     usdc: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // Binance-Peg USDC
     weth: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", // WBNB
-    rpcUrl:
-      process.env.NEXT_PUBLIC_BSC_RPC_URL ||
-      "https://bsc-dataseed1.binance.org",
+    rpcUrl: process.env.NEXT_PUBLIC_BSC_RPC_URL || "https://bsc-dataseed1.binance.org",
     nativeToken: "BNB",
     nativeTokenPriceEstimate: 650,
   },
@@ -189,9 +180,7 @@ const aeroCLFactoryAbi = parseAbi([
   "function getPool(address tokenA, address tokenB, int24 tickSpacing) external view returns (address pool)",
 ]);
 
-const erc20Abi = parseAbi([
-  "function decimals() external view returns (uint8)",
-]);
+const erc20Abi = parseAbi(["function decimals() external view returns (uint8)"]);
 
 const uniPoolAbi = parseAbi([
   "function token0() external view returns (address)",
@@ -256,9 +245,7 @@ export async function findAllPools(
   // Filter out pools with invalid addresses
   const validPools = allPools.filter((pool) => {
     const addr = pool.address;
-    return (
-      typeof addr === "string" && addr.startsWith("0x") && addr.length === 42
-    );
+    return typeof addr === "string" && addr.startsWith("0x") && addr.length === 42;
   });
 
   // Deduplicate by address (case-insensitive) - keep highest TVL for each address
@@ -272,9 +259,7 @@ export async function findAllPools(
   }
 
   // Sort by TVL descending
-  const dedupedPools = Array.from(seenAddresses.values()).sort(
-    (a, b) => b.tvlUsd - a.tvlUsd,
-  );
+  const dedupedPools = Array.from(seenAddresses.values()).sort((a, b) => b.tvlUsd - a.tvlUsd);
 
   setCache(cacheKey, dedupedPools, POOL_CACHE_TTL_MS);
   return dedupedPools;
@@ -283,10 +268,7 @@ export async function findAllPools(
 /**
  * Internal function to fetch all pools from all sources
  */
-async function fetchAllPoolsInternal(
-  tokenAddress: string,
-  chainId: number,
-): Promise<PoolInfo[]> {
+async function fetchAllPoolsInternal(tokenAddress: string, chainId: number): Promise<PoolInfo[]> {
   const config = CONFIG[chainId];
   if (!config) throw new Error(`Unsupported chain ID: ${chainId}`);
 
@@ -310,9 +292,7 @@ async function fetchAllPoolsInternal(
   const isBrowser = typeof window !== "undefined";
   // FAIL-FAST: PORT must be configured for server-side requests
   if (!isBrowser && !process.env.PORT) {
-    throw new Error(
-      "PORT environment variable is required for server-side RPC requests",
-    );
+    throw new Error("PORT environment variable is required for server-side RPC requests");
   }
   // PORT is guaranteed to exist here (checked above for server-side)
   const port = process.env.PORT ?? "4444";
@@ -322,9 +302,7 @@ async function fetchAllPoolsInternal(
     : config.rpcUrl;
 
   if (process.env.NODE_ENV === "development") {
-    console.log(
-      `[PoolFinder] Using RPC: ${effectiveRpcUrl} (browser: ${isBrowser})`,
-    );
+    console.log(`[PoolFinder] Using RPC: ${effectiveRpcUrl} (browser: ${isBrowser})`);
   }
 
   // Create client with explicit type to avoid deep type instantiation
@@ -344,26 +322,12 @@ async function fetchAllPoolsInternal(
 
   // Aerodrome Slipstream (CL) pools - compatible with UniswapV3TWAPOracle (Uniswap V3 interface)
   if (config.aerodromeCLFactory) {
-    promises.push(
-      findAerodromeCLPools(
-        client,
-        tokenAddress,
-        config,
-        config.aerodromeCLFactory,
-      ),
-    );
+    promises.push(findAerodromeCLPools(client, tokenAddress, config, config.aerodromeCLFactory));
   }
 
   // Aerodrome Slipstream 2 (community/newer pools)
   if (config.aerodromeCLFactory2) {
-    promises.push(
-      findAerodromeCLPools(
-        client,
-        tokenAddress,
-        config,
-        config.aerodromeCLFactory2,
-      ),
-    );
+    promises.push(findAerodromeCLPools(client, tokenAddress, config, config.aerodromeCLFactory2));
   }
 
   if (config.pancakeswapFactory) {
@@ -401,11 +365,7 @@ async function fetchAllPoolsInternal(
 
   // If no pools found or all have very low TVL, try CoinGecko as fallback
   if (allPools.length === 0 || allPools.every((p) => p.tvlUsd < 100)) {
-    const coinGeckoPool = await findCoinGeckoPrice(
-      tokenAddress,
-      chainId,
-      config,
-    );
+    const coinGeckoPool = await findCoinGeckoPrice(tokenAddress, chainId, config);
     if (coinGeckoPool) {
       allPools.push(coinGeckoPool);
     }
@@ -437,8 +397,7 @@ export async function findBestPool(
   // Filter out pools with invalid addresses (e.g., V4 poolIds which are 32-byte hashes)
   const validPools = allPools.filter((pool) => {
     const addr = pool.address;
-    const isValidLength =
-      typeof addr === "string" && addr.startsWith("0x") && addr.length === 42;
+    const isValidLength = typeof addr === "string" && addr.startsWith("0x") && addr.length === 42;
     if (!isValidLength && process.env.NODE_ENV === "development") {
       console.warn(
         `[PoolFinder] Filtering out pool with invalid address (${addr.length} chars): ${addr.slice(0, 20)}...`,
@@ -491,20 +450,13 @@ async function findUniswapV3Pools(
           address: config.uniV3Factory as Address,
           abi: uniFactoryAbi as Abi,
           functionName: "getPool",
-          args: [
-            tokenAddress as `0x${string}`,
-            baseTokenAddress as `0x${string}`,
-            fee,
-          ],
+          args: [tokenAddress as `0x${string}`, baseTokenAddress as `0x${string}`, fee],
         });
       },
       { cacheTtlMs: POOL_CACHE_TTL_MS },
     );
 
-    if (
-      poolAddress &&
-      poolAddress !== "0x0000000000000000000000000000000000000000"
-    ) {
+    if (poolAddress && poolAddress !== "0x0000000000000000000000000000000000000000") {
       const poolInfo = await getUniPoolInfo(
         client,
         poolAddress,
@@ -526,9 +478,7 @@ async function findUniswapV3Pools(
     ]);
   } else {
     // BSC: Only check WETH (WBNB)
-    await Promise.all([
-      ...FEE_TIERS.map((fee) => checkPool(config.weth, "WETH", fee)),
-    ]);
+    await Promise.all([...FEE_TIERS.map((fee) => checkPool(config.weth, "WETH", fee))]);
   }
 
   return pools;
@@ -548,9 +498,7 @@ function computeV4PoolId(
 ): `0x${string}` {
   // Sort currencies - currency0 must be < currency1
   const [sorted0, sorted1] =
-    BigInt(currency0) < BigInt(currency1)
-      ? [currency0, currency1]
-      : [currency1, currency0];
+    BigInt(currency0) < BigInt(currency1) ? [currency0, currency1] : [currency1, currency0];
 
   // PoolKey struct: (Currency currency0, Currency currency1, uint24 fee, int24 tickSpacing, IHooks hooks)
   // Use abi.encode (not packed) - each field is padded to 32 bytes
@@ -617,15 +565,12 @@ async function findUniswapV4Pools(
       withRetryAndCache(
         `v4-slot0:${poolId}`,
         async () => {
-          return poolReadContract<readonly [bigint, number, number, number]>(
-            client,
-            {
-              address: config.uniV4StateView as Address,
-              abi: stateViewAbi as Abi,
-              functionName: "getSlot0",
-              args: [poolId],
-            },
-          );
+          return poolReadContract<readonly [bigint, number, number, number]>(client, {
+            address: config.uniV4StateView as Address,
+            abi: stateViewAbi as Abi,
+            functionName: "getSlot0",
+            args: [poolId],
+          });
         },
         { cacheTtlMs: POOL_CACHE_TTL_MS },
       ),
@@ -649,9 +594,7 @@ async function findUniswapV4Pools(
       // FAIL-FAST: liquidityResult should be defined if slot0Result exists
       // Liquidity can be 0n (valid), but undefined means the call failed
       if (liquidityResult === undefined) {
-        throw new Error(
-          "Liquidity query failed but slot0 succeeded - inconsistent pool state",
-        );
+        throw new Error("Liquidity query failed but slot0 succeeded - inconsistent pool state");
       }
       const liquidity = liquidityResult;
 
@@ -672,8 +615,7 @@ async function findUniswapV4Pools(
       );
 
       // Calculate price
-      const isToken0Target =
-        token0.toLowerCase() === tokenAddress.toLowerCase();
+      const isToken0Target = token0.toLowerCase() === tokenAddress.toLowerCase();
       const Q96 = 2n ** 96n;
       const sqrtP = Number(sqrtPriceX96) / Number(Q96);
       const price0in1 = sqrtP * sqrtP;
@@ -686,8 +628,7 @@ async function findUniswapV4Pools(
         : 10 ** (baseDecimals - tokenDecimals);
       const price0in1Adjusted = price0in1 * decimalAdjustment;
 
-      const baseTokenPrice =
-        baseTokenSymbol === "USDC" ? 1 : config.nativeTokenPriceEstimate;
+      const baseTokenPrice = baseTokenSymbol === "USDC" ? 1 : config.nativeTokenPriceEstimate;
       const priceUsd = isToken0Target
         ? price0in1Adjusted * baseTokenPrice
         : (1 / price0in1Adjusted) * baseTokenPrice;
@@ -729,10 +670,7 @@ async function findUniswapV4Pools(
   ];
 
   // Add configured hook if not already in list
-  if (
-    config.clankerHook &&
-    !hookAddresses.includes(config.clankerHook as Address)
-  ) {
+  if (config.clankerHook && !hookAddresses.includes(config.clankerHook as Address)) {
     hookAddresses.unshift(config.clankerHook as Address);
   }
 
@@ -743,14 +681,7 @@ async function findUniswapV4Pools(
       // Check WETH pairs
       checks.push(checkPool(config.weth, "WETH", fee, hook));
       // V4 uses address(0) for native ETH - check those too
-      checks.push(
-        checkPool(
-          "0x0000000000000000000000000000000000000000",
-          "WETH",
-          fee,
-          hook,
-        ),
-      );
+      checks.push(checkPool("0x0000000000000000000000000000000000000000", "WETH", fee, hook));
     }
   }
 
@@ -794,26 +725,17 @@ async function findAerodromeCLPools(
           address: factoryAddress as Address,
           abi: aeroCLFactoryAbi as Abi,
           functionName: "getPool",
-          args: [
-            tokenAddress as Address,
-            baseTokenAddress as Address,
-            tickSpacing,
-          ],
+          args: [tokenAddress as Address, baseTokenAddress as Address, tickSpacing],
         });
       },
       { cacheTtlMs: POOL_CACHE_TTL_MS },
     );
 
     if (process.env.NODE_ENV === "development") {
-      console.log(
-        `[PoolFinder] Aerodrome CL ${baseTokenSymbol}/${tickSpacing}: ${poolAddress}`,
-      );
+      console.log(`[PoolFinder] Aerodrome CL ${baseTokenSymbol}/${tickSpacing}: ${poolAddress}`);
     }
 
-    if (
-      poolAddress &&
-      poolAddress !== "0x0000000000000000000000000000000000000000"
-    ) {
+    if (poolAddress && poolAddress !== "0x0000000000000000000000000000000000000000") {
       // Use getAeroSlipstreamPoolInfo for Aerodrome CL pools (different slot0 signature)
       const poolInfo = await getAeroSlipstreamPoolInfo(
         client,
@@ -899,9 +821,7 @@ async function findGeckoTerminalV4Pools(
   }
 
   if (process.env.NODE_ENV === "development") {
-    console.log(
-      `[PoolFinder] Checking GeckoTerminal for V4 pools on ${network}: ${tokenAddress}`,
-    );
+    console.log(`[PoolFinder] Checking GeckoTerminal for V4 pools on ${network}: ${tokenAddress}`);
   }
 
   // Use backend proxy to avoid CSP violations
@@ -909,9 +829,7 @@ async function findGeckoTerminalV4Pools(
   const isBrowser = typeof window !== "undefined";
   // FAIL-FAST: PORT must be configured for server-side requests
   if (!isBrowser && !process.env.PORT) {
-    throw new Error(
-      "PORT environment variable is required for server-side GeckoTerminal requests",
-    );
+    throw new Error("PORT environment variable is required for server-side GeckoTerminal requests");
   }
   // PORT is guaranteed to exist here (checked above for server-side)
   const port = process.env.PORT ?? "4444";
@@ -937,40 +855,26 @@ async function findGeckoTerminalV4Pools(
 
   // Filter for Uniswap V4 pools only (we handle V3 separately)
   // GeckoTerminal uses "uniswap-v4-base", "uniswap-v4-ethereum", etc.
-  const v4DexId =
-    network === "eth" ? "uniswap-v4-ethereum" : `uniswap-v4-${network}`;
-  const v4Pools = data.data.filter(
-    (p) => p.relationships.dex.data.id === v4DexId,
-  );
+  const v4DexId = network === "eth" ? "uniswap-v4-ethereum" : `uniswap-v4-${network}`;
+  const v4Pools = data.data.filter((p) => p.relationships.dex.data.id === v4DexId);
 
   if (process.env.NODE_ENV === "development") {
-    console.log(
-      `[PoolFinder] GeckoTerminal found ${v4Pools.length} V4 pools for ${tokenAddress}`,
-    );
+    console.log(`[PoolFinder] GeckoTerminal found ${v4Pools.length} V4 pools for ${tokenAddress}`);
   }
 
   for (const pool of v4Pools) {
     // Determine base token (WETH, USDC, or USDT)
     const quoteTokenId = pool.relationships.quote_token.data.id;
-    const isWethPair = quoteTokenId
-      .toLowerCase()
-      .includes(config.weth.toLowerCase());
-    const isUsdcPair = quoteTokenId
-      .toLowerCase()
-      .includes(config.usdc.toLowerCase());
+    const isWethPair = quoteTokenId.toLowerCase().includes(config.weth.toLowerCase());
+    const isUsdcPair = quoteTokenId.toLowerCase().includes(config.usdc.toLowerCase());
     const isUsdtPair =
-      config.usdt &&
-      quoteTokenId.toLowerCase().includes(config.usdt.toLowerCase());
+      config.usdt && quoteTokenId.toLowerCase().includes(config.usdt.toLowerCase());
 
     if (!isWethPair && !isUsdcPair && !isUsdtPair) continue; // Skip non-standard pairs
 
     // USDT is treated as USDC for pricing purposes (both are $1 stablecoins)
     const baseToken: "WETH" | "USDC" = isWethPair ? "WETH" : "USDC";
-    const quoteTokenAddress = isWethPair
-      ? config.weth
-      : isUsdcPair
-        ? config.usdc
-        : config.usdt;
+    const quoteTokenAddress = isWethPair ? config.weth : isUsdcPair ? config.usdc : config.usdt;
 
     // FAIL-FAST: Validate quote token address is configured
     if (!quoteTokenAddress) {
@@ -983,12 +887,10 @@ async function findGeckoTerminalV4Pools(
     // FAIL-FAST: Validate numeric values from API
     const tvlUsdRaw = parseFloat(pool.attributes.reserve_in_usd);
     const priceUsdRaw = parseFloat(pool.attributes.base_token_price_usd);
-    if (isNaN(tvlUsdRaw) || tvlUsdRaw < 0) {
-      throw new Error(
-        `Invalid TVL value from GeckoTerminal: ${pool.attributes.reserve_in_usd}`,
-      );
+    if (Number.isNaN(tvlUsdRaw) || tvlUsdRaw < 0) {
+      throw new Error(`Invalid TVL value from GeckoTerminal: ${pool.attributes.reserve_in_usd}`);
     }
-    if (isNaN(priceUsdRaw) || priceUsdRaw < 0) {
+    if (Number.isNaN(priceUsdRaw) || priceUsdRaw < 0) {
       throw new Error(
         `Invalid price value from GeckoTerminal: ${pool.attributes.base_token_price_usd}`,
       );
@@ -1001,9 +903,7 @@ async function findGeckoTerminalV4Pools(
 
     // Determine token0/token1 from pool name or token IDs
     const baseTokenId = pool.relationships.base_token.data.id;
-    const token0: string = baseTokenId
-      .toLowerCase()
-      .includes(tokenAddress.toLowerCase())
+    const token0: string = baseTokenId.toLowerCase().includes(tokenAddress.toLowerCase())
       ? tokenAddress
       : quoteAddr;
     const token1: string = token0 === tokenAddress ? quoteAddr : tokenAddress;
@@ -1053,17 +953,13 @@ async function findGeckoTerminalAllPools(
   }
 
   if (process.env.NODE_ENV === "development") {
-    console.log(
-      `[PoolFinder] Checking GeckoTerminal for ALL pools on ${network}: ${tokenAddress}`,
-    );
+    console.log(`[PoolFinder] Checking GeckoTerminal for ALL pools on ${network}: ${tokenAddress}`);
   }
 
   const isBrowser = typeof window !== "undefined";
   // FAIL-FAST: PORT must be configured for server-side requests
   if (!isBrowser && !process.env.PORT) {
-    throw new Error(
-      "PORT environment variable is required for server-side GeckoTerminal requests",
-    );
+    throw new Error("PORT environment variable is required for server-side GeckoTerminal requests");
   }
   // PORT is guaranteed to exist here (checked above for server-side)
   const port = process.env.PORT ?? "4444";
@@ -1107,8 +1003,7 @@ async function findGeckoTerminalAllPools(
     const dexId = p.relationships.dex.data.id.toLowerCase();
     // Must be V3-compatible but NOT V4
     return (
-      v3CompatibleDexPatterns.some((pattern) => dexId.includes(pattern)) &&
-      !dexId.includes("v4")
+      v3CompatibleDexPatterns.some((pattern) => dexId.includes(pattern)) && !dexId.includes("v4")
     );
   });
 
@@ -1132,24 +1027,15 @@ async function findGeckoTerminalAllPools(
 
     // Determine base token (WETH, USDC, or USDT)
     const quoteTokenId = pool.relationships.quote_token.data.id;
-    const isWethPair = quoteTokenId
-      .toLowerCase()
-      .includes(config.weth.toLowerCase());
-    const isUsdcPair = quoteTokenId
-      .toLowerCase()
-      .includes(config.usdc.toLowerCase());
+    const isWethPair = quoteTokenId.toLowerCase().includes(config.weth.toLowerCase());
+    const isUsdcPair = quoteTokenId.toLowerCase().includes(config.usdc.toLowerCase());
     const isUsdtPair =
-      config.usdt &&
-      quoteTokenId.toLowerCase().includes(config.usdt.toLowerCase());
+      config.usdt && quoteTokenId.toLowerCase().includes(config.usdt.toLowerCase());
 
     if (!isWethPair && !isUsdcPair && !isUsdtPair) continue;
 
     const baseToken: "WETH" | "USDC" = isWethPair ? "WETH" : "USDC";
-    const quoteTokenAddress = isWethPair
-      ? config.weth
-      : isUsdcPair
-        ? config.usdc
-        : config.usdt;
+    const quoteTokenAddress = isWethPair ? config.weth : isUsdcPair ? config.usdc : config.usdt;
 
     // FAIL-FAST: Validate quote token address is configured
     if (!quoteTokenAddress) {
@@ -1162,12 +1048,10 @@ async function findGeckoTerminalAllPools(
     // FAIL-FAST: Validate numeric values from API
     const tvlUsdRaw = parseFloat(pool.attributes.reserve_in_usd);
     const priceUsdRaw = parseFloat(pool.attributes.base_token_price_usd);
-    if (isNaN(tvlUsdRaw) || tvlUsdRaw < 0) {
-      throw new Error(
-        `Invalid TVL value from GeckoTerminal: ${pool.attributes.reserve_in_usd}`,
-      );
+    if (Number.isNaN(tvlUsdRaw) || tvlUsdRaw < 0) {
+      throw new Error(`Invalid TVL value from GeckoTerminal: ${pool.attributes.reserve_in_usd}`);
     }
-    if (isNaN(priceUsdRaw) || priceUsdRaw < 0) {
+    if (Number.isNaN(priceUsdRaw) || priceUsdRaw < 0) {
       throw new Error(
         `Invalid price value from GeckoTerminal: ${pool.attributes.base_token_price_usd}`,
       );
@@ -1177,9 +1061,7 @@ async function findGeckoTerminalAllPools(
 
     // Determine token ordering
     const baseTokenId = pool.relationships.base_token.data.id;
-    const token0: string = baseTokenId
-      .toLowerCase()
-      .includes(tokenAddress.toLowerCase())
+    const token0: string = baseTokenId.toLowerCase().includes(tokenAddress.toLowerCase())
       ? tokenAddress
       : quoteAddr;
     const token1: string = token0 === tokenAddress ? quoteAddr : tokenAddress;
@@ -1279,9 +1161,7 @@ async function findCoinGeckoPrice(
   const isBrowser = typeof window !== "undefined";
   // FAIL-FAST: PORT must be configured for server-side requests
   if (!isBrowser && !process.env.PORT) {
-    throw new Error(
-      "PORT environment variable is required for server-side CoinGecko requests",
-    );
+    throw new Error("PORT environment variable is required for server-side CoinGecko requests");
   }
   // PORT is guaranteed to exist here (checked above for server-side)
   const port = process.env.PORT ?? "4444";
@@ -1318,9 +1198,7 @@ async function findCoinGeckoPrice(
   }
   // FAIL-FAST: Validate market_data structure
   if (!data.market_data.current_price) {
-    throw new Error(
-      "CoinGecko response missing market_data.current_price field",
-    );
+    throw new Error("CoinGecko response missing market_data.current_price field");
   }
   const priceUsd = data.market_data.current_price.usd;
   // market_cap and total_volume are optional fields - use 0 if missing
@@ -1385,17 +1263,8 @@ async function _findAerodromePools(
       args: [tokenAddress as Address, baseTokenAddress as Address, stable],
     });
 
-    if (
-      poolAddress &&
-      poolAddress !== "0x0000000000000000000000000000000000000000"
-    ) {
-      const poolInfo = await getAeroPoolInfo(
-        client,
-        poolAddress,
-        baseTokenSymbol,
-        stable,
-        config,
-      );
+    if (poolAddress && poolAddress !== "0x0000000000000000000000000000000000000000") {
+      const poolInfo = await getAeroPoolInfo(client, poolAddress, baseTokenSymbol, stable, config);
       if (poolInfo) pools.push(poolInfo);
     }
   };
@@ -1442,10 +1311,7 @@ async function findPancakeswapPools(
       { cacheTtlMs: POOL_CACHE_TTL_MS },
     );
 
-    if (
-      poolAddress &&
-      poolAddress !== "0x0000000000000000000000000000000000000000"
-    ) {
+    if (poolAddress && poolAddress !== "0x0000000000000000000000000000000000000000") {
       const poolInfo = await getUniPoolInfo(
         client,
         poolAddress,
@@ -1470,9 +1336,7 @@ async function findPancakeswapPools(
     ]);
   } else {
     // BSC: Only check WETH (WBNB)
-    await Promise.all([
-      ...FEE_TIERS.map((fee) => checkPool(config.weth, "WETH", fee)),
-    ]);
+    await Promise.all([...FEE_TIERS.map((fee) => checkPool(config.weth, "WETH", fee))]);
   }
 
   return pools;
@@ -1529,14 +1393,7 @@ async function getUniPoolInfo(
   // Calculate real TVL using liquidity and sqrtPrice
   // slot0 returns a tuple: [sqrtPriceX96, tick, observationIndex, ...]
   const sqrtPriceX96 = slot0[0];
-  const tvlUsd = calculateV3TVL(
-    liquidity,
-    sqrtPriceX96,
-    token0,
-    token1,
-    baseToken,
-    config,
-  );
+  const tvlUsd = calculateV3TVL(liquidity, sqrtPriceX96, token0, token1, baseToken, config);
 
   // Calculate Price in USD
   // Price of Token0 in terms of Token1 = (sqrtPriceX96 / 2^96)^2
@@ -1544,8 +1401,7 @@ async function getUniPoolInfo(
   // We want price of TargetToken in USD.
 
   let priceUsd = 0;
-  const isToken0Target =
-    (token0 as string).toLowerCase() === targetTokenAddress.toLowerCase();
+  const isToken0Target = (token0 as string).toLowerCase() === targetTokenAddress.toLowerCase();
 
   // P = price of Token0 in Token1 (raw)
   const Q96 = 2n ** 96n;
@@ -1642,19 +1498,11 @@ async function getAeroSlipstreamPoolInfo(
   // Calculate real TVL using liquidity and sqrtPrice
   // slot0 returns a tuple: [sqrtPriceX96, tick, observationIndex, ...]
   const sqrtPriceX96 = slot0[0];
-  const tvlUsd = calculateV3TVL(
-    liquidity,
-    sqrtPriceX96,
-    token0,
-    token1,
-    baseToken,
-    config,
-  );
+  const tvlUsd = calculateV3TVL(liquidity, sqrtPriceX96, token0, token1, baseToken, config);
 
   // Calculate Price in USD
   let priceUsd = 0;
-  const isToken0Target =
-    (token0 as string).toLowerCase() === targetTokenAddress.toLowerCase();
+  const isToken0Target = (token0 as string).toLowerCase() === targetTokenAddress.toLowerCase();
 
   const Q96 = 2n ** 96n;
   const sqrtP = Number(sqrtPriceX96) / Number(Q96);
@@ -1757,7 +1605,7 @@ function calculateV3TVL(
   liquidity: bigint,
   sqrtPriceX96: bigint,
   token0: string,
-  token1: string,
+  _token1: string,
   baseTokenSymbol: "USDC" | "WETH",
   config: (typeof CONFIG)[number],
 ): number {

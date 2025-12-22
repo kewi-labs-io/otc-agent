@@ -24,11 +24,7 @@ function isLocalDevelopment(chain: string, contractAddress: string): boolean {
   if (chain === "solana") {
     const solanaRpc = getSolanaConfig(getNetwork()).rpc;
     const hasBirdeyeKey = !!process.env.BIRDEYE_API_KEY;
-    if (
-      solanaRpc.includes("127.0.0.1") ||
-      solanaRpc.includes("localhost") ||
-      !hasBirdeyeKey
-    ) {
+    if (solanaRpc.includes("127.0.0.1") || solanaRpc.includes("localhost") || !hasBirdeyeKey) {
       return true;
     }
   }
@@ -37,7 +33,7 @@ function isLocalDevelopment(chain: string, contractAddress: string): boolean {
 }
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ tokenId: string }> },
 ) {
   const routeParams = await params;
@@ -59,11 +55,7 @@ export async function GET(
       // Skip external API calls for local development
       if (!isLocalDevelopment(token.chain, token.contractAddress)) {
         const service = new MarketDataService();
-        await service.refreshTokenData(
-          tokenId,
-          token.contractAddress,
-          token.chain,
-        );
+        await service.refreshTokenData(tokenId, token.contractAddress, token.chain);
         marketData = await MarketDataDB.getMarketData(tokenId);
       }
     }

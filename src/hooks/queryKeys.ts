@@ -19,12 +19,10 @@ export const tokenKeys = {
   all: ["tokens"] as const,
   lists: () => [...tokenKeys.all, "list"] as const,
   batches: () => [...tokenKeys.all, "batch"] as const,
-  batch: (ids: string[]) =>
-    [...tokenKeys.batches(), ids.sort().join(",")] as const,
+  batch: (ids: string[]) => [...tokenKeys.batches(), ids.sort().join(",")] as const,
   single: (id: string) => [...tokenKeys.all, "single", id] as const,
   marketData: (id: string) => [...tokenKeys.all, "marketData", id] as const,
-  lookup: (address: string, chain: Chain) =>
-    [...tokenKeys.all, "lookup", chain, address] as const,
+  lookup: (address: string, chain: Chain) => [...tokenKeys.all, "lookup", chain, address] as const,
   decimals: (address: string, chain: Chain) =>
     [...tokenKeys.all, "decimals", chain, address] as const,
 };
@@ -36,13 +34,10 @@ export const tokenKeys = {
 export const consignmentKeys = {
   all: ["consignments"] as const,
   lists: () => [...consignmentKeys.all, "list"] as const,
-  list: (filters: ConsignmentsFilters) =>
-    [...consignmentKeys.lists(), filters] as const,
+  list: (filters: ConsignmentsFilters) => [...consignmentKeys.lists(), filters] as const,
   single: (id: string) => [...consignmentKeys.all, "single", id] as const,
-  byConsigner: (address: string) =>
-    [...consignmentKeys.lists(), { consigner: address }] as const,
-  byToken: (tokenId: string) =>
-    [...consignmentKeys.lists(), { tokenId }] as const,
+  byConsigner: (address: string) => [...consignmentKeys.lists(), { consigner: address }] as const,
+  byToken: (tokenId: string) => [...consignmentKeys.lists(), { tokenId }] as const,
 };
 
 /**
@@ -69,8 +64,7 @@ export const quoteKeys = {
  */
 export const poolKeys = {
   all: ["pools"] as const,
-  check: (address: string, chain: Chain) =>
-    [...poolKeys.all, "check", chain, address] as const,
+  check: (address: string, chain: Chain) => [...poolKeys.all, "check", chain, address] as const,
 };
 
 /**
@@ -82,8 +76,7 @@ export const walletTokenKeys = {
   byWallet: (address: string, chain: Chain) =>
     [...walletTokenKeys.byChain(chain), address] as const,
   // Solana-specific balance keys
-  solBalance: (publicKey: string) =>
-    [...walletTokenKeys.all, "solana", "sol", publicKey] as const,
+  solBalance: (publicKey: string) => [...walletTokenKeys.all, "solana", "sol", publicKey] as const,
   solUsdcBalance: (publicKey: string) =>
     [...walletTokenKeys.all, "solana", "usdc", publicKey] as const,
   splBalance: (publicKey: string, mint: string) =>
@@ -97,8 +90,7 @@ export const priceKeys = {
   all: ["prices"] as const,
   native: () => [...priceKeys.all, "native"] as const,
   token: (tokenId: string) => [...priceKeys.all, "token", tokenId] as const,
-  tokenByMint: (mint: string) =>
-    [...priceKeys.all, "tokenByMint", mint] as const,
+  tokenByMint: (mint: string) => [...priceKeys.all, "tokenByMint", mint] as const,
 };
 
 /**

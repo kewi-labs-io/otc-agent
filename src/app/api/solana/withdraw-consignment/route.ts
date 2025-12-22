@@ -1,8 +1,8 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import * as anchor from "@coral-xyz/anchor";
 import { Connection, PublicKey, Transaction } from "@solana/web3.js";
-import { promises as fs } from "fs";
 import { type NextRequest, NextResponse } from "next/server";
-import path from "path";
 import { getSolanaConfig } from "@/config/contracts";
 import { getHeliusRpcUrl, getNetwork } from "@/config/env";
 import { validationErrorResponse } from "@/lib/validation/helpers";
@@ -21,8 +21,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Validate request body - return 400 on invalid params
-  const parseResult =
-    SolanaWithdrawConsignmentRequestWithSignedTxSchema.safeParse(body);
+  const parseResult = SolanaWithdrawConsignmentRequestWithSignedTxSchema.safeParse(body);
   if (!parseResult.success) {
     return validationErrorResponse(parseResult.error, 400);
   }
@@ -33,8 +32,7 @@ export async function POST(request: NextRequest) {
   // Get Solana config from deployment
   const network = getNetwork();
   const solanaConfig = getSolanaConfig();
-  const SOLANA_RPC =
-    network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
+  const SOLANA_RPC = network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
   const SOLANA_DESK = solanaConfig.desk;
 
   if (!SOLANA_DESK) {
@@ -49,36 +47,23 @@ export async function POST(request: NextRequest) {
 
   // Load desk keypair (supports env var and file-based)
   const deskKeypair = await loadDeskKeypair();
-  console.log(
-    "[Withdraw Consignment API] Loaded desk keypair:",
-    deskKeypair.publicKey.toBase58(),
-  );
+  console.log("[Withdraw Consignment API] Loaded desk keypair:", deskKeypair.publicKey.toBase58());
   const desk = new PublicKey(SOLANA_DESK);
 
   // Load IDL
-  const idlPath = path.join(
-    process.cwd(),
-    "solana/otc-program/target/idl/otc.json",
-  );
+  const idlPath = path.join(process.cwd(), "solana/otc-program/target/idl/otc.json");
   const idl = JSON.parse(await fs.readFile(idlPath, "utf8"));
 
   // Deserialize the signed transaction from the client
-  const transaction = Transaction.from(
-    Buffer.from(signedTransaction, "base64"),
-  );
+  const transaction = Transaction.from(Buffer.from(signedTransaction, "base64"));
 
   // Verify the consigner signed it
   const consignerPubkey = new PublicKey(consignerAddress);
   // Check if consigner's signature exists (signature is a Buffer when signed, null when unsigned)
-  const consignerSig = transaction.signatures.find((sig) =>
-    sig.publicKey.equals(consignerPubkey),
-  );
+  const consignerSig = transaction.signatures.find((sig) => sig.publicKey.equals(consignerPubkey));
 
   if (!consignerSig || !consignerSig.signature) {
-    return NextResponse.json(
-      { error: "Transaction not signed by consigner" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Transaction not signed by consigner" }, { status: 400 });
   }
 
   // Fetch consignment account to get token mint
@@ -108,8 +93,7 @@ export async function POST(request: NextRequest) {
   const programAccounts = program.account as ConsignmentAccountProgram;
   let consignmentData;
   try {
-    consignmentData =
-      await programAccounts.consignment.fetch(consignmentPubkey);
+    consignmentData = await programAccounts.consignment.fetch(consignmentPubkey);
   } catch (err) {
     // Handle "Invalid account discriminator" and other fetch errors
     const message = err instanceof Error ? err.message : String(err);
@@ -124,14 +108,8 @@ export async function POST(request: NextRequest) {
         { status: 404 },
       );
     }
-    console.error(
-      "[Withdraw Consignment API] Error fetching consignment:",
-      message,
-    );
-    return NextResponse.json(
-      { error: `Failed to fetch consignment: ${message}` },
-      { status: 500 },
-    );
+    console.error("[Withdraw Consignment API] Error fetching consignment:", message);
+    return NextResponse.json({ error: `Failed to fetch consignment: ${message}` }, { status: 500 });
   }
 
   // Check consignment exists
@@ -144,10 +122,7 @@ export async function POST(request: NextRequest) {
 
   // Verify consigner matches
   if (consignmentData.consigner.toString() !== consignerAddress) {
-    return NextResponse.json(
-      { error: "Consigner address mismatch" },
-      { status: 403 },
-    );
+    return NextResponse.json({ error: "Consigner address mismatch" }, { status: 403 });
   }
 
   // Verify consignment belongs to expected desk
@@ -160,10 +135,7 @@ export async function POST(request: NextRequest) {
 
   // Verify consignment is active and has remaining amount
   if (!consignmentData.isActive) {
-    return NextResponse.json(
-      { error: "Consignment is not active" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Consignment is not active" }, { status: 400 });
   }
 
   // consignmentData.remainingAmount is a BN, convert to string for comparison
@@ -194,35 +166,24 @@ export async function POST(request: NextRequest) {
   console.log("[Withdraw Consignment API] Desk signature added");
 
   // Verify all required signatures are present
-  const deskSig = transaction.signatures.find((sig) =>
-    sig.publicKey.equals(deskKeypair.publicKey),
-  );
+  const deskSig = transaction.signatures.find((sig) => sig.publicKey.equals(deskKeypair.publicKey));
   const consignerSigFinal = transaction.signatures.find((sig) =>
     sig.publicKey.equals(consignerPubkey),
   );
 
   if (!deskSig || !deskSig.signature) {
-    return NextResponse.json(
-      { error: "Desk signature missing" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Desk signature missing" }, { status: 500 });
   }
   if (!consignerSigFinal || !consignerSigFinal.signature) {
-    return NextResponse.json(
-      { error: "Consigner signature missing" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Consigner signature missing" }, { status: 400 });
   }
 
   // Send transaction
   console.log("[Withdraw Consignment API] Sending transaction...");
-  const signature = await connection.sendRawTransaction(
-    transaction.serialize(),
-    {
-      skipPreflight: false,
-      maxRetries: 3,
-    },
-  );
+  const signature = await connection.sendRawTransaction(transaction.serialize(), {
+    skipPreflight: false,
+    maxRetries: 3,
+  });
   console.log("[Withdraw Consignment API] Transaction sent:", signature);
 
   // Wait for confirmation
@@ -231,7 +192,6 @@ export async function POST(request: NextRequest) {
   console.log("[Withdraw Consignment API] Transaction confirmed");
 
   const withdrawResponse = { success: true, signature };
-  const validatedWithdrawResponse =
-    SolanaWithdrawConsignmentResponseSchema.parse(withdrawResponse);
+  const validatedWithdrawResponse = SolanaWithdrawConsignmentResponseSchema.parse(withdrawResponse);
   return NextResponse.json(validatedWithdrawResponse);
 }

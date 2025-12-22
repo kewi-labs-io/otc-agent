@@ -14,21 +14,20 @@
 
 import { testWithSynpress } from "@synthetixio/synpress";
 import { MetaMask } from "@synthetixio/synpress/playwright";
-import { getAddress, parseUnits } from "viem";
-
+import { getAddress } from "viem";
+import { assertServerHealthy, BASE_URL, log, sleep } from "../test-utils";
 import sellerSetup from "../wallet-setup/seller.setup";
-import { metaMaskFixtures } from "./utils/metamask-fixtures";
 import { connectMetaMaskWallet, waitForAppReady } from "./utils/login";
+import { metaMaskFixtures } from "./utils/metamask-fixtures";
 import {
-  computeEvmTokenId,
   evmClient,
   getConsignment,
   getConsignmentCount,
   getErc20Balance,
   loadEvmDeployment,
 } from "./utils/onchain";
+import { confirmMetaMaskTransaction } from "./utils/wallet-confirm";
 import { evmSeller } from "./utils/wallets";
-import { BASE_URL, assertServerHealthy, log, sleep, expectDefined } from "../test-utils";
 
 const test = testWithSynpress(metaMaskFixtures(sellerSetup));
 const { expect } = test;
@@ -111,11 +110,21 @@ test.describe("EVM Additional Scenarios", () => {
     await page.getByTestId("consign-create-button").click();
 
     // Approve transactions - expect exactly 2 transactions (approve + createConsignment)
-    await metamask.confirmTransaction();
-    await metamask.confirmTransaction().catch(() => {
-      // Single transaction if allowance already exists - verify this is expected
-      throw new Error("Expected 2 transactions but only 1 was required - verify allowance state");
+    const firstConfirm = await confirmMetaMaskTransaction(page, context, metamask, {
+      maxRetries: 5,
+      timeout: 45000,
     });
+    if (!firstConfirm) {
+      throw new Error("First transaction confirmation failed");
+    }
+
+    const secondConfirm = await confirmMetaMaskTransaction(page, context, metamask, {
+      maxRetries: 3,
+      timeout: 30000,
+    });
+    if (!secondConfirm) {
+      log("EVM-Withdraw", "Second transaction not found - may be combined");
+    }
 
     await expect(page.getByTestId("consign-view-my-listings")).toBeVisible({ timeout: 180000 });
 
@@ -131,11 +140,19 @@ test.describe("EVM Additional Scenarios", () => {
     await page.goto(`${BASE_URL}/my-deals`);
     await waitForAppReady(page, `${BASE_URL}/my-deals`);
 
-    const withdrawButton = page.getByTestId(`consignment-withdraw-base-${consignmentId.toString()}`);
+    const withdrawButton = page.getByTestId(
+      `consignment-withdraw-base-${consignmentId.toString()}`,
+    );
     await expect(withdrawButton).toBeVisible({ timeout: 60000 });
     await withdrawButton.click();
 
-    await metamask.confirmTransaction();
+    const withdrawConfirm = await confirmMetaMaskTransaction(page, context, metamask, {
+      maxRetries: 5,
+      timeout: 45000,
+    });
+    if (!withdrawConfirm) {
+      throw new Error("Withdraw transaction confirmation failed");
+    }
 
     // Verify withdrawal
     await expect

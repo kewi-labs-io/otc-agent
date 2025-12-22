@@ -17,11 +17,7 @@ const AVATAR_COLORS = [
   "#ec4899", // Pink
 ];
 
-export function WalletAvatar({
-  address,
-  size = 32,
-  className,
-}: WalletAvatarProps) {
+export function WalletAvatar({ address, size = 32, className }: WalletAvatarProps) {
   return (
     <div
       className={className}
@@ -32,12 +28,7 @@ export function WalletAvatar({
         overflow: "hidden",
       }}
     >
-      <Avatar
-        size={size}
-        name={address}
-        variant="beam"
-        colors={AVATAR_COLORS}
-      />
+      <Avatar size={size} name={address} variant="beam" colors={AVATAR_COLORS} />
     </div>
   );
 }

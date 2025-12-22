@@ -29,10 +29,7 @@ interface ConsignmentResponse {
  * @param id - Consignment database ID
  * @param callerAddress - Optional wallet address for owner-specific data
  */
-async function fetchConsignment(
-  id: string,
-  callerAddress?: string,
-): Promise<OTCConsignment> {
+async function fetchConsignment(id: string, callerAddress?: string): Promise<OTCConsignment> {
   const url = callerAddress
     ? `/api/consignments/${encodeURIComponent(id)}?callerAddress=${encodeURIComponent(callerAddress)}`
     : `/api/consignments/${encodeURIComponent(id)}`;
@@ -43,9 +40,7 @@ async function fetchConsignment(
     if (response.status === 404) {
       throw new Error(`Consignment ${id} not found`);
     }
-    throw new Error(
-      `Failed to fetch consignment: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Failed to fetch consignment: ${response.status} ${response.statusText}`);
   }
 
   const data = (await response.json()) as ConsignmentResponse;

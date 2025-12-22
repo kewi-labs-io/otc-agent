@@ -28,10 +28,7 @@ const SOL_PRICE_CACHE_TTL_MS = 60_000;
  */
 async function fetchSolPriceUsd(): Promise<number> {
   // Check cache first
-  if (
-    cachedSolPrice &&
-    Date.now() - cachedSolPrice.timestamp < SOL_PRICE_CACHE_TTL_MS
-  ) {
+  if (cachedSolPrice && Date.now() - cachedSolPrice.timestamp < SOL_PRICE_CACHE_TTL_MS) {
     return cachedSolPrice.price;
   }
 
@@ -113,38 +110,24 @@ export interface SolanaPoolInfo {
   tokenVault?: string; // Token vault account (SPL tokens)
 }
 
-const RAYDIUM_AMM_PROGRAM_MAINNET = new PublicKey(
-  "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
-);
-const RAYDIUM_AMM_PROGRAM_DEVNET = new PublicKey(
-  "HWy1jotHpo6UqeQxx49dpYYdQB8wj9Qk9MdxwjLvDHB8",
-);
+const RAYDIUM_AMM_PROGRAM_MAINNET = new PublicKey("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8");
+const RAYDIUM_AMM_PROGRAM_DEVNET = new PublicKey("HWy1jotHpo6UqeQxx49dpYYdQB8wj9Qk9MdxwjLvDHB8");
 
 // PumpSwap AMM Program (same for mainnet/devnet) - for GRADUATED tokens
-const PUMPSWAP_AMM_PROGRAM = new PublicKey(
-  "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
-);
+const PUMPSWAP_AMM_PROGRAM = new PublicKey("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA");
 
 // Pump.fun Bonding Curve Program - for UNBONDED tokens (original bonding curve)
-const PUMPFUN_BONDING_CURVE_PROGRAM = new PublicKey(
-  "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
-);
+const PUMPFUN_BONDING_CURVE_PROGRAM = new PublicKey("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
 
 // Meteora AMM Program (standard pools)
-const METEORA_AMM_PROGRAM = new PublicKey(
-  "Eo7WjKq67rjJQSZxS6z3YkapzY3eBj7eH5R8vMg6WP2r",
-);
+const METEORA_AMM_PROGRAM = new PublicKey("Eo7WjKq67rjJQSZxS6z3YkapzY3eBj7eH5R8vMg6WP2r");
 
 // Mainnet Mints
-const USDC_MINT_MAINNET = new PublicKey(
-  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-);
+const USDC_MINT_MAINNET = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 const SOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
 
 // Devnet Mints
-const USDC_MINT_DEVNET = new PublicKey(
-  "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-);
+const USDC_MINT_DEVNET = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
 
 export async function findBestSolanaPool(
   tokenMint: string,
@@ -233,8 +216,7 @@ export async function findBestSolanaPool(
   const bestPool = allPools[0];
 
   // Log selection for debugging
-  const priceDisplay =
-    bestPool.priceUsd != null ? bestPool.priceUsd.toFixed(8) : "N/A";
+  const priceDisplay = bestPool.priceUsd != null ? bestPool.priceUsd.toFixed(8) : "N/A";
   console.log(
     `[PoolFinder] Selected: ${bestPool.protocol} @ ${bestPool.address.slice(0, 8)}... (TVL: $${bestPool.tvlUsd.toFixed(2)}, Price: $${priceDisplay})`,
   );
@@ -294,9 +276,7 @@ async function findPumpFunBondingCurve(
 
   // If complete, token has graduated to PumpSwap/Raydium
   if (complete) {
-    console.log(
-      `[PumpFun] Bonding curve ${bondingCurvePda.toBase58()} is complete (graduated)`,
-    );
+    console.log(`[PumpFun] Bonding curve ${bondingCurvePda.toBase58()} is complete (graduated)`);
     return [];
   }
 
@@ -333,9 +313,7 @@ async function findPumpFunBondingCurve(
   const realSolAmount = Number(realSolReserves) / 1e9;
   const tvlUsd = realSolAmount * solPriceUsd * 2;
 
-  console.log(
-    `[PumpFun] Found bonding curve for ${mint.toBase58().slice(0, 8)}...`,
-  );
+  console.log(`[PumpFun] Found bonding curve for ${mint.toBase58().slice(0, 8)}...`);
   console.log(`  Token decimals: ${tokenDecimals}`);
   console.log(
     `  Raw virtual reserves: ${virtualTokenReserves.toString()} tokens / ${virtualSolReserves.toString()} lamports`,
@@ -373,8 +351,7 @@ async function findPumpSwapPools(
   cluster: "mainnet" | "devnet",
 ): Promise<SolanaPoolInfo[]> {
   const pools: SolanaPoolInfo[] = [];
-  const USDC_MINT =
-    cluster === "mainnet" ? USDC_MINT_MAINNET : USDC_MINT_DEVNET;
+  const USDC_MINT = cluster === "mainnet" ? USDC_MINT_MAINNET : USDC_MINT_DEVNET;
 
   // PumpSwap pools use memcmp filters at offsets 43 (base_mint) and 75 (quote_mint)
   // Based on: https://github.com/AL-THE-BOT-FATHER/pump_swap_market_cap
@@ -410,8 +387,7 @@ async function findPumpSwapPools(
   // FAIL-FAST: Each account must be processed successfully
   for (const account of all) {
     const data = account.account.data;
-    const readPubkey = (offset: number) =>
-      new PublicKey(data.subarray(offset, offset + 32));
+    const readPubkey = (offset: number) => new PublicKey(data.subarray(offset, offset + 32));
 
     // PumpSwap pool layout (from Python code):
     // offset 43: base_mint
@@ -444,13 +420,10 @@ async function findPumpSwapPools(
         value: { uiAmount: 0 },
       };
 
-      baseBalance =
-        await connection.getTokenAccountBalance(poolBaseTokenAccount);
+      baseBalance = await connection.getTokenAccountBalance(poolBaseTokenAccount);
       await sleep(RPC_CALL_DELAY_MS);
 
-      quoteBalance = await connection.getTokenAccountBalance(
-        poolQuoteTokenAccount,
-      );
+      quoteBalance = await connection.getTokenAccountBalance(poolQuoteTokenAccount);
       await sleep(RPC_CALL_DELAY_MS);
 
       // FAIL-FAST: Token account balances must be valid numbers
@@ -487,17 +460,12 @@ async function findPumpSwapPools(
       // Calculate Spot Price
       let priceUsd = 0;
       if (baseToken === "USDC") {
-        const tokenAmount = baseMint.equals(USDC_MINT)
-          ? quoteAmount
-          : baseAmount;
+        const tokenAmount = baseMint.equals(USDC_MINT) ? quoteAmount : baseAmount;
         priceUsd = tokenAmount > 0 ? solOrUsdcAmount / tokenAmount : 0;
       } else {
         // Base is SOL. Price = SOL / Token * SolPrice
-        const tokenAmount = baseMint.equals(SOL_MINT)
-          ? quoteAmount
-          : baseAmount;
-        priceUsd =
-          tokenAmount > 0 ? (solOrUsdcAmount / tokenAmount) * solPriceUsd : 0;
+        const tokenAmount = baseMint.equals(SOL_MINT) ? quoteAmount : baseAmount;
+        priceUsd = tokenAmount > 0 ? (solOrUsdcAmount / tokenAmount) * solPriceUsd : 0;
       }
 
       // Determine which vault is SOL and which is token
@@ -544,25 +512,16 @@ async function findRaydiumPools(
 ): Promise<SolanaPoolInfo[]> {
   const pools: SolanaPoolInfo[] = [];
   const PROGRAM_ID =
-    cluster === "mainnet"
-      ? RAYDIUM_AMM_PROGRAM_MAINNET
-      : RAYDIUM_AMM_PROGRAM_DEVNET;
-  const USDC_MINT =
-    cluster === "mainnet" ? USDC_MINT_MAINNET : USDC_MINT_DEVNET;
+    cluster === "mainnet" ? RAYDIUM_AMM_PROGRAM_MAINNET : RAYDIUM_AMM_PROGRAM_DEVNET;
+  const USDC_MINT = cluster === "mainnet" ? USDC_MINT_MAINNET : USDC_MINT_DEVNET;
 
   // Alternative Strategy: Fetch multiple accounts in a batch if possible, or use getProgramAccounts with stricter filters
   // The public RPC nodes often block getProgramAccounts for large datasets like Raydium.
   // However, filtering by size (752) AND memcmp (mint at offset) is usually allowed as it's efficient.
 
-  const filtersBase = [
-    { dataSize: 752 },
-    { memcmp: { offset: 400, bytes: mint.toBase58() } },
-  ];
+  const filtersBase = [{ dataSize: 752 }, { memcmp: { offset: 400, bytes: mint.toBase58() } }];
 
-  const filtersQuote = [
-    { dataSize: 752 },
-    { memcmp: { offset: 432, bytes: mint.toBase58() } },
-  ];
+  const filtersQuote = [{ dataSize: 752 }, { memcmp: { offset: 432, bytes: mint.toBase58() } }];
 
   // Run sequentially to avoid rate limits
   const poolsBase = await connection.getProgramAccounts(PROGRAM_ID, {
@@ -582,8 +541,7 @@ async function findRaydiumPools(
   // Process results (same as before)
   for (const account of all) {
     const data = account.account.data;
-    const readPubkey = (offset: number) =>
-      new PublicKey(data.subarray(offset, offset + 32));
+    const readPubkey = (offset: number) => new PublicKey(data.subarray(offset, offset + 32));
 
     const coinMint = readPubkey(400);
     const pcMint = readPubkey(432);
@@ -619,21 +577,15 @@ async function findRaydiumPools(
       balance = await connection.getTokenAccountBalance(vaultToCheck);
       await sleep(RPC_CALL_DELAY_MS);
       // FAIL-FAST: Token account balance must be valid
-      if (
-        balance.value.uiAmount === null ||
-        balance.value.uiAmount === undefined
-      ) {
-        throw new Error(
-          `Token account balance returned null for vault ${vaultToCheck.toBase58()}`,
-        );
+      if (balance.value.uiAmount === null || balance.value.uiAmount === undefined) {
+        throw new Error(`Token account balance returned null for vault ${vaultToCheck.toBase58()}`);
       }
       const amount = balance.value.uiAmount;
 
       // Fetch real SOL price for TVL and price calculations (cached, with API key support)
       const solPriceUsd = await fetchSolPriceUsd();
 
-      const tvlUsd =
-        baseToken === "USDC" ? amount * 2 : amount * solPriceUsd * 2;
+      const tvlUsd = baseToken === "USDC" ? amount * 2 : amount * solPriceUsd * 2;
 
       // Fetch the other vault to calculate price
       let priceUsd = 0;
@@ -652,9 +604,7 @@ async function findRaydiumPools(
       await sleep(RPC_CALL_DELAY_MS);
       // FAIL-FAST: Token account balance must be valid
       if (otherBalance.value.uiAmount == null) {
-        throw new Error(
-          `Token account balance returned null for vault ${otherVault.toBase58()}`,
-        );
+        throw new Error(`Token account balance returned null for vault ${otherVault.toBase58()}`);
       }
       const otherAmount = otherBalance.value.uiAmount;
 
@@ -687,7 +637,7 @@ async function findRaydiumPools(
  * Uses DexScreener API for reliable pricing since CPMM layout is complex
  */
 async function findRaydiumCpmmPools(
-  connection: Connection,
+  _connection: Connection,
   mint: PublicKey,
   cluster: "mainnet" | "devnet",
 ): Promise<SolanaPoolInfo[]> {
@@ -699,10 +649,9 @@ async function findRaydiumCpmmPools(
 
   // Use DexScreener API to find pools for this token
   const mintStr = mint.toBase58();
-  const response = await fetch(
-    `https://api.dexscreener.com/latest/dex/tokens/${mintStr}`,
-    { signal: AbortSignal.timeout(10000) },
-  );
+  const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mintStr}`, {
+    signal: AbortSignal.timeout(10000),
+  });
 
   if (!response.ok) {
     throw new Error(`DexScreener API error: ${response.status}`);
@@ -743,13 +692,11 @@ async function findRaydiumCpmmPools(
     if (!baseToken) continue;
 
     const priceUsd = parseFloat(pair.priceUsd);
-    if (isNaN(priceUsd)) {
+    if (Number.isNaN(priceUsd)) {
       throw new Error(`Invalid price value: ${pair.priceUsd}`);
     }
     if (!pair.liquidity) {
-      throw new Error(
-        `Raydium pair ${pair.pairAddress} missing liquidity field`,
-      );
+      throw new Error(`Raydium pair ${pair.pairAddress} missing liquidity field`);
     }
     const tvlUsd = pair.liquidity.usd ?? 0;
 
@@ -868,10 +815,7 @@ async function findMeteoraPools(
     let baseToken: "SOL" | "USDC" | null = null;
     if (mintX === SOL_MINT.toBase58() || mintY === SOL_MINT.toBase58()) {
       baseToken = "SOL";
-    } else if (
-      mintX === USDC_MINT.toBase58() ||
-      mintY === USDC_MINT.toBase58()
-    ) {
+    } else if (mintX === USDC_MINT.toBase58() || mintY === USDC_MINT.toBase58()) {
       baseToken = "USDC";
     }
 
@@ -879,27 +823,19 @@ async function findMeteoraPools(
 
     // FAIL-FAST: MeteoraPool interface requires liquidity, current_price, and trade_volume_24h
     if (!pool.liquidity) {
-      throw new Error(
-        `Meteora pool ${pool.address} missing required liquidity field`,
-      );
+      throw new Error(`Meteora pool ${pool.address} missing required liquidity field`);
     }
     if (pool.current_price === undefined) {
-      throw new Error(
-        `Meteora pool ${pool.address} missing required current_price field`,
-      );
+      throw new Error(`Meteora pool ${pool.address} missing required current_price field`);
     }
     if (pool.trade_volume_24h === undefined) {
-      throw new Error(
-        `Meteora pool ${pool.address} missing required trade_volume_24h field`,
-      );
+      throw new Error(`Meteora pool ${pool.address} missing required trade_volume_24h field`);
     }
 
     // Calculate TVL and price
     const liquidity = parseFloat(pool.liquidity);
-    if (isNaN(liquidity) || liquidity < 0) {
-      throw new Error(
-        `Meteora pool ${pool.address} has invalid liquidity: ${pool.liquidity}`,
-      );
+    if (Number.isNaN(liquidity) || liquidity < 0) {
+      throw new Error(`Meteora pool ${pool.address} has invalid liquidity: ${pool.liquidity}`);
     }
     // FAIL-FAST: Use liquidity directly (already validated above)
     // If liquidity is 0, that's a valid state (empty pool), not an error
@@ -916,9 +852,7 @@ async function findMeteoraPools(
 
     console.log(`[Meteora] Found DLMM pool: ${pool.name || pool.address}`);
     console.log(`  Address: ${pool.address}`);
-    console.log(
-      `  Base: ${baseToken}, Price: $${priceUsd.toFixed(8)}, TVL: $${tvlUsd.toFixed(2)}`,
-    );
+    console.log(`  Base: ${baseToken}, Price: $${priceUsd.toFixed(8)}, TVL: $${tvlUsd.toFixed(2)}`);
 
     pools.push({
       protocol: "Meteora",

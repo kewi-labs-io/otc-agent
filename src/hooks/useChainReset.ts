@@ -33,8 +33,7 @@ export function useChainReset() {
       // Only enable chain reset detection for local development with local validators
       const network = process.env.NEXT_PUBLIC_NETWORK;
       const isLocalNetwork = network === "local" || network === "localnet";
-      const isDevWithoutNetwork =
-        !network && process.env.NODE_ENV === "development";
+      const isDevWithoutNetwork = !network && process.env.NODE_ENV === "development";
 
       // Don't run chain reset checks when connected to real networks
       if (isLocalNetwork || isDevWithoutNetwork) {
@@ -50,8 +49,7 @@ export function useChainReset() {
     console.warn("[ChainReset] Local chain reset detected");
 
     toast.error("Chain Reset Detected", {
-      description:
-        "Local blockchain was reset. Click here to reset your wallet connection.",
+      description: "Local blockchain was reset. Click here to reset your wallet connection.",
       duration: 10000,
       action: {
         label: "Reset Wallet",
@@ -79,10 +77,7 @@ export function useChainReset() {
     const checkInterval = setInterval(async () => {
       const currentBlock = await publicClient.getBlockNumber();
 
-      if (
-        state.lastBlockNumber !== null &&
-        currentBlock < state.lastBlockNumber
-      ) {
+      if (state.lastBlockNumber !== null && currentBlock < state.lastBlockNumber) {
         await handleChainReset();
       }
 
@@ -90,13 +85,7 @@ export function useChainReset() {
     }, 3000);
 
     return () => clearInterval(checkInterval);
-  }, [
-    mounted,
-    state.checksEnabled,
-    state.lastBlockNumber,
-    publicClient,
-    handleChainReset,
-  ]);
+  }, [mounted, state.checksEnabled, state.lastBlockNumber, publicClient, handleChainReset]);
 
   // Return nothing - this hook just monitors for chain resets
   // and shows a toast with reset action when detected

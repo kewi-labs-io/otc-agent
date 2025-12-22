@@ -1,9 +1,9 @@
 // Quote Service - quote management for Eliza OTC Desk
 // Single source of truth registered with runtime.getService("QuoteService")
 
+import crypto from "node:crypto";
 import type { IAgentRuntime } from "@elizaos/core";
 import { Service } from "@elizaos/core";
-import crypto from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import { walletToEntityId } from "../../entityId";
 import type { PaymentCurrency, QuoteMemory, QuoteStatus } from "../types";
@@ -30,9 +30,7 @@ export class QuoteService extends Service {
   }
 
   async initialize(): Promise<void> {
-    console.log(
-      "[QuoteService] Initialized - single source of truth for quotes",
-    );
+    console.log("[QuoteService] Initialized - single source of truth for quotes");
     console.log("[QuoteService] Service type:", this.serviceType);
     console.log("[QuoteService] Service name:", QuoteService.serviceName);
   }
@@ -47,21 +45,14 @@ export class QuoteService extends Service {
     return service;
   }
 
-  private async addToIndex(
-    quoteId: string,
-    entityId: string,
-    beneficiary?: string,
-  ): Promise<void> {
-    const allQuotes =
-      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
+  private async addToIndex(quoteId: string, entityId: string, beneficiary?: string): Promise<void> {
+    const allQuotes = (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
     if (!allQuotes.includes(quoteId)) {
       allQuotes.push(quoteId);
       await this.runtime.setCache(ALL_QUOTES_KEY, allQuotes);
     }
 
-    const entityQuotes =
-      (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(entityId))) ||
-      [];
+    const entityQuotes = (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(entityId))) || [];
     if (!entityQuotes.includes(quoteId)) {
       entityQuotes.push(quoteId);
       await this.runtime.setCache(ENTITY_QUOTES_KEY(entityId), entityQuotes);
@@ -69,15 +60,10 @@ export class QuoteService extends Service {
 
     if (beneficiary) {
       const beneficiaryQuotes =
-        (await this.runtime.getCache<string[]>(
-          BENEFICIARY_QUOTES_KEY(beneficiary),
-        )) || [];
+        (await this.runtime.getCache<string[]>(BENEFICIARY_QUOTES_KEY(beneficiary))) || [];
       if (!beneficiaryQuotes.includes(quoteId)) {
         beneficiaryQuotes.push(quoteId);
-        await this.runtime.setCache(
-          BENEFICIARY_QUOTES_KEY(beneficiary),
-          beneficiaryQuotes,
-        );
+        await this.runtime.setCache(BENEFICIARY_QUOTES_KEY(beneficiary), beneficiaryQuotes);
       }
     }
   }
@@ -105,9 +91,7 @@ export class QuoteService extends Service {
   }): string {
     const secret = process.env.WORKER_AUTH_TOKEN;
     if (!secret) {
-      throw new Error(
-        "WORKER_AUTH_TOKEN must be set for quote signature generation",
-      );
+      throw new Error("WORKER_AUTH_TOKEN must be set for quote signature generation");
     }
     const payload = JSON.stringify(data);
     return crypto.createHmac("sha256", secret).update(payload).digest("hex");
@@ -143,9 +127,7 @@ export class QuoteService extends Service {
     const now = Date.now();
 
     // Check if quote already exists
-    const existing = await this.runtime.getCache<QuoteMemory>(
-      QUOTE_KEY(quoteId),
-    );
+    const existing = await this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId));
     console.log(
       `[QuoteService] createQuote - ID: ${quoteId}, Exists: ${!!existing}, Terms: ${data.discountBps}bps/${data.lockupMonths}mo`,
     );
@@ -172,8 +154,7 @@ export class QuoteService extends Service {
       lockupMonths: data.lockupMonths,
       lockupDays,
       paymentCurrency: data.paymentCurrency,
-      priceUsdPerToken:
-        data.priceUsdPerToken !== undefined ? data.priceUsdPerToken : 0, // 0 is valid for quotes with dynamic pricing
+      priceUsdPerToken: data.priceUsdPerToken !== undefined ? data.priceUsdPerToken : 0, // 0 is valid for quotes with dynamic pricing
       totalUsd: data.totalUsd,
       discountUsd: data.discountUsd,
       discountedUsd: data.discountedUsd,
@@ -209,20 +190,14 @@ export class QuoteService extends Service {
   }
 
   async getActiveQuotes(): Promise<QuoteMemory[]> {
-    const allQuoteIds =
-      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
+    const allQuoteIds = (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
 
     const allQuotes = await Promise.all(
-      allQuoteIds.map((quoteId) =>
-        this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId)),
-      ),
+      allQuoteIds.map((quoteId) => this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId))),
     );
 
     return allQuotes
-      .filter(
-        (quote): quote is QuoteMemory =>
-          quote != null && quote.status === "active",
-      )
+      .filter((quote): quote is QuoteMemory => quote != null && quote.status === "active")
       .sort((a, b) => b.createdAt - a.createdAt);
   }
 
@@ -240,64 +215,44 @@ export class QuoteService extends Service {
         ),
       );
 
-      const activeQuote = indexedQuotes.find(
-        (quote) => quote != null && quote.status === "active",
-      );
+      const activeQuote = indexedQuotes.find((quote) => quote != null && quote.status === "active");
       if (activeQuote) return activeQuote;
     }
 
-    const allQuoteIds =
-      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
+    const allQuoteIds = (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
 
     const allQuotes = await Promise.all(
-      allQuoteIds.map((quoteId) =>
-        this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId)),
-      ),
+      allQuoteIds.map((quoteId) => this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId))),
     );
 
     const found = allQuotes.find(
-      (quote) =>
-        quote != null &&
-        quote.beneficiary === normalized &&
-        quote.status === "active",
+      (quote) => quote != null && quote.beneficiary === normalized && quote.status === "active",
     );
 
     if (found) return found;
     throw new Error(`No active quote found for beneficiary: ${beneficiary}`);
   }
 
-  async getUserQuoteHistory(
-    entityId: string,
-    limit: number,
-  ): Promise<QuoteMemory[]> {
+  async getUserQuoteHistory(entityId: string, limit: number): Promise<QuoteMemory[]> {
     console.log("[QuoteService] getUserQuoteHistory:", { entityId, limit });
 
     const entityQuoteIds =
-      (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(entityId))) ||
-      [];
-    console.log(
-      "[QuoteService] Found quote IDs from index:",
-      entityQuoteIds.length,
-    );
+      (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(entityId))) || [];
+    console.log("[QuoteService] Found quote IDs from index:", entityQuoteIds.length);
 
     const entityQuotes = await Promise.all(
-      entityQuoteIds.map((quoteId) =>
-        this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId)),
-      ),
+      entityQuoteIds.map((quoteId) => this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId))),
     );
 
     const quotes = entityQuotes.filter((q): q is QuoteMemory => q != null);
     const processedIds = new Set(entityQuoteIds);
 
-    const allQuoteIds =
-      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
+    const allQuoteIds = (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
     const uncheckedIds = allQuoteIds.filter((id) => !processedIds.has(id));
 
     if (uncheckedIds.length > 0) {
       const uncheckedQuotes = await Promise.all(
-        uncheckedIds.map((quoteId) =>
-          this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId)),
-        ),
+        uncheckedIds.map((quoteId) => this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId))),
       );
 
       // Find quotes with matching entityId that weren't indexed
@@ -312,21 +267,13 @@ export class QuoteService extends Service {
 
       // Fix the index in batch if we found any
       if (unindexedQuoteIds.length > 0) {
-        console.log(
-          "[QuoteService] Found unindexed quotes:",
-          unindexedQuoteIds.length,
-        );
+        console.log("[QuoteService] Found unindexed quotes:", unindexedQuoteIds.length);
         const updatedEntityQuoteIds = [...entityQuoteIds, ...unindexedQuoteIds];
-        await this.runtime.setCache(
-          ENTITY_QUOTES_KEY(entityId),
-          updatedEntityQuoteIds,
-        );
+        await this.runtime.setCache(ENTITY_QUOTES_KEY(entityId), updatedEntityQuoteIds);
       }
     }
 
-    const sorted = quotes
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, limit);
+    const sorted = quotes.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
     console.log("[QuoteService] Returning quotes:", sorted.length);
     return sorted;
   }
@@ -338,18 +285,13 @@ export class QuoteService extends Service {
   }
 
   async getQuoteByOfferId(offerId: string): Promise<QuoteMemory | null> {
-    const allQuoteIds =
-      (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
+    const allQuoteIds = (await this.runtime.getCache<string[]>(ALL_QUOTES_KEY)) || [];
 
     const allQuotes = await Promise.all(
-      allQuoteIds.map((quoteId) =>
-        this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId)),
-      ),
+      allQuoteIds.map((quoteId) => this.runtime.getCache<QuoteMemory>(QUOTE_KEY(quoteId))),
     );
 
-    const quote = allQuotes.find(
-      (quote) => quote != null && quote.offerId === offerId,
-    );
+    const quote = allQuotes.find((quote) => quote != null && quote.offerId === offerId);
     return quote || null;
   }
 
@@ -372,18 +314,10 @@ export class QuoteService extends Service {
       ...quote,
       status,
       offerId: data.offerId !== "" ? data.offerId : quote.offerId,
-      transactionHash:
-        data.transactionHash !== ""
-          ? data.transactionHash
-          : quote.transactionHash,
-      blockNumber:
-        data.blockNumber !== 0 ? data.blockNumber : quote.blockNumber,
-      rejectionReason:
-        data.rejectionReason !== ""
-          ? data.rejectionReason
-          : quote.rejectionReason,
-      approvalNote:
-        data.approvalNote !== "" ? data.approvalNote : quote.approvalNote,
+      transactionHash: data.transactionHash !== "" ? data.transactionHash : quote.transactionHash,
+      blockNumber: data.blockNumber !== 0 ? data.blockNumber : quote.blockNumber,
+      rejectionReason: data.rejectionReason !== "" ? data.rejectionReason : quote.rejectionReason,
+      approvalNote: data.approvalNote !== "" ? data.approvalNote : quote.approvalNote,
       executedAt: status === "executed" ? now : quote.executedAt,
       rejectedAt: status === "rejected" ? now : quote.rejectedAt,
       approvedAt: status === "approved" ? now : quote.approvedAt,
@@ -432,11 +366,8 @@ export class QuoteService extends Service {
       transactionHash: data.transactionHash,
       blockNumber: data.blockNumber,
       priceUsdPerToken:
-        data.priceUsdPerToken !== undefined
-          ? data.priceUsdPerToken
-          : quote.priceUsdPerToken,
-      lockupDays:
-        data.lockupDays !== undefined ? data.lockupDays : quote.lockupDays,
+        data.priceUsdPerToken !== undefined ? data.priceUsdPerToken : quote.priceUsdPerToken,
+      lockupDays: data.lockupDays !== undefined ? data.lockupDays : quote.lockupDays,
       status: "executed",
       executedAt: Date.now(),
     };
@@ -451,10 +382,7 @@ export class QuoteService extends Service {
     return updatedQuote;
   }
 
-  async setQuoteBeneficiary(
-    quoteId: string,
-    beneficiary: string,
-  ): Promise<QuoteMemory> {
+  async setQuoteBeneficiary(quoteId: string, beneficiary: string): Promise<QuoteMemory> {
     console.log("[QuoteService] setQuoteBeneficiary called:", {
       quoteId,
       beneficiary,
@@ -473,29 +401,16 @@ export class QuoteService extends Service {
     });
 
     const oldEntityQuotes =
-      (await this.runtime.getCache<string[]>(
-        ENTITY_QUOTES_KEY(quote.entityId),
-      )) || [];
-    console.log(
-      "[QuoteService] Old entity quotes:",
-      oldEntityQuotes.length,
-      oldEntityQuotes,
-    );
+      (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(quote.entityId))) || [];
+    console.log("[QuoteService] Old entity quotes:", oldEntityQuotes.length, oldEntityQuotes);
     const filteredOld = oldEntityQuotes.filter((id) => id !== quoteId);
     await this.runtime.setCache(ENTITY_QUOTES_KEY(quote.entityId), filteredOld);
-    console.log(
-      "[QuoteService] Removed from old entity, remaining:",
-      filteredOld.length,
-    );
+    console.log("[QuoteService] Removed from old entity, remaining:", filteredOld.length);
 
     if (quote.beneficiary) {
       const oldBeneficiaryQuotes =
-        (await this.runtime.getCache<string[]>(
-          BENEFICIARY_QUOTES_KEY(quote.beneficiary),
-        )) || [];
-      const filteredOldBeneficiary = oldBeneficiaryQuotes.filter(
-        (id) => id !== quoteId,
-      );
+        (await this.runtime.getCache<string[]>(BENEFICIARY_QUOTES_KEY(quote.beneficiary))) || [];
+      const filteredOldBeneficiary = oldBeneficiaryQuotes.filter((id) => id !== quoteId);
       await this.runtime.setCache(
         BENEFICIARY_QUOTES_KEY(quote.beneficiary),
         filteredOldBeneficiary,
@@ -503,8 +418,7 @@ export class QuoteService extends Service {
     }
 
     const newEntityQuotes =
-      (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(newEntityId))) ||
-      [];
+      (await this.runtime.getCache<string[]>(ENTITY_QUOTES_KEY(newEntityId))) || [];
     console.log(
       "[QuoteService] New entity quotes before:",
       newEntityQuotes.length,
@@ -512,26 +426,15 @@ export class QuoteService extends Service {
     );
     if (!newEntityQuotes.includes(quoteId)) {
       newEntityQuotes.push(quoteId);
-      await this.runtime.setCache(
-        ENTITY_QUOTES_KEY(newEntityId),
-        newEntityQuotes,
-      );
-      console.log(
-        "[QuoteService] Added to new entity, total:",
-        newEntityQuotes.length,
-      );
+      await this.runtime.setCache(ENTITY_QUOTES_KEY(newEntityId), newEntityQuotes);
+      console.log("[QuoteService] Added to new entity, total:", newEntityQuotes.length);
     }
 
     const newBeneficiaryQuotes =
-      (await this.runtime.getCache<string[]>(
-        BENEFICIARY_QUOTES_KEY(normalized),
-      )) || [];
+      (await this.runtime.getCache<string[]>(BENEFICIARY_QUOTES_KEY(normalized))) || [];
     if (!newBeneficiaryQuotes.includes(quoteId)) {
       newBeneficiaryQuotes.push(quoteId);
-      await this.runtime.setCache(
-        BENEFICIARY_QUOTES_KEY(normalized),
-        newBeneficiaryQuotes,
-      );
+      await this.runtime.setCache(BENEFICIARY_QUOTES_KEY(normalized), newBeneficiaryQuotes);
     }
 
     const newSignature = this.generateQuoteSignature({
@@ -576,9 +479,7 @@ export class QuoteService extends Service {
   async getQuoteByWallet(walletAddress: string): Promise<QuoteMemory | null> {
     const entityId = walletToEntityId(walletAddress);
     const quotes = await this.getUserQuoteHistory(entityId, 100);
-    const activeQuote = quotes.find(
-      (q) => q.entityId === entityId && q.status === "active",
-    );
+    const activeQuote = quotes.find((q) => q.entityId === entityId && q.status === "active");
     return activeQuote || null;
   }
 
@@ -588,9 +489,7 @@ export class QuoteService extends Service {
     const active = await this.getActiveQuotes();
     const userQuotes = active.filter((q) => q.entityId === entityId);
 
-    console.log(
-      `[QuoteService] Expiring ${userQuotes.length} quotes for ${walletAddress}`,
-    );
+    console.log(`[QuoteService] Expiring ${userQuotes.length} quotes for ${walletAddress}`);
 
     // Expire all quotes in parallel for better performance
     await Promise.all(

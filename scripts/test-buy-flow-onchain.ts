@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * On-Chain Buy Flow E2E Test
  *
@@ -16,24 +17,24 @@
  * Run: bun scripts/test-buy-flow-onchain.ts
  */
 
+import { execSync, spawn } from "node:child_process";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import {
+  type Address,
   createPublicClient,
   createWalletClient,
-  http,
-  parseEther,
   formatEther,
-  parseUnits,
   formatUnits,
-  keccak256,
-  stringToBytes,
-  type Address,
   type Hex,
+  http,
+  keccak256,
+  parseEther,
+  parseUnits,
+  stringToBytes,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { localhost } from "viem/chains";
-import { spawn, execSync } from "child_process";
-import * as fs from "fs";
-import * as path from "path";
 
 // =============================================================================
 // CONFIGURATION
@@ -131,8 +132,8 @@ async function startAnvil(): Promise<() => void> {
 }
 
 async function deployContracts(
-  publicClient: ReturnType<typeof createPublicClient>,
-  walletClient: ReturnType<typeof createWalletClient>
+  _publicClient: ReturnType<typeof createPublicClient>,
+  _walletClient: ReturnType<typeof createWalletClient>,
 ): Promise<{
   otc: Address;
   token: Address;
@@ -150,7 +151,7 @@ async function deployContracts(
     {
       cwd: contractsDir,
       stdio: "pipe",
-    }
+    },
   );
 
   // Read deployment addresses
@@ -213,7 +214,7 @@ async function runBuyFlowTest() {
   section("ON-CHAIN BUY FLOW E2E TEST");
 
   // Start Anvil if needed
-  const stopAnvil = await startAnvil();
+  const _stopAnvil = await startAnvil();
 
   // Create clients
   const publicClient = createPublicClient({
@@ -317,11 +318,12 @@ async function runBuyFlowTest() {
   });
 
   await publicClient.waitForTransactionReceipt({ hash: p2pTx });
-  const p2pConsignmentId = (await publicClient.readContract({
-    address: addresses.otc,
-    abi: OTC_ABI,
-    functionName: "nextConsignmentId",
-  })) - 1n;
+  const p2pConsignmentId =
+    (await publicClient.readContract({
+      address: addresses.otc,
+      abi: OTC_ABI,
+      functionName: "nextConsignmentId",
+    })) - 1n;
 
   log("✅", `P2P Consignment created: ID ${p2pConsignmentId}`);
 
@@ -343,11 +345,12 @@ async function runBuyFlowTest() {
   });
 
   await publicClient.waitForTransactionReceipt({ hash: p2pOfferTx });
-  const p2pOfferId = (await publicClient.readContract({
-    address: addresses.otc,
-    abi: OTC_ABI,
-    functionName: "nextOfferId",
-  })) - 1n;
+  const p2pOfferId =
+    (await publicClient.readContract({
+      address: addresses.otc,
+      abi: OTC_ABI,
+      functionName: "nextOfferId",
+    })) - 1n;
 
   // Verify auto-approval
   const p2pOffer = await publicClient.readContract({
@@ -467,11 +470,12 @@ async function runBuyFlowTest() {
   });
 
   await publicClient.waitForTransactionReceipt({ hash: negotiableTx });
-  const negotiableConsignmentId = (await publicClient.readContract({
-    address: addresses.otc,
-    abi: OTC_ABI,
-    functionName: "nextConsignmentId",
-  })) - 1n;
+  const negotiableConsignmentId =
+    (await publicClient.readContract({
+      address: addresses.otc,
+      abi: OTC_ABI,
+      functionName: "nextConsignmentId",
+    })) - 1n;
 
   log("✅", `Negotiable Consignment created: ID ${negotiableConsignmentId}`);
 
@@ -512,11 +516,12 @@ async function runBuyFlowTest() {
   });
 
   await publicClient.waitForTransactionReceipt({ hash: negotiableOfferTx });
-  const negotiableOfferId = (await publicClient.readContract({
-    address: addresses.otc,
-    abi: OTC_ABI,
-    functionName: "nextOfferId",
-  })) - 1n;
+  const negotiableOfferId =
+    (await publicClient.readContract({
+      address: addresses.otc,
+      abi: OTC_ABI,
+      functionName: "nextOfferId",
+    })) - 1n;
 
   // Verify NOT auto-approved
   const negotiableOffer = await publicClient.readContract({
@@ -697,4 +702,3 @@ runBuyFlowTest()
     console.error("\n❌ Error:", error);
     process.exit(1);
   });
-

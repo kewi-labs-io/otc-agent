@@ -8,19 +8,15 @@ import { AcceptQuoteModal } from "@/components/accept-quote-modal";
 import { Button } from "@/components/button";
 import { ChatMessages } from "@/components/chat-messages";
 import { Dialog } from "@/components/dialog";
-import { InlineSvgSpinner } from "@/components/ui/loading-spinner";
 import { TextareaWithActions } from "@/components/textarea-with-actions";
 import { TokenHeader } from "@/components/token-header";
+import { InlineSvgSpinner } from "@/components/ui/loading-spinner";
 import { CHAT_SOURCE, USER_NAME } from "@/constants";
 import { useChain, useWalletActions, useWalletConnection } from "@/contexts";
-import { useConsignments } from "@/hooks/useConsignments";
 import { useCreateRoom, useSendMessage } from "@/hooks/useChat";
+import { useConsignments } from "@/hooks/useConsignments";
 import type { Token, TokenMarketData } from "@/types";
-import type {
-  ChatMessage,
-  ChatMessageContent,
-  ChatMessageQuoteData,
-} from "@/types/chat-message";
+import type { ChatMessage, ChatMessageContent, ChatMessageQuoteData } from "@/types/chat-message";
 import { formatRawTokenAmount } from "@/utils/format";
 import { type OTCQuote, parseMessageXML } from "@/utils/xml-parser";
 
@@ -127,10 +123,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
 import type { RawRoomMessage } from "@/types";
 
 // --- Helper: Parse room message into ChatMessage format ---
-function parseRoomMessage(
-  msg: RawRoomMessage,
-  roomId: string,
-): ChatMessage | null {
+function parseRoomMessage(msg: RawRoomMessage, roomId: string): ChatMessage | null {
   // FAIL-FAST: Validate required fields first
   if (!msg.id) {
     throw new Error("RawRoomMessage missing id field");
@@ -192,9 +185,7 @@ function parseRoomMessage(
     senderId: msg.entityId,
     roomId: roomId,
     createdAt:
-      typeof msg.createdAt === "number"
-        ? msg.createdAt
-        : new Date(msg.createdAt).getTime(),
+      typeof msg.createdAt === "number" ? msg.createdAt : new Date(msg.createdAt).getTime(),
     source: CHAT_SOURCE,
     isLoading: false,
     serverMessageId: msg.id,
@@ -217,11 +208,7 @@ const initialChatState: ChatState = {
   showClearChatModal: false,
 };
 
-export const Chat = ({
-  roomId: initialRoomId,
-  token,
-  marketData,
-}: ChatProps = {}) => {
+export const Chat = ({ roomId: initialRoomId, token, marketData }: ChatProps = {}) => {
   // --- Consolidated State ---
   const [state, dispatch] = useReducer(chatReducer, {
     ...initialChatState,
@@ -256,15 +243,15 @@ export const Chat = ({
 
   // Fetch consignments for this token to get available amounts and terms
   const { data: consignments } = useConsignments({
-    filters: token && token.id ? { tokenId: token.id } : {},
-    enabled: !!(token && token.id),
+    filters: token?.id ? { tokenId: token.id } : {},
+    enabled: !!token?.id,
   });
 
   // Helper to safely parse BigInt
-  const safeBigInt = (value: string | undefined | null): bigint => {
+  const safeBigInt = useCallback((value: string | undefined | null): bigint => {
     if (!value) return 0n;
     return BigInt(value);
-  };
+  }, []);
 
   // Calculate aggregated consignment data for the token
   // Uses sanitized display fields (worst case for negotiable, actual for fixed)
@@ -303,9 +290,7 @@ export const Chat = ({
         if (c.isNegotiable) {
           // FAIL-FAST: Negotiable consignments must have minDiscountBps
           if (c.minDiscountBps == null) {
-            throw new Error(
-              `Negotiable consignment ${c.id} missing minDiscountBps`,
-            );
+            throw new Error(`Negotiable consignment ${c.id} missing minDiscountBps`);
           }
           return c.minDiscountBps;
         }
@@ -325,9 +310,7 @@ export const Chat = ({
         if (c.isNegotiable) {
           // FAIL-FAST: Negotiable consignments must have maxLockupDays
           if (c.maxLockupDays == null) {
-            throw new Error(
-              `Negotiable consignment ${c.id} missing maxLockupDays`,
-            );
+            throw new Error(`Negotiable consignment ${c.id} missing maxLockupDays`);
           }
           return c.maxLockupDays;
         }
@@ -342,9 +325,7 @@ export const Chat = ({
     const maxDealAmount = totalAvailable; // Can buy up to total available
 
     // Check if any consignment is fractionalized (allows partial purchases)
-    const hasFractionalized = activeConsignments.some(
-      (c) => c.isFractionalized,
-    );
+    const hasFractionalized = activeConsignments.some((c) => c.isFractionalized);
     const hasNegotiable = activeConsignments.some((c) => c.isNegotiable);
 
     // FAIL-FAST: startingDiscount and startingLockupDays must be valid numbers
@@ -354,9 +335,7 @@ export const Chat = ({
       throw new Error(`Invalid startingDiscount computed: ${startingDiscount}`);
     }
     if (!Number.isFinite(startingLockupDays) || startingLockupDays < 0) {
-      throw new Error(
-        `Invalid startingLockupDays computed: ${startingLockupDays}`,
-      );
+      throw new Error(`Invalid startingLockupDays computed: ${startingLockupDays}`);
     }
 
     return {
@@ -371,12 +350,10 @@ export const Chat = ({
       // Uses the first active consignment (required for on-chain execution)
       primaryConsignmentId: activeConsignments[0].id,
     };
-  }, [consignments]);
+  }, [consignments, safeBigInt]);
 
   // --- Refs ---
-  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
-    null,
-  );
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastMessageTimestampRef = useRef<number>(0);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const previousQuoteIdRef = useRef<string | null>(null);
@@ -434,23 +411,17 @@ export const Chat = ({
         const data = await response.json();
         // FAIL-FAST: API response must have messages array
         if (!data.messages || !Array.isArray(data.messages)) {
-          throw new Error(
-            "Invalid API response: messages array is missing or not an array",
-          );
+          throw new Error("Invalid API response: messages array is missing or not an array");
         }
         const rawMessages = data.messages;
 
         // Format messages using helper function
         const formattedMessages = (rawMessages as RawRoomMessage[])
           .map((msg) => parseRoomMessage(msg, roomId))
-          .filter(
-            (msg: ChatMessage | null): msg is ChatMessage => msg !== null,
-          );
+          .filter((msg: ChatMessage | null): msg is ChatMessage => msg !== null);
 
         // Sort by timestamp
-        formattedMessages.sort(
-          (a: ChatMessage, b: ChatMessage) => a.createdAt - b.createdAt,
-        );
+        formattedMessages.sort((a: ChatMessage, b: ChatMessage) => a.createdAt - b.createdAt);
 
         dispatch({ type: "SET_MESSAGES", payload: formattedMessages });
 
@@ -493,24 +464,18 @@ export const Chat = ({
         const data = await response.json();
         // FAIL-FAST: API response must have messages array
         if (!data.messages || !Array.isArray(data.messages)) {
-          throw new Error(
-            "Invalid API response: messages array is missing or not an array",
-          );
+          throw new Error("Invalid API response: messages array is missing or not an array");
         }
         const newMessages = data.messages;
 
         if (newMessages.length > 0) {
           const formattedMessages = (newMessages as RawRoomMessage[])
             .map((msg) => parseRoomMessage(msg, roomId))
-            .filter(
-              (msg: ChatMessage | null): msg is ChatMessage => msg !== null,
-            );
+            .filter((msg: ChatMessage | null): msg is ChatMessage => msg !== null);
 
           // Use ref to get current messages without triggering effect restart
           const currentMessages = messagesRef.current;
-          const withoutOptimistic = currentMessages.filter(
-            (m) => !m.isUserMessage,
-          );
+          const withoutOptimistic = currentMessages.filter((m) => !m.isUserMessage);
 
           // Merge with new messages and dedupe by server ID
           const byServerId = new Map<string, ChatMessage>();
@@ -544,8 +509,7 @@ export const Chat = ({
 
           // Update last message timestamp
           if (formattedMessages.length > 0) {
-            const lastNewMessage =
-              formattedMessages[formattedMessages.length - 1];
+            const lastNewMessage = formattedMessages[formattedMessages.length - 1];
             lastMessageTimestampRef.current = lastNewMessage.createdAt;
           }
 
@@ -589,13 +553,7 @@ export const Chat = ({
   const sendMessage = useCallback(
     async (messageText: string, targetRoomId?: string) => {
       const effectiveRoomId = targetRoomId || roomId;
-      if (
-        !messageText.trim() ||
-        !entityId ||
-        !effectiveRoomId ||
-        inputDisabled ||
-        !isConnected
-      ) {
+      if (!messageText.trim() || !entityId || !effectiveRoomId || inputDisabled || !isConnected) {
         throw new Error("Cannot send message: missing required data");
       }
 
@@ -662,11 +620,30 @@ export const Chat = ({
     [input, isConnected, entityId, roomId, createNewRoom, sendMessage],
   );
 
+  // Track room creation to prevent infinite retries
+  const roomCreationAttemptedRef = useRef<string | null>(null);
+
   // Handle creating a new room when there isn't one
   useEffect(() => {
     if (!roomId && entityId && isConnected) {
+      // Only attempt once per entityId to prevent infinite loop on backend failure
+      if (roomCreationAttemptedRef.current === entityId) {
+        return;
+      }
+      roomCreationAttemptedRef.current = entityId;
       // Automatically create a room for this wallet when connected
-      createNewRoom();
+      createNewRoom().catch((err) => {
+        console.warn(
+          "[Chat] Failed to create room:",
+          err instanceof Error ? err.message : String(err),
+        );
+        // Reset after delay to allow retry on user action
+        setTimeout(() => {
+          if (roomCreationAttemptedRef.current === entityId) {
+            roomCreationAttemptedRef.current = null;
+          }
+        }, 10000);
+      });
     }
   }, [roomId, entityId, isConnected, createNewRoom]);
 
@@ -675,27 +652,27 @@ export const Chat = ({
     const container = messagesContainerRef.current;
     if (!container) return;
     container.scrollTop = container.scrollHeight;
-  }, [messages]);
+  }, []);
 
   // Helper: Extract text content from a message for XML parsing
-  const getMessageTextForParsing = (msg: ChatMessage): string => {
+  const getMessageTextForParsing = useCallback((msg: ChatMessage): string => {
     // Primary: use text field if it's a string
     if (typeof msg.text === "string" && msg.text) {
       return msg.text;
     }
     // Fallback 1: check content.text
-    if (msg.content && msg.content.text) {
+    if (msg.content?.text) {
       return msg.content.text;
     }
     // Fallback 2: check content.xml (agent sends quotes here too)
-    if (msg.content && msg.content.xml) {
+    if (msg.content?.xml) {
       return msg.content.xml;
     }
     return "";
-  };
+  }, []);
 
   // Helper: Try to extract quote directly from structured content
-  const getQuoteFromContent = (msg: ChatMessage): OTCQuote | null => {
+  const getQuoteFromContent = useCallback((msg: ChatMessage): OTCQuote | null => {
     if (!msg.content) return null;
     if (msg.content.type !== "otc_quote") return null;
     if (!msg.content.quote) return null;
@@ -731,9 +708,7 @@ export const Chat = ({
     const lockupDays = Number(q.lockupDays);
     // lockupMonths is optional - calculate from lockupDays if not provided
     const lockupMonths =
-      typeof q.lockupMonths === "number"
-        ? Number(q.lockupMonths)
-        : Math.ceil(lockupDays / 30);
+      typeof q.lockupMonths === "number" ? Number(q.lockupMonths) : Math.ceil(lockupDays / 30);
 
     return {
       quoteId: String(q.quoteId),
@@ -754,9 +729,7 @@ export const Chat = ({
           ? Number(q.pricePerToken)
           : undefined,
       totalValueUsd:
-        q.totalUsd !== undefined && q.totalUsd !== null
-          ? Number(q.totalUsd)
-          : undefined,
+        q.totalUsd !== undefined && q.totalUsd !== null ? Number(q.totalUsd) : undefined,
       finalPriceUsd:
         q.discountedUsd !== undefined && q.discountedUsd !== null
           ? Number(q.discountedUsd)
@@ -764,7 +737,7 @@ export const Chat = ({
       createdAt: q.createdAt ? String(q.createdAt) : undefined,
       status: q.status ? String(q.status) : undefined,
     };
-  };
+  }, []);
 
   // Extract current quote from messages
   useEffect(() => {
@@ -785,12 +758,7 @@ export const Chat = ({
       if (!extractedQuote) {
         const messageText = getMessageTextForParsing(msg);
         const parsed = parseMessageXML(messageText);
-        if (
-          parsed &&
-          parsed.type === "otc_quote" &&
-          parsed.data &&
-          "tokenSymbol" in parsed.data
-        ) {
+        if (parsed && parsed.type === "otc_quote" && parsed.data && "tokenSymbol" in parsed.data) {
           extractedQuote = parsed.data as OTCQuote;
         }
       }
@@ -819,7 +787,7 @@ export const Chat = ({
         break;
       }
     }
-  }, [messages]);
+  }, [messages, getMessageTextForParsing, getQuoteFromContent]);
 
   // Extract marketData.priceUsd to a variable for static dependency checking
   const priceUsd = marketData?.priceUsd;
@@ -845,12 +813,7 @@ export const Chat = ({
       throw new Error(`Invalid token ID format: ${token.id}`);
     }
     const tokenChain = tokenIdParts[1] as OTCQuote["tokenChain"];
-    const validChains: OTCQuote["tokenChain"][] = [
-      "ethereum",
-      "base",
-      "bsc",
-      "solana",
-    ];
+    const validChains: OTCQuote["tokenChain"][] = ["ethereum", "base", "bsc", "solana"];
     if (!validChains.includes(tokenChain)) {
       throw new Error(`Invalid chain in token ID: ${tokenChain}`);
     }
@@ -869,10 +832,7 @@ export const Chat = ({
     const defaultQuote: OTCQuote = {
       quoteId: `default-${token.id}`,
       tokenAmount: consignmentData.totalAvailable,
-      tokenAmountFormatted: formatRawTokenAmount(
-        consignmentData.totalAvailable,
-        token.decimals,
-      ),
+      tokenAmountFormatted: formatRawTokenAmount(consignmentData.totalAvailable, token.decimals),
       tokenSymbol: token.symbol,
       tokenChain: tokenChain,
       tokenAddress: tokenAddress, // Include for direct lookup
@@ -885,8 +845,7 @@ export const Chat = ({
       pricePerToken: typeof priceUsd === "number" ? priceUsd : undefined,
       totalValueUsd:
         typeof priceUsd === "number"
-          ? (Number(consignmentData.totalAvailable) / 10 ** token.decimals) *
-            priceUsd
+          ? (Number(consignmentData.totalAvailable) / 10 ** token.decimals) * priceUsd
           : undefined,
       status: "default",
       // Pass consignment properties for UI
@@ -947,9 +906,7 @@ export const Chat = ({
     // If connected but to wrong chain, trigger connection flow for required chain
     if (needsChainConnection) {
       const requiredChain = isSolanaQuote ? "solana" : "evm";
-      console.log(
-        `[Chat] Quote requires ${requiredChain}, connecting wallet...`,
-      );
+      console.log(`[Chat] Quote requires ${requiredChain}, connecting wallet...`);
       // Set active family first so Privy knows which chain to connect
       setActiveFamily(requiredChain);
       // Trigger Privy connect (user is already authenticated since isConnected is true)
@@ -961,14 +918,7 @@ export const Chat = ({
 
     // User is connected to the right chain, proceed normally
     dispatch({ type: "SET_ACCEPT_MODAL", payload: true });
-  }, [
-    currentQuote,
-    isConnected,
-    solanaConnected,
-    evmConnected,
-    connectWallet,
-    setActiveFamily,
-  ]);
+  }, [currentQuote, isConnected, solanaConnected, evmConnected, connectWallet, setActiveFamily]);
 
   const handleClearChat = useCallback(async () => {
     if (!entityId) return;
@@ -993,9 +943,7 @@ export const Chat = ({
 
     // Reset chat and create new room in the background
     if (!entityId) {
-      console.warn(
-        "[Chat] No entityId during deal completion - cannot reset chat",
-      );
+      console.warn("[Chat] No entityId during deal completion - cannot reset chat");
       return;
     }
 
@@ -1057,9 +1005,7 @@ export const Chat = ({
         currentQuote={currentQuote}
         onAcceptOffer={handleAcceptOffer}
         isOfferGlowing={isOfferGlowing}
-        onClearChat={() =>
-          dispatch({ type: "SET_CLEAR_CHAT_MODAL", payload: true })
-        }
+        onClearChat={() => dispatch({ type: "SET_CLEAR_CHAT_MODAL", payload: true })}
         onConnect={handleConnect}
         privyReady={privyReady}
         token={token}
@@ -1077,9 +1023,7 @@ export const Chat = ({
       {/* Clear Chat Confirmation Modal */}
       <Dialog
         open={showClearChatModal}
-        onClose={() =>
-          dispatch({ type: "SET_CLEAR_CHAT_MODAL", payload: false })
-        }
+        onClose={() => dispatch({ type: "SET_CLEAR_CHAT_MODAL", payload: false })}
       >
         <div className="bg-white dark:bg-zinc-900 max-w-md rounded-lg overflow-hidden">
           <h3 className="text-xl font-semibold bg-red-600 text-white mb-4 px-4 py-2 rounded-t-lg">
@@ -1087,15 +1031,13 @@ export const Chat = ({
           </h3>
           <div className="p-4">
             <p className="text-zinc-600 dark:text-zinc-400 mb-6">
-              This will permanently delete all messages and reset the
-              agent&apos;s memory of your conversation. Your current quote will
-              be reset to default terms. This action cannot be undone.
+              This will permanently delete all messages and reset the agent&apos;s memory of your
+              conversation. Your current quote will be reset to default terms. This action cannot be
+              undone.
             </p>
             <div className="flex gap-3 justify-end">
               <Button
-                onClick={() =>
-                  dispatch({ type: "SET_CLEAR_CHAT_MODAL", payload: false })
-                }
+                onClick={() => dispatch({ type: "SET_CLEAR_CHAT_MODAL", payload: false })}
                 color="dark"
               >
                 <div className="px-4 py-2">Cancel</div>
@@ -1143,11 +1085,10 @@ function ChatHeader({
     <div className="flex-shrink-0 pb-3 border-b border-zinc-200 dark:border-zinc-800">
       {/* Header row with title and actions */}
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-          Negotiate a Deal
-        </h2>
+        <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Negotiate a Deal</h2>
         {!isLoadingHistory && (
           <button
+            type="button"
             onClick={onClearChat}
             className="text-xs text-zinc-500 hover:text-red-500 dark:text-zinc-400 dark:hover:text-red-400 transition-colors"
           >
@@ -1191,9 +1132,7 @@ function ChatHeader({
                   </span>
                 )}
                 {lockupDisplay && (
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                    {lockupDisplay}
-                  </span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">{lockupDisplay}</span>
                 )}
               </div>
             </div>
@@ -1399,7 +1338,7 @@ function ChatBody({
             isLoading={isAgentThinking || inputDisabled || !isConnected}
             placeholder={
               isConnected
-                ? currentQuote && currentQuote.tokenSymbol
+                ? currentQuote?.tokenSymbol
                   ? `Negotiate a deal for $${currentQuote.tokenSymbol}`
                   : "Ask about available tokens or request a quote"
                 : "Connect wallet to chat"

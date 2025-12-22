@@ -43,9 +43,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
   if (!privyAppId) {
-    throw new Error(
-      "NEXT_PUBLIC_PRIVY_APP_ID is required. Please add it to your .env.local file.",
-    );
+    throw new Error("NEXT_PUBLIC_PRIVY_APP_ID is required. Please add it to your .env.local file.");
   }
 
   // Memoize Privy config to prevent re-creation on every render
@@ -88,24 +86,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
   if (!mounted) {
     // Render children with skeleton providers during SSR/hydration
     return (
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="system"
-        enableSystem
-        disableTransitionOnChange
-      >
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
         {children}
       </ThemeProvider>
     );
   }
 
   return (
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="system"
-      enableSystem
-      disableTransitionOnChange
-    >
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <MiniappProvider>
         <PrivyProvider appId={privyAppId} config={privyConfig}>
           <WagmiProvider config={config}>

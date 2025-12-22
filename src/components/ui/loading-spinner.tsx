@@ -40,33 +40,17 @@ export function LoadingSpinner({
  * SVG-based inline loading spinner (smaller, for buttons/inline text)
  * Consolidated from components/spinner.tsx
  */
-export function InlineSvgSpinner({
-  className,
-  size = 16,
-}: {
-  className?: string;
-  size?: number;
-}) {
+export function InlineSvgSpinner({ className, size = 16 }: { className?: string; size?: number }) {
   return (
     <svg
-      className={clsx(
-        "animate-spin text-zinc-600 dark:text-zinc-400",
-        className,
-      )}
+      className={clsx("animate-spin text-zinc-600 dark:text-zinc-400", className)}
       style={{ width: size, height: size }}
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
       aria-hidden
     >
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      />
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path
         className="opacity-75"
         fill="currentColor"
@@ -86,14 +70,8 @@ export function PageLoading({
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
-        <LoadingSpinner
-          size={48}
-          colorClass={colorClass}
-          className="mx-auto mb-4"
-        />
-        <div className="text-xl text-zinc-600 dark:text-zinc-400">
-          {message}
-        </div>
+        <LoadingSpinner size={48} colorClass={colorClass} className="mx-auto mb-4" />
+        <div className="text-xl text-zinc-600 dark:text-zinc-400">{message}</div>
       </div>
     </div>
   );
@@ -109,14 +87,8 @@ export function InlineLoading({
   return (
     <div className="flex items-center justify-center py-8">
       <div className="text-center">
-        <LoadingSpinner
-          size={32}
-          colorClass={colorClass}
-          className="mx-auto mb-2"
-        />
-        <div className="text-sm text-zinc-600 dark:text-zinc-400">
-          {message}
-        </div>
+        <LoadingSpinner size={32} colorClass={colorClass} className="mx-auto mb-2" />
+        <div className="text-sm text-zinc-600 dark:text-zinc-400">{message}</div>
       </div>
     </div>
   );
@@ -125,21 +97,12 @@ export function InlineLoading({
 /**
  * Card/section loading state
  */
-export function CardLoading({
-  message,
-  colorClass = "border-brand-500",
-}: LoadingSpinnerProps) {
+export function CardLoading({ message, colorClass = "border-brand-500" }: LoadingSpinnerProps) {
   return (
     <main className="flex-1 min-h-[60dvh] flex items-center justify-center">
       <div className="text-center">
-        <LoadingSpinner
-          size={48}
-          colorClass={colorClass}
-          className="mx-auto mb-4"
-        />
-        {message && (
-          <div className="text-zinc-600 dark:text-zinc-400">{message}</div>
-        )}
+        <LoadingSpinner size={48} colorClass={colorClass} className="mx-auto mb-4" />
+        {message && <div className="text-zinc-600 dark:text-zinc-400">{message}</div>}
       </div>
     </main>
   );

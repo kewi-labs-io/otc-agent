@@ -104,12 +104,8 @@ export function createSolanaConnection(
  */
 export interface SolanaWalletAdapter {
   publicKey: string;
-  signTransaction: <T extends Transaction | VersionedTransaction>(
-    tx: T,
-  ) => Promise<T>;
-  signAllTransactions: <T extends Transaction | VersionedTransaction>(
-    txs: T[],
-  ) => Promise<T[]>;
+  signTransaction: <T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>;
+  signAllTransactions: <T extends Transaction | VersionedTransaction>(txs: T[]) => Promise<T[]>;
 }
 
 /**
@@ -122,8 +118,7 @@ export function createAnchorWallet(adapter: SolanaWalletAdapter): Wallet {
   return {
     publicKey: new PublicKey(adapter.publicKey),
     signTransaction: adapter.signTransaction as Wallet["signTransaction"],
-    signAllTransactions:
-      adapter.signAllTransactions as Wallet["signAllTransactions"],
+    signAllTransactions: adapter.signAllTransactions as Wallet["signAllTransactions"],
     // Browser wallets don't have payer keypair - AnchorProvider accepts undefined
     payer: undefined as Keypair | undefined,
   } as Wallet;
@@ -136,9 +131,7 @@ export function createDummyAnchorWallet(): Wallet {
   const dummyKeypair = Keypair.generate();
   return {
     publicKey: dummyKeypair.publicKey,
-    signTransaction: async <T extends Transaction | VersionedTransaction>(
-      tx: T,
-    ): Promise<T> => {
+    signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
       if ("version" in tx) (tx as VersionedTransaction).sign([dummyKeypair]);
       else (tx as Transaction).partialSign(dummyKeypair);
       return tx;
@@ -148,8 +141,7 @@ export function createDummyAnchorWallet(): Wallet {
     ): Promise<T[]> =>
       Promise.all(
         txs.map(async (tx) => {
-          if ("version" in tx)
-            (tx as VersionedTransaction).sign([dummyKeypair]);
+          if ("version" in tx) (tx as VersionedTransaction).sign([dummyKeypair]);
           else (tx as Transaction).partialSign(dummyKeypair);
           return tx;
         }),
@@ -184,11 +176,7 @@ export async function ensureTokenRegistered(
   payer: PublicKey,
   signTransaction: <T extends Transaction>(tx: T) => Promise<T>,
 ): Promise<{ registered: boolean; signature?: string }> {
-  const tokenRegistryPda = deriveTokenRegistryPda(
-    desk,
-    tokenMint,
-    program.programId,
-  );
+  const tokenRegistryPda = deriveTokenRegistryPda(desk, tokenMint, program.programId);
 
   const tokenRegistryInfo = await connection.getAccountInfo(tokenRegistryPda);
   if (tokenRegistryInfo) {
@@ -234,19 +222,13 @@ export async function ensureTokenRegistered(
     .transaction();
 
   registerTx.feePayer = payer;
-  registerTx.recentBlockhash = (
-    await connection.getLatestBlockhash()
-  ).blockhash;
+  registerTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
   const signedRegisterTx = await signTransaction(registerTx);
-  const registerSig = await connection.sendRawTransaction(
-    signedRegisterTx.serialize(),
-  );
+  const registerSig = await connection.sendRawTransaction(signedRegisterTx.serialize());
   await waitForSolanaTx(connection, registerSig, "confirmed");
 
-  console.log(
-    `[Solana-OTC] Token registered with pool_type=${poolType}: ${registerSig}`,
-  );
+  console.log(`[Solana-OTC] Token registered with pool_type=${poolType}: ${registerSig}`);
   return { registered: true, signature: registerSig };
 }
 
@@ -286,9 +268,7 @@ export async function ensureTreasuryExists(
 
   const createAtaTx = new Transaction().add(createAtaIx);
   createAtaTx.feePayer = payer;
-  createAtaTx.recentBlockhash = (
-    await connection.getLatestBlockhash()
-  ).blockhash;
+  createAtaTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
   const signedTx = await signTransaction(createAtaTx);
   const ataSig = await connection.sendRawTransaction(signedTx.serialize());
@@ -336,9 +316,7 @@ export async function createSolanaConsignment(
   };
 
   if (!SOLANA_DESK) {
-    throw new Error(
-      "SOLANA_DESK not configured in SUPPORTED_CHAINS.solana.contracts.otc",
-    );
+    throw new Error("SOLANA_DESK not configured in SUPPORTED_CHAINS.solana.contracts.otc");
   }
 
   log("Creating Solana connection...");
@@ -381,9 +359,7 @@ export async function createSolanaConsignment(
     desk,
     tokenMintPk,
     consignerPk,
-    walletAdapter.signTransaction as <T extends Transaction>(
-      tx: T,
-    ) => Promise<T>,
+    walletAdapter.signTransaction as <T extends Transaction>(tx: T) => Promise<T>,
   );
 
   // Ensure desk treasury exists
@@ -394,9 +370,7 @@ export async function createSolanaConsignment(
     tokenMintPk,
     tokenProgramId,
     consignerPk,
-    walletAdapter.signTransaction as <T extends Transaction>(
-      tx: T,
-    ) => Promise<T>,
+    walletAdapter.signTransaction as <T extends Transaction>(tx: T) => Promise<T>,
   );
 
   // Create consignment
@@ -515,16 +489,8 @@ export async function createSolanaOfferFromConsignment(
   const consignmentPubkey = new PublicKey(params.consignmentAddress);
 
   // Derive PDAs
-  const tokenRegistryPda = deriveTokenRegistryPda(
-    desk,
-    tokenMintPk,
-    program.programId,
-  );
-  const deskTokenTreasury = await getAssociatedTokenAddress(
-    tokenMintPk,
-    desk,
-    true,
-  );
+  const tokenRegistryPda = deriveTokenRegistryPda(desk, tokenMintPk, program.programId);
+  const deskTokenTreasury = await getAssociatedTokenAddress(tokenMintPk, desk, true);
 
   // Fetch desk account for nextOfferId
   interface DeskAccount {
@@ -537,9 +503,7 @@ export async function createSolanaOfferFromConsignment(
     };
   }
 
-  const deskAccount = await (program.account as DeskAccountProgram).desk.fetch(
-    desk,
-  );
+  const deskAccount = await (program.account as DeskAccountProgram).desk.fetch(desk);
   const nextOfferId = new anchor.BN(deskAccount.nextOfferId.toString());
 
   log(`Next offer ID: ${nextOfferId.toString()}`);
@@ -555,9 +519,9 @@ export async function createSolanaOfferFromConsignment(
     };
   }
 
-  const consignmentAccount = await (
-    program.account as ConsignmentAccountProgram
-  ).consignment.fetch(consignmentPubkey);
+  const consignmentAccount = await (program.account as ConsignmentAccountProgram).consignment.fetch(
+    consignmentPubkey,
+  );
   const consignmentId = new anchor.BN(consignmentAccount.id.toString());
 
   log(`Consignment ID: ${consignmentId.toString()}`);
@@ -619,9 +583,7 @@ export interface DeskPricingData {
   decimals: number;
 }
 
-export async function fetchDeskPricingData(
-  tokenMintAddress: string,
-): Promise<DeskPricingData> {
+export async function fetchDeskPricingData(tokenMintAddress: string): Promise<DeskPricingData> {
   if (!SOLANA_DESK) {
     throw new Error("SOLANA_DESK not configured");
   }
@@ -629,20 +591,14 @@ export async function fetchDeskPricingData(
   const connection = createSolanaConnection();
   const idl = await fetchSolanaIdl();
 
-  const provider = new anchor.AnchorProvider(
-    connection,
-    createDummyAnchorWallet(),
-    { commitment: "confirmed" },
-  );
+  const provider = new anchor.AnchorProvider(connection, createDummyAnchorWallet(), {
+    commitment: "confirmed",
+  });
   const program = new anchor.Program(idl, provider);
 
   const desk = new PublicKey(SOLANA_DESK);
   const tokenMintPk = new PublicKey(tokenMintAddress);
-  const tokenRegistryPda = deriveTokenRegistryPda(
-    desk,
-    tokenMintPk,
-    program.programId,
-  );
+  const tokenRegistryPda = deriveTokenRegistryPda(desk, tokenMintPk, program.programId);
 
   // Fetch desk account
   interface DeskAccountWithMin {
@@ -655,9 +611,7 @@ export async function fetchDeskPricingData(
     };
   }
 
-  const deskAccount = await (
-    program.account as DeskAccountProgramWithMin
-  ).desk.fetch(desk);
+  const deskAccount = await (program.account as DeskAccountProgramWithMin).desk.fetch(desk);
 
   const minUsdAmount8d = BigInt(deskAccount.minUsdAmount8D.toString());
 

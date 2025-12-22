@@ -1,12 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import {
-  type Abi,
-  type Address,
-  createPublicClient,
-  encodePacked,
-  http,
-  keccak256,
-} from "viem";
+import { type Abi, type Address, createPublicClient, encodePacked, http, keccak256 } from "viem";
 import { base, bsc, mainnet } from "viem/chains";
 import { type Chain, SUPPORTED_CHAINS } from "@/config/chains";
 import { getCurrentNetwork } from "@/config/contracts";
@@ -68,8 +61,7 @@ export async function GET(request: NextRequest) {
   // Validate query params - return 400 on missing/invalid params
   const parseResult = TokenPoolCheckQuerySchema.safeParse({
     chain: searchParams.get("chain"),
-    tokenAddress:
-      searchParams.get("address") ?? searchParams.get("tokenAddress"),
+    tokenAddress: searchParams.get("address") ?? searchParams.get("tokenAddress"),
   });
 
   if (!parseResult.success) {
@@ -98,16 +90,12 @@ export async function GET(request: NextRequest) {
 
   // FAIL-FAST: ChainConfig requires contracts field - if missing, config is invalid
   if (!chainConfig.contracts) {
-    throw new Error(
-      `Chain config for ${chain} missing contracts - invalid ChainConfig`,
-    );
+    throw new Error(`Chain config for ${chain} missing contracts - invalid ChainConfig`);
   }
 
   // FAIL-FAST: ChainConfig requires rpcUrl field - if missing, config is invalid
   if (!chainConfig.rpcUrl) {
-    throw new Error(
-      `Chain config for ${chain} missing rpcUrl - invalid ChainConfig`,
-    );
+    throw new Error(`Chain config for ${chain} missing rpcUrl - invalid ChainConfig`);
   }
 
   // FAIL-FAST: EVM chains require chainId
@@ -128,9 +116,7 @@ export async function GET(request: NextRequest) {
   const rpcUrl = chainConfig.rpcUrl.startsWith("/")
     ? (() => {
         if (!process.env.PORT) {
-          throw new Error(
-            "PORT environment variable not set for local RPC URL",
-          );
+          throw new Error("PORT environment variable not set for local RPC URL");
         }
         return `http://localhost:${process.env.PORT}${chainConfig.rpcUrl}`;
       })()
@@ -142,14 +128,10 @@ export async function GET(request: NextRequest) {
   });
 
   // Check if token is registered
-  const tokenIdBytes32 = keccak256(
-    encodePacked(["address"], [tokenAddress as Address]),
-  );
+  const tokenIdBytes32 = keccak256(encodePacked(["address"], [tokenAddress as Address]));
 
   let isRegistered = false;
-  const tokenResult = await safeReadContract<
-    [Address, number, boolean, Address]
-  >(client, {
+  const tokenResult = await safeReadContract<[Address, number, boolean, Address]>(client, {
     address: otcAddress as Address,
     abi: tokensAbi as Abi,
     functionName: "tokens",
@@ -157,9 +139,7 @@ export async function GET(request: NextRequest) {
   });
 
   const [registeredAddress, , isActive] = tokenResult;
-  isRegistered =
-    isActive &&
-    registeredAddress !== "0x0000000000000000000000000000000000000000";
+  isRegistered = isActive && registeredAddress !== "0x0000000000000000000000000000000000000000";
 
   // Find all pools (skip for local development - no real DEX pools)
   let allPoolsRaw: PoolInfo[] = [];
@@ -197,8 +177,7 @@ export async function GET(request: NextRequest) {
       warning = "Token not registered in local OTC contract.";
     }
   } else if (!pool) {
-    warning =
-      "No liquidity pool found. Requires Uniswap V3/V4, Aerodrome, or Pancakeswap pool.";
+    warning = "No liquidity pool found. Requires Uniswap V3/V4, Aerodrome, or Pancakeswap pool.";
   } else if (pool.tvlUsd < 1000) {
     warning = `Low liquidity detected ($${pool.tvlUsd.toFixed(0)}). Price accuracy may be affected.`;
   } else if (pool.tvlUsd < 10000) {

@@ -31,10 +31,7 @@ export async function GET(request: NextRequest) {
   const token = await getCachedTokenBySymbol(symbol);
 
   if (!token) {
-    return NextResponse.json(
-      { success: false, error: "Token not found" },
-      { status: 404 },
-    );
+    return NextResponse.json({ success: false, error: "Token not found" }, { status: 404 });
   }
 
   // Filter by chain if specified

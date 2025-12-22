@@ -29,9 +29,7 @@ interface TokenGroup {
 }
 
 // --- Helper: Filter valid consignments (active with remaining amount) ---
-function filterValidConsignments(
-  consignments: OTCConsignment[],
-): OTCConsignment[] {
+function filterValidConsignments(consignments: OTCConsignment[]): OTCConsignment[] {
   return consignments.filter((c) => {
     if (c.status !== "active") return false;
     const remaining = BigInt(c.remainingAmount);
@@ -41,9 +39,7 @@ function filterValidConsignments(
 }
 
 // --- Helper: Group consignments by tokenId ---
-function groupConsignmentsByToken(
-  consignments: OTCConsignment[],
-): TokenGroup[] {
+function groupConsignmentsByToken(consignments: OTCConsignment[]): TokenGroup[] {
   const validConsignments = filterValidConsignments(consignments);
   const uniqueMap = new Map(validConsignments.map((c) => [c.id, c]));
   const unique = Array.from(uniqueMap.values());
@@ -85,9 +81,7 @@ const TokenGroupWithData = memo(function TokenGroupWithData({
     );
   }
 
-  return (
-    <TokenDealsSection token={token} consignments={tokenGroup.consignments} />
-  );
+  return <TokenDealsSection token={token} consignments={tokenGroup.consignments} />;
 });
 
 export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
@@ -145,11 +139,11 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
   }, [tokenGroups, searchQuery, tokensData]);
 
   // Reset to page 1 when filters change - use useEffect for side effects
-  const chainsKey = filters.chains.join(",");
-  const negotiableTypesKey = filters.negotiableTypes.join(",");
+  const _chainsKey = filters.chains.join(",");
+  const _negotiableTypesKey = filters.negotiableTypes.join(",");
   useEffect(() => {
     setCurrentPage(1);
-  }, [chainsKey, negotiableTypesKey]);
+  }, []);
 
   // Pagination
   const totalPages = Math.ceil(filteredGroups.length / PAGE_SIZE);
@@ -181,8 +175,7 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
   // Loading state: either consignments loading, or tokens loading when we have tokenIds
   // Also wait for tokensData when we have tokenIds (handles edge cases where isLoading is false but data not ready)
   const isLoading =
-    isLoadingConsignments ||
-    (tokenIds.length > 0 && (isLoadingTokens || !tokensData));
+    isLoadingConsignments || (tokenIds.length > 0 && (isLoadingTokens || !tokensData));
 
   if (isLoading) {
     return (
@@ -229,8 +222,7 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
           No results found
         </h3>
         <p className="text-zinc-600 dark:text-zinc-400">
-          No tokens match &quot;{searchQuery}&quot;. Try a different search
-          term.
+          No tokens match &quot;{searchQuery}&quot;. Try a different search term.
         </p>
       </div>
     );
@@ -240,8 +232,7 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
     return (
       <div className="text-center py-12">
         <p className="text-zinc-600 dark:text-zinc-400">
-          No OTC deals match your filters. Try adjusting the filters or be the
-          first to list a deal.
+          No OTC deals match your filters. Try adjusting the filters or be the first to list a deal.
         </p>
       </div>
     );
@@ -254,9 +245,7 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
         // FAIL-FAST: If there are consignments for a tokenId, that token must exist after loading
         // tokensData should contain all tokens for the groups we're rendering
         if (!tokensData) {
-          throw new Error(
-            `Tokens data missing - should be loaded before rendering groups`,
-          );
+          throw new Error(`Tokens data missing - should be loaded before rendering groups`);
         }
         // API returns flat Token objects directly (not { token, marketData } wrapper)
         const token = tokensData[group.tokenId];
@@ -265,13 +254,7 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
             `Token data missing for tokenId: ${group.tokenId} - consignments exist but token not found in batch`,
           );
         }
-        return (
-          <TokenGroupWithData
-            key={group.tokenId}
-            tokenGroup={group}
-            token={token}
-          />
-        );
+        return <TokenGroupWithData key={group.tokenId} tokenGroup={group} token={token} />;
       })}
 
       {/* Pagination controls */}
@@ -282,12 +265,7 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
             disabled={currentPage === 1}
             className="!px-3 !py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -302,14 +280,13 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
             {currentPage > 2 && (
               <>
                 <button
+                  type="button"
                   onClick={() => goToPage(1)}
                   className="w-8 h-8 rounded-lg text-sm font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                 >
                   1
                 </button>
-                {currentPage > 3 && (
-                  <span className="px-1 text-zinc-400">...</span>
-                )}
+                {currentPage > 3 && <span className="px-1 text-zinc-400">...</span>}
               </>
             )}
 
@@ -328,11 +305,11 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
 
               if (pageNum < 1 || pageNum > totalPages) return null;
               if (pageNum === 1 && currentPage > 2) return null;
-              if (pageNum === totalPages && currentPage < totalPages - 1)
-                return null;
+              if (pageNum === totalPages && currentPage < totalPages - 1) return null;
 
               return (
                 <button
+                  type="button"
                   key={pageNum}
                   onClick={() => goToPage(pageNum)}
                   className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
@@ -349,10 +326,9 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
             {/* Last page */}
             {currentPage < totalPages - 1 && (
               <>
-                {currentPage < totalPages - 2 && (
-                  <span className="px-1 text-zinc-400">...</span>
-                )}
+                {currentPage < totalPages - 2 && <span className="px-1 text-zinc-400">...</span>}
                 <button
+                  type="button"
                   onClick={() => goToPage(totalPages)}
                   className="w-8 h-8 rounded-lg text-sm font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                 >
@@ -367,18 +343,8 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
             disabled={currentPage === totalPages}
             className="!px-3 !py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5l7 7-7 7"
-              />
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </Button>
         </div>

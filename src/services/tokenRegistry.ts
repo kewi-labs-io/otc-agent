@@ -1,12 +1,7 @@
 import type { Chain } from "@/config/chains";
 import { parseOrThrow } from "@/lib/validation/helpers";
 import { RegisterTokenInputSchema } from "@/types/validation/service-schemas";
-import {
-  MarketDataDB,
-  type Token,
-  TokenDB,
-  type TokenMarketData,
-} from "./database";
+import { MarketDataDB, type Token, TokenDB, type TokenMarketData } from "./database";
 
 export class TokenRegistryService {
   async registerToken(params: {
@@ -29,9 +24,7 @@ export class TokenRegistryService {
     // EVM addresses can be lowercased (case-insensitive)
     // Solana addresses are Base58 encoded and MUST preserve case
     const normalizedAddress =
-      params.chain === "solana"
-        ? params.contractAddress
-        : params.contractAddress.toLowerCase();
+      params.chain === "solana" ? params.contractAddress : params.contractAddress.toLowerCase();
 
     const token = await TokenDB.createToken({
       symbol: params.symbol.toUpperCase(),
@@ -78,16 +71,8 @@ export class TokenRegistryService {
       tokens = tokensWithMarketData
         .filter(({ marketData }) => {
           if (!marketData) return false;
-          if (
-            filters.minMarketCap &&
-            marketData.marketCap < filters.minMarketCap
-          )
-            return false;
-          if (
-            filters.maxMarketCap &&
-            marketData.marketCap > filters.maxMarketCap
-          )
-            return false;
+          if (filters.minMarketCap && marketData.marketCap < filters.minMarketCap) return false;
+          if (filters.maxMarketCap && marketData.marketCap > filters.maxMarketCap) return false;
           return true;
         })
         .map(({ token }) => token);

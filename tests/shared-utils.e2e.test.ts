@@ -7,30 +7,30 @@
  * Run: bun test tests/shared-utils.e2e.test.ts
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import { isEvmAddress, isSolanaAddress, normalizeAddress } from "@/utils/address-utils";
 import {
-  formatDate,
-  formatDateTime,
-  formatTokenAmount,
-  formatTokenAmountFull,
-  formatUsd,
-  formatPercentFromBps,
-  formatPercent,
-  getLockupLabel,
-  formatAddress,
-  formatTxHash,
-  formatTimeRemaining,
-  isMatured,
-  formatNativeAmount,
-} from "@/utils/format";
-import {
-  transformSolanaDeal,
-  transformEvmDeal,
-  sortOffersByDate,
   filterActiveOffers,
   type OfferWithMetadata,
+  sortOffersByDate,
+  transformEvmDeal,
+  transformSolanaDeal,
 } from "@/utils/deal-transforms";
-import { isEvmAddress, isSolanaAddress, normalizeAddress } from "@/utils/address-utils";
+import {
+  formatAddress,
+  formatDate,
+  formatDateTime,
+  formatNativeAmount,
+  formatPercent,
+  formatPercentFromBps,
+  formatTimeRemaining,
+  formatTokenAmount,
+  formatTokenAmountFull,
+  formatTxHash,
+  formatUsd,
+  getLockupLabel,
+  isMatured,
+} from "@/utils/format";
 import { expectDefined, expectEqual } from "./test-utils";
 
 // ==========================================================================
@@ -260,7 +260,10 @@ describe("Deal Transformation Utilities", () => {
 
   describe("transformSolanaDeal", () => {
     test("transforms Solana deal to OfferWithMetadata", () => {
-      const result = transformSolanaDeal(mockSolanaDeal, "WalletPubKey111111111111111111111111111111");
+      const result = transformSolanaDeal(
+        mockSolanaDeal,
+        "WalletPubKey111111111111111111111111111111",
+      );
 
       expect(result.id).toBe(BigInt(123));
       expect(result.tokenAmount).toBe(BigInt(1000));
@@ -274,9 +277,7 @@ describe("Deal Transformation Utilities", () => {
     test("throws when beneficiary is missing (fail-fast)", () => {
       const dealWithoutBeneficiary = { ...mockSolanaDeal, beneficiary: "" };
 
-      expect(() => transformSolanaDeal(dealWithoutBeneficiary)).toThrow(
-        "missing beneficiary"
-      );
+      expect(() => transformSolanaDeal(dealWithoutBeneficiary)).toThrow("missing beneficiary");
     });
   });
 

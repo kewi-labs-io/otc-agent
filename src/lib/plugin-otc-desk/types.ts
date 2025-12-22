@@ -2,11 +2,7 @@
 // Import Zod-validated types as source of truth
 
 import type { Chain } from "@/config/chains";
-import type {
-  ChainFamily,
-  PaymentCurrency,
-  QuoteStatus,
-} from "@/types/validation/schemas";
+import type { ChainFamily, PaymentCurrency, QuoteStatus } from "@/types/validation/schemas";
 
 // Re-export Zod-validated types for external use
 export type { QuoteStatus, PaymentCurrency };
@@ -60,10 +56,7 @@ export interface QuoteMemory {
  * Lockup component: 0 bps at 0 days, 50 bps (0.5%) at ≥365 days
  * Returns value between 25 and 150 bps
  */
-export function calculateAgentCommission(
-  discountBps: number,
-  lockupDays: number,
-): number {
+export function calculateAgentCommission(discountBps: number, lockupDays: number): number {
   // Discount component: 100 bps at 5% discount, 25 bps at 30% discount
   let discountComponent: number;
   if (discountBps <= 500) {

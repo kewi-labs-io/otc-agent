@@ -14,9 +14,7 @@ interface ChainSelectorProps {
 const allChains: Chain[] = (() => {
   const keys = Object.keys(SUPPORTED_CHAINS);
   const validChains: Chain[] = ["ethereum", "base", "bsc", "solana"];
-  const chains = keys.filter((key): key is Chain =>
-    validChains.includes(key as Chain),
-  );
+  const chains = keys.filter((key): key is Chain => validChains.includes(key as Chain));
   if (chains.length !== validChains.length) {
     throw new Error(
       `Mismatch between SUPPORTED_CHAINS keys and Chain type: expected ${validChains.length}, got ${chains.length}`,
@@ -48,14 +46,11 @@ export const ChainSelector = memo(function ChainSelector({
     [onChange],
   );
 
-  const currentValue =
-    selected.length === allChains.length ? "all" : selected[0] || "all";
+  const currentValue = selected.length === allChains.length ? "all" : selected[0] || "all";
 
   return (
     <div className="flex items-center gap-2">
-      <label className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
-        Chain:
-      </label>
+      <label className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-nowrap">Chain:</label>
       <div className="relative">
         <select
           value={currentValue}
@@ -75,12 +70,7 @@ export const ChainSelector = memo(function ChainSelector({
           stroke="currentColor"
           viewBox="0 0 24 24"
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </div>
     </div>

@@ -50,9 +50,7 @@ export async function startBaseListener() {
   // Server-side: use Alchemy directly
   const alchemyKey = process.env.ALCHEMY_API_KEY;
   if (!alchemyKey) {
-    throw new Error(
-      "[Base Listener] ALCHEMY_API_KEY not configured - cannot start listener",
-    );
+    throw new Error("[Base Listener] ALCHEMY_API_KEY not configured - cannot start listener");
   }
   const rpcUrl = `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`;
 
@@ -61,10 +59,7 @@ export async function startBaseListener() {
     transport: http(rpcUrl),
   });
 
-  console.log(
-    "[Base Listener] Starting listener for",
-    registrationHelperAddress,
-  );
+  console.log("[Base Listener] Starting listener for", registrationHelperAddress);
   isListening = true;
 
   // Watch for TokenRegistered events
@@ -83,10 +78,7 @@ export async function startBaseListener() {
     },
     onLogs: async (logs) => {
       for (const log of logs) {
-        await handleTokenRegistered(
-          client as MinimalPublicClient,
-          log as TokenRegisteredLog,
-        );
+        await handleTokenRegistered(client as MinimalPublicClient, log as TokenRegisteredLog);
       }
     },
     onError: (error) => {
@@ -113,10 +105,7 @@ export async function startBaseListener() {
 /**
  * Handle a TokenRegistered event
  */
-async function handleTokenRegistered(
-  client: MinimalPublicClient,
-  log: TokenRegisteredLog,
-) {
+async function handleTokenRegistered(client: MinimalPublicClient, log: TokenRegisteredLog) {
   // When using watchEvent with event definition, viem automatically decodes the log
   const { tokenAddress, pool, registeredBy } = log.args;
 
@@ -190,9 +179,7 @@ export async function backfillBaseEvents(fromBlock?: bigint) {
   const latestBlock = await client.getBlockNumber();
   const startBlock = fromBlock || latestBlock - BigInt(10000); // Last ~10k blocks
 
-  console.log(
-    `[Base Backfill] Fetching events from block ${startBlock} to ${latestBlock}`,
-  );
+  console.log(`[Base Backfill] Fetching events from block ${startBlock} to ${latestBlock}`);
 
   const logs = await client.getLogs({
     address: registrationHelperAddress as `0x${string}`,
@@ -214,10 +201,7 @@ export async function backfillBaseEvents(fromBlock?: bigint) {
   console.log(`[Base Backfill] Found ${logs.length} TokenRegistered events`);
 
   for (const log of logs) {
-    await handleTokenRegistered(
-      client as MinimalPublicClient,
-      log as TokenRegisteredLog,
-    );
+    await handleTokenRegistered(client as MinimalPublicClient, log as TokenRegisteredLog);
   }
 
   console.log("[Base Backfill] ✅ Backfill complete");

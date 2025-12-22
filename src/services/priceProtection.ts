@@ -39,10 +39,7 @@ export class PriceProtectionService {
 
     let currentPrice: number;
     if (!marketData || Date.now() - marketData.lastUpdated > 300000) {
-      currentPrice = await this.marketDataService.fetchTokenPrice(
-        tokenAddress,
-        chain,
-      );
+      currentPrice = await this.marketDataService.fetchTokenPrice(tokenAddress, chain);
     } else {
       currentPrice = marketData.priceUsd;
     }

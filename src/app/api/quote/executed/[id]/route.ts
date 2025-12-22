@@ -7,17 +7,11 @@ import {
   GetExecutedQuoteParamsSchema,
 } from "@/types/validation/api-schemas";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await agentRuntime.getRuntime();
 
   const routeParams = await params;
-  const validatedParams = validateRouteParams(
-    GetExecutedQuoteParamsSchema,
-    routeParams,
-  );
+  const validatedParams = validateRouteParams(GetExecutedQuoteParamsSchema, routeParams);
 
   const { id: quoteId } = validatedParams;
 
@@ -33,29 +27,19 @@ export async function GET(
       message.includes("not registered") ||
       message.includes("does not exist")
     ) {
-      return NextResponse.json(
-        { error: `Quote ${quoteId} not found` },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: `Quote ${quoteId} not found` }, { status: 404 });
     }
     throw err;
   }
 
   // Allow active, approved, and executed quotes to be viewed
   // active = quote created, approved = offer created/approved on-chain, executed = paid/fulfilled
-  if (
-    quote.status !== "executed" &&
-    quote.status !== "active" &&
-    quote.status !== "approved"
-  ) {
+  if (quote.status !== "executed" && quote.status !== "active" && quote.status !== "approved") {
     console.warn("[Quote Executed API] Invalid status:", {
       quoteId,
       status: quote.status,
     });
-    return NextResponse.json(
-      { error: "Quote not found or invalid status" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Quote not found or invalid status" }, { status: 400 });
   }
 
   const formattedQuote = {

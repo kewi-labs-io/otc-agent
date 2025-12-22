@@ -41,21 +41,14 @@ export interface CreateConsignmentParams {
 }
 
 export class ConsignmentService {
-  async createConsignment(
-    params: CreateConsignmentParams,
-  ): Promise<OTCConsignment> {
+  async createConsignment(params: CreateConsignmentParams): Promise<OTCConsignment> {
     // Validate parameters
     const validated = parseOrThrow(CreateConsignmentInputSchema, params);
 
     // Business logic validation (expect/throw for invariants)
     if (!validated.isNegotiable) {
-      if (
-        validated.fixedDiscountBps === undefined ||
-        validated.fixedLockupDays === undefined
-      ) {
-        throw new Error(
-          "Fixed consignments must specify fixedDiscountBps and fixedLockupDays",
-        );
+      if (validated.fixedDiscountBps === undefined || validated.fixedLockupDays === undefined) {
+        throw new Error("Fixed consignments must specify fixedDiscountBps and fixedLockupDays");
       }
     }
 
@@ -179,16 +172,13 @@ export class ConsignmentService {
         if (!c.isPrivate) return true;
         // Compare addresses - Solana is case-sensitive, EVM is case-insensitive
         const isSolana = c.chain === "solana";
-        const requester = isSolana
-          ? requesterAddress
-          : requesterAddress.toLowerCase();
+        const requester = isSolana ? requesterAddress : requesterAddress.toLowerCase();
         if (isSolana) {
           if (c.consignerAddress === requester) return true;
           if (c.allowedBuyers?.includes(requester)) return true;
         } else {
           if (c.consignerAddress.toLowerCase() === requester) return true;
-          if (c.allowedBuyers?.some((b) => b.toLowerCase() === requester))
-            return true;
+          if (c.allowedBuyers?.some((b) => b.toLowerCase() === requester)) return true;
         }
         return false;
       });
@@ -239,9 +229,7 @@ export class ConsignmentService {
 
     await runtime.setCache(lockKey, true);
 
-    const consignment = await ConsignmentDB.getConsignment(
-      validated.consignmentId,
-    );
+    const consignment = await ConsignmentDB.getConsignment(validated.consignmentId);
 
     if (consignment.status !== "active") {
       await runtime.deleteCache(lockKey);
@@ -278,19 +266,14 @@ export class ConsignmentService {
     await runtime.deleteCache(lockKey);
   }
 
-  async releaseReservation(
-    consignmentId: string,
-    amount: string,
-  ): Promise<void> {
+  async releaseReservation(consignmentId: string, amount: string): Promise<void> {
     // Validate parameters
     const validated = parseOrThrow(ReleaseReservationInputSchema, {
       consignmentId,
       amount,
     });
 
-    const consignment = await ConsignmentDB.getConsignment(
-      validated.consignmentId,
-    );
+    const consignment = await ConsignmentDB.getConsignment(validated.consignmentId);
     const newRemaining = (
       BigInt(consignment.remainingAmount) + BigInt(validated.amount)
     ).toString();
@@ -318,9 +301,7 @@ export class ConsignmentService {
 
     // Normalize address based on chain - Solana is case-sensitive, EVM is case-insensitive
     const normalizedBuyerAddress =
-      params.chain === "solana"
-        ? validated.buyerAddress
-        : validated.buyerAddress.toLowerCase();
+      params.chain === "solana" ? validated.buyerAddress : validated.buyerAddress.toLowerCase();
 
     return await ConsignmentDealDB.createDeal({
       consignmentId: validated.consignmentId,
@@ -352,10 +333,8 @@ export class ConsignmentService {
       if (BigInt(amount) > BigInt(c.remainingAmount)) continue;
 
       if (c.isNegotiable) {
-        if (discountBps < c.minDiscountBps || discountBps > c.maxDiscountBps)
-          continue;
-        if (lockupDays < c.minLockupDays || lockupDays > c.maxLockupDays)
-          continue;
+        if (discountBps < c.minDiscountBps || discountBps > c.maxDiscountBps) continue;
+        if (lockupDays < c.minLockupDays || lockupDays > c.maxLockupDays) continue;
       } else {
         if (discountBps !== c.fixedDiscountBps) continue;
         if (lockupDays !== c.fixedLockupDays) continue;

@@ -1,10 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { validationErrorResponse } from "@/lib/validation/helpers";
 import type { TokenInfo } from "@/types/api";
-import {
-  TokenLookupQuerySchema,
-  TokenLookupResponseSchema,
-} from "@/types/validation/api-schemas";
+import { TokenLookupQuerySchema, TokenLookupResponseSchema } from "@/types/validation/api-schemas";
 import { isEvmAddress, isSolanaAddress } from "@/utils/address-utils";
 
 // Codex GraphQL endpoint and Solana network ID
@@ -14,10 +11,7 @@ const SOLANA_NETWORK_ID = 1399811149;
 /**
  * Look up Solana token via Codex API
  */
-async function lookupSolanaToken(
-  address: string,
-  codexKey: string,
-): Promise<TokenInfo | null> {
+async function lookupSolanaToken(address: string, codexKey: string): Promise<TokenInfo | null> {
   const query = `
     query GetToken($input: TokenInput!) {
       token(input: $input) {
@@ -92,11 +86,7 @@ async function lookupEvmToken(
   alchemyKey: string,
 ): Promise<TokenInfo | null> {
   const alchemyNetwork =
-    chain === "ethereum"
-      ? "eth-mainnet"
-      : chain === "bsc"
-        ? "bnb-mainnet"
-        : "base-mainnet";
+    chain === "ethereum" ? "eth-mainnet" : chain === "bsc" ? "bnb-mainnet" : "base-mainnet";
 
   const url = `https://${alchemyNetwork}.g.alchemy.com/v2/${alchemyKey}`;
 
@@ -160,9 +150,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
 
   // Validate query params - return 400 on invalid params
-  const parseResult = TokenLookupQuerySchema.safeParse(
-    Object.fromEntries(searchParams.entries()),
-  );
+  const parseResult = TokenLookupQuerySchema.safeParse(Object.fromEntries(searchParams.entries()));
   if (!parseResult.success) {
     return validationErrorResponse(parseResult.error, 400);
   }
@@ -174,10 +162,7 @@ export async function GET(request: NextRequest) {
   const looksLikeEvm = isEvmAddress(address);
 
   if (!looksLikeSolana && !looksLikeEvm) {
-    return NextResponse.json(
-      { error: "Invalid address format" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Invalid address format" }, { status: 400 });
   }
 
   // If chain not provided, infer from address
@@ -192,10 +177,7 @@ export async function GET(request: NextRequest) {
   if (chain === "solana") {
     const codexKey = process.env.CODEX_API_KEY;
     if (!codexKey) {
-      return NextResponse.json(
-        { error: "Solana token lookup not configured" },
-        { status: 503 },
-      );
+      return NextResponse.json({ error: "Solana token lookup not configured" }, { status: 503 });
     }
     // External API call - handle errors at boundary
     try {
@@ -203,18 +185,12 @@ export async function GET(request: NextRequest) {
     } catch (err) {
       // External API returned malformed data - surface as 502 Bad Gateway
       const message = err instanceof Error ? err.message : "External API error";
-      return NextResponse.json(
-        { error: message, address, chain },
-        { status: 502 },
-      );
+      return NextResponse.json({ error: message, address, chain }, { status: 502 });
     }
   } else {
     const alchemyKey = process.env.ALCHEMY_API_KEY;
     if (!alchemyKey) {
-      return NextResponse.json(
-        { error: "EVM token lookup not configured" },
-        { status: 503 },
-      );
+      return NextResponse.json({ error: "EVM token lookup not configured" }, { status: 503 });
     }
     // External API call - handle errors at boundary
     try {
@@ -222,18 +198,12 @@ export async function GET(request: NextRequest) {
     } catch (err) {
       // External API returned malformed data - surface as 502 Bad Gateway
       const message = err instanceof Error ? err.message : "External API error";
-      return NextResponse.json(
-        { error: message, address, chain },
-        { status: 502 },
-      );
+      return NextResponse.json({ error: message, address, chain }, { status: 502 });
     }
   }
 
   if (!token) {
-    return NextResponse.json(
-      { error: "Token not found", address, chain },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: "Token not found", address, chain }, { status: 404 });
   }
 
   const response = { success: true, token };

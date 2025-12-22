@@ -7,7 +7,7 @@
  * Run: bun test tests/hooks/api-helpers.test.ts
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { extractErrorMessage, throwApiError } from "@/hooks/lib/api-helpers";
 
 describe("api-helpers", () => {
@@ -85,9 +85,9 @@ describe("api-helpers", () => {
         json: async () => ({ error: "Specific error message" }),
       } as Response;
 
-      await expect(
-        throwApiError(mockResponse, "Default fallback"),
-      ).rejects.toThrow("Specific error message");
+      await expect(throwApiError(mockResponse, "Default fallback")).rejects.toThrow(
+        "Specific error message",
+      );
     });
 
     test("throws error with fallback on JSON parse failure", async () => {
@@ -97,9 +97,9 @@ describe("api-helpers", () => {
         },
       } as Response;
 
-      await expect(
-        throwApiError(mockResponse, "Fallback on parse failure"),
-      ).rejects.toThrow("Fallback on parse failure");
+      await expect(throwApiError(mockResponse, "Fallback on parse failure")).rejects.toThrow(
+        "Fallback on parse failure",
+      );
     });
 
     test("throws error with fallback on empty response", async () => {
@@ -107,9 +107,9 @@ describe("api-helpers", () => {
         json: async () => ({}),
       } as Response;
 
-      await expect(
-        throwApiError(mockResponse, "Fallback for empty"),
-      ).rejects.toThrow("Fallback for empty");
+      await expect(throwApiError(mockResponse, "Fallback for empty")).rejects.toThrow(
+        "Fallback for empty",
+      );
     });
 
     test("handles null JSON response", async () => {
@@ -117,9 +117,9 @@ describe("api-helpers", () => {
         json: async () => null,
       } as Response;
 
-      await expect(
-        throwApiError(mockResponse, "Fallback for null"),
-      ).rejects.toThrow("Fallback for null");
+      await expect(throwApiError(mockResponse, "Fallback for null")).rejects.toThrow(
+        "Fallback for null",
+      );
     });
   });
 });

@@ -87,9 +87,7 @@ export function getCronSecret(): string | undefined {
 export function getWorkerAuthToken(): string {
   const token = process.env.WORKER_AUTH_TOKEN;
   if (!token) {
-    throw new Error(
-      "WORKER_AUTH_TOKEN must be set for quote signature generation",
-    );
+    throw new Error("WORKER_AUTH_TOKEN must be set for quote signature generation");
   }
   return token;
 }
@@ -192,8 +190,7 @@ export function getNetwork(): NetworkEnvironment {
 
   if (explicit === "mainnet") return "mainnet";
   if (explicit === "testnet" || explicit === "sepolia") return "testnet";
-  if (explicit === "local" || explicit === "localnet" || explicit === "anvil")
-    return "local";
+  if (explicit === "local" || explicit === "localnet" || explicit === "anvil") return "local";
 
   // Legacy flag support
   if (process.env.NEXT_PUBLIC_USE_MAINNET === "true") return "mainnet";
@@ -220,11 +217,7 @@ export function isDevelopment(): boolean {
  * Get app URL for redirects and metadata
  */
 export function getAppUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:4444"
-  );
+  return process.env.NEXT_PUBLIC_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:4444";
 }
 
 /**
@@ -313,8 +306,7 @@ export function validateProductionSecrets(): {
   if (!getGroqApiKey()) missing.push("GROQ_API_KEY");
   if (!getCronSecret()) missing.push("CRON_SECRET");
   if (!process.env.WORKER_AUTH_TOKEN) missing.push("WORKER_AUTH_TOKEN");
-  if (getDatabaseUrl().includes("localhost"))
-    missing.push("DATABASE_POSTGRES_URL");
+  if (getDatabaseUrl().includes("localhost")) missing.push("DATABASE_POSTGRES_URL");
 
   return { valid: missing.length === 0, missing };
 }

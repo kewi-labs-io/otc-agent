@@ -68,25 +68,14 @@ export type PaymentCurrency = z.infer<typeof PaymentCurrencySchema>;
 // QUOTE STATUS
 //==============================================================================
 
-export const QuoteStatusSchema = z.enum([
-  "active",
-  "expired",
-  "executed",
-  "rejected",
-  "approved",
-]);
+export const QuoteStatusSchema = z.enum(["active", "expired", "executed", "rejected", "approved"]);
 export type QuoteStatus = z.infer<typeof QuoteStatusSchema>;
 
 //==============================================================================
 // CONSIGNMENT STATUS
 //==============================================================================
 
-export const ConsignmentStatusSchema = z.enum([
-  "active",
-  "paused",
-  "depleted",
-  "withdrawn",
-]);
+export const ConsignmentStatusSchema = z.enum(["active", "paused", "depleted", "withdrawn"]);
 export type ConsignmentStatus = z.infer<typeof ConsignmentStatusSchema>;
 
 //==============================================================================
@@ -104,11 +93,7 @@ export type DealStatus = z.infer<typeof DealStatusSchema>;
 // - Valid absolute URLs (https://..., http://...)
 // - Relative paths starting with / (e.g., /tokens/eliza.svg)
 // - Empty string (no URL)
-export const UrlSchema = z.union([
-  z.string().url(),
-  z.string().startsWith("/"),
-  z.literal(""),
-]);
+export const UrlSchema = z.union([z.string().url(), z.string().startsWith("/"), z.literal("")]);
 
 //==============================================================================
 // COMMON STRING VALIDATIONS
@@ -121,9 +106,7 @@ export const NonEmptyStringSchema = z.string().min(1);
 export const OptionalNonEmptyStringSchema = z.string().min(1).optional();
 
 // Hex string (for bytes32, transaction hashes, etc.)
-export const HexStringSchema = z
-  .string()
-  .regex(/^0x[a-fA-F0-9]+$/, "Must be a valid hex string");
+export const HexStringSchema = z.string().regex(/^0x[a-fA-F0-9]+$/, "Must be a valid hex string");
 
 // Bytes32 hex string (64 hex characters after 0x)
 export const Bytes32Schema = z

@@ -36,9 +36,7 @@ export function TokenHeader({ token, marketData }: TokenHeaderProps) {
               {token.contractAddress && (
                 <>
                   <span>•</span>
-                  <span className="font-mono">
-                    {formatAddress(token.contractAddress)}
-                  </span>
+                  <span className="font-mono">{formatAddress(token.contractAddress)}</span>
                 </>
               )}
             </div>
@@ -52,23 +50,15 @@ export function TokenHeader({ token, marketData }: TokenHeaderProps) {
               <div className="hidden sm:flex items-center gap-3 text-xs">
                 <div>
                   <div className="text-zinc-600 dark:text-zinc-400">MCap</div>
-                  <div className="font-semibold">
-                    {formatMarketCap(marketData.marketCap)}
-                  </div>
+                  <div className="font-semibold">{formatMarketCap(marketData.marketCap)}</div>
                 </div>
                 <div>
-                  <div className="text-zinc-600 dark:text-zinc-400">
-                    Vol 24h
-                  </div>
-                  <div className="font-semibold">
-                    {formatMarketCap(marketData.volume24h)}
-                  </div>
+                  <div className="text-zinc-600 dark:text-zinc-400">Vol 24h</div>
+                  <div className="font-semibold">{formatMarketCap(marketData.volume24h)}</div>
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-lg font-bold">
-                  ${formatPrice(marketData.priceUsd)}
-                </div>
+                <div className="text-lg font-bold">${formatPrice(marketData.priceUsd)}</div>
                 <div className={`text-xs ${priceChangeColor}`}>
                   {priceChange >= 0 ? "+" : ""}
                   {priceChange.toFixed(2)}% (24h)

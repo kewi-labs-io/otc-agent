@@ -1,11 +1,11 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import type {
   PublicKey as SolanaPublicKey,
   Transaction,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { promises as fs } from "fs";
 import { type NextRequest, NextResponse } from "next/server";
-import path from "path";
 import {
   type Abi,
   type Account,
@@ -16,12 +16,11 @@ import {
   type Chain as ViemChain,
 } from "viem";
 import { type PrivateKeyAccount, privateKeyToAccount } from "viem/accounts";
-import { getSolanaConfig } from "@/config/contracts";
+import { getOtcAddress, getSolanaConfig } from "@/config/contracts";
 import { getEvmPrivateKey, getHeliusRpcUrl, getNetwork } from "@/config/env";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 import { agentRuntime } from "@/lib/agent-runtime";
 import { getChain, getViemChainForType } from "@/lib/getChain";
-import { getOtcAddress } from "@/config/contracts";
 import { parseOfferStruct, type RawOfferData } from "@/lib/otc-helpers";
 import type { QuoteService } from "@/lib/plugin-otc-desk/services/quoteService";
 import { validationErrorResponse } from "@/lib/validation/helpers";
@@ -136,20 +135,14 @@ async function handleApproval(request: NextRequest) {
     const form = await request.formData();
     const v = form.get("offerId");
     if (!v) {
-      return NextResponse.json(
-        { error: "offerId required in form data" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "offerId required in form data" }, { status: 400 });
     }
     offerId = String(v);
   } else {
     const { searchParams } = new URL(request.url);
     const v = searchParams.get("offerId");
     if (!v) {
-      return NextResponse.json(
-        { error: "offerId required in query params" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "offerId required in query params" }, { status: 400 });
     }
     offerId = v;
   }
@@ -157,13 +150,9 @@ async function handleApproval(request: NextRequest) {
   // FAIL-FAST: Validate offerId is present
   if (
     !offerId ||
-    (typeof offerId !== "string" &&
-      typeof offerId !== "number" &&
-      typeof offerId !== "bigint")
+    (typeof offerId !== "string" && typeof offerId !== "number" && typeof offerId !== "bigint")
   ) {
-    throw new Error(
-      "offerId is required and must be a string, number, or bigint",
-    );
+    throw new Error("offerId is required and must be a string, number, or bigint");
   }
 
   console.log(
@@ -196,15 +185,10 @@ async function handleApproval(request: NextRequest) {
       throw new Error(`Invalid Solana offerAddress format: ${offerAddress}`);
     }
     if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(consignmentAddress)) {
-      throw new Error(
-        `Invalid Solana consignmentAddress format: ${consignmentAddress}`,
-      );
+      throw new Error(`Invalid Solana consignmentAddress format: ${consignmentAddress}`);
     }
 
-    console.log(
-      "[Approve API] Processing Solana approval for offer:",
-      offerAddress,
-    );
+    console.log("[Approve API] Processing Solana approval for offer:", offerAddress);
 
     // Import Anchor and Solana libs dynamically
     const anchor = await import("@coral-xyz/anchor");
@@ -212,21 +196,16 @@ async function handleApproval(request: NextRequest) {
 
     const solanaConfig = getSolanaConfig();
     const network = getNetwork();
-    const SOLANA_RPC =
-      network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
+    const SOLANA_RPC = network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
     const SOLANA_DESK = solanaConfig.desk;
 
     console.log(`[Solana Approve] Using Helius RPC`);
-    if (!SOLANA_DESK)
-      throw new Error("SOLANA_DESK not configured in deployment");
+    if (!SOLANA_DESK) throw new Error("SOLANA_DESK not configured in deployment");
 
     const connection = new Connection(SOLANA_RPC, "confirmed");
 
     // Load owner/approver keypair from environment or fallback to id.json
-    const idlPath = path.join(
-      process.cwd(),
-      "solana/otc-program/target/idl/otc.json",
-    );
+    const idlPath = path.join(process.cwd(), "solana/otc-program/target/idl/otc.json");
     const idl = JSON.parse(await fs.readFile(idlPath, "utf8"));
     const bs58 = await import("bs58");
 
@@ -241,10 +220,7 @@ async function handleApproval(request: NextRequest) {
       );
     } else {
       // Fallback to id.json for local development
-      const keypairPath = path.join(
-        process.cwd(),
-        "solana/otc-program/id.json",
-      );
+      const keypairPath = path.join(process.cwd(), "solana/otc-program/id.json");
       const keypairData = JSON.parse(await fs.readFile(keypairPath, "utf8"));
       approverKeypair = Keypair.fromSecretKey(Uint8Array.from(keypairData));
       console.log(
@@ -256,25 +232,17 @@ async function handleApproval(request: NextRequest) {
     // Wallet interface matches @coral-xyz/anchor's Wallet type
     interface AnchorWallet {
       publicKey: SolanaPublicKey;
-      signTransaction<T extends Transaction | VersionedTransaction>(
-        tx: T,
-      ): Promise<T>;
-      signAllTransactions<T extends Transaction | VersionedTransaction>(
-        txs: T[],
-      ): Promise<T[]>;
+      signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T>;
+      signAllTransactions<T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]>;
     }
 
     const wallet: AnchorWallet = {
       publicKey: approverKeypair.publicKey,
-      signTransaction: async <T extends Transaction | VersionedTransaction>(
-        tx: T,
-      ) => {
+      signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T) => {
         (tx as Transaction).partialSign(approverKeypair);
         return tx;
       },
-      signAllTransactions: async <T extends Transaction | VersionedTransaction>(
-        txs: T[],
-      ) => {
+      signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]) => {
         txs.forEach((tx) => (tx as Transaction).partialSign(approverKeypair));
         return txs;
       },
@@ -316,9 +284,7 @@ async function handleApproval(request: NextRequest) {
         }>;
       };
       desk: {
-        fetch: (
-          address: SolanaPublicKey,
-        ) => Promise<{ usdcMint: SolanaPublicKey }>;
+        fetch: (address: SolanaPublicKey) => Promise<{ usdcMint: SolanaPublicKey }>;
       };
     }
     const programAccounts = program.account as ProgramAccountsFetch;
@@ -333,16 +299,10 @@ async function handleApproval(request: NextRequest) {
       agent: SolanaPublicKey;
       solUsdPrice8D: { toNumber: () => number };
     };
-    const deskData = (await programAccounts.desk.fetch(
-      desk,
-    )) as DeskAccountData;
+    const deskData = (await programAccounts.desk.fetch(desk)) as DeskAccountData;
     // Token mint comes from the offer itself (multi-token support)
     const tokenMint = new PublicKey(offerData.tokenMint);
-    const deskTokenTreasury = await getAssociatedTokenAddress(
-      tokenMint,
-      desk,
-      true,
-    );
+    const deskTokenTreasury = await getAssociatedTokenAddress(tokenMint, desk, true);
 
     // Load desk keypair for signing fulfillment - REQUIRED for fulfillment to work
     let deskKeypair: InstanceType<typeof Keypair>;
@@ -350,9 +310,7 @@ async function handleApproval(request: NextRequest) {
     if (deskPrivateKey) {
       const secretKey = bs58.default.decode(deskPrivateKey);
       deskKeypair = Keypair.fromSecretKey(secretKey);
-      console.log(
-        `[Approve API] Loaded desk keypair: ${deskKeypair.publicKey.toBase58()}`,
-      );
+      console.log(`[Approve API] Loaded desk keypair: ${deskKeypair.publicKey.toBase58()}`);
     } else {
       // Try file-based
       const deskKeypairPath = path.join(
@@ -360,9 +318,7 @@ async function handleApproval(request: NextRequest) {
         "solana/otc-program/desk-mainnet-keypair.json",
       );
       // FAIL-FAST: Desk keypair file must exist and be valid
-      const deskKeypairData = JSON.parse(
-        await fs.readFile(deskKeypairPath, "utf8"),
-      );
+      const deskKeypairData = JSON.parse(await fs.readFile(deskKeypairPath, "utf8"));
       deskKeypair = Keypair.fromSecretKey(Uint8Array.from(deskKeypairData));
       console.log(
         `[Approve API] Loaded desk keypair from file: ${deskKeypair.publicKey.toBase58()}`,
@@ -379,9 +335,7 @@ async function handleApproval(request: NextRequest) {
 
     // Check if SOL price is set (needed for SOL payments)
     if (offerData.currency === 0 && deskData.solUsdPrice8D.toNumber() === 0) {
-      console.log(
-        "[Approve API] SOL price not set on desk, fetching live price...",
-      );
+      console.log("[Approve API] SOL price not set on desk, fetching live price...");
 
       // Fetch real SOL price from CoinGecko
       const cgRes = await fetch(
@@ -408,16 +362,12 @@ async function handleApproval(request: NextRequest) {
       const solPriceUsd = cgData.solana.usd;
 
       if (solPriceUsd <= 0) {
-        throw new Error(
-          "Invalid SOL price from CoinGecko - cannot fulfill offer",
-        );
+        throw new Error("Invalid SOL price from CoinGecko - cannot fulfill offer");
       }
 
       // Convert to 8-decimal format (e.g., $200.50 -> 20050000000)
       const solPrice8d = Math.round(solPriceUsd * 1e8);
-      console.log(
-        `[Approve API] Fetched SOL price: $${solPriceUsd} (${solPrice8d} in 8d)`,
-      );
+      console.log(`[Approve API] Fetched SOL price: $${solPriceUsd} (${solPrice8d} in 8d)`);
 
       // Also fetch token price for consistency - try CoinGecko first, then Jupiter
       const tokenMintStr = offerData.tokenMint.toString();
@@ -430,41 +380,29 @@ async function handleApproval(request: NextRequest) {
       );
 
       if (tokenCgRes.ok) {
-        const tokenCgData = (await tokenCgRes.json()) as Record<
-          string,
-          { usd?: number }
-        >;
+        const tokenCgData = (await tokenCgRes.json()) as Record<string, { usd?: number }>;
         const tokenPriceEntry = tokenCgData[tokenMintStr.toLowerCase()];
         // Price entry is optional - token may not be in CoinGecko
         if (tokenPriceEntry) {
           // FAIL-FAST: If entry exists, usd should be valid
-          if (
-            typeof tokenPriceEntry.usd !== "number" ||
-            tokenPriceEntry.usd <= 0
-          ) {
+          if (typeof tokenPriceEntry.usd !== "number" || tokenPriceEntry.usd <= 0) {
             throw new Error(
               `CoinGecko returned invalid price for ${tokenMintStr}: ${tokenPriceEntry.usd}`,
             );
           }
           tokenPriceUsd = tokenPriceEntry.usd;
-          console.log(
-            `[Approve API] Fetched token price from CoinGecko: $${tokenPriceUsd}`,
-          );
+          console.log(`[Approve API] Fetched token price from CoinGecko: $${tokenPriceUsd}`);
         }
       }
 
       // If CoinGecko doesn't have it, try Jupiter
       if (tokenPriceUsd === null) {
-        console.log(
-          `[Approve API] Token not in CoinGecko, trying Jupiter: ${tokenMintStr}`,
-        );
+        console.log(`[Approve API] Token not in CoinGecko, trying Jupiter: ${tokenMintStr}`);
         const jupiterPrices = await fetchJupiterPrices([tokenMintStr]);
         const jupiterPrice = jupiterPrices[tokenMintStr];
         if (jupiterPrice && jupiterPrice > 0) {
           tokenPriceUsd = jupiterPrice;
-          console.log(
-            `[Approve API] Fetched token price from Jupiter: $${tokenPriceUsd}`,
-          );
+          console.log(`[Approve API] Fetched token price from Jupiter: $${tokenPriceUsd}`);
         }
       }
 
@@ -477,9 +415,7 @@ async function handleApproval(request: NextRequest) {
       }
 
       const tokenPrice8d = Math.round(tokenPriceUsd * 1e8);
-      console.log(
-        `[Approve API] Using token price: $${tokenPriceUsd} (${tokenPrice8d} in 8d)`,
-      );
+      console.log(`[Approve API] Using token price: $${tokenPriceUsd} (${tokenPrice8d} in 8d)`);
 
       const now = Math.floor(Date.now() / 1000);
       await program.methods
@@ -519,22 +455,14 @@ async function handleApproval(request: NextRequest) {
     } else {
       // Pay with USDC
       const usdcMint = new PublicKey(deskData.usdcMint);
-      const deskUsdcTreasury = await getAssociatedTokenAddress(
-        usdcMint,
-        desk,
-        true,
-      );
+      const deskUsdcTreasury = await getAssociatedTokenAddress(usdcMint, desk, true);
       const payerUsdcAta = await getAssociatedTokenAddress(
         usdcMint,
         approverKeypair.publicKey,
         false,
       );
       // Agent USDC ATA for commission (optional)
-      const agentUsdcAta = await getAssociatedTokenAddress(
-        usdcMint,
-        deskData.agent,
-        false,
-      );
+      const agentUsdcAta = await getAssociatedTokenAddress(usdcMint, deskData.agent, false);
 
       fulfillTx = await program.methods
         .fulfillOfferUsdc(new anchor.BN(offerId))
@@ -548,9 +476,7 @@ async function handleApproval(request: NextRequest) {
           agentUsdcAta,
           deskSigner: deskKeypair.publicKey,
           payer: approverKeypair.publicKey,
-          tokenProgram: new PublicKey(
-            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-          ),
+          tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
           systemProgram: new PublicKey("11111111111111111111111111111111"),
         })
         .signers([approverKeypair, deskKeypair])
@@ -569,20 +495,12 @@ async function handleApproval(request: NextRequest) {
       offerAddress,
       approvalTx: approveTx,
     };
-    const validatedSolanaResponse =
-      ApproveOfferResponseSchema.parse(solanaResponse);
+    const validatedSolanaResponse = ApproveOfferResponseSchema.parse(solanaResponse);
     return NextResponse.json(validatedSolanaResponse);
   }
 
-  console.log(
-    "[Approve API] ENTERING EVM approval path (chainType was:",
-    chainType,
-    ")",
-  );
-  const chain =
-    chainType && chainType !== "solana"
-      ? getViemChainForType(chainType)
-      : getChain();
+  console.log("[Approve API] ENTERING EVM approval path (chainType was:", chainType, ")");
+  const chain = chainType && chainType !== "solana" ? getViemChainForType(chainType) : getChain();
 
   // For EVM approval, we need a direct RPC URL (not the proxy) to send transactions
   // The proxy only supports read operations
@@ -638,12 +556,8 @@ async function handleApproval(request: NextRequest) {
     // accounts is optional in Anvil state dump - if it exists, validate structure
     const accounts = json.accounts;
     // If accounts exists, it should have the expected structure (fail-fast on malformed config)
-    const testWalletAddr = accounts?.testWallet
-      ? (accounts.testWallet as Address)
-      : undefined;
-    const approverAddrFromJson = accounts?.approver
-      ? (accounts.approver as Address)
-      : undefined;
+    const testWalletAddr = accounts?.testWallet ? (accounts.testWallet as Address) : undefined;
+    const approverAddrFromJson = accounts?.approver ? (accounts.approver as Address) : undefined;
     // Use testWalletAddr if available, otherwise use approverAddrFromJson
     // Use testWalletAddr if available, otherwise fall back to approverAddrFromJson
     const impersonateAddr = testWalletAddr ?? approverAddrFromJson;
@@ -686,10 +600,7 @@ async function handleApproval(request: NextRequest) {
     args: [],
   });
 
-  console.log(
-    "[Approve API] Current required approvals:",
-    Number(currentRequired),
-  );
+  console.log("[Approve API] Current required approvals:", Number(currentRequired));
 
   if (isLocalNetwork && Number(currentRequired) !== 1) {
     console.log("[Approve API] Setting requiredApprovals to 1 (local only)...");
@@ -725,9 +636,7 @@ async function handleApproval(request: NextRequest) {
     });
     console.log("[Approve API] ✅ Set requiredApprovals to 1 (local)");
   } else if (!isLocalNetwork) {
-    console.log(
-      "[Approve API] Skipping requiredApprovals mutation - non-local network",
-    );
+    console.log("[Approve API] Skipping requiredApprovals mutation - non-local network");
   } else {
     console.log("[Approve API] ✅ Already in single-approver mode");
   }
@@ -748,10 +657,7 @@ async function handleApproval(request: NextRequest) {
     offer = parseOfferStruct(offerRaw);
 
     // Check if offer exists (beneficiary is set when offer is created)
-    if (
-      offer.beneficiary &&
-      offer.beneficiary !== "0x0000000000000000000000000000000000000000"
-    ) {
+    if (offer.beneficiary && offer.beneficiary !== "0x0000000000000000000000000000000000000000") {
       console.log(`[Approve API] Offer found on attempt ${attempt}`);
       break;
     }
@@ -773,10 +679,7 @@ async function handleApproval(request: NextRequest) {
       { status: 404 },
     );
   }
-  if (
-    !offer.beneficiary ||
-    offer.beneficiary === "0x0000000000000000000000000000000000000000"
-  ) {
+  if (!offer.beneficiary || offer.beneficiary === "0x0000000000000000000000000000000000000000") {
     return NextResponse.json(
       {
         error: `Offer ${offerId} exists but has invalid beneficiary. Transaction may still be pending.`,
@@ -798,9 +701,7 @@ async function handleApproval(request: NextRequest) {
       txHash: "already-approved",
       alreadyApproved: true,
     };
-    const validatedAlreadyApproved = ApproveOfferResponseSchema.parse(
-      alreadyApprovedResponse,
-    );
+    const validatedAlreadyApproved = ApproveOfferResponseSchema.parse(alreadyApprovedResponse);
     return NextResponse.json(validatedAlreadyApproved);
   }
 
@@ -868,9 +769,7 @@ async function handleApproval(request: NextRequest) {
     // For local testing, skip price validation if token not registered
     const network = getNetwork();
     if (network === "local") {
-      console.log(
-        "[Approve API] Local network - skipping price validation (token not in DB)",
-      );
+      console.log("[Approve API] Local network - skipping price validation (token not in DB)");
     } else {
       return NextResponse.json(
         {
@@ -889,11 +788,7 @@ async function handleApproval(request: NextRequest) {
       tokenChain,
     });
 
-    const priceCheck = await checkPriceDivergence(
-      tokenAddress,
-      tokenChain,
-      offerPriceUsd,
-    );
+    const priceCheck = await checkPriceDivergence(tokenAddress, tokenChain, offerPriceUsd);
 
     if (!priceCheck.valid && typeof priceCheck.divergencePercent === "number") {
       console.log("[Approve API] Price divergence detected:", {
@@ -904,10 +799,7 @@ async function handleApproval(request: NextRequest) {
       });
 
       // Reject if divergence exceeds threshold (skip on local network)
-      if (
-        priceCheck.divergencePercent > MAX_PRICE_DIVERGENCE_BPS / 100 &&
-        !isLocalNetwork
-      ) {
+      if (priceCheck.divergencePercent > MAX_PRICE_DIVERGENCE_BPS / 100 && !isLocalNetwork) {
         return NextResponse.json(
           {
             success: false,
@@ -922,10 +814,7 @@ async function handleApproval(request: NextRequest) {
           },
           { status: 400 },
         );
-      } else if (
-        isLocalNetwork &&
-        priceCheck.divergencePercent > MAX_PRICE_DIVERGENCE_BPS / 100
-      ) {
+      } else if (isLocalNetwork && priceCheck.divergencePercent > MAX_PRICE_DIVERGENCE_BPS / 100) {
         console.log(
           "[Approve API] Skipping price rejection on local network (divergence:",
           priceCheck.divergencePercent,
@@ -942,9 +831,7 @@ async function handleApproval(request: NextRequest) {
   // ============ END PRICE VALIDATION ============
 
   // Approve immediately
-  const accountAddr = (
-    typeof account === "string" ? account : account.address
-  ) as Address;
+  const accountAddr = (typeof account === "string" ? account : account.address) as Address;
 
   console.log("[Approve API] Simulating approval...", {
     offerId,
@@ -990,15 +877,12 @@ async function handleApproval(request: NextRequest) {
   // offer.beneficiary is required - if missing, skip (offer should have beneficiary)
   if (quoteService) {
     if (!offer.beneficiary) {
-      console.warn(
-        "[Approve API] Offer missing beneficiary - skipping quote update",
-      );
+      console.warn("[Approve API] Offer missing beneficiary - skipping quote update");
       return NextResponse.json({ success: true, txHash });
     }
     const activeQuotes = await quoteService.getActiveQuotes();
     const matchingQuote = activeQuotes.find(
-      (q: QuoteMemory) =>
-        q.beneficiary.toLowerCase() === offer.beneficiary.toLowerCase(),
+      (q: QuoteMemory) => q.beneficiary.toLowerCase() === offer.beneficiary.toLowerCase(),
     );
 
     if (matchingQuote) {
@@ -1020,8 +904,7 @@ async function handleApproval(request: NextRequest) {
       const discountedUsd = Number(discountedUsd8) / 1e8;
 
       // Determine payment currency and amount based on offer currency
-      const paymentCurrency: "ETH" | "USDC" =
-        offer.currency === 0 ? "ETH" : "USDC";
+      const paymentCurrency: "ETH" | "USDC" = offer.currency === 0 ? "ETH" : "USDC";
       let paymentAmount = "0";
 
       if (offer.currency === 0) {
@@ -1052,9 +935,7 @@ async function handleApproval(request: NextRequest) {
       });
 
       // Update quote with financial data from contract
-      const updatedQuote = await quoteService.getQuoteByQuoteId(
-        matchingQuote.quoteId,
-      );
+      const updatedQuote = await quoteService.getQuoteByQuoteId(matchingQuote.quoteId);
       updatedQuote.tokenAmount = offer.tokenAmount.toString();
       updatedQuote.totalUsd = totalUsd;
       updatedQuote.discountUsd = discountUsd;
@@ -1065,10 +946,7 @@ async function handleApproval(request: NextRequest) {
 
       await runtime.setCache(`quote:${matchingQuote.quoteId}`, updatedQuote);
 
-      console.log(
-        "[Approve API] Updated quote with financial data:",
-        matchingQuote.quoteId,
-      );
+      console.log("[Approve API] Updated quote with financial data:", matchingQuote.quoteId);
     }
   }
 
@@ -1161,20 +1039,14 @@ async function handleApproval(request: NextRequest) {
   }
 
   // Check if approver should also fulfill
-  const requireApproverToFulfill = await safeReadContract<boolean>(
-    publicClient,
-    {
-      address: OTC_ADDRESS,
-      abi,
-      functionName: "requireApproverToFulfill",
-      args: [],
-    },
-  );
+  const requireApproverToFulfill = await safeReadContract<boolean>(publicClient, {
+    address: OTC_ADDRESS,
+    abi,
+    functionName: "requireApproverToFulfill",
+    args: [],
+  });
 
-  console.log(
-    "[Approve API] requireApproverToFulfill:",
-    requireApproverToFulfill,
-  );
+  console.log("[Approve API] requireApproverToFulfill:", requireApproverToFulfill);
 
   let fulfillTxHash: `0x${string}` | undefined;
 
@@ -1183,9 +1055,7 @@ async function handleApproval(request: NextRequest) {
     console.log("[Approve API] Auto-fulfilling offer (approver-only mode)...");
 
     // FAIL-FAST: Auto-fulfillment must succeed
-    const accountAddr = (
-      typeof account === "string" ? account : account.address
-    ) as Address;
+    const accountAddr = (typeof account === "string" ? account : account.address) as Address;
 
     // Calculate required payment
     const currency = approvedOffer.currency;
@@ -1290,7 +1160,6 @@ async function handleApproval(request: NextRequest) {
       ? "Offer approved and fulfilled automatically"
       : "Offer approved. Please complete payment to fulfill the offer.",
   };
-  const validatedFinalResponse =
-    ApproveOfferResponseSchema.parse(finalResponse);
+  const validatedFinalResponse = ApproveOfferResponseSchema.parse(finalResponse);
   return NextResponse.json(validatedFinalResponse);
 }

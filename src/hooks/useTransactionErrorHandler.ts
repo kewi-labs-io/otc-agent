@@ -28,9 +28,7 @@ export function useTransactionErrorHandler() {
         ? error.cause.reason.toLowerCase()
         : "";
     const detailsStr =
-      error.details && typeof error.details === "string"
-        ? error.details.toLowerCase()
-        : "";
+      error.details && typeof error.details === "string" ? error.details.toLowerCase() : "";
     const shortMsg =
       error.shortMessage && typeof error.shortMessage === "string"
         ? error.shortMessage.toLowerCase()

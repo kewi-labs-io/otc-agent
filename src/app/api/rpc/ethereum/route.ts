@@ -1,10 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getAlchemyApiKey } from "@/config/env";
 import { validationErrorResponse } from "@/lib/validation/helpers";
-import {
-  RpcProxyErrorResponseSchema,
-  RpcRequestSchema,
-} from "@/types/validation/api-schemas";
+import { RpcProxyErrorResponseSchema, RpcRequestSchema } from "@/types/validation/api-schemas";
 
 // Proxy RPC requests to Alchemy to keep API key server-side
 // This prevents the Alchemy API key from being exposed in the browser
@@ -45,11 +42,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!response.ok) {
-    console.error(
-      "[RPC Proxy] Alchemy error:",
-      response.status,
-      response.statusText,
-    );
+    console.error("[RPC Proxy] Alchemy error:", response.status, response.statusText);
     const errorResponse = { error: "RPC request failed" };
     const validatedError = RpcProxyErrorResponseSchema.parse(errorResponse);
     return NextResponse.json(validatedError, { status: response.status });

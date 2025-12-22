@@ -1,24 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server";
-import {
-  type Abi,
-  type Address,
-  createPublicClient,
-  createWalletClient,
-  http,
-} from "viem";
+import { type Abi, type Address, createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { getOtcAddress } from "@/config/contracts";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 import { getChain, getRpcUrl } from "@/lib/getChain";
-import { getOtcAddress } from "@/config/contracts";
 import type { RawOfferData } from "@/lib/otc-helpers";
 import { CronCheckMaturedOtcResponseSchema } from "@/types/validation/api-schemas";
 
 // This should be called daily via a cron job (e.g., Vercel Cron or external scheduler)
 // It checks for matured OTC and claims them on behalf of users
 
-const EVM_PRIVATE_KEY = process.env.EVM_PRIVATE_KEY as
-  | `0x${string}`
-  | undefined;
+const EVM_PRIVATE_KEY = process.env.EVM_PRIVATE_KEY as `0x${string}` | undefined;
 const CRON_SECRET = process.env.CRON_SECRET;
 
 export async function GET(request: NextRequest) {
@@ -33,21 +25,17 @@ export async function GET(request: NextRequest) {
       success: false,
       error: "Server configuration error",
     };
-    const validatedConfigError =
-      CronCheckMaturedOtcResponseSchema.parse(configErrorResponse);
+    const validatedConfigError = CronCheckMaturedOtcResponseSchema.parse(configErrorResponse);
     return NextResponse.json(validatedConfigError, { status: 500 });
   }
 
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     console.warn("[Cron API] Unauthorized cron access attempt", {
-      ip:
-        request.headers.get("x-forwarded-for") ||
-        request.headers.get("x-real-ip"),
+      ip: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip"),
       timestamp: new Date().toISOString(),
     });
     const unauthorizedResponse = { success: false, error: "Unauthorized" };
-    const validatedUnauthorized =
-      CronCheckMaturedOtcResponseSchema.parse(unauthorizedResponse);
+    const validatedUnauthorized = CronCheckMaturedOtcResponseSchema.parse(unauthorizedResponse);
     return NextResponse.json(validatedUnauthorized, { status: 401 });
   }
 
@@ -154,8 +142,7 @@ export async function GET(request: NextRequest) {
         maturedOffers: result.maturedOffers,
         message: "Found matured offers but cannot claim without approver key",
       };
-      const validatedNoKey =
-        CronCheckMaturedOtcResponseSchema.parse(noKeyResponse);
+      const validatedNoKey = CronCheckMaturedOtcResponseSchema.parse(noKeyResponse);
       return NextResponse.json(validatedNoKey, { status: 500 });
     }
 

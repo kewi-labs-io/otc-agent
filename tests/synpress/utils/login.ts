@@ -5,8 +5,8 @@
  */
 
 import type { BrowserContext, Page } from "@playwright/test";
-import { MetaMask, Phantom } from "@synthetixio/synpress/playwright";
-import { sleep, expectDefined } from "../../test-utils";
+import type { MetaMask, Phantom } from "@synthetixio/synpress/playwright";
+import { sleep } from "../../test-utils";
 
 /**
  * Wait for the app to be ready (page loaded and stable).
@@ -25,37 +25,42 @@ export async function waitForAppReady(page: Page, baseUrl: string): Promise<void
 
 /**
  * Check if wallet is already connected.
- * Checks multiple indicators:
- * - wallet-menu element (if app has one)
- * - Truncated address displayed on page
- * - Sign In button NOT visible (connected state)
+ * Returns true ONLY if we have positive evidence of connection.
+ * Conservative: returns false if uncertain (lets the connection flow proceed).
  */
 async function isWalletConnected(page: Page): Promise<boolean> {
-  // First check for explicit wallet indicator
+  // Wait a moment for the page to stabilize
+  await sleep(1000);
+
+  // First check if Sign In button is visible - if so, definitely NOT connected
+  const signInButton = page.locator('button:has-text("Sign In")').first();
+  const signInVisible = await signInButton.isVisible({ timeout: 2000 }).catch(() => false);
+  if (signInVisible) {
+    return false;
+  }
+
+  // Check for explicit wallet indicator (positive evidence)
   const walletIndicator = page
     .locator('[data-testid="wallet-menu"], [data-testid="wallet-address"]')
     .first();
   if (await walletIndicator.isVisible({ timeout: 1000 }).catch(() => false)) {
+    console.log("[isWalletConnected] Found wallet indicator - already connected");
     return true;
   }
 
-  // Check for truncated address pattern (0x1234...5678) - use getByText which handles regex better
-  const addressPatterns = ['0x', '...', '…'];
-  for (const pattern of addressPatterns) {
-    const hasAddress = await page.locator(`text=${pattern}`).first().isVisible({ timeout: 500 }).catch(() => false);
-    if (hasAddress) {
-      // Found something that looks like an address
-      return true;
-    }
+  // Check for truncated wallet address displayed (0xf39F...2266 pattern)
+  // Only match button elements to avoid false positives from contract addresses in text
+  const walletAddressButton = page
+    .locator("button")
+    .filter({ hasText: /0x[a-fA-F0-9]{4}\.\.\.?[a-fA-F0-9]{4}/ })
+    .first();
+  if (await walletAddressButton.isVisible({ timeout: 500 }).catch(() => false)) {
+    console.log("[isWalletConnected] Found wallet address button - already connected");
+    return true;
   }
 
-  // Check if Sign In button is NOT visible (implies connected)
-  const signInButton = page.locator('button:has-text("Sign In")').first();
-  const signInVisible = await signInButton.isVisible({ timeout: 1000 }).catch(() => false);
-  
-  // If Sign In is visible, not connected
-  // If Sign In is not visible, might be connected (or loading)
-  return !signInVisible;
+  // If no positive evidence, assume not connected (let connection flow proceed)
+  return false;
 }
 
 /**
@@ -63,7 +68,9 @@ async function isWalletConnected(page: Page): Promise<boolean> {
  */
 async function openPrivyConnectFlow(page: Page): Promise<void> {
   // Look for Sign In or Connect Wallet button
-  const connectButton = page.locator('button:has-text("Sign In"), button:has-text("Connect Wallet")').first();
+  const connectButton = page
+    .locator('button:has-text("Sign In"), button:has-text("Connect Wallet")')
+    .first();
 
   const connectVisible = await connectButton.isVisible({ timeout: 4000 }).catch(() => false);
   if (connectVisible) {
@@ -90,7 +97,7 @@ async function openPrivyConnectFlow(page: Page): Promise<void> {
  */
 export async function connectMetaMaskWallet(
   page: Page,
-  context: BrowserContext,
+  _context: BrowserContext,
   metamask: MetaMask,
 ): Promise<string> {
   // Check if already connected
@@ -108,9 +115,9 @@ export async function connectMetaMaskWallet(
     'button:has-text("MetaMask")',
     'div[role="button"]:has-text("MetaMask")',
     '[data-testid*="metamask"]',
-    'text=/MetaMask/i',
+    "text=/MetaMask/i",
   ];
-  
+
   let metamaskClicked = false;
   for (const selector of metamaskSelectors) {
     const option = page.locator(selector).first();
@@ -122,7 +129,7 @@ export async function connectMetaMaskWallet(
       break;
     }
   }
-  
+
   if (!metamaskClicked) {
     console.log("[connectMetaMaskWallet] MetaMask button not found, trying to proceed anyway");
   }
@@ -149,11 +156,11 @@ export async function connectMetaMaskWallet(
 
   // Verify wallet is now connected by checking Sign In button is gone
   await sleep(2000);
-  
+
   // Wait for Sign In button to disappear (indicates successful connection)
   const signInButton = page.locator('button:has-text("Sign In")').first();
   const stillShowingSignIn = await signInButton.isVisible({ timeout: 5000 }).catch(() => false);
-  
+
   if (stillShowingSignIn) {
     throw new Error("MetaMask wallet connection failed - Sign In button still visible");
   }
@@ -173,8 +180,11 @@ export async function connectPhantomWallet(
 ): Promise<void> {
   // Check if already connected
   if (await isWalletConnected(page)) {
+    console.log("[connectPhantomWallet] Wallet already connected, skipping");
     return;
   }
+
+  console.log("[connectPhantomWallet] Starting Phantom connection...");
 
   // Open Privy connect flow
   await openPrivyConnectFlow(page);
@@ -211,24 +221,23 @@ export async function connectPhantomWallet(
   // (e.g., "Monad Mainnet is live", "Earn 8% APY", etc.)
   const allPages = context.pages();
   for (const p of allPages) {
-    // Try "Got it" button first
-    const gotItBtn = p.locator('button:has-text("Got it")').first();
+    // Try "Got it" button first (exact match to avoid false positives)
+    const gotItBtn = p
+      .locator("button")
+      .filter({ hasText: /^Got it$/i })
+      .first();
     if (await gotItBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
       await gotItBtn.click();
       await sleep(500);
     }
-    
-    // Try "Not now" button (common dismissal)
-    const notNowBtn = p.locator('button:has-text("Not now"), button:has-text("No thanks"), button:has-text("Skip")').first();
-    if (await notNowBtn.isVisible({ timeout: 500 }).catch(() => false)) {
-      await notNowBtn.click();
-      await sleep(500);
-    }
-    
-    // Try back button/arrow for promo screens
-    const backBtn = p.locator('[aria-label*="back" i], button:has-text("<"), svg[data-testid*="back"]').first();
-    if (await backBtn.isVisible({ timeout: 500 }).catch(() => false)) {
-      await backBtn.click();
+
+    // Try "Not now" or "Skip" buttons (exact match)
+    const dismissBtn = p
+      .locator("button")
+      .filter({ hasText: /^(Not now|No thanks|Skip|Close|Dismiss)$/i })
+      .first();
+    if (await dismissBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+      await dismissBtn.click();
       await sleep(500);
     }
   }
@@ -242,11 +251,11 @@ export async function connectPhantomWallet(
 
   // Verify wallet is now connected by checking Sign In button is gone
   await sleep(2000);
-  
+
   // Wait for Sign In button to disappear (indicates successful connection)
   const signInButton = page.locator('button:has-text("Sign In")').first();
   const stillShowingSignIn = await signInButton.isVisible({ timeout: 5000 }).catch(() => false);
-  
+
   if (stillShowingSignIn) {
     throw new Error("Phantom wallet connection failed - Sign In button still visible");
   }
@@ -257,10 +266,14 @@ export async function connectPhantomWallet(
  */
 export async function disconnectWallet(page: Page): Promise<void> {
   // Look for wallet menu or any clickable wallet indicator
-  const walletMenu = page.locator('[data-testid="wallet-menu"], [data-testid="wallet-address"], button:has-text("0x")').first();
+  const walletMenu = page
+    .locator('[data-testid="wallet-menu"], [data-testid="wallet-address"], button:has-text("0x")')
+    .first();
   if (!(await walletMenu.isVisible({ timeout: 2000 }).catch(() => false))) {
     // Try looking for a user menu or settings menu
-    const userMenu = page.locator('[data-testid="user-menu"], button:has-text("Account"), button:has-text("Settings")').first();
+    const userMenu = page
+      .locator('[data-testid="user-menu"], button:has-text("Account"), button:has-text("Settings")')
+      .first();
     if (!(await userMenu.isVisible({ timeout: 2000 }).catch(() => false))) {
       return; // Not connected or no menu found
     }
@@ -270,7 +283,11 @@ export async function disconnectWallet(page: Page): Promise<void> {
   }
   await sleep(500);
 
-  const disconnectButton = page.locator('button:has-text("Disconnect"), button:has-text("Sign Out"), button:has-text("Log Out")').first();
+  const disconnectButton = page
+    .locator(
+      'button:has-text("Disconnect"), button:has-text("Sign Out"), button:has-text("Log Out")',
+    )
+    .first();
   if (await disconnectButton.isVisible({ timeout: 2000 }).catch(() => false)) {
     await disconnectButton.click();
     await sleep(1000);

@@ -30,8 +30,10 @@ bun run test:solana            # Solana program tests
 bun run test:complete-flow     # Full system test (auto-starts services)
 bun run test:e2e              # Playwright E2E tests (237 tests, 99% coverage)
 
-# Linting
-bun run lint                   # Format with Prettier
+# Linting (Biome)
+bun run lint                   # Check with Biome
+bun run lint:fix               # Fix issues with Biome
+bun run format                 # Format with Biome
 ```
 
 ### Running Single Tests
@@ -147,7 +149,7 @@ This architecture solves the trust problem in decentralized OTC trading through 
 - **form-data** - Via axios/@elizaos (we use browser FormData API)
 - **morgan** - Via dev-only tomahawk
 - **uglify-js** - Build tool only
-- **js-yaml** - Via eslint/langchain (not parsing untrusted YAML)
+- **js-yaml** - Via langchain (not parsing untrusted YAML)
 
 **Risk Assessment**: LOW - vulnerabilities are in transitive deps, not directly exploitable in our application code.
 

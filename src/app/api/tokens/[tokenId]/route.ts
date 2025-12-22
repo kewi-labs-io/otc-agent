@@ -4,25 +4,19 @@ import { TokenByIdResponseSchema } from "@/types/validation/api-schemas";
 import { sanitizeConsignmentForBuyer } from "@/utils/consignment-sanitizer";
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ tokenId: string }> },
 ) {
   const { tokenId } = await params;
 
   // FAIL-FAST: Validate tokenId parameter
   if (!tokenId) {
-    return NextResponse.json(
-      { success: false, error: "Token ID is required" },
-      { status: 400 },
-    );
+    return NextResponse.json({ success: false, error: "Token ID is required" }, { status: 400 });
   }
 
   // Validate tokenId format
   if (!tokenId.match(/^token-(ethereum|base|bsc|solana)-/)) {
-    return NextResponse.json(
-      { success: false, error: "Invalid tokenId format" },
-      { status: 400 },
-    );
+    return NextResponse.json({ success: false, error: "Invalid tokenId format" }, { status: 400 });
   }
 
   // Token lookup - return 404 if not found, 400 if invalid format
@@ -52,9 +46,7 @@ export async function GET(
 
   // Filter out listings with < 1 token remaining (dust amounts)
   const oneToken = BigInt(10) ** BigInt(token.decimals);
-  consignments = consignments.filter(
-    (c) => BigInt(c.remainingAmount) >= oneToken,
-  );
+  consignments = consignments.filter((c) => BigInt(c.remainingAmount) >= oneToken);
 
   // Sanitize consignments to hide negotiation terms from buyers
   // This prevents gaming the negotiation by querying the API

@@ -2,10 +2,7 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { type NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http, parseAbi } from "viem";
 import { base } from "viem/chains";
-import {
-  getRegistrationHelperForChain,
-  getSolanaProgramId,
-} from "@/config/contracts";
+import { getRegistrationHelperForChain, getSolanaProgramId } from "@/config/contracts";
 import { getHeliusRpcUrl, getNetwork } from "@/config/env";
 import type { MinimalPublicClient } from "@/lib/viem-utils";
 import { TokenDB } from "@/services/database";
@@ -13,9 +10,7 @@ import { TokenRegistryService } from "@/services/tokenRegistry";
 import { CronPollTokenRegistrationsResponseSchema } from "@/types/validation/api-schemas";
 
 // register_token instruction discriminator from IDL
-const REGISTER_TOKEN_DISCRIMINATOR = Buffer.from([
-  32, 146, 36, 240, 80, 183, 36, 84,
-]);
+const REGISTER_TOKEN_DISCRIMINATOR = Buffer.from([32, 146, 36, 240, 80, 183, 36, 84]);
 
 const ERC20_ABI = parseAbi([
   "function symbol() view returns (string)",
@@ -79,9 +74,7 @@ async function pollBaseRegistrations() {
     return { processed: 0, message: "Already up to date" };
   }
 
-  console.log(
-    `[Cron Base] Fetching events from block ${startBlock} to ${latestBlock}`,
-  );
+  console.log(`[Cron Base] Fetching events from block ${startBlock} to ${latestBlock}`);
 
   const logs = await client.getLogs({
     address: registrationHelperAddress as `0x${string}`,
@@ -118,9 +111,7 @@ async function pollBaseRegistrations() {
   for (const log of logs) {
     const { tokenAddress, registeredBy } = (log as TokenRegisteredLog).args;
 
-    console.log(
-      `[Cron Base] Processing token registration: ${tokenAddress} by ${registeredBy}`,
-    );
+    console.log(`[Cron Base] Processing token registration: ${tokenAddress} by ${registeredBy}`);
 
     // Fetch token metadata
     const viemClient = client as MinimalPublicClient;
@@ -171,15 +162,13 @@ async function pollSolanaRegistrations() {
   const programId = getSolanaProgramId();
 
   const network = getNetwork();
-  const rpcUrl =
-    network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
+  const rpcUrl = network === "local" ? "http://127.0.0.1:8899" : getHeliusRpcUrl();
   console.log(`[Poll Solana Registrations] Using Helius RPC`);
   const connection = new Connection(rpcUrl, "confirmed");
 
-  const signatures = await connection.getSignaturesForAddress(
-    new PublicKey(programId),
-    { limit: 50 },
-  );
+  const signatures = await connection.getSignaturesForAddress(new PublicKey(programId), {
+    limit: 50,
+  });
 
   if (signatures.length === 0) {
     return { processed: 0, message: "No recent transactions" };
@@ -187,9 +176,7 @@ async function pollSolanaRegistrations() {
 
   let startIndex = 0;
   if (lastSolanaSignature) {
-    const lastIndex = signatures.findIndex(
-      (sig) => sig.signature === lastSolanaSignature,
-    );
+    const lastIndex = signatures.findIndex((sig) => sig.signature === lastSolanaSignature);
     if (lastIndex >= 0) {
       startIndex = lastIndex + 1;
     }
@@ -199,9 +186,7 @@ async function pollSolanaRegistrations() {
     return { processed: 0, message: "Already up to date" };
   }
 
-  console.log(
-    `[Cron Solana] Checking ${signatures.length - startIndex} transactions`,
-  );
+  console.log(`[Cron Solana] Checking ${signatures.length - startIndex} transactions`);
 
   let processed = 0;
   let lastProcessedSig: string | null = null;
@@ -217,33 +202,24 @@ async function pollSolanaRegistrations() {
     // FAIL-FAST: Transaction must exist and have metadata to process
     if (!tx) continue;
     if (!tx.meta) {
-      console.warn(
-        `[Cron Solana] Transaction ${sig.signature} missing metadata - skipping`,
-      );
+      console.warn(`[Cron Solana] Transaction ${sig.signature} missing metadata - skipping`);
       continue;
     }
     // logMessages is required in Solana transaction metadata
     if (!tx.meta.logMessages) {
-      console.warn(
-        `[Cron Solana] Transaction ${sig.signature} missing logMessages - skipping`,
-      );
+      console.warn(`[Cron Solana] Transaction ${sig.signature} missing logMessages - skipping`);
       continue;
     }
 
     const hasRegisterToken = tx.meta.logMessages.some(
-      (log) =>
-        log.includes("Instruction: RegisterToken") ||
-        log.includes("register_token"),
+      (log) => log.includes("Instruction: RegisterToken") || log.includes("register_token"),
     );
 
     if (hasRegisterToken) {
       const parsed = parseSolanaRegisterToken(tx, programId);
       if (parsed) {
         // FAIL-FAST: Token registration must succeed
-        const tokenData = await fetchSolanaTokenData(
-          connection,
-          parsed.tokenMint,
-        );
+        const tokenData = await fetchSolanaTokenData(connection, parsed.tokenMint);
         await TokenDB.createToken({
           symbol: tokenData.symbol,
           name: tokenData.name,
@@ -254,9 +230,7 @@ async function pollSolanaRegistrations() {
           logoUrl: "",
           description: "",
         });
-        console.log(
-          `[Cron Solana] ✅ Registered: ${tokenData.symbol} (${parsed.tokenMint})`,
-        );
+        console.log(`[Cron Solana] ✅ Registered: ${tokenData.symbol} (${parsed.tokenMint})`);
         registeredTokens.push(parsed.tokenMint);
         processed++;
       }
@@ -342,9 +316,7 @@ async function fetchSolanaTokenData(
   connection: Connection,
   mintAddress: string,
 ): Promise<{ name: string; symbol: string; decimals: number }> {
-  const mintInfo = await connection.getParsedAccountInfo(
-    new PublicKey(mintAddress),
-  );
+  const mintInfo = await connection.getParsedAccountInfo(new PublicKey(mintAddress));
 
   // FAIL-FAST: Mint account must exist
   if (!mintInfo.value) {
@@ -364,17 +336,11 @@ async function fetchSolanaTokenData(
     }
   }
 
-  const METADATA_PROGRAM_ID = new PublicKey(
-    "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
-  );
+  const METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
   const mintPubkey = new PublicKey(mintAddress);
 
   const [metadataPda] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("metadata"),
-      METADATA_PROGRAM_ID.toBuffer(),
-      mintPubkey.toBuffer(),
-    ],
+    [Buffer.from("metadata"), METADATA_PROGRAM_ID.toBuffer(), mintPubkey.toBuffer()],
     METADATA_PROGRAM_ID,
   );
 
@@ -432,9 +398,7 @@ export async function GET(request: NextRequest) {
 
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     console.warn("[Cron] Unauthorized access attempt", {
-      ip:
-        request.headers.get("x-forwarded-for") ||
-        request.headers.get("x-real-ip"),
+      ip: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip"),
       timestamp: new Date().toISOString(),
     });
     const unauthorizedResponse = { success: false, error: "Unauthorized" };
@@ -462,25 +426,19 @@ export async function GET(request: NextRequest) {
   // Poll Base
   const baseResult = await pollBaseRegistrations();
   results.base = {
-    processed:
-      typeof baseResult.processed === "number" ? baseResult.processed : 0,
+    processed: typeof baseResult.processed === "number" ? baseResult.processed : 0,
     error: typeof baseResult.error === "string" ? baseResult.error : null,
-    latestBlock:
-      typeof baseResult.latestBlock === "string"
-        ? baseResult.latestBlock
-        : null,
+    latestBlock: typeof baseResult.latestBlock === "string" ? baseResult.latestBlock : null,
   };
 
   // Poll Solana
   const solanaResult = await pollSolanaRegistrations();
   const solanaLastSignature =
-    "lastSignature" in solanaResult &&
-    typeof solanaResult.lastSignature === "string"
+    "lastSignature" in solanaResult && typeof solanaResult.lastSignature === "string"
       ? solanaResult.lastSignature
       : null;
   results.solana = {
-    processed:
-      typeof solanaResult.processed === "number" ? solanaResult.processed : 0,
+    processed: typeof solanaResult.processed === "number" ? solanaResult.processed : 0,
     error: null, // pollSolanaRegistrations doesn't return error - failures are logged
     lastSignature: solanaLastSignature,
   };
@@ -492,7 +450,6 @@ export async function GET(request: NextRequest) {
     message: `Processed ${totalProcessed} new token registrations`,
     results,
   };
-  const validatedPoll =
-    CronPollTokenRegistrationsResponseSchema.parse(pollResponse);
+  const validatedPoll = CronPollTokenRegistrationsResponseSchema.parse(pollResponse);
   return NextResponse.json(validatedPoll);
 }

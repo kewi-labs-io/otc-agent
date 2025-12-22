@@ -47,13 +47,11 @@ export const ChatMessage = memo(function ChatMessage({
     children?: React.ReactNode;
     index?: string | number;
   }) => {
-    const citationIndex =
-      typeof index === "string" ? Number(index) : (index ?? 0);
-    const citation = citations?.find((c, i) => i === citationIndex);
+    const citationIndex = typeof index === "string" ? Number(index) : (index ?? 0);
+    const citation = citations?.find((_c, i) => i === citationIndex);
 
     // If citation not found in uniqueCitations, find first citation with same URL
-    const displayCitation =
-      uniqueCitations?.find((c) => c.url === citation?.url) || citation;
+    const displayCitation = uniqueCitations?.find((c) => c.url === citation?.url) || citation;
 
     return (
       <a
@@ -108,9 +106,7 @@ export const ChatMessage = memo(function ChatMessage({
   // Deduplicate citations by URL and preserve order
   const uniqueCitations = citations?.reduce(
     (acc, current, idx) => {
-      const existingCitation = acc.find(
-        (c) => c.url === current.url && c.index === idx,
-      );
+      const existingCitation = acc.find((c) => c.url === current.url && c.index === idx);
       if (!existingCitation) {
         acc.push({ ...current, index: idx });
       }
@@ -120,8 +116,7 @@ export const ChatMessage = memo(function ChatMessage({
   );
 
   // name is guaranteed to exist (validated above) - no optional chaining needed
-  const isUser =
-    message.name === USER_NAME || message.name.toLowerCase() === "user";
+  const isUser = message.name === USER_NAME || message.name.toLowerCase() === "user";
 
   // Parse message text - handle both raw text and structured content
   let messageText = "";
@@ -131,9 +126,7 @@ export const ChatMessage = memo(function ChatMessage({
     messageText = message.content.text;
   } else if (message.content) {
     messageText =
-      typeof message.content === "string"
-        ? message.content
-        : JSON.stringify(message.content);
+      typeof message.content === "string" ? message.content : JSON.stringify(message.content);
   }
 
   // Clean up any XML artifacts or special formatting for agent messages
@@ -156,16 +149,8 @@ export const ChatMessage = memo(function ChatMessage({
   const bubbleUser = "bg-zinc-800/80 border-zinc-700 text-zinc-100";
 
   return (
-    <div
-      data-testid={isUser ? "user-message" : "agent-message"}
-      className="w-full group"
-    >
-      <div
-        className={clsx(
-          "flex items-end gap-3 mb-4",
-          isUser ? "justify-end" : "justify-start",
-        )}
-      >
+    <div data-testid={isUser ? "user-message" : "agent-message"} className="w-full group">
+      <div className={clsx("flex items-end gap-3 mb-4", isUser ? "justify-end" : "justify-start")}>
         {!isUser && (
           <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center overflow-hidden rounded-full">
             <Image
@@ -209,6 +194,7 @@ export const ChatMessage = memo(function ChatMessage({
           {!isUser && uniqueCitations && uniqueCitations.length > 0 && (
             <div className="mt-3 text-xs">
               <button
+                type="button"
                 onClick={() => setIsSourcesExpanded(!isSourcesExpanded)}
                 className="group flex items-center gap-1 py-1 text-zinc-400 hover:text-zinc-200 cursor-pointer"
               >
@@ -244,11 +230,7 @@ export const ChatMessage = memo(function ChatMessage({
                             wrapper: "span",
                             forceInline: true,
                             overrides: {
-                              p: ({
-                                children,
-                              }: {
-                                children?: React.ReactNode;
-                              }) => (
+                              p: ({ children }: { children?: React.ReactNode }) => (
                                 <span className="truncate">{children}</span>
                               ),
                             },
@@ -276,6 +258,7 @@ export const ChatMessage = memo(function ChatMessage({
           <div className="flex flex-col gap-2">
             {followUpPrompts.map((prompt: string, index: number) => (
               <button
+                type="button"
                 key={index}
                 onClick={() => onFollowUpClick?.(prompt)}
                 className={clsx([

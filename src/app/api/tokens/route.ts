@@ -1,12 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { agentRuntime } from "@/lib/agent-runtime";
-import {
-  getCachedMarketData,
-  getCachedTokens,
-  invalidateTokenCache,
-} from "@/lib/cache";
-import { parseOrThrow, validateQueryParams } from "@/lib/validation/helpers";
 import { SUPPORTED_CHAINS } from "@/config/chains";
+import { agentRuntime } from "@/lib/agent-runtime";
+import { getCachedMarketData, getCachedTokens, invalidateTokenCache } from "@/lib/cache";
+import { parseOrThrow, validateQueryParams } from "@/lib/validation/helpers";
 import { type Chain, MarketDataDB, TokenDB } from "@/services/database";
 import { MarketDataService } from "@/services/marketDataService";
 import { TokenRegistryService } from "@/services/tokenRegistry";
@@ -25,8 +21,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const query = validateQueryParams(GetTokensQuerySchema, searchParams);
 
-  const { chain, symbol, address, minMarketCap, maxMarketCap, isActive } =
-    query;
+  const { chain, symbol, address, minMarketCap, maxMarketCap, isActive } = query;
 
   // Use serverless-optimized cache for token list
   const filters: { chain?: Chain; isActive?: boolean } = {};
@@ -37,9 +32,7 @@ export async function GET(request: NextRequest) {
 
   // Filter by symbol or address if provided
   if (symbol) {
-    tokens = tokens.filter(
-      (t) => t.symbol.toLowerCase() === symbol.toLowerCase(),
-    );
+    tokens = tokens.filter((t) => t.symbol.toLowerCase() === symbol.toLowerCase());
   }
   if (address) {
     tokens = tokens.filter((t) => {
@@ -99,15 +92,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const data = parseOrThrow(CreateTokenRequestSchema, body);
 
-  const {
-    symbol,
-    name,
-    contractAddress,
-    chain,
-    decimals,
-    logoUrl,
-    description,
-  } = data;
+  const { symbol, name, contractAddress, chain, decimals, logoUrl, description } = data;
 
   // logoUrl and description are optional fields - use empty string as default
   const logoUrlValue = logoUrl ?? "";
@@ -206,9 +191,7 @@ export async function DELETE(request: NextRequest) {
     const allTokens = await runtime.getCache<string[]>("all_tokens");
     // allTokens is optional - default to empty array if not present
     const allTokensArray =
-      allTokens !== undefined && allTokens !== null && Array.isArray(allTokens)
-        ? allTokens
-        : [];
+      allTokens !== undefined && allTokens !== null && Array.isArray(allTokens) ? allTokens : [];
     const updated = allTokensArray.filter((id) => id !== tokenId);
     await runtime.setCache("all_tokens", updated);
 
@@ -216,8 +199,7 @@ export async function DELETE(request: NextRequest) {
       success: true,
       message: `Deleted token: ${tokenId}`,
     };
-    const validatedDeleteOne =
-      DeleteTokenResponseSchema.parse(deleteOneResponse);
+    const validatedDeleteOne = DeleteTokenResponseSchema.parse(deleteOneResponse);
     return NextResponse.json(validatedDeleteOne);
   }
 

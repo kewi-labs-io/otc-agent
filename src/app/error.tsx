@@ -3,11 +3,11 @@
 import { useEffect } from "react";
 import { Button } from "@/components/button";
 
-export default function Error({
+export default function ErrorBoundary({
   error,
   reset,
 }: {
-  error: Error & { digest?: string };
+  error: globalThis.Error & { digest?: string };
   reset: () => void;
 }) {
   useEffect(() => {

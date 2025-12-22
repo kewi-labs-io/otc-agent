@@ -1,7 +1,7 @@
 /**
  * Integration test for logo fetching in the app
  * Simulates what the EVM balances API does
- * 
+ *
  * Run: bun run scripts/test-logo-integration.ts
  */
 
@@ -67,10 +67,7 @@ async function fetchTrustWalletLogo(
   return null;
 }
 
-async function fetchCoinGeckoLogo(
-  contractAddress: string,
-  chain: string,
-): Promise<string | null> {
+async function fetchCoinGeckoLogo(contractAddress: string, chain: string): Promise<string | null> {
   const platform = COINGECKO_PLATFORM_MAP[chain];
   if (!platform) {
     return null;
@@ -85,16 +82,13 @@ async function fetchCoinGeckoLogo(
     return null;
   }
 
-  const data = await response.json() as { image?: { small?: string; thumb?: string } };
+  const data = (await response.json()) as { image?: { small?: string; thumb?: string } };
   if (data.image?.small) return data.image.small;
   if (data.image?.thumb) return data.image.thumb;
   return null;
 }
 
-async function fetchAlchemyLogo(
-  contractAddress: string,
-  chain: string,
-): Promise<string | null> {
+async function fetchAlchemyLogo(contractAddress: string, chain: string): Promise<string | null> {
   const alchemyKey = process.env.ALCHEMY_API_KEY;
   if (!alchemyKey) {
     return null;
@@ -129,7 +123,7 @@ async function fetchAlchemyLogo(
     return null;
   }
 
-  const data = await response.json() as { result?: { logo?: string } };
+  const data = (await response.json()) as { result?: { logo?: string } };
   if (data.result?.logo) return data.result.logo;
   return null;
 }
@@ -175,10 +169,7 @@ async function runTest() {
       total++;
       process.stdout.write(`${token.symbol.padEnd(8)} `);
 
-      const { logo, source } = await fetchLogoFromMultipleSources(
-        token.address,
-        chain,
-      );
+      const { logo, source } = await fetchLogoFromMultipleSources(token.address, chain);
 
       if (logo) {
         found++;

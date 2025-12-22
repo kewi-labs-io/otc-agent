@@ -10,12 +10,7 @@ import {
   stringToUuid,
   type UUID,
 } from "@elizaos/core";
-import {
-  getDatabaseUrl,
-  getGroqApiKey,
-  getGroqModels,
-  isProduction,
-} from "@/config/env";
+import { getDatabaseUrl, getGroqApiKey, getGroqModels, isProduction } from "@/config/env";
 import agent from "./agent";
 
 // Global state for serverless environment persistence
@@ -130,14 +125,11 @@ class AgentRuntimeManager {
 
     // Get database URL from centralized config
     const postgresUrl = getDatabaseUrl();
-    const isLocalDb =
-      postgresUrl.includes("localhost") || postgresUrl.includes("127.0.0.1");
+    const isLocalDb = postgresUrl.includes("localhost") || postgresUrl.includes("127.0.0.1");
 
     // Validate database URL in production
     if (isProduction() && isLocalDb) {
-      console.error(
-        "[AgentRuntime] ERROR: No database URL found in production",
-      );
+      console.error("[AgentRuntime] ERROR: No database URL found in production");
       throw new Error(
         "Database connection failed: No database URL configured in production. " +
           "Vercel Neon Storage should provide DATABASE_POSTGRES_URL automatically. " +
@@ -148,17 +140,14 @@ class AgentRuntimeManager {
     // Validate URL format (basic check) for remote databases
     if (!isLocalDb) {
       const isValidFormat =
-        postgresUrl.startsWith("postgres://") ||
-        postgresUrl.startsWith("postgresql://");
+        postgresUrl.startsWith("postgres://") || postgresUrl.startsWith("postgresql://");
       if (!isValidFormat) {
         console.warn(
           "[AgentRuntime] WARNING: Database URL doesn't start with postgres:// or postgresql://",
         );
       }
       // FAIL-FAST: Validate URL format - new URL() throws if invalid
-      const url = new URL(
-        postgresUrl.replace(/^postgres(ql)?:\/\//, "http://"),
-      );
+      const url = new URL(postgresUrl.replace(/^postgres(ql)?:\/\//, "http://"));
       // FAIL-FAST: hostname is required in URL - if missing, URL is invalid
       if (!url.hostname || url.hostname === "") {
         throw new Error(
@@ -183,9 +172,7 @@ class AgentRuntimeManager {
     }
     const plugins = agent.plugins.filter((p) => p != null) as Plugin[];
     if (plugins.length === 0) {
-      throw new Error(
-        "agent.plugins array contains only null/undefined values",
-      );
+      throw new Error("agent.plugins array contains only null/undefined values");
     }
 
     // FAIL-FAST: Providers and actions are defined in agent.ts as filtered arrays
@@ -221,9 +208,7 @@ class AgentRuntimeManager {
     };
 
     // Type assertion: @elizaos/core runtime config is loosely typed
-    this.runtime = new AgentRuntime(
-      runtimeConfig as ConstructorParameters<typeof AgentRuntime>[0],
-    );
+    this.runtime = new AgentRuntime(runtimeConfig as ConstructorParameters<typeof AgentRuntime>[0]);
 
     // Cache globally for reuse in warm container
     globalState.__elizaRuntime = this.runtime;

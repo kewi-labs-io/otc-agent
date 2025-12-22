@@ -28,21 +28,14 @@ export class UserSessionStorageService extends Service {
     // Cleanup if needed
   }
 
-  static async start(
-    runtime: IAgentRuntime,
-  ): Promise<UserSessionStorageService> {
+  static async start(runtime: IAgentRuntime): Promise<UserSessionStorageService> {
     const service = new UserSessionStorageService(runtime);
     await service.initialize();
     return service;
   }
 
-  async getOrCreateSession(
-    entityId: string,
-    walletAddress: string,
-  ): Promise<UserQuoteStats> {
-    const existing = await this.runtime.getCache<UserQuoteStats>(
-      SESSION_KEY(entityId),
-    );
+  async getOrCreateSession(entityId: string, walletAddress: string): Promise<UserQuoteStats> {
+    const existing = await this.runtime.getCache<UserQuoteStats>(SESSION_KEY(entityId));
 
     if (existing) {
       const now = Date.now();
@@ -84,16 +77,11 @@ export class UserSessionStorageService extends Service {
   async checkRateLimit(entityId: string, walletAddress: string): Promise<void> {
     const session = await this.getOrCreateSession(entityId, walletAddress);
     if (session.dailyQuoteCount >= MAX_DAILY_QUOTES) {
-      throw new Error(
-        `Daily quote limit of ${MAX_DAILY_QUOTES} reached for ${entityId}`,
-      );
+      throw new Error(`Daily quote limit of ${MAX_DAILY_QUOTES} reached for ${entityId}`);
     }
   }
 
-  async incrementQuoteCount(
-    entityId: string,
-    walletAddress: string,
-  ): Promise<void> {
+  async incrementQuoteCount(entityId: string, walletAddress: string): Promise<void> {
     const session = await this.getOrCreateSession(entityId, walletAddress);
     const now = Date.now();
 
@@ -128,8 +116,6 @@ export class UserSessionStorageService extends Service {
   }
 }
 
-export function getUserSessionStorageService(
-  runtime: IAgentRuntime,
-): UserSessionStorageService {
+export function getUserSessionStorageService(runtime: IAgentRuntime): UserSessionStorageService {
   return new UserSessionStorageService(runtime);
 }

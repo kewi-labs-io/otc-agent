@@ -1,7 +1,7 @@
 import { revalidateTag, unstable_cache } from "next/cache";
-import { checksumAddress } from "@/utils/address-utils";
 import { ConsignmentDB, MarketDataDB, TokenDB } from "@/services/database";
 import type { Chain, Token } from "@/types";
+import { checksumAddress } from "@/utils/address-utils";
 
 /**
  * Chain config for logo sources
@@ -59,10 +59,7 @@ async function fetchTrustWalletLogo(
 /**
  * Try CoinGecko for logo
  */
-async function fetchCoinGeckoLogo(
-  contractAddress: string,
-  chain: string,
-): Promise<string | null> {
+async function fetchCoinGeckoLogo(contractAddress: string, chain: string): Promise<string | null> {
   const config = CHAIN_CONFIG[chain];
   if (!config) return null;
 
@@ -114,20 +111,17 @@ async function enrichTokenWithLogo(token: Token): Promise<Token> {
   const [trustWalletLogo, alchemyLogo] = await Promise.all([
     fetchTrustWalletLogo(token.contractAddress, token.chain),
     alchemyKey
-      ? fetch(
-          `https://${config.alchemyNetwork}.g.alchemy.com/v2/${alchemyKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: 1,
-              method: "alchemy_getTokenMetadata",
-              params: [token.contractAddress],
-            }),
-            signal: AbortSignal.timeout(3000),
-          },
-        )
+      ? fetch(`https://${config.alchemyNetwork}.g.alchemy.com/v2/${alchemyKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "alchemy_getTokenMetadata",
+            params: [token.contractAddress],
+          }),
+          signal: AbortSignal.timeout(3000),
+        })
           .then((r) => (r.ok ? r.json() : null))
           .then((data) => {
             // FAIL-FAST: Validate response structure
@@ -357,9 +351,7 @@ export const getCachedTokenBatch = unstable_cache(
     const LOGO_BATCH_SIZE = 10;
     for (let i = 0; i < tokensNeedingLogos.length; i += LOGO_BATCH_SIZE) {
       const batch = tokensNeedingLogos.slice(i, i + LOGO_BATCH_SIZE);
-      const enrichedBatch = await Promise.all(
-        batch.map((token) => enrichTokenWithLogo(token)),
-      );
+      const enrichedBatch = await Promise.all(batch.map((token) => enrichTokenWithLogo(token)));
 
       // Update token map with enriched tokens
       for (const enrichedToken of enrichedBatch) {

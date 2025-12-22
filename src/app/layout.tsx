@@ -94,9 +94,7 @@ export default function RootLayout({
         <Providers>
           <div className="flex h-dvh w-full flex-col overflow-hidden">
             <Header />
-            <main className="flex-1 flex flex-col overflow-hidden">
-              {children}
-            </main>
+            <main className="flex-1 flex flex-col overflow-hidden">{children}</main>
           </div>
         </Providers>
         <XShareResume />

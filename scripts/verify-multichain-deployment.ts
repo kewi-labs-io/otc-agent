@@ -11,15 +11,15 @@
  * - Oracle discovery works
  */
 
-import { createPublicClient, http, parseAbi, type Abi } from "viem";
-import { base } from "viem/chains";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { getAppUrl } from "../src/config/env";
+import { type Abi, createPublicClient, http, parseAbi } from "viem";
+import { base } from "viem/chains";
 import {
   getEvmConfig,
   getRegistrationHelperForChain,
   getSolanaConfig,
 } from "../src/config/contracts";
+import { getAppUrl } from "../src/config/env";
 
 const evm = getEvmConfig("mainnet");
 const solana = getSolanaConfig("mainnet");
@@ -27,7 +27,7 @@ const solana = getSolanaConfig("mainnet");
 let BASE_RPC: string;
 if (process.env.BASE_RPC_URL) {
   BASE_RPC = process.env.BASE_RPC_URL;
-} else if (evm.rpc && evm.rpc.startsWith("/")) {
+} else if (evm.rpc?.startsWith("/")) {
   BASE_RPC = `${getAppUrl()}${evm.rpc}`;
 } else if (evm.rpc) {
   BASE_RPC = evm.rpc;
@@ -38,7 +38,7 @@ if (process.env.BASE_RPC_URL) {
 let SOLANA_RPC: string;
 if (process.env.SOLANA_MAINNET_RPC) {
   SOLANA_RPC = process.env.SOLANA_MAINNET_RPC;
-} else if (solana.rpc && solana.rpc.startsWith("/")) {
+} else if (solana.rpc?.startsWith("/")) {
   SOLANA_RPC = `${getAppUrl()}${solana.rpc}`;
 } else if (solana.rpc) {
   SOLANA_RPC = solana.rpc;
@@ -157,7 +157,7 @@ async function verifyBaseDeployment() {
   console.log("\n✅ Base deployment verified successfully");
 }
 
-async function verifySolanaDeployment() {
+async function _verifySolanaDeployment() {
   console.log("\n=== Verifying Solana Deployment ===\n");
 
   if (!SOLANA_PROGRAM_ID) {
@@ -224,7 +224,7 @@ async function main() {
   console.log("╚════════════════════════════════════════════════╝");
 
   await verifyBaseDeployment();
-  await verifySolanaDeployment();
+  await _verifySolanaDeployment();
   await testWalletScanning();
 
   console.log("\n╔════════════════════════════════════════════════╗");

@@ -3,8 +3,8 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { DealCompletion } from "@/components/deal-completion";
-import { useExecutedQuote } from "@/hooks/useQuote";
 import { PageLoading } from "@/components/ui/loading-spinner";
+import { useExecutedQuote } from "@/hooks/useQuote";
 
 // Force dynamic rendering for this route
 export const dynamic = "force-dynamic";
@@ -25,12 +25,7 @@ export default function DealPage() {
   }, [quoteId, router]);
 
   if (isLoading) {
-    return (
-      <PageLoading
-        message="Loading your deal..."
-        colorClass="border-green-500"
-      />
-    );
+    return <PageLoading message="Loading your deal..." colorClass="border-green-500" />;
   }
 
   if (error || !quote) {

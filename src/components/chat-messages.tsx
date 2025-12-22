@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { ChatMessage } from "@/components/chat-message";
 import { USER_NAME } from "@/constants";
@@ -27,11 +27,11 @@ export function ChatMessages({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageRef = useRef<string>("");
 
-  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior });
     }, 100);
-  };
+  }, []);
 
   useEffect(() => {
     if (messages.length === 0) return;
@@ -42,12 +42,11 @@ export function ChatMessages({
       lastMessageRef.current = currentText;
       scrollToBottom("instant");
     }
-  }, [messages]);
+  }, [messages, scrollToBottom]);
 
-  const lastMessage =
-    messages.length > 0 ? messages[messages.length - 1] : null;
-  const lastMessageName = lastMessage?.name ?? null;
-  const lastMessageText = lastMessage?.text ?? null;
+  const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+  const _lastMessageName = lastMessage?.name ?? null;
+  const _lastMessageText = lastMessage?.text ?? null;
 
   useEffect(() => {
     if (!lastMessage) return;
@@ -58,7 +57,7 @@ export function ChatMessages({
     if (isUserMessage && hasContent) {
       scrollToBottom("smooth");
     }
-  }, [lastMessageName, lastMessageText, lastMessage]);
+  }, [lastMessage, scrollToBottom]);
 
   return (
     <div className="flex flex-col">
@@ -68,24 +67,16 @@ export function ChatMessages({
 
         const assistantIndex =
           message.name !== USER_NAME
-            ? messages.slice(0, i + 1).filter((m) => m.name !== USER_NAME)
-                .length - 1
+            ? messages.slice(0, i + 1).filter((m) => m.name !== USER_NAME).length - 1
             : -1;
 
         return (
-          <div
-            key={messageKey}
-            ref={i === messages.length - 1 ? messagesEndRef : undefined}
-          >
+          <div key={messageKey} ref={i === messages.length - 1 ? messagesEndRef : undefined}>
             <ChatMessage
               message={message}
-              citations={
-                message.name !== USER_NAME ? citationsMap[i] : undefined
-              }
+              citations={message.name !== USER_NAME ? citationsMap[i] : undefined}
               followUpPrompts={
-                message.name !== USER_NAME
-                  ? followUpPromptsMap[assistantIndex]
-                  : undefined
+                message.name !== USER_NAME ? followUpPromptsMap[assistantIndex] : undefined
               }
               onFollowUpClick={onFollowUpClick}
               assistantAvatarUrl={assistantAvatarUrl}

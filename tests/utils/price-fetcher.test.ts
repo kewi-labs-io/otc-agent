@@ -7,16 +7,16 @@
  * Run: bun test tests/utils/price-fetcher.test.ts
  */
 
-import { describe, test, expect, beforeAll, setDefaultTimeout } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import {
-  fetchNativePrices,
-  fetchCoinGeckoPrices,
-  fetchDeFiLlamaPrices,
-  fetchJupiterPrices,
-  fetchEvmPrices,
-  fetchTokenPrices,
   COINGECKO_PLATFORMS,
   DEFILLAMA_CHAINS,
+  fetchCoinGeckoPrices,
+  fetchDeFiLlamaPrices,
+  fetchEvmPrices,
+  fetchJupiterPrices,
+  fetchNativePrices,
+  fetchTokenPrices,
   NATIVE_TOKEN_IDS,
 } from "@/utils/price-fetcher";
 
@@ -41,36 +41,36 @@ const KNOWN_TOKENS = {
 describe("Price Fetcher - Platform Configuration", () => {
   describe("COINGECKO_PLATFORMS", () => {
     test("maps ethereum to correct platform ID", () => {
-      expect(COINGECKO_PLATFORMS["ethereum"]).toBe("ethereum");
-      expect(COINGECKO_PLATFORMS["eth"]).toBe("ethereum");
+      expect(COINGECKO_PLATFORMS.ethereum).toBe("ethereum");
+      expect(COINGECKO_PLATFORMS.eth).toBe("ethereum");
     });
 
     test("maps base to correct platform ID", () => {
-      expect(COINGECKO_PLATFORMS["base"]).toBe("base");
+      expect(COINGECKO_PLATFORMS.base).toBe("base");
     });
 
     test("maps bsc to correct platform ID", () => {
-      expect(COINGECKO_PLATFORMS["bsc"]).toBe("binance-smart-chain");
+      expect(COINGECKO_PLATFORMS.bsc).toBe("binance-smart-chain");
     });
 
     test("returns undefined for unknown chains", () => {
-      expect(COINGECKO_PLATFORMS["unknown"]).toBeUndefined();
+      expect(COINGECKO_PLATFORMS.unknown).toBeUndefined();
     });
   });
 
   describe("DEFILLAMA_CHAINS", () => {
     test("maps supported chains correctly", () => {
-      expect(DEFILLAMA_CHAINS["ethereum"]).toBe("ethereum");
-      expect(DEFILLAMA_CHAINS["base"]).toBe("base");
-      expect(DEFILLAMA_CHAINS["bsc"]).toBe("bsc");
+      expect(DEFILLAMA_CHAINS.ethereum).toBe("ethereum");
+      expect(DEFILLAMA_CHAINS.base).toBe("base");
+      expect(DEFILLAMA_CHAINS.bsc).toBe("bsc");
     });
   });
 
   describe("NATIVE_TOKEN_IDS", () => {
     test("maps native tokens to CoinGecko IDs", () => {
-      expect(NATIVE_TOKEN_IDS["ETH"]).toBe("ethereum");
-      expect(NATIVE_TOKEN_IDS["BNB"]).toBe("binancecoin");
-      expect(NATIVE_TOKEN_IDS["SOL"]).toBe("solana");
+      expect(NATIVE_TOKEN_IDS.ETH).toBe("ethereum");
+      expect(NATIVE_TOKEN_IDS.BNB).toBe("binancecoin");
+      expect(NATIVE_TOKEN_IDS.SOL).toBe("solana");
     });
   });
 });
@@ -388,7 +388,7 @@ describe("Price Fetcher - Data Verification", () => {
   test("prices are positive finite numbers", async () => {
     const nativePrices = await fetchNativePrices(["ETH", "SOL"]);
 
-    for (const [symbol, price] of Object.entries(nativePrices)) {
+    for (const [_symbol, price] of Object.entries(nativePrices)) {
       expect(typeof price).toBe("number");
       expect(Number.isFinite(price)).toBe(true);
       expect(price).toBeGreaterThan(0);

@@ -66,10 +66,7 @@ export async function fetchTrustWalletLogo(
   const response = await fetch(url, {
     method: "GET",
     headers: { Range: "bytes=0-0" },
-    signal:
-      options.signal !== undefined
-        ? options.signal
-        : AbortSignal.timeout(timeout),
+    signal: options.signal !== undefined ? options.signal : AbortSignal.timeout(timeout),
   });
 
   // 200 or 206 (partial content) means the file exists
@@ -106,10 +103,7 @@ export async function fetchAlchemyLogo(
       method: "alchemy_getTokenMetadata",
       params: [contractAddress],
     }),
-    signal:
-      options.signal !== undefined
-        ? options.signal
-        : AbortSignal.timeout(timeout),
+    signal: options.signal !== undefined ? options.signal : AbortSignal.timeout(timeout),
   });
 
   if (!response.ok) {
@@ -117,7 +111,7 @@ export async function fetchAlchemyLogo(
   }
 
   const data = (await response.json()) as { result?: { logo?: string } };
-  if (data.result && data.result.logo) {
+  if (data.result?.logo) {
     return data.result.logo;
   }
 
@@ -149,10 +143,7 @@ export async function fetchCoinGeckoLogo(
 
   const response = await fetch(url, {
     headers,
-    signal:
-      options.signal !== undefined
-        ? options.signal
-        : AbortSignal.timeout(timeout),
+    signal: options.signal !== undefined ? options.signal : AbortSignal.timeout(timeout),
   });
 
   if (!response.ok) {
@@ -181,11 +172,7 @@ export async function fetchLogoFromMultipleSources(
   options: LogoFetchOptions = {},
 ): Promise<string | null> {
   // 1. Try TrustWallet first (free, best coverage for popular tokens)
-  const trustWalletLogo = await fetchTrustWalletLogo(
-    contractAddress,
-    chain,
-    options,
-  );
+  const trustWalletLogo = await fetchTrustWalletLogo(contractAddress, chain, options);
   if (trustWalletLogo) {
     console.log(
       `[Logo Fetcher] Found logo from TrustWallet for ${contractAddress.slice(0, 10)}...`,
@@ -194,29 +181,16 @@ export async function fetchLogoFromMultipleSources(
   }
 
   // 2. Try Alchemy as fallback
-  const alchemyLogo = await fetchAlchemyLogo(
-    contractAddress,
-    chain,
-    alchemyKey,
-    options,
-  );
+  const alchemyLogo = await fetchAlchemyLogo(contractAddress, chain, alchemyKey, options);
   if (alchemyLogo) {
-    console.log(
-      `[Logo Fetcher] Found logo from Alchemy for ${contractAddress.slice(0, 10)}...`,
-    );
+    console.log(`[Logo Fetcher] Found logo from Alchemy for ${contractAddress.slice(0, 10)}...`);
     return alchemyLogo;
   }
 
   // 3. Try CoinGecko (might be rate limited on free tier)
-  const coinGeckoLogo = await fetchCoinGeckoLogo(
-    contractAddress,
-    chain,
-    options,
-  );
+  const coinGeckoLogo = await fetchCoinGeckoLogo(contractAddress, chain, options);
   if (coinGeckoLogo) {
-    console.log(
-      `[Logo Fetcher] Found logo from CoinGecko for ${contractAddress.slice(0, 10)}...`,
-    );
+    console.log(`[Logo Fetcher] Found logo from CoinGecko for ${contractAddress.slice(0, 10)}...`);
     return coinGeckoLogo;
   }
 
@@ -254,22 +228,14 @@ export async function fetchLogoParallel(
   }
 
   if (alchemyLogo) {
-    console.log(
-      `[Logo Fetcher] Found logo from Alchemy for ${contractAddress.slice(0, 10)}...`,
-    );
+    console.log(`[Logo Fetcher] Found logo from Alchemy for ${contractAddress.slice(0, 10)}...`);
     return alchemyLogo;
   }
 
   // Fall back to CoinGecko only if both failed
-  const coinGeckoLogo = await fetchCoinGeckoLogo(
-    contractAddress,
-    chain,
-    options,
-  );
+  const coinGeckoLogo = await fetchCoinGeckoLogo(contractAddress, chain, options);
   if (coinGeckoLogo) {
-    console.log(
-      `[Logo Fetcher] Found logo from CoinGecko for ${contractAddress.slice(0, 10)}...`,
-    );
+    console.log(`[Logo Fetcher] Found logo from CoinGecko for ${contractAddress.slice(0, 10)}...`);
     return coinGeckoLogo;
   }
 

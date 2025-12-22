@@ -7,26 +7,18 @@ interface ICard {
   disabled?: boolean;
 }
 
-export default function Card({
-  number,
-  title,
-  description,
-  button,
-  onClick,
-  disabled,
-}: ICard) {
+export default function Card({ number, title, description, button, onClick, disabled }: ICard) {
   return (
     <div className="backdrop-blur-md bg-white/5 p-4 sm:p-5 lg:p-6 rounded-lg border border-brand-300 w-full xl:flex-1 flex flex-col">
       <div className="flex items-start gap-4">
         <div className="text-brand-500 text-3xl font-bold">{number}</div>
         <div className="items-center">
           <h3 className="text-white text-[27px] -mt-1 font-bold">{title}</h3>
-          <p className="text-zinc-400 max-w-md text-[15px] mt-1">
-            {description}
-          </p>
+          <p className="text-zinc-400 max-w-md text-[15px] mt-1">{description}</p>
         </div>
       </div>
       <button
+        type="button"
         onClick={onClick}
         disabled={disabled}
         className={

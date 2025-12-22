@@ -5,23 +5,32 @@
  */
 
 import { config } from "dotenv";
+
 config({ path: ".env.local" });
 
-import { createPublicClient, http, type Address } from "viem";
+import * as fs from "node:fs";
+import { Connection, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
+import { type Address, createPublicClient, http } from "viem";
 import { base, bsc, mainnet } from "viem/chains";
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import * as fs from "fs";
 
 // Load configs
-const mainnetEvmConfigRaw = JSON.parse(fs.readFileSync("src/config/deployments/mainnet-evm.json", "utf8"));
-const mainnetSolanaConfig = JSON.parse(fs.readFileSync("src/config/deployments/mainnet-solana.json", "utf8"));
-const baseConfigRaw = JSON.parse(fs.readFileSync("src/config/deployments/base-mainnet.json", "utf8"));
+const mainnetEvmConfigRaw = JSON.parse(
+  fs.readFileSync("src/config/deployments/mainnet-evm.json", "utf8"),
+);
+const mainnetSolanaConfig = JSON.parse(
+  fs.readFileSync("src/config/deployments/mainnet-solana.json", "utf8"),
+);
+const baseConfigRaw = JSON.parse(
+  fs.readFileSync("src/config/deployments/base-mainnet.json", "utf8"),
+);
 
 // Validate config structure
 if (!mainnetEvmConfigRaw.networks) {
   throw new Error("mainnet-evm.json missing 'networks' field");
 }
-const mainnetEvmConfig = mainnetEvmConfigRaw as { networks: { bsc?: { otc: string }; ethereum?: { otc: string } } };
+const mainnetEvmConfig = mainnetEvmConfigRaw as {
+  networks: { bsc?: { otc: string }; ethereum?: { otc: string } };
+};
 
 if (!baseConfigRaw.contracts) {
   throw new Error("base-mainnet.json missing 'contracts' field");
@@ -32,26 +41,98 @@ const HELIUS_KEY = process.env.HELIUS_API_KEY;
 
 // ABIs
 const OTC_ABI = [
-  { name: "nextConsignmentId", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "nextOfferId", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "owner", type: "function", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
-  { name: "agent", type: "function", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
-  { name: "approver", type: "function", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
-  { name: "consignments", type: "function", inputs: [{ type: "uint256" }], outputs: [
-    { type: "uint256" }, { type: "address" }, { type: "uint256" }, { type: "uint256" },
-    { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" },
-    { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "bool" },
-    { type: "uint256" }, { type: "uint256" }, { type: "uint256" }
-  ], stateMutability: "view" },
-  { name: "offers", type: "function", inputs: [{ type: "uint256" }], outputs: [
-    { type: "uint256" }, { type: "bytes32" }, { type: "address" }, { type: "uint256" },
-    { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" },
-    { type: "uint256" }, { type: "uint8" }, { type: "bool" }, { type: "bool" },
-    { type: "bool" }, { type: "bool" }, { type: "bool" }, { type: "address" }, { type: "uint256" }, { type: "uint16" }
-  ], stateMutability: "view" },
+  {
+    name: "nextConsignmentId",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    name: "nextOfferId",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    name: "owner",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    name: "agent",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    name: "approver",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    name: "consignments",
+    type: "function",
+    inputs: [{ type: "uint256" }],
+    outputs: [
+      { type: "uint256" },
+      { type: "address" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "bool" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint256" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    name: "offers",
+    type: "function",
+    inputs: [{ type: "uint256" }],
+    outputs: [
+      { type: "uint256" },
+      { type: "bytes32" },
+      { type: "address" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint8" },
+      { type: "bool" },
+      { type: "bool" },
+      { type: "bool" },
+      { type: "bool" },
+      { type: "bool" },
+      { type: "address" },
+      { type: "uint256" },
+      { type: "uint16" },
+    ],
+    stateMutability: "view",
+  },
 ] as const;
 
-async function verifyEvm(chainName: string, chain: typeof base, otcAddress: Address, rpcUrl: string) {
+async function verifyEvm(
+  chainName: string,
+  chain: typeof base,
+  otcAddress: Address,
+  rpcUrl: string,
+) {
   console.log("\n📊 Verifying " + chainName + "...");
   console.log("   Contract: " + otcAddress);
 
@@ -95,13 +176,13 @@ async function verifyEvm(chainName: string, chain: typeof base, otcAddress: Addr
       functionName: "offers",
       args: [i],
     });
-    
-    const approved = offer[11] as boolean;
+
+    const _approved = offer[11] as boolean;
     const paid = offer[12] as boolean;
     const executed = offer[13] as boolean;
     const cancelled = offer[14] as boolean;
     const commissionBps = offer[17] as number;
-    
+
     if (!cancelled) {
       activeOffers++;
       if (commissionBps === 0 || commissionBps === 0n) {
@@ -127,20 +208,20 @@ async function verifySolana() {
   if (!HELIUS_KEY) {
     throw new Error("HELIUS_API_KEY is required for Solana verification");
   }
-  
+
   const rpcUrl = "https://mainnet.helius-rpc.com/?api-key=" + HELIUS_KEY;
-  
+
   console.log("   Program: " + mainnetSolanaConfig.programId);
   console.log("   Desk: " + mainnetSolanaConfig.desk);
-  
+
   const connection = new Connection(rpcUrl, "confirmed");
-  
+
   // Check program exists
   const programInfo = await connection.getAccountInfo(new PublicKey(mainnetSolanaConfig.programId));
   if (!programInfo) {
     throw new Error(`Program not deployed at ${mainnetSolanaConfig.programId}`);
   }
-  
+
   console.log("   ✅ Program deployed (" + programInfo.data.length + " bytes)");
 
   // Check desk exists
@@ -151,7 +232,7 @@ async function verifySolana() {
   }
   console.log("   ✅ Desk account exists (" + deskInfo.data.length + " bytes)");
   console.log("   Desk Owner: " + deskInfo.owner.toBase58());
-  
+
   // Parse desk data (first 8 bytes are discriminator)
   // Next 32 bytes is owner pubkey
   const ownerBytes = deskInfo.data.slice(8, 40);
@@ -160,7 +241,7 @@ async function verifySolana() {
 
   // Get desk balance
   const deskBalance = await connection.getBalance(deskPubkey);
-  console.log("   Desk SOL Balance: " + (deskBalance / LAMPORTS_PER_SOL));
+  console.log("   Desk SOL Balance: " + deskBalance / LAMPORTS_PER_SOL);
 }
 
 async function main() {
@@ -172,12 +253,7 @@ async function main() {
   if (!baseConfig.contracts.otc) {
     throw new Error("Base config missing OTC contract address");
   }
-  await verifyEvm(
-    "Base", 
-    base, 
-    baseConfig.contracts.otc as Address,
-    "https://mainnet.base.org"
-  );
+  await verifyEvm("Base", base, baseConfig.contracts.otc as Address, "https://mainnet.base.org");
 
   // Verify BSC
   if (mainnetEvmConfig.networks.bsc) {
@@ -188,7 +264,7 @@ async function main() {
       "BSC",
       bsc,
       mainnetEvmConfig.networks.bsc.otc as Address,
-      "https://bsc-dataseed1.binance.org"
+      "https://bsc-dataseed1.binance.org",
     );
   }
 
@@ -201,7 +277,7 @@ async function main() {
       "Ethereum",
       mainnet,
       mainnetEvmConfig.networks.ethereum.otc as Address,
-      "https://eth.llamarpc.com"
+      "https://eth.llamarpc.com",
     );
   }
 

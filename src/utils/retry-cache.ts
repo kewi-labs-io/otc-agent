@@ -40,11 +40,7 @@ export function getCached<T>(key: string): T | undefined {
 /**
  * Set a value in the cache with TTL
  */
-export function setCache<T>(
-  key: string,
-  value: T,
-  ttlMs: number = DEFAULT_CACHE_TTL_MS,
-): void {
+export function setCache<T>(key: string, value: T, ttlMs: number = DEFAULT_CACHE_TTL_MS): void {
   // Evict oldest entries if cache is full
   if (cache.size >= MAX_CACHE_SIZE) {
     // Simple eviction: delete first 10% of entries (oldest by insertion order)
@@ -83,8 +79,7 @@ function isRetryableError(error: unknown): boolean {
     if (message.includes("429") || message.includes("rate limit")) return true;
     // Network errors
     if (message.includes("network") || message.includes("timeout")) return true;
-    if (message.includes("econnreset") || message.includes("enotfound"))
-      return true;
+    if (message.includes("econnreset") || message.includes("enotfound")) return true;
     // RPC specific errors
     if (message.includes("too many requests")) return true;
     if (message.includes("secondary index")) return true; // Solana specific

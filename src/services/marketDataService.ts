@@ -42,10 +42,7 @@ export class MarketDataService {
     return marketData.priceUsd;
   }
 
-  async fetchMarketData(
-    tokenAddress: string,
-    chain: Chain,
-  ): Promise<TokenMarketData> {
+  async fetchMarketData(tokenAddress: string, chain: Chain): Promise<TokenMarketData> {
     parseOrThrow(FetchMarketDataInputSchema, { tokenAddress, chain });
     if (chain === "solana") {
       return await this.fetchSolanaData(tokenAddress);
@@ -53,17 +50,10 @@ export class MarketDataService {
     return await this.fetchEVMData(tokenAddress, chain);
   }
 
-  private async fetchEVMData(
-    tokenAddress: string,
-    chain: Chain,
-  ): Promise<TokenMarketData> {
+  private async fetchEVMData(tokenAddress: string, chain: Chain): Promise<TokenMarketData> {
     // Map chain to CoinGecko platform ID
     const platformId =
-      chain === "bsc"
-        ? "binance-smart-chain"
-        : chain === "base"
-          ? "base"
-          : "ethereum";
+      chain === "bsc" ? "binance-smart-chain" : chain === "base" ? "base" : "ethereum";
     const url = this.coingeckoApiKey
       ? `https://pro-api.coingecko.com/api/v3/simple/token_price/${platformId}?contract_addresses=${tokenAddress}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true`
       : `https://api.coingecko.com/api/v3/simple/token_price/${platformId}?contract_addresses=${tokenAddress}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true`;
@@ -77,8 +67,7 @@ export class MarketDataService {
     }
 
     const response = await fetch(url, { headers });
-    if (!response.ok)
-      throw new Error(`CoinGecko API error: ${response.status}`);
+    if (!response.ok) throw new Error(`CoinGecko API error: ${response.status}`);
 
     const data: CoinGeckoPrice = await response.json();
     const tokenData = data[tokenAddress.toLowerCase()];
@@ -95,15 +84,12 @@ export class MarketDataService {
     };
   }
 
-  private async fetchSolanaData(
-    tokenAddress: string,
-  ): Promise<TokenMarketData> {
+  private async fetchSolanaData(tokenAddress: string): Promise<TokenMarketData> {
     // Solana addresses are Base58 encoded and case-sensitive - preserve original case
     if (!this.birdeyeApiKey) {
       const { getSolanaConfig } = await import("@/config/contracts");
       const solanaRpc = getSolanaConfig().rpc;
-      const isLocalnet =
-        solanaRpc.includes("127.0.0.1") || solanaRpc.includes("localhost");
+      const isLocalnet = solanaRpc.includes("127.0.0.1") || solanaRpc.includes("localhost");
 
       if (isLocalnet) {
         // LOCALNET ONLY: Return zeros to indicate "price unknown from off-chain source"
@@ -123,9 +109,7 @@ export class MarketDataService {
           lastUpdated: Date.now(),
         };
       }
-      throw new Error(
-        "BIRDEYE_API_KEY required for Solana token pricing on devnet/mainnet",
-      );
+      throw new Error("BIRDEYE_API_KEY required for Solana token pricing on devnet/mainnet");
     }
 
     const url = `https://public-api.birdeye.so/defi/price?address=${tokenAddress}`;
@@ -151,11 +135,7 @@ export class MarketDataService {
     };
   }
 
-  async refreshTokenData(
-    tokenId: string,
-    tokenAddress: string,
-    chain: Chain,
-  ): Promise<void> {
+  async refreshTokenData(tokenId: string, tokenAddress: string, chain: Chain): Promise<void> {
     parseOrThrow(
       z.object({
         tokenId: z.string().min(1),
@@ -172,9 +152,7 @@ export class MarketDataService {
     tokens: Array<{ id: string; contractAddress: string; chain: Chain }>,
   ): Promise<void> {
     await Promise.all(
-      tokens.map((token) =>
-        this.refreshTokenData(token.id, token.contractAddress, token.chain),
-      ),
+      tokens.map((token) => this.refreshTokenData(token.id, token.contractAddress, token.chain)),
     );
   }
 }

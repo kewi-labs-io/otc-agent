@@ -6,22 +6,15 @@ import { Suspense, useCallback, useState } from "react";
 import { PageLoading } from "@/components/ui/loading-spinner";
 import { useRenderTracker } from "@/utils/render-tracker";
 
-const DealsGrid = dynamic(
-  () => import("@/components/deals-grid").then((m) => m.DealsGrid),
-  { ssr: false },
-);
-const DealFilters = dynamic(
-  () => import("@/components/deal-filters").then((m) => m.DealFilters),
-  { ssr: false },
-);
+const DealsGrid = dynamic(() => import("@/components/deals-grid").then((m) => m.DealsGrid), {
+  ssr: false,
+});
+const DealFilters = dynamic(() => import("@/components/deal-filters").then((m) => m.DealFilters), {
+  ssr: false,
+});
 
 const INITIAL_FILTERS = {
-  chains: ["ethereum", "base", "bsc", "solana"] as (
-    | "ethereum"
-    | "base"
-    | "bsc"
-    | "solana"
-  )[],
+  chains: ["ethereum", "base", "bsc", "solana"] as ("ethereum" | "base" | "bsc" | "solana")[],
   minMarketCap: 0,
   maxMarketCap: 0,
   negotiableTypes: ["negotiable", "fixed"] as ("negotiable" | "fixed")[],
@@ -34,12 +27,9 @@ function MarketplaceContent() {
   const [filters, setFilters] = useState(INITIAL_FILTERS);
 
   // Memoize the callback to prevent DealFilters re-renders
-  const handleFiltersChange = useCallback(
-    (newFilters: typeof INITIAL_FILTERS) => {
-      setFilters(newFilters);
-    },
-    [],
-  );
+  const handleFiltersChange = useCallback((newFilters: typeof INITIAL_FILTERS) => {
+    setFilters(newFilters);
+  }, []);
 
   return (
     <div className="relative flex flex-col h-full min-h-0">
@@ -47,10 +37,7 @@ function MarketplaceContent() {
         <div className="max-w-7xl mx-auto w-full flex flex-col min-h-0 flex-1">
           {/* Filters - Fixed */}
           <div className="mb-4 flex-shrink-0">
-            <DealFilters
-              filters={filters}
-              onFiltersChange={handleFiltersChange}
-            />
+            <DealFilters filters={filters} onFiltersChange={handleFiltersChange} />
           </div>
 
           {/* Deals Grid - Scrollable */}
@@ -66,12 +53,7 @@ function MarketplaceContent() {
 export default function Page() {
   return (
     <Suspense
-      fallback={
-        <PageLoading
-          message="Loading OTC Marketplace..."
-          colorClass="border-blue-600"
-        />
-      }
+      fallback={<PageLoading message="Loading OTC Marketplace..." colorClass="border-blue-600" />}
     >
       <MarketplaceContent />
     </Suspense>

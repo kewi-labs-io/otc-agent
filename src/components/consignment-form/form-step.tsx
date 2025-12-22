@@ -169,15 +169,10 @@ export function FormStep({
   const [selectedPoolIndex, setSelectedPoolIndex] = useState(0);
   const [showPoolSelector, setShowPoolSelector] = useState(false);
 
-  const { chain: tokenChain, address: rawTokenAddress } = parseTokenId(
-    formData.tokenId,
-  );
+  const { chain: tokenChain, address: rawTokenAddress } = parseTokenId(formData.tokenId);
 
   // Use React Query for pool checking - automatic caching and deduplication
-  const { poolCheck, isCheckingPool } = usePoolCheck(
-    rawTokenAddress,
-    tokenChain,
-  );
+  const { poolCheck, isCheckingPool } = usePoolCheck(rawTokenAddress, tokenChain);
 
   // Reset pool selection when pool check changes and set initial selected pool
   useEffect(() => {
@@ -188,9 +183,7 @@ export function FormStep({
 
     // FAIL-FAST: If poolCheck exists, it should have either allPools or pool
     const defaultPool =
-      poolCheck.allPools && poolCheck.allPools.length > 0
-        ? poolCheck.allPools[0]
-        : poolCheck.pool;
+      poolCheck.allPools && poolCheck.allPools.length > 0 ? poolCheck.allPools[0] : poolCheck.pool;
 
     if (defaultPool) {
       // FAIL-FAST: Pool must have address
@@ -206,10 +199,7 @@ export function FormStep({
     if (!poolCheck) return null;
     if (poolCheck.allPools && poolCheck.allPools.length > 0) {
       // FAIL-FAST: Validate index is within bounds
-      if (
-        selectedPoolIndex < 0 ||
-        selectedPoolIndex >= poolCheck.allPools.length
-      ) {
+      if (selectedPoolIndex < 0 || selectedPoolIndex >= poolCheck.allPools.length) {
         throw new Error(
           `Invalid pool index: ${selectedPoolIndex} (available: ${poolCheck.allPools.length})`,
         );
@@ -217,9 +207,7 @@ export function FormStep({
       const selected = poolCheck.allPools[selectedPoolIndex];
       // FAIL-FAST: Selected pool must exist (index validated above)
       if (!selected) {
-        throw new Error(
-          `Pool at index ${selectedPoolIndex} is null or undefined`,
-        );
+        throw new Error(`Pool at index ${selectedPoolIndex} is null or undefined`);
       }
       return selected;
     }
@@ -235,7 +223,7 @@ export function FormStep({
 
   const currentAmount = useMemo(() => {
     const parsed = parseFloat(formData.amount);
-    return isNaN(parsed) ? 0 : parsed;
+    return Number.isNaN(parsed) ? 0 : parsed;
   }, [formData.amount]);
 
   const validationErrors = useMemo(() => {
@@ -244,9 +232,7 @@ export function FormStep({
     if (!formData.amount || parseFloat(formData.amount) <= 0) {
       errors.push("Enter an amount to list");
     } else if (currentAmount > maxBalance) {
-      errors.push(
-        `Amount exceeds balance (${maxBalance.toLocaleString()} ${selectedTokenSymbol})`,
-      );
+      errors.push(`Amount exceeds balance (${maxBalance.toLocaleString()} ${selectedTokenSymbol})`);
     }
 
     if (formData.isNegotiable) {
@@ -275,11 +261,8 @@ export function FormStep({
   // For EVM tokens, also require a valid pool
   const poolValid =
     tokenChain === "solana" ||
-    (!isCheckingPool &&
-      poolCheck &&
-      (poolCheck.hasPool || poolCheck.isRegistered));
-  const isValid =
-    validationErrors.length === 0 && currentAmount > 0 && poolValid;
+    (!isCheckingPool && poolCheck && (poolCheck.hasPool || poolCheck.isRegistered));
+  const isValid = validationErrors.length === 0 && currentAmount > 0 && poolValid;
 
   const setAmountPercentage = useCallback(
     (pct: number) => {
@@ -304,20 +287,17 @@ export function FormStep({
           />
         ) : (
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-400 to-brand-500 flex items-center justify-center">
-            <span className="text-white font-bold">
-              {selectedTokenSymbol.charAt(0)}
-            </span>
+            <span className="text-white font-bold">{selectedTokenSymbol.charAt(0)}</span>
           </div>
         )}
         <div className="flex-1">
-          <p className="font-semibold text-zinc-900 dark:text-zinc-100">
-            {selectedTokenSymbol}
-          </p>
+          <p className="font-semibold text-zinc-900 dark:text-zinc-100">{selectedTokenSymbol}</p>
           <p className="text-xs text-zinc-500">
             Available: {maxBalance.toLocaleString()} {selectedTokenSymbol}
           </p>
         </div>
         <button
+          type="button"
           onClick={onBack}
           className="text-xs text-brand-500 hover:text-brand-600 font-medium"
         >
@@ -332,12 +312,8 @@ export function FormStep({
             <Coins className="w-4 h-4 text-brand-500" />
           </div>
           <div>
-            <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
-              Amount to List
-            </h3>
-            <p className="text-xs text-zinc-500">
-              How many tokens to make available
-            </p>
+            <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">Amount to List</h3>
+            <p className="text-xs text-zinc-500">How many tokens to make available</p>
           </div>
         </div>
 
@@ -377,9 +353,7 @@ export function FormStep({
               max={maxBalance}
               value={Math.min(currentAmount, maxBalance)}
               step={maxBalance / 100}
-              onChange={(val) =>
-                updateFormData({ amount: Math.floor(val).toString() })
-              }
+              onChange={(val) => updateFormData({ amount: Math.floor(val).toString() })}
             />
           )}
 
@@ -415,21 +389,15 @@ export function FormStep({
             <Zap className="w-4 h-4 text-purple-500" />
           </div>
           <div>
-            <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
-              Negotiable Pricing
-            </h3>
+            <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">Negotiable Pricing</h3>
             <p className="text-xs text-zinc-500">Allow buyers to negotiate</p>
           </div>
         </div>
         <button
           type="button"
-          onClick={() =>
-            updateFormData({ isNegotiable: !formData.isNegotiable })
-          }
+          onClick={() => updateFormData({ isNegotiable: !formData.isNegotiable })}
           className={`relative w-11 h-6 rounded-full transition-colors ${
-            formData.isNegotiable
-              ? "bg-purple-500"
-              : "bg-zinc-300 dark:bg-zinc-600"
+            formData.isNegotiable ? "bg-purple-500" : "bg-zinc-300 dark:bg-zinc-600"
           }`}
         >
           <span
@@ -450,9 +418,7 @@ export function FormStep({
             <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
               {formData.isNegotiable ? "Discount Range" : "Fixed Discount"}
             </h3>
-            <p className="text-xs text-zinc-500">
-              Percentage below market price
-            </p>
+            <p className="text-xs text-zinc-500">Percentage below market price</p>
           </div>
         </div>
 
@@ -506,9 +472,7 @@ export function FormStep({
             <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
               {formData.isNegotiable ? "Lockup Duration Range" : "Fixed Lockup"}
             </h3>
-            <p className="text-xs text-zinc-500">
-              How long tokens are locked after purchase
-            </p>
+            <p className="text-xs text-zinc-500">How long tokens are locked after purchase</p>
           </div>
         </div>
 
@@ -568,18 +532,15 @@ export function FormStep({
               <Info className="w-4 h-4" />
               Price Oracle
             </div>
-            {poolCheck &&
-              poolCheck.allPools &&
-              poolCheck.allPools.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setShowPoolSelector(!showPoolSelector)}
-                  className="text-xs text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
-                >
-                  {showPoolSelector ? "Hide" : "Change"} (
-                  {poolCheck.allPools.length} available)
-                </button>
-              )}
+            {poolCheck?.allPools && poolCheck.allPools.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setShowPoolSelector(!showPoolSelector)}
+                className="text-xs text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
+              >
+                {showPoolSelector ? "Hide" : "Change"} ({poolCheck.allPools.length} available)
+              </button>
+            )}
           </div>
 
           {isCheckingPool ? (
@@ -590,65 +551,53 @@ export function FormStep({
           ) : poolCheck ? (
             <div className="space-y-2">
               {/* Pool Selector */}
-              {showPoolSelector &&
-                poolCheck.allPools &&
-                poolCheck.allPools.length > 1 && (
-                  <div className="space-y-1 p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800/50 max-h-48 overflow-y-auto">
-                    {poolCheck.allPools.map((pool, idx) => (
-                      <button
-                        key={pool.address}
-                        type="button"
-                        onClick={() => {
-                          setSelectedPoolIndex(idx);
-                          setShowPoolSelector(false);
-                          updateFormData({ selectedPoolAddress: pool.address });
-                        }}
-                        className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors ${
-                          idx === selectedPoolIndex
-                            ? "bg-orange-500/20 text-orange-700 dark:text-orange-300"
-                            : "hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
-                        }`}
-                      >
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium">
-                            {pool.protocol} ({pool.baseToken})
-                          </span>
-                          <span
-                            className={
-                              pool.tvlUsd < 10000
-                                ? "text-amber-600"
-                                : "text-green-600"
-                            }
-                          >
-                            $
-                            {pool.tvlUsd.toLocaleString(undefined, {
-                              maximumFractionDigits: 0,
-                            })}
-                          </span>
-                        </div>
-                        <div className="text-zinc-500 dark:text-zinc-400 truncate">
-                          {pool.address.slice(0, 10)}...{pool.address.slice(-8)}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
+              {showPoolSelector && poolCheck.allPools && poolCheck.allPools.length > 1 && (
+                <div className="space-y-1 p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800/50 max-h-48 overflow-y-auto">
+                  {poolCheck.allPools.map((pool, idx) => (
+                    <button
+                      key={pool.address}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPoolIndex(idx);
+                        setShowPoolSelector(false);
+                        updateFormData({ selectedPoolAddress: pool.address });
+                      }}
+                      className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors ${
+                        idx === selectedPoolIndex
+                          ? "bg-orange-500/20 text-orange-700 dark:text-orange-300"
+                          : "hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">
+                          {pool.protocol} ({pool.baseToken})
+                        </span>
+                        <span className={pool.tvlUsd < 10000 ? "text-amber-600" : "text-green-600"}>
+                          $
+                          {pool.tvlUsd.toLocaleString(undefined, {
+                            maximumFractionDigits: 0,
+                          })}
+                        </span>
+                      </div>
+                      <div className="text-zinc-500 dark:text-zinc-400 truncate">
+                        {pool.address.slice(0, 10)}...{pool.address.slice(-8)}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Selected Pool Info */}
               {poolCheck.hasPool && selectedPool && (
                 <>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-zinc-600 dark:text-zinc-400">
-                      Source:
-                    </span>
+                    <span className="text-zinc-600 dark:text-zinc-400">Source:</span>
                     <span className="text-zinc-900 dark:text-zinc-100">
                       {selectedPool.protocol} ({selectedPool.baseToken})
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-zinc-600 dark:text-zinc-400">
-                      Pool Liquidity:
-                    </span>
+                    <span className="text-zinc-600 dark:text-zinc-400">Pool Liquidity:</span>
                     <span
                       className={`${selectedPool.tvlUsd < 10000 ? "text-amber-600" : "text-green-600"}`}
                     >
@@ -660,9 +609,7 @@ export function FormStep({
                   </div>
                   {selectedPool.priceUsd && (
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-zinc-600 dark:text-zinc-400">
-                        Current Price:
-                      </span>
+                      <span className="text-zinc-600 dark:text-zinc-400">Current Price:</span>
                       <span className="text-zinc-900 dark:text-zinc-100">
                         $
                         {selectedPool.priceUsd.toLocaleString(undefined, {
@@ -691,8 +638,8 @@ export function FormStep({
                 <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-red-600 dark:text-red-400">
-                    No liquidity pool found. This token needs a Uniswap V3/V4,
-                    Aerodrome, or Pancakeswap pool to be listed.
+                    No liquidity pool found. This token needs a Uniswap V3/V4, Aerodrome, or
+                    Pancakeswap pool to be listed.
                   </p>
                 </div>
               )}
@@ -738,9 +685,7 @@ export function FormStep({
               type="button"
               onClick={() => updateFormData({ isPrivate: !formData.isPrivate })}
               className={`relative w-11 h-6 rounded-full transition-colors ${
-                formData.isPrivate
-                  ? "bg-brand-500"
-                  : "bg-zinc-300 dark:bg-zinc-600"
+                formData.isPrivate ? "bg-brand-500" : "bg-zinc-300 dark:bg-zinc-600"
               }`}
             >
               <span
@@ -761,9 +706,7 @@ export function FormStep({
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-zinc-500 mb-1 block">
-                  Max Price Volatility
-                </label>
+                <label className="text-xs text-zinc-500 mb-1 block">Max Price Volatility</label>
                 <div className="relative">
                   <input
                     type="number"
@@ -781,9 +724,7 @@ export function FormStep({
                 </div>
               </div>
               <div>
-                <label className="text-xs text-zinc-500 mb-1 block">
-                  Max Execute Time
-                </label>
+                <label className="text-xs text-zinc-500 mb-1 block">Max Execute Time</label>
                 <div className="relative">
                   <input
                     type="number"
@@ -837,9 +778,7 @@ export function FormStep({
           data-testid="consign-review-button"
           className="flex-1 px-6 py-3"
         >
-          {tokenChain !== "solana" && isCheckingPool
-            ? "Checking pool..."
-            : "Review Listing"}
+          {tokenChain !== "solana" && isCheckingPool ? "Checking pool..." : "Review Listing"}
         </Button>
       </div>
     </div>

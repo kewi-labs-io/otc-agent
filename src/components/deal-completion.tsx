@@ -53,19 +53,11 @@ export function DealCompletion({ quote }: DealCompletionProps) {
   // Memoized derived values
   const { discountPercent, roi, maturityDate } = useMemo(() => {
     const dp = quote.discountBps / 100;
-    const r =
-      quote.discountedUsd > 0
-        ? (quote.discountUsd / quote.discountedUsd) * 100
-        : 0;
+    const r = quote.discountedUsd > 0 ? (quote.discountUsd / quote.discountedUsd) * 100 : 0;
     const md = new Date();
     md.setMonth(md.getMonth() + quote.lockupMonths);
     return { discountPercent: dp, roi: r, maturityDate: md };
-  }, [
-    quote.discountBps,
-    quote.discountedUsd,
-    quote.discountUsd,
-    quote.lockupMonths,
-  ]);
+  }, [quote.discountBps, quote.discountedUsd, quote.discountUsd, quote.lockupMonths]);
 
   const projectedYield = 0; // No yield; discount-only instrument
 
@@ -77,11 +69,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
         hasPostedRef.current = true;
 
         // Skip POST if quote is already executed or has no data
-        if (
-          quote.status !== "executed" &&
-          quote.tokenAmount &&
-          quote.tokenAmount !== "0"
-        ) {
+        if (quote.status !== "executed" && quote.tokenAmount && quote.tokenAmount !== "0") {
           // FAIL-FAST: transactionHash is required for deal completion
           // If missing, the deal hasn't been executed yet
           if (!quote.transactionHash) {
@@ -130,8 +118,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
       paymentCurrency: quote.paymentCurrency as "ETH" | "USDC",
     });
 
-    const savingsText =
-      quote.discountUsd > 0 ? `$${quote.discountUsd.toFixed(2)}` : "TBD";
+    const savingsText = quote.discountUsd > 0 ? `$${quote.discountUsd.toFixed(2)}` : "TBD";
     const roiText = roi > 0 ? `${roi.toFixed(1)}%` : "TBD";
 
     const text = `Just secured ${formatTokenAmountFull(parseFloat(quote.tokenAmount))} tokens at ${(quote.discountBps / 100).toFixed(0)}% discount on AI OTC Desk!
@@ -225,11 +212,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
         {shareImageUrl && (
           <div className="p-3 sm:p-6 mb-4 sm:mb-6">
             <div className="mb-3 sm:mb-4 rounded-lg overflow-hidden">
-              <img
-                src={shareImageUrl}
-                alt="Share card preview"
-                className="w-full h-auto"
-              />
+              <img src={shareImageUrl} alt="Share card preview" className="w-full h-auto" />
             </div>
             <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3">
               <Button
@@ -237,11 +220,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
                 className="sm:ml-auto flex items-center justify-center gap-2 !px-4 !py-2.5 sm:!py-2 w-full sm:w-auto"
                 color="blue"
               >
-                <svg
-                  className="w-5 h-5"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z" />
                 </svg>
                 Share
@@ -251,12 +230,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
                 onClick={downloadImage}
                 className="flex items-center justify-center gap-2 border border-zinc-300 dark:border-zinc-700 bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800 !px-4 !py-2.5 sm:!py-2 w-full sm:w-auto"
               >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -272,9 +246,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
 
         {/* P&L Card Preview */}
         <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4 sm:p-6 mb-4 sm:mb-6">
-          <h2 className="text-lg sm:text-xl font-bold text-white mb-3 sm:mb-4">
-            Your P&L Summary
-          </h2>
+          <h2 className="text-lg sm:text-xl font-bold text-white mb-3 sm:mb-4">Your P&L Summary</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             {/* Left Column - Financial Summary */}
@@ -284,8 +256,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
                   Instant Savings
                 </h3>
                 <p className="text-2xl sm:text-3xl font-bold text-white">
-                  $
-                  {quote.discountUsd > 0 ? quote.discountUsd.toFixed(2) : "N/A"}
+                  ${quote.discountUsd > 0 ? quote.discountUsd.toFixed(2) : "N/A"}
                 </p>
                 <p className="text-xs sm:text-sm text-zinc-400 mt-1">
                   {(quote.discountBps / 100).toFixed(2)}% below market price
@@ -296,10 +267,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-zinc-400">You Paid</span>
                   <span className="text-white font-semibold">
-                    $
-                    {quote.discountedUsd > 0
-                      ? quote.discountedUsd.toFixed(2)
-                      : "N/A"}
+                    ${quote.discountedUsd > 0 ? quote.discountedUsd.toFixed(2) : "N/A"}
                   </span>
                 </div>
                 <div className="flex justify-between items-center mb-2">
@@ -322,29 +290,21 @@ export function DealCompletion({ quote }: DealCompletionProps) {
             {/* Right Column - Deal Terms */}
             <div className="space-y-4">
               <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-                <h3 className="text-blue-400 font-semibold mb-2">
-                  Discount ROI
-                </h3>
+                <h3 className="text-blue-400 font-semibold mb-2">Discount ROI</h3>
                 <p className="text-3xl font-bold text-white">
                   {roi > 0 ? `${roi.toFixed(1)}%` : "N/A"}
                 </p>
-                <p className="text-sm text-zinc-400 mt-1">
-                  Based solely on discount vs. paid
-                </p>
+                <p className="text-sm text-zinc-400 mt-1">Based solely on discount vs. paid</p>
               </div>
 
               <div className="bg-zinc-800 rounded-lg p-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-zinc-400">Discount</span>
-                  <span className="text-white font-semibold">
-                    {discountPercent.toFixed(2)}%
-                  </span>
+                  <span className="text-white font-semibold">{discountPercent.toFixed(2)}%</span>
                 </div>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-zinc-400">Lockup Period</span>
-                  <span className="text-white font-semibold">
-                    {quote.lockupMonths} months
-                  </span>
+                  <span className="text-white font-semibold">{quote.lockupMonths} months</span>
                 </div>
 
                 <div className="border-t border-zinc-700 pt-2 mt-2">
@@ -371,8 +331,7 @@ export function DealCompletion({ quote }: DealCompletionProps) {
               <div className="text-right">
                 <p className="text-zinc-400 text-sm">Payment Method</p>
                 <p className="text-xl font-semibold text-white">
-                  {quote.paymentAmount}{" "}
-                  {quote.chain === "solana" ? "SOL" : quote.paymentCurrency}
+                  {quote.paymentAmount} {quote.chain === "solana" ? "SOL" : quote.paymentCurrency}
                 </p>
               </div>
             </div>

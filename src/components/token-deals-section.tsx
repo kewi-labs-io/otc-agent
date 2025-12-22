@@ -24,10 +24,8 @@ function getDealTerms(c: OTCConsignment): {
       lockupDays: c.maxLockupDays,
     };
   }
-  if (c.fixedDiscountBps == null)
-    throw new Error(`Consignment ${c.id}: missing fixedDiscountBps`);
-  if (c.fixedLockupDays == null)
-    throw new Error(`Consignment ${c.id}: missing fixedLockupDays`);
+  if (c.fixedDiscountBps == null) throw new Error(`Consignment ${c.id}: missing fixedDiscountBps`);
+  if (c.fixedLockupDays == null) throw new Error(`Consignment ${c.id}: missing fixedLockupDays`);
   return { discountBps: c.fixedDiscountBps, lockupDays: c.fixedLockupDays };
 }
 
@@ -36,10 +34,7 @@ function getDealScore(c: OTCConsignment) {
   return discountBps - lockupDays; // higher discount, shorter lockup = better
 }
 
-export function TokenDealsSection({
-  token,
-  consignments,
-}: TokenDealsSectionProps) {
+export function TokenDealsSection({ token, consignments }: TokenDealsSectionProps) {
   const router = useRouter();
   const [isExpanded, setIsExpanded] = useState(true);
   const prefetchToken = usePrefetchToken();
@@ -50,28 +45,20 @@ export function TokenDealsSection({
   }, [prefetchToken, token.id]);
 
   // formatAmount uses centralized formatRawTokenAmount from @/utils/format
-  const formatAmount = (amount: string) =>
-    formatRawTokenAmount(amount, token.decimals);
+  const formatAmount = (amount: string) => formatRawTokenAmount(amount, token.decimals);
 
   // Filter to only active consignments with remaining balance
   const activeConsignments = useMemo(
-    () =>
-      consignments.filter(
-        (c) => c.status === "active" && BigInt(c.remainingAmount) > 0n,
-      ),
+    () => consignments.filter((c) => c.status === "active" && BigInt(c.remainingAmount) > 0n),
     [consignments],
   );
 
   const sortedConsignments = useMemo(
-    () =>
-      [...activeConsignments].sort((a, b) => getDealScore(b) - getDealScore(a)),
+    () => [...activeConsignments].sort((a, b) => getDealScore(b) - getDealScore(a)),
     [activeConsignments],
   );
 
-  const totalAvailable = activeConsignments.reduce(
-    (sum, c) => sum + BigInt(c.remainingAmount),
-    0n,
-  );
+  const totalAvailable = activeConsignments.reduce((sum, c) => sum + BigInt(c.remainingAmount), 0n);
 
   // Don't render if no active consignments
   if (activeConsignments.length === 0) {
@@ -101,9 +88,7 @@ export function TokenDealsSection({
             )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold truncate">
-                  {token.symbol}
-                </h3>
+                <h3 className="text-lg font-semibold truncate">{token.symbol}</h3>
                 <span className="text-sm text-zinc-500 dark:text-zinc-400 truncate">
                   {token.name}
                 </span>
@@ -124,9 +109,7 @@ export function TokenDealsSection({
                   <span className="font-medium">
                     {formatAmount(totalAvailable.toString())} {token.symbol}
                   </span>
-                  <span className="text-zinc-500 dark:text-zinc-400 ml-2">
-                    available
-                  </span>
+                  <span className="text-zinc-500 dark:text-zinc-400 ml-2">available</span>
                 </div>
               </div>
             </div>
