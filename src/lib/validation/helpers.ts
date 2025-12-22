@@ -1,16 +1,42 @@
 /**
  * Validation helper functions
  * Provides convenient wrappers around Zod for common validation patterns
+ *
+ * NOTE ON `unknown` TYPE:
+ * These functions intentionally use `unknown` for their data parameter because
+ * they are validation boundary functions. At system boundaries (API responses,
+ * user input, RPC calls), the incoming data has no compile-time type information.
+ * The Zod schema validates and narrows the type from `unknown` to the expected T.
+ * This is the correct pattern per fail-fast principles - validate at edges.
  */
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 /**
- * Parse data with a Zod schema, throwing an error if validation fails
- * Use this for fail-fast validation at boundaries (I/O, HTTP, RPC)
+ * Unvalidated data from external sources.
+ * This type represents data at system boundaries before Zod validation.
+ * It's intentionally broad to accept JSON, API responses, user input, etc.
  */
-export function parseOrThrow<T>(schema: z.ZodSchema<T>, data: unknown): T {
+type UnvalidatedData =
+  | Record<string, unknown>
+  | string
+  | number
+  | boolean
+  | null
+  | unknown[]
+  | object;
+
+/**
+ * Parse data with a Zod schema, throwing an error if validation fails.
+ * Use this for fail-fast validation at boundaries (I/O, HTTP, RPC).
+ *
+ * @param schema - Zod schema to validate against
+ * @param data - Untyped data from external source (API, RPC, user input)
+ * @returns Validated and typed data
+ * @throws Error with detailed validation message if validation fails
+ */
+export function parseOrThrow<T>(schema: z.ZodSchema<T>, data: UnvalidatedData): T {
   const result = schema.safeParse(data);
   if (!result.success) {
     const errorMessage = result.error.issues
@@ -22,13 +48,17 @@ export function parseOrThrow<T>(schema: z.ZodSchema<T>, data: unknown): T {
 }
 
 /**
- * Parse data with a Zod schema, returning null if validation fails
+ * Parse data with a Zod schema, returning null if validation fails.
  *
  * NOTE: This is defensive programming - prefer parseOrThrow for fail-fast validation.
  * Only use this when invalid data is truly acceptable (e.g., optional user input).
  * For API boundaries and required data, use parseOrThrow instead.
+ *
+ * @param schema - Zod schema to validate against
+ * @param data - Untyped data from external source
+ * @returns Validated data or null if validation fails
  */
-export function parseOrNull<T>(schema: z.ZodSchema<T>, data: unknown): T | null {
+export function parseOrNull<T>(schema: z.ZodSchema<T>, data: UnvalidatedData): T | null {
   const result = schema.safeParse(data);
   if (!result.success) {
     return null;
@@ -37,13 +67,18 @@ export function parseOrNull<T>(schema: z.ZodSchema<T>, data: unknown): T | null 
 }
 
 /**
- * Validate and transform data
- * Useful when you need to transform validated data
+ * Validate and transform data.
+ * Useful when you need to transform validated data.
+ *
+ * @param schema - Zod schema to validate against
+ * @param transform - Function to transform validated data
+ * @param data - Untyped data from external source
+ * @returns Transformed data
  */
 export function validateAndTransform<T, U>(
   schema: z.ZodSchema<T>,
   transform: (data: T) => U,
-  data: unknown,
+  data: UnvalidatedData,
 ): U {
   const parsed = parseOrThrow(schema, data);
   return transform(parsed);

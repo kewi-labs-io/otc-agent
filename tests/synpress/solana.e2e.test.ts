@@ -44,10 +44,10 @@ test.describe("Solana Additional Scenarios", () => {
   });
 
   test("verifies Solana deployment and desk state", async ({
-    context,
-    page,
-    phantomPage,
-    extensionId,
+    _context,
+    _page,
+    _phantomPage,
+    _extensionId,
   }) => {
     log("Solana-Verify", "Verifying Solana deployment...");
 

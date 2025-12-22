@@ -13,7 +13,7 @@ import {
 import { createAnchorWallet, loadDeskKeypair } from "@/utils/solana-keypair";
 
 export async function POST(request: NextRequest) {
-  let body;
+  let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
@@ -91,7 +91,9 @@ export async function POST(request: NextRequest) {
   }
 
   const programAccounts = program.account as ConsignmentAccountProgram;
-  let consignmentData;
+  let consignmentData:
+    | Awaited<ReturnType<ConsignmentAccountProgram["consignment"]["fetch"]>>
+    | undefined;
   try {
     consignmentData = await programAccounts.consignment.fetch(consignmentPubkey);
   } catch (err) {

@@ -192,7 +192,7 @@ async function main() {
   await verifySolana();
 
   // Summary
-  console.log("\n" + "═".repeat(70));
+  console.log(`\n${"═".repeat(70)}`);
   console.log("  VERIFICATION SUMMARY");
   console.log("═".repeat(70));
 
@@ -208,7 +208,7 @@ async function main() {
   console.log("🎉 All mainnet deployments verified successfully!");
 
   // P2P Feature Summary
-  console.log("\n" + "═".repeat(70));
+  console.log(`\n${"═".repeat(70)}`);
   console.log("  P2P AUTO-APPROVAL FEATURE");
   console.log("═".repeat(70));
   console.log("  ✅ EVM: Non-negotiable offers auto-approved at creation");

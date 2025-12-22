@@ -1764,7 +1764,7 @@ export function AcceptQuoteModal({
     // Don't wait for receipt - immediately trigger backend approval
     // Backend will verify on-chain state directly via Alchemy (faster than frontend polling)
     console.log("[AcceptQuote] Transaction hash:", createTxHash);
-    console.log("[AcceptQuote] View on explorer: https://basescan.org/tx/" + createTxHash);
+    console.log(`[AcceptQuote] View on explorer: https://basescan.org/tx/${createTxHash}`);
 
     // Step 2: Immediately trigger backend approval
     console.log("[AcceptQuote] Updating UI to await_approval step...");
@@ -2107,6 +2107,7 @@ export function AcceptQuoteModal({
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
+                    aria-hidden="true"
                   >
                     <path
                       strokeLinecap="round"
@@ -2504,6 +2505,7 @@ export function AcceptQuoteModal({
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"

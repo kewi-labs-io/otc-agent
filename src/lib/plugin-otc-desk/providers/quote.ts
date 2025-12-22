@@ -57,7 +57,7 @@ export const quoteProvider: Provider = {
       text: `
 Current Agent Quote (ID: ${currentQuote.quoteId}):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 Amount: ${Number(currentQuote.tokenAmount) > 0 ? formattedAmount + " tokens" : "Choose amount at acceptance"}
+📊 Amount: ${Number(currentQuote.tokenAmount) > 0 ? `${formattedAmount} tokens` : "Choose amount at acceptance"}
 💰 Price per Token: Determined by oracle on-chain at execution
 💵 Total Value: $${currentQuote.totalUsd.toFixed(2)} (estimated at creation)
 🎯 Discount: ${currentQuote.discountBps / 100}% (${currentQuote.discountBps} bps)

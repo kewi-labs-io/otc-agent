@@ -140,9 +140,9 @@ function log(
 }
 
 function section(title: string) {
-  console.log("\n" + "═".repeat(70));
+  console.log(`\n${"═".repeat(70)}`);
   console.log(`  ${title}`);
-  console.log("═".repeat(70) + "\n");
+  console.log(`${"═".repeat(70)}\n`);
 }
 
 // =============================================================================
@@ -258,7 +258,7 @@ async function validateEVM() {
     ];
 
     log("INFO", "Sample Consignment #1:", {
-      "Token ID": consignment[0].slice(0, 18) + "...",
+      "Token ID": `${consignment[0].slice(0, 18)}...`,
       Consigner: consignment[1],
       "Total Amount": formatEther(consignment[2]),
       Remaining: formatEther(consignment[3]),

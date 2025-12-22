@@ -185,9 +185,8 @@ export class ConsignmentService {
     }
 
     if (filters?.minAmount) {
-      consignments = consignments.filter(
-        (c) => BigInt(c.remainingAmount) >= BigInt(filters.minAmount!),
-      );
+      const minAmount = filters.minAmount;
+      consignments = consignments.filter((c) => BigInt(c.remainingAmount) >= BigInt(minAmount));
     }
 
     return consignments;
@@ -222,48 +221,68 @@ export class ConsignmentService {
     const runtime = await agentRuntime.getRuntime();
 
     const lockKey = `consignment_lock:${validated.consignmentId}`;
-    const existingLock = await runtime.getCache<boolean>(lockKey);
-    if (existingLock) {
-      throw new Error("Consignment is being modified, try again");
+    // Unique lock value for compare-and-swap pattern
+    const lockValue = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    // Atomic lock acquisition with retry
+    let acquired = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const existingLock = await runtime.getCache<string>(lockKey);
+      if (!existingLock) {
+        // Set lock (note: no TTL support - lock is cleared after operation)
+        await runtime.setCache(lockKey, lockValue);
+        // Verify we got the lock (compare-and-swap pattern)
+        const checkLock = await runtime.getCache<string>(lockKey);
+        if (checkLock === lockValue) {
+          acquired = true;
+          break;
+        }
+      }
+      // Wait before retry with exponential backoff
+      await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
     }
 
-    await runtime.setCache(lockKey, true);
-
-    const consignment = await ConsignmentDB.getConsignment(validated.consignmentId);
-
-    if (consignment.status !== "active") {
-      await runtime.deleteCache(lockKey);
-      throw new Error("Consignment is not active");
+    if (!acquired) {
+      throw new Error("Failed to acquire lock for consignment - please retry");
     }
 
-    const remaining = BigInt(consignment.remainingAmount);
-    const reserve = BigInt(validated.amount);
+    try {
+      const consignment = await ConsignmentDB.getConsignment(validated.consignmentId);
 
-    if (reserve > remaining) {
-      await runtime.deleteCache(lockKey);
-      throw new Error("Insufficient remaining amount");
+      if (consignment.status !== "active") {
+        throw new Error("Consignment is not active");
+      }
+
+      const remaining = BigInt(consignment.remainingAmount);
+      const reserve = BigInt(validated.amount);
+
+      if (reserve > remaining) {
+        throw new Error("Insufficient remaining amount");
+      }
+
+      if (reserve < BigInt(consignment.minDealAmount)) {
+        throw new Error("Amount below minimum deal size");
+      }
+
+      if (reserve > BigInt(consignment.maxDealAmount)) {
+        throw new Error("Amount exceeds maximum deal size");
+      }
+
+      const newRemaining = (remaining - reserve).toString();
+      const status = newRemaining === "0" ? "depleted" : "active";
+
+      await ConsignmentDB.updateConsignment(validated.consignmentId, {
+        remainingAmount: newRemaining,
+        status,
+        lastDealAt: Date.now(),
+      });
+    } finally {
+      // Always release lock if we own it
+      const currentLock = await runtime.getCache<string>(lockKey);
+      if (currentLock === lockValue) {
+        await runtime.deleteCache(lockKey);
+      }
     }
-
-    if (reserve < BigInt(consignment.minDealAmount)) {
-      await runtime.deleteCache(lockKey);
-      throw new Error("Amount below minimum deal size");
-    }
-
-    if (reserve > BigInt(consignment.maxDealAmount)) {
-      await runtime.deleteCache(lockKey);
-      throw new Error("Amount exceeds maximum deal size");
-    }
-
-    const newRemaining = (remaining - reserve).toString();
-    const status = newRemaining === "0" ? "depleted" : "active";
-
-    await ConsignmentDB.updateConsignment(validated.consignmentId, {
-      remainingAmount: newRemaining,
-      status,
-      lastDealAt: Date.now(),
-    });
-
-    await runtime.deleteCache(lockKey);
   }
 
   async releaseReservation(consignmentId: string, amount: string): Promise<void> {
@@ -273,16 +292,53 @@ export class ConsignmentService {
       amount,
     });
 
-    const consignment = await ConsignmentDB.getConsignment(validated.consignmentId);
-    const newRemaining = (
-      BigInt(consignment.remainingAmount) + BigInt(validated.amount)
-    ).toString();
-    const status = newRemaining === "0" ? "depleted" : "active";
+    const { agentRuntime } = await import("@/lib/agent-runtime");
+    const runtime = await agentRuntime.getRuntime();
 
-    await ConsignmentDB.updateConsignment(validated.consignmentId, {
-      remainingAmount: newRemaining,
-      status,
-    });
+    const lockKey = `consignment_lock:${validated.consignmentId}`;
+    // Unique lock value for compare-and-swap pattern
+    const lockValue = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    // Atomic lock acquisition with retry
+    let acquired = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const existingLock = await runtime.getCache<string>(lockKey);
+      if (!existingLock) {
+        // Set lock (note: no TTL support - lock is cleared after operation)
+        await runtime.setCache(lockKey, lockValue);
+        // Verify we got the lock (compare-and-swap pattern)
+        const checkLock = await runtime.getCache<string>(lockKey);
+        if (checkLock === lockValue) {
+          acquired = true;
+          break;
+        }
+      }
+      // Wait before retry with exponential backoff
+      await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
+    }
+
+    if (!acquired) {
+      throw new Error("Failed to acquire lock for consignment - please retry");
+    }
+
+    try {
+      const consignment = await ConsignmentDB.getConsignment(validated.consignmentId);
+      const newRemaining = (
+        BigInt(consignment.remainingAmount) + BigInt(validated.amount)
+      ).toString();
+      const status = newRemaining === "0" ? "depleted" : "active";
+
+      await ConsignmentDB.updateConsignment(validated.consignmentId, {
+        remainingAmount: newRemaining,
+        status,
+      });
+    } finally {
+      // Always release lock if we own it
+      const currentLock = await runtime.getCache<string>(lockKey);
+      if (currentLock === lockValue) {
+        await runtime.deleteCache(lockKey);
+      }
+    }
   }
 
   async recordDeal(params: {

@@ -409,13 +409,16 @@ export function useOTC(): {
   }, [myOfferIdsRes.data]);
 
   // Using type assertion to avoid deep type instantiation issue
-  const myOffersContracts = myOfferIds.map((id) => ({
-    address: otcAddress!,
-    abi,
-    functionName: "offers" as const,
-    args: [id] as const,
-    chainId,
-  }));
+  // FAIL-FAST: Skip contract calls if otcAddress is not configured
+  const myOffersContracts = otcAddress
+    ? myOfferIds.map((id) => ({
+        address: otcAddress,
+        abi,
+        functionName: "offers" as const,
+        args: [id] as const,
+        chainId,
+      }))
+    : [];
 
   // Type assertion to avoid deep type instantiation with wagmi's complex generics
   // wagmi's useReadContracts has deeply nested generics that cause TS2589
@@ -446,13 +449,16 @@ export function useOTC(): {
     openOfferIdsData !== undefined && openOfferIdsData !== null && Array.isArray(openOfferIdsData)
       ? openOfferIdsData
       : [];
-  const openOffersContracts = openOfferIds.map((id) => ({
-    address: otcAddress!,
-    abi,
-    functionName: "offers" as const,
-    args: [id] as const,
-    chainId,
-  }));
+  // FAIL-FAST: Skip contract calls if otcAddress is not configured
+  const openOffersContracts = otcAddress
+    ? openOfferIds.map((id) => ({
+        address: otcAddress,
+        abi,
+        functionName: "offers" as const,
+        args: [id] as const,
+        chainId,
+      }))
+    : [];
 
   // Type assertion to avoid deep type instantiation with wagmi's complex generics
   // useReadContracts has extremely deep generic types that cause TypeScript performance issues
@@ -517,6 +523,30 @@ export function useOTC(): {
       chain?: Chain;
       otcOverride?: Address;
     }) => {
+      // SECURITY: Validate inputs before contract interaction
+      if (params.tokenAmountWei <= 0n) {
+        throw new Error("Token amount must be positive");
+      }
+      if (
+        params.tokenAmountWei >
+        BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+      ) {
+        throw new Error("Token amount exceeds uint256 max");
+      }
+      if (params.discountBps < 0 || params.discountBps > 10000) {
+        throw new Error("Discount must be between 0 and 10000 basis points (0-100%)");
+      }
+      if (params.agentCommissionBps < 0 || params.agentCommissionBps > 1500) {
+        throw new Error("Agent commission must be between 0 and 1500 basis points (0-15%)");
+      }
+      if (params.lockupSeconds < 0n) {
+        throw new Error("Lockup cannot be negative");
+      }
+      if (params.lockupSeconds > 31536000n * 10n) {
+        // 10 years max
+        throw new Error("Lockup exceeds maximum allowed (10 years)");
+      }
+
       // chain is optional - default to "base" if not provided
       const targetChain = params.chain ?? "base";
       // otcOverride takes priority, then chain-specific address, then default otcAddress
@@ -1109,8 +1139,14 @@ export function useOTC(): {
           });
           console.log("[useOTC] approveToken - reset tx:", resetTxHash);
 
-          // Wait briefly for the reset tx to be mined
-          await new Promise((r) => setTimeout(r, 3000));
+          // Wait for transaction confirmation instead of arbitrary timeout
+          const receipt = await targetPublicClient.waitForTransactionReceipt({
+            hash: resetTxHash,
+            timeout: 60_000, // 60 second timeout
+          });
+          if (receipt.status !== "success") {
+            throw new Error("Allowance reset transaction failed");
+          }
         }
       }
 

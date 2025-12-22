@@ -20,8 +20,9 @@ import { getOtcAddress, getSolanaConfig } from "@/config/contracts";
 import { getEvmPrivateKey, getHeliusRpcUrl, getNetwork } from "@/config/env";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 import { agentRuntime } from "@/lib/agent-runtime";
+import { validateCSRF } from "@/lib/csrf";
 import { getChain, getViemChainForType } from "@/lib/getChain";
-import { parseOfferStruct, type RawOfferData } from "@/lib/otc-helpers";
+import { type ParsedOffer, parseOfferStruct, type RawOfferData } from "@/lib/otc-helpers";
 import type { QuoteService } from "@/lib/plugin-otc-desk/services/quoteService";
 import { validationErrorResponse } from "@/lib/validation/helpers";
 import { safeReadContract } from "@/lib/viem-utils";
@@ -68,11 +69,23 @@ interface WriteContractRequest {
   dataSuffix?: `0x${string}`;
 }
 
+/**
+ * Minimal wallet client interface for contract writes.
+ * Used to avoid viem's deep type instantiation issues with WalletClient generics.
+ *
+ * NOTE: The cast `viemClient as unknown as MinimalWalletClient` is necessary
+ * because viem's WalletClient has very deep generic types that cause TypeScript
+ * to error with "Type instantiation is excessively deep and possibly infinite".
+ * Our MinimalWalletClient is a subset of WalletClient's methods.
+ */
 interface MinimalWalletClient {
   writeContract: (request: WriteContractRequest) => Promise<`0x${string}`>;
 }
 
 export async function POST(request: NextRequest) {
+  const csrfError = validateCSRF(request);
+  if (csrfError) return csrfError;
+
   return await handleApproval(request);
 }
 
@@ -114,7 +127,7 @@ async function handleApproval(request: NextRequest) {
   let consignmentAddress: string | undefined;
 
   if (contentType.includes("application/json")) {
-    let body;
+    let body: Record<string, unknown>;
     try {
       body = await request.json();
     } catch {
@@ -243,7 +256,9 @@ async function handleApproval(request: NextRequest) {
         return tx;
       },
       signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]) => {
-        txs.forEach((tx) => (tx as Transaction).partialSign(approverKeypair));
+        for (const tx of txs) {
+          (tx as Transaction).partialSign(approverKeypair);
+        }
         return txs;
       },
     };
@@ -643,7 +658,7 @@ async function handleApproval(request: NextRequest) {
 
   // Poll for offer to exist (tx might still be pending)
   // This handles the case where frontend calls us immediately after tx submission
-  let offer;
+  let offer: ParsedOffer | undefined;
   const maxPollAttempts = 10; // 10 attempts * 2 seconds = 20 seconds max wait
 
   for (let attempt = 1; attempt <= maxPollAttempts; attempt++) {

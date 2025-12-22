@@ -5,9 +5,10 @@
  * Used in accept-quote-modal for payment calculations.
  *
  * Features:
- * - Auto-refresh every 60s
+ * - Auto-refresh every 15s (reduced from 60s for security)
  * - Shared cache across all components
  * - Pauses refresh when tab not visible
+ * - Price staleness indicators for UI feedback
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -55,20 +56,21 @@ async function fetchNativePrices(): Promise<NativePrices> {
  * Hook to fetch and auto-refresh native token prices
  *
  * Features:
- * - 60s stale time (prices change slowly)
- * - Auto-refresh every 60s
+ * - 15s stale time (reduced from 60s for security - prevents arbitrage during volatility)
+ * - Auto-refresh every 15s
  * - Shared cache across components
  * - Pauses refresh when tab not visible
+ * - Price age and staleness indicators
  *
- * @returns { prices, isLoading, error }
+ * @returns { prices, isLoading, error, priceAge, isStale, forceRefresh }
  */
 export function useNativePrices() {
   const query = useQuery({
     queryKey: priceKeys.native(),
     queryFn: fetchNativePrices,
-    staleTime: 60_000, // 1 minute
-    gcTime: 300_000, // 5 minutes
-    refetchInterval: 60_000, // Auto-refresh every minute
+    staleTime: 15_000, // 15 seconds - reduced from 60s for security
+    gcTime: 60_000, // 1 minute - reduced from 5 min
+    refetchInterval: 15_000, // Auto-refresh every 15 seconds
     refetchIntervalInBackground: false, // Don't refresh when tab not visible
     retry: 2,
     retryDelay: 1000,
@@ -81,6 +83,10 @@ export function useNativePrices() {
     solPrice: query.data?.SOL ?? 0,
     isLoading: query.isLoading,
     error: query.error,
+    // Price freshness indicators for security-sensitive operations
+    priceAge: query.dataUpdatedAt ? Date.now() - query.dataUpdatedAt : null,
+    isStale: query.dataUpdatedAt ? Date.now() - query.dataUpdatedAt > 30_000 : true,
+    forceRefresh: () => query.refetch(),
   };
 }
 

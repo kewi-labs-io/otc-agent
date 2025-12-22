@@ -109,7 +109,13 @@ async function main() {
   const failed = 0;
 
   for (const token of solanaTokens) {
-    const mint = new PublicKey(token.contractAddress!);
+    // FAIL-FAST: contractAddress was already validated in filter above
+    if (!token.contractAddress) {
+      console.log(`\n--- ${token.symbol} - SKIPPING (no contract address) ---`);
+      skipped++;
+      continue;
+    }
+    const mint = new PublicKey(token.contractAddress);
     console.log(`\n--- ${token.symbol} (${mint.toBase58().slice(0, 8)}...) ---`);
 
     // Find token registry PDA

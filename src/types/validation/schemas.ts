@@ -43,7 +43,8 @@ export const AddressSchema = z.union([EvmAddressSchema, SolanaAddressSchema]);
 // Must be a non-negative integer string
 export const BigIntStringSchema = z
   .string()
-  .regex(/^\d+$/, "Must be a non-negative integer string");
+  .regex(/^\d+$/, "Must be a non-negative integer string")
+  .max(78, "Number exceeds maximum safe value (uint256 max is 78 digits)");
 
 // Basis points: 0-10000 (0% to 100%)
 export const BpsSchema = z.number().int().min(0).max(10000);
@@ -106,7 +107,10 @@ export const NonEmptyStringSchema = z.string().min(1);
 export const OptionalNonEmptyStringSchema = z.string().min(1).optional();
 
 // Hex string (for bytes32, transaction hashes, etc.)
-export const HexStringSchema = z.string().regex(/^0x[a-fA-F0-9]+$/, "Must be a valid hex string");
+export const HexStringSchema = z
+  .string()
+  .regex(/^0x[a-fA-F0-9]+$/, "Must be a valid hex string")
+  .max(131072, "Hex string exceeds maximum allowed length"); // 64KB limit
 
 // Bytes32 hex string (64 hex characters after 0x)
 export const Bytes32Schema = z

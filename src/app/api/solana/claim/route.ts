@@ -15,7 +15,7 @@ import { createAnchorWallet, loadDeskKeypair } from "@/utils/solana-keypair";
 import { getTokenProgramId } from "@/utils/solana-otc";
 
 export async function POST(request: NextRequest) {
-  let body;
+  let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
@@ -76,22 +76,24 @@ export async function POST(request: NextRequest) {
 
   const program = new anchor.Program(idl, provider);
 
+  interface OfferData {
+    fulfilled: boolean;
+    paid: boolean;
+    tokenMint: PublicKey;
+    unlockTime: number;
+    id: { toString(): string };
+  }
+
   interface OfferAccountProgram {
     offer: {
-      fetch: (pubkey: PublicKey) => Promise<{
-        fulfilled: boolean;
-        paid: boolean;
-        tokenMint: PublicKey;
-        unlockTime: number;
-        id: { toString(): string };
-      }>;
+      fetch: (pubkey: PublicKey) => Promise<OfferData>;
     };
   }
 
   const programAccounts = program.account as OfferAccountProgram;
   const offer = new PublicKey(offerAddress);
 
-  let offerData;
+  let offerData: OfferData;
   try {
     offerData = await programAccounts.offer.fetch(offer);
   } catch (err) {

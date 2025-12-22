@@ -164,8 +164,16 @@ export function getDatabaseUrl(): string {
 
   if (url) return url;
 
-  // Local development default
+  // FAIL-FAST in production - require explicit database config
+  if (isProduction()) {
+    throw new Error(
+      "DATABASE_URL must be configured in production - no default credentials allowed",
+    );
+  }
+
+  // Local development default only
   const port = process.env.POSTGRES_DEV_PORT || "5439";
+  console.warn("[Config] Using local development database - not for production use");
   return `postgres://eliza:password@localhost:${port}/eliza`;
 }
 
@@ -195,8 +203,16 @@ export function getNetwork(): NetworkEnvironment {
   // Legacy flag support
   if (process.env.NEXT_PUBLIC_USE_MAINNET === "true") return "mainnet";
 
-  // Default to mainnet for production
-  return "mainnet";
+  // SECURITY: In production, require explicit network config
+  if (isProduction()) {
+    throw new Error(
+      "NEXT_PUBLIC_NETWORK must be explicitly set in production (mainnet|testnet|local)",
+    );
+  }
+
+  // Default to local for development safety
+  console.warn("[Config] No network specified, defaulting to local for safety");
+  return "local";
 }
 
 /**

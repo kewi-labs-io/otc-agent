@@ -548,7 +548,7 @@ describe("Retry Cache - Data Verification", () => {
     const retrieved = getCached<typeof arr>("arr-test");
     expect(retrieved).toBe(arr);
     // After expect assertion confirms retrieved === arr, we know retrieved is defined
-    expect(retrieved![0]).toBe(1);
-    expect(retrieved![1]).toBe("two");
+    expect(retrieved?.[0]).toBe(1);
+    expect(retrieved?.[1]).toBe("two");
   });
 });

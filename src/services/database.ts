@@ -96,6 +96,7 @@ const QuoteExecutionUpdateInputSchema = z.object({
   }),
 });
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Database operation namespace
 export class QuoteDB {
   static async createQuote(data: {
     entityId: string;
@@ -242,6 +243,7 @@ export class QuoteDB {
     return service.verifyQuoteSignature(quote);
   }
 }
+// biome-ignore lint/complexity/noStaticOnlyClass: Database operation namespace
 export class DealCompletionService {
   static async generateShareData(quoteId: string) {
     const quote = await QuoteDB.getQuoteByQuoteId(quoteId);
@@ -284,6 +286,7 @@ const TokenCreateInputSchema = z.object({
   tokenVault: z.string().optional(),
 });
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Database operation namespace
 export class TokenDB {
   static async createToken(data: Omit<Token, "id" | "createdAt" | "updatedAt">): Promise<Token> {
     // FAIL-FAST: Validate input with Zod schema
@@ -433,24 +436,50 @@ export class TokenDB {
   }
 }
 
-// Helper to convert NaN/undefined/null to a default number
-const toValidNumber = (val: unknown, defaultVal: number): number => {
+/**
+ * Numeric value from external APIs - may be null, undefined, NaN, or a valid number.
+ * This is more specific than `unknown` for values we expect from market data APIs.
+ */
+type ExternalNumericValue = number | null | undefined;
+
+/**
+ * Convert potentially invalid numeric values from external APIs to valid numbers.
+ * Handles NaN, null, and undefined - all common in market data APIs.
+ */
+const toValidNumber = (val: ExternalNumericValue, defaultVal: number): number => {
   if (val === undefined || val === null) return defaultVal;
   if (typeof val === "number" && !Number.isNaN(val)) return val;
   return defaultVal;
 };
 
 // Market data input schema - handles NaN and undefined from external APIs
+// Uses preprocess to coerce ExternalNumericValue to valid numbers before validation
 const MarketDataInputSchema = z.object({
   tokenId: z.string().min(1),
-  priceUsd: z.preprocess((v) => toValidNumber(v, 0), z.number().nonnegative()),
-  marketCap: z.preprocess((v) => toValidNumber(v, 0), z.number().nonnegative()),
-  volume24h: z.preprocess((v) => toValidNumber(v, 0), z.number().nonnegative()),
-  priceChange24h: z.preprocess((v) => toValidNumber(v, 0), z.number()),
-  liquidity: z.preprocess((v) => toValidNumber(v, 0), z.number().nonnegative()),
-  lastUpdated: z.preprocess((v) => toValidNumber(v, Date.now()), z.number().int().positive()),
+  priceUsd: z.preprocess(
+    (v) => toValidNumber(v as ExternalNumericValue, 0),
+    z.number().nonnegative(),
+  ),
+  marketCap: z.preprocess(
+    (v) => toValidNumber(v as ExternalNumericValue, 0),
+    z.number().nonnegative(),
+  ),
+  volume24h: z.preprocess(
+    (v) => toValidNumber(v as ExternalNumericValue, 0),
+    z.number().nonnegative(),
+  ),
+  priceChange24h: z.preprocess((v) => toValidNumber(v as ExternalNumericValue, 0), z.number()),
+  liquidity: z.preprocess(
+    (v) => toValidNumber(v as ExternalNumericValue, 0),
+    z.number().nonnegative(),
+  ),
+  lastUpdated: z.preprocess(
+    (v) => toValidNumber(v as ExternalNumericValue, Date.now()),
+    z.number().int().positive(),
+  ),
 });
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Database operation namespace
 export class MarketDataDB {
   static async setMarketData(data: TokenMarketData): Promise<void> {
     // FAIL-FAST: Validate input
@@ -520,6 +549,7 @@ const ConsignmentCreateInputSchema = z
     },
   );
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Database operation namespace
 export class ConsignmentDB {
   static async createConsignment(
     data: Omit<OTCConsignment, "id" | "createdAt" | "updatedAt">,
@@ -656,6 +686,7 @@ const ConsignmentDealCreateInputSchema = z.object({
   status: z.enum(["pending", "executed", "failed"]),
 });
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Database operation namespace
 export class ConsignmentDealDB {
   static async createDeal(data: Omit<ConsignmentDeal, "id">): Promise<ConsignmentDeal> {
     // FAIL-FAST: Validate input

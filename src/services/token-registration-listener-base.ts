@@ -4,6 +4,45 @@ import { getRegistrationHelperForChain } from "@/config/contracts";
 import type { MinimalPublicClient } from "@/lib/viem-utils";
 import { TokenRegistryService } from "./tokenRegistry";
 
+// Protected symbols that can only be registered from verified contract addresses
+const PROTECTED_SYMBOLS = ["USDC", "USDT", "DAI", "WETH", "WBTC", "ETH", "BTC"];
+
+const VERIFIED_TOKEN_ADDRESSES: Record<string, Record<string, string>> = {
+  base: {
+    USDC: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+    WETH: "0x4200000000000000000000000000000000000006",
+  },
+  ethereum: {
+    USDC: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    USDT: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    DAI: "0x6b175474e89094c44da98b954eedeac495271d0f",
+    WETH: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+  },
+  bsc: {
+    USDC: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+    USDT: "0x55d398326f99059ff775485246999027b3197955",
+  },
+};
+
+/**
+ * Check if a symbol is protected and the token address doesn't match the verified address
+ * Returns true if the registration should be BLOCKED
+ */
+function isProtectedSymbol(symbol: string, tokenAddress: string, chain: string): boolean {
+  const upperSymbol = symbol.toUpperCase();
+  if (!PROTECTED_SYMBOLS.includes(upperSymbol)) {
+    return false; // Not a protected symbol, allow registration
+  }
+
+  const verifiedAddresses = VERIFIED_TOKEN_ADDRESSES[chain];
+  if (!verifiedAddresses) return true; // Block if no verified list for chain
+
+  const verifiedAddress = verifiedAddresses[upperSymbol];
+  if (!verifiedAddress) return true; // Block if symbol not in verified list
+
+  return tokenAddress.toLowerCase() !== verifiedAddress.toLowerCase();
+}
+
 /**
  * Decoded TokenRegistered event args
  */
@@ -136,6 +175,14 @@ async function handleTokenRegistered(client: MinimalPublicClient, log: TokenRegi
       functionName: "decimals",
     }),
   ]);
+
+  // Security check: block impersonation of protected symbols
+  if (isProtectedSymbol(symbol as string, tokenAddress, "base")) {
+    console.warn(
+      `[Base Listener] Blocked unverified ${symbol} token at ${tokenAddress} - possible impersonation attempt`,
+    );
+    return;
+  }
 
   // Add to database with pool address for future price updates
   const tokenService = new TokenRegistryService();

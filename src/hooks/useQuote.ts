@@ -8,42 +8,21 @@
  */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
 import type { DealQuote } from "@/components/deal-completion";
+import { parseOrThrow } from "@/lib/validation/helpers";
+import { DealQuoteSchema } from "@/types/validation/hook-schemas";
 import { quoteKeys } from "./queryKeys";
 
-/**
- * Validate quote response has required fields
- * Throws if validation fails
- */
-function validateDealQuote(data: unknown): DealQuote {
-  if (typeof data !== "object" || data === null) {
-    throw new Error("Invalid quote response: expected object");
-  }
+// API response schema for executed quote endpoint
+const ExecutedQuoteResponseSchema = z.object({
+  quote: DealQuoteSchema,
+});
 
-  const obj = data as Record<string, unknown>;
-
-  // Validate required fields
-  if (typeof obj.quoteId !== "string") {
-    throw new Error("Invalid quote response: missing quoteId");
-  }
-  if (typeof obj.beneficiary !== "string") {
-    throw new Error("Invalid quote response: missing beneficiary");
-  }
-  if (typeof obj.tokenAmount !== "string") {
-    throw new Error("Invalid quote response: missing tokenAmount");
-  }
-  if (typeof obj.discountBps !== "number") {
-    throw new Error("Invalid quote response: missing discountBps");
-  }
-  if (typeof obj.paymentAmount !== "string") {
-    throw new Error("Invalid quote response: missing paymentAmount");
-  }
-  if (typeof obj.paymentCurrency !== "string") {
-    throw new Error("Invalid quote response: missing paymentCurrency");
-  }
-
-  return data as DealQuote;
-}
+// API response schema for quote by offer endpoint
+const QuoteByOfferResponseSchema = z.object({
+  quoteId: z.string().min(1),
+});
 
 /**
  * Fetch an executed quote by ID with retry logic
@@ -63,13 +42,10 @@ async function fetchExecutedQuote(quoteId: string): Promise<DealQuote> {
     throw new Error(`Quote not found: ${quoteId}`);
   }
 
-  const data = await response.json();
-
-  if (!data.quote) {
-    throw new Error(`Quote not found in API response for: ${quoteId}`);
-  }
-
-  return validateDealQuote(data.quote);
+  // Validate response structure with Zod schema
+  const rawData: Record<string, unknown> = await response.json();
+  const validated = parseOrThrow(ExecutedQuoteResponseSchema, rawData);
+  return validated.quote;
 }
 
 /**
@@ -88,12 +64,15 @@ async function fetchQuoteByOffer(offerId: string): Promise<{ quoteId: string } |
     throw new Error(`Failed to fetch quote by offer: ${response.status} ${response.statusText}`);
   }
 
-  const data = await response.json();
-  if (!data.quoteId) {
+  // Validate response structure with Zod schema
+  const rawData: Record<string, unknown> = await response.json();
+  const parseResult = QuoteByOfferResponseSchema.safeParse(rawData);
+  if (!parseResult.success) {
+    // quoteId missing or invalid - treat as not found
     return null;
   }
 
-  return { quoteId: data.quoteId };
+  return { quoteId: parseResult.data.quoteId };
 }
 
 /**

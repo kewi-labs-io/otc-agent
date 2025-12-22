@@ -29,8 +29,14 @@ MemoizedMarkdownBlock.displayName = "MemoizedMarkdownBlock";
 export const MemoizedMarkdown = memo(({ content, id, options }: MemoizedMarkdownProps) => {
   const blocks = useMemo(() => parseMarkdownIntoBlocks(content), [content]);
 
+  // Using index in key is acceptable here - blocks are derived deterministically from
+  // content and don't reorder; the composite key includes the message id for uniqueness
   return blocks.map((block, index) => (
-    <MemoizedMarkdownBlock content={block} options={options} key={`${id}-block_${index}`} />
+    <MemoizedMarkdownBlock
+      content={block}
+      options={options}
+      key={`${id}-${block.slice(0, 20)}-${index}`}
+    />
   ));
 });
 

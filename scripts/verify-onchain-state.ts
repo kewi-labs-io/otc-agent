@@ -133,8 +133,8 @@ async function verifyEvm(
   otcAddress: Address,
   rpcUrl: string,
 ) {
-  console.log("\n📊 Verifying " + chainName + "...");
-  console.log("   Contract: " + otcAddress);
+  console.log(`\n📊 Verifying ${chainName}...`);
+  console.log(`   Contract: ${otcAddress}`);
 
   const client = createPublicClient({
     chain,
@@ -156,10 +156,10 @@ async function verifyEvm(
   ]);
 
   console.log("   ✅ Contract deployed");
-  console.log("   Owner: " + owner);
-  console.log("   Agent: " + agent);
-  console.log("   Next Consignment ID: " + nextConsignmentId);
-  console.log("   Next Offer ID: " + nextOfferId);
+  console.log(`   Owner: ${owner}`);
+  console.log(`   Agent: ${agent}`);
+  console.log(`   Next Consignment ID: ${nextConsignmentId}`);
+  console.log(`   Next Offer ID: ${nextOfferId}`);
 
   // Count active consignments and offers
   let activeOffers = 0;
@@ -195,11 +195,11 @@ async function verifyEvm(
     }
   }
 
-  console.log("   Active Offers: " + activeOffers);
-  console.log("   P2P Offers (commission=0): " + p2pOffers);
-  console.log("   Negotiable Offers: " + negotiableOffers);
-  console.log("   Paid Offers: " + paidOffers);
-  console.log("   Claimed/Executed: " + claimedOffers);
+  console.log(`   Active Offers: ${activeOffers}`);
+  console.log(`   P2P Offers (commission=0): ${p2pOffers}`);
+  console.log(`   Negotiable Offers: ${negotiableOffers}`);
+  console.log(`   Paid Offers: ${paidOffers}`);
+  console.log(`   Claimed/Executed: ${claimedOffers}`);
 }
 
 async function verifySolana() {
@@ -209,10 +209,10 @@ async function verifySolana() {
     throw new Error("HELIUS_API_KEY is required for Solana verification");
   }
 
-  const rpcUrl = "https://mainnet.helius-rpc.com/?api-key=" + HELIUS_KEY;
+  const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}`;
 
-  console.log("   Program: " + mainnetSolanaConfig.programId);
-  console.log("   Desk: " + mainnetSolanaConfig.desk);
+  console.log(`   Program: ${mainnetSolanaConfig.programId}`);
+  console.log(`   Desk: ${mainnetSolanaConfig.desk}`);
 
   const connection = new Connection(rpcUrl, "confirmed");
 
@@ -222,7 +222,7 @@ async function verifySolana() {
     throw new Error(`Program not deployed at ${mainnetSolanaConfig.programId}`);
   }
 
-  console.log("   ✅ Program deployed (" + programInfo.data.length + " bytes)");
+  console.log(`   ✅ Program deployed (${programInfo.data.length} bytes)`);
 
   // Check desk exists
   const deskPubkey = new PublicKey(mainnetSolanaConfig.desk);
@@ -230,18 +230,18 @@ async function verifySolana() {
   if (!deskInfo) {
     throw new Error(`Desk account not found at ${mainnetSolanaConfig.desk}`);
   }
-  console.log("   ✅ Desk account exists (" + deskInfo.data.length + " bytes)");
-  console.log("   Desk Owner: " + deskInfo.owner.toBase58());
+  console.log(`   ✅ Desk account exists (${deskInfo.data.length} bytes)`);
+  console.log(`   Desk Owner: ${deskInfo.owner.toBase58()}`);
 
   // Parse desk data (first 8 bytes are discriminator)
   // Next 32 bytes is owner pubkey
   const ownerBytes = deskInfo.data.slice(8, 40);
   const owner = new PublicKey(ownerBytes);
-  console.log("   Desk Owner Key: " + owner.toBase58());
+  console.log(`   Desk Owner Key: ${owner.toBase58()}`);
 
   // Get desk balance
   const deskBalance = await connection.getBalance(deskPubkey);
-  console.log("   Desk SOL Balance: " + deskBalance / LAMPORTS_PER_SOL);
+  console.log(`   Desk SOL Balance: ${deskBalance / LAMPORTS_PER_SOL}`);
 }
 
 async function main() {
@@ -285,7 +285,7 @@ async function main() {
   await verifySolana();
 
   // Summary
-  console.log("\n" + "═".repeat(70));
+  console.log(`\n${"═".repeat(70)}`);
   console.log("  VERIFICATION SUMMARY");
   console.log("═".repeat(70));
   console.log("\n✅ All contracts verified on-chain");

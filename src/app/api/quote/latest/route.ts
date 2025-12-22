@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { agentRuntime } from "@/lib/agent-runtime";
+import { validateCSRF } from "@/lib/csrf";
 import { walletToEntityId } from "@/lib/entityId";
 import type QuoteService from "@/lib/plugin-otc-desk/services/quoteService";
 import { parseOrThrow } from "@/lib/validation/helpers";
@@ -117,6 +118,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const csrfError = validateCSRF(request);
+  if (csrfError) return csrfError;
+
   const runtime = await agentRuntime.getRuntime();
   const quoteService = runtime.getService<QuoteService>("QuoteService");
 

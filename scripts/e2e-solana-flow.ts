@@ -109,9 +109,9 @@ function log(
 }
 
 function section(title: string) {
-  console.log("\n" + "═".repeat(70));
+  console.log(`\n${"═".repeat(70)}`);
   console.log(`  ${title}`);
-  console.log("═".repeat(70) + "\n");
+  console.log(`${"═".repeat(70)}\n`);
 }
 
 function formatLamports(lamports: BN | number | bigint): string {
@@ -121,7 +121,7 @@ function formatLamports(lamports: BN | number | bigint): string {
       : lamports instanceof BN
         ? lamports.toNumber()
         : lamports;
-  return (value / LAMPORTS_PER_SOL).toFixed(6) + " SOL";
+  return `${(value / LAMPORTS_PER_SOL).toFixed(6)} SOL`;
 }
 
 // =============================================================================

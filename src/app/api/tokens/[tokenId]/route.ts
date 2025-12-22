@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { ConsignmentDB, MarketDataDB, TokenDB } from "@/services/database";
+import type { Token } from "@/types";
 import { TokenByIdResponseSchema } from "@/types/validation/api-schemas";
 import { sanitizeConsignmentForBuyer } from "@/utils/consignment-sanitizer";
 
@@ -20,7 +21,7 @@ export async function GET(
   }
 
   // Token lookup - return 404 if not found, 400 if invalid format
-  let token;
+  let token: Token;
   try {
     token = await TokenDB.getToken(tokenId);
   } catch (err) {

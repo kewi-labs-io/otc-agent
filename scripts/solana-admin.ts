@@ -137,7 +137,7 @@ async function createTreasury(tokenMintStr: string): Promise<void> {
   const sig = await sendAndConfirmTransaction(connection, tx, [wallet]);
   console.log("✅ Treasury created");
   console.log("Transaction:", sig);
-  console.log("View on Solscan: https://solscan.io/tx/" + sig);
+  console.log(`View on Solscan: https://solscan.io/tx/${sig}`);
 }
 
 async function registerToken(tokenMintStr: string, priceUsd?: number): Promise<void> {
@@ -151,7 +151,7 @@ async function registerToken(tokenMintStr: string, priceUsd?: number): Promise<v
   console.log("Token Mint:", tokenMint.toBase58());
   console.log("Desk:", DESK.toBase58());
   console.log("Wallet:", wallet.publicKey.toBase58());
-  if (priceUsd) console.log("Initial Price: $" + priceUsd);
+  if (priceUsd) console.log(`Initial Price: $${priceUsd}`);
 
   // Derive token registry PDA
   const [tokenRegistryPda] = PublicKey.findProgramAddressSync(
@@ -187,7 +187,7 @@ async function registerToken(tokenMintStr: string, priceUsd?: number): Promise<v
 
   console.log("✅ Token registered");
   console.log("Transaction:", tx);
-  console.log("View on Solscan: https://solscan.io/tx/" + tx);
+  console.log(`View on Solscan: https://solscan.io/tx/${tx}`);
 
   // Set price if provided
   if (priceUsd) {
@@ -208,7 +208,7 @@ async function setPrice(tokenMintStr: string, priceUsd: number): Promise<void> {
   const price8d = new anchor.BN(Math.floor(priceUsd * 1e8));
 
   console.log("Token:", tokenMint.toBase58());
-  console.log("Price: $" + priceUsd + " (" + price8d.toString() + " in 8d format)");
+  console.log(`Price: $${priceUsd} (${price8d.toString()} in 8d format)`);
 
   // Derive token registry PDA
   const [tokenRegistryPda] = PublicKey.findProgramAddressSync(
@@ -231,7 +231,7 @@ async function setPrice(tokenMintStr: string, priceUsd: number): Promise<void> {
 
   console.log("✅ Price set");
   console.log("Transaction:", tx);
-  console.log("View on Solscan: https://solscan.io/tx/" + tx);
+  console.log(`View on Solscan: https://solscan.io/tx/${tx}`);
 }
 
 async function setLimits(
@@ -257,11 +257,11 @@ async function setLimits(
   console.log("Desk:", DESK.toBase58());
   console.log("Wallet:", wallet.publicKey.toBase58());
   console.log("\nNew Limits:");
-  console.log("  Min USD: $" + minUsdAmount + " (" + minUsd8d.toString() + " in 8d format)");
+  console.log(`  Min USD: $${minUsdAmount} (${minUsd8d.toString()} in 8d format)`);
   console.log("  Max Token Per Order:", maxTokenPerOrder);
-  console.log("  Quote Expiry:", quoteExpirySecs + " seconds");
-  console.log("  Default Unlock Delay:", defaultUnlockDelaySecs + " seconds");
-  console.log("  Max Lockup:", maxLockupSecs + " seconds");
+  console.log("  Quote Expiry:", `${quoteExpirySecs} seconds`);
+  console.log("  Default Unlock Delay:", `${defaultUnlockDelaySecs} seconds`);
+  console.log("  Max Lockup:", `${maxLockupSecs} seconds`);
 
   console.log("\nSetting limits...");
 
@@ -276,7 +276,7 @@ async function setLimits(
 
   console.log("✅ Limits set");
   console.log("Transaction:", tx);
-  console.log("View on Solscan: https://solscan.io/tx/" + tx);
+  console.log(`View on Solscan: https://solscan.io/tx/${tx}`);
 }
 
 async function showStatus(): Promise<void> {
@@ -332,7 +332,7 @@ async function showStatus(): Promise<void> {
     console.log("   Agent:", deskAccount.agent.toBase58());
     console.log("   Consignments:", deskAccount.nextConsignmentId.toNumber() - 1);
     console.log("   Offers:", deskAccount.nextOfferId.toNumber() - 1);
-    console.log("   Min USD: $" + deskAccount.minUsdAmount8D.toNumber() / 1e8);
+    console.log(`   Min USD: $${deskAccount.minUsdAmount8D.toNumber() / 1e8}`);
     console.log("   Max Token Per Order:", deskAccount.maxTokenPerOrder.toString());
     console.log("   Paused:", deskAccount.paused);
   }

@@ -6,9 +6,12 @@ import {
   invalidateConsignmentCache,
   invalidateTokenCache,
 } from "@/lib/cache";
+import { validateCSRF } from "@/lib/csrf";
 import { validationErrorResponse } from "@/lib/validation/helpers";
+import { getAuthHeaders, verifyWalletOwnership } from "@/lib/wallet-auth";
 import { ConsignmentService } from "@/services/consignmentService";
 import { ConsignmentDB, TokenDB } from "@/services/database";
+import type { OTCConsignment } from "@/types";
 import {
   ConsignmentsResponseSchema,
   CreateConsignmentRequestSchema,
@@ -50,7 +53,7 @@ export async function GET(request: NextRequest) {
 
   // For user-specific requests, bypass cache (private data)
   // For public requests, use serverless-optimized cache
-  let consignments;
+  let consignments: OTCConsignment[];
   if (consignerAddress) {
     // User's own consignments - don't use shared cache
     consignments = await ConsignmentDB.getConsignmentsByConsigner(
@@ -228,7 +231,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  let body;
+  const csrfError = validateCSRF(request);
+  if (csrfError) return csrfError;
+
+  let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
@@ -268,6 +274,35 @@ export async function POST(request: NextRequest) {
     tokenLogoUrl,
     tokenAddress,
   } = data;
+
+  // Verify wallet ownership via cryptographic signature
+  const auth = getAuthHeaders(request);
+  if (!auth) {
+    return NextResponse.json(
+      {
+        error:
+          "Authorization headers required (x-wallet-address, x-wallet-signature, x-auth-message, x-auth-timestamp)",
+      },
+      { status: 401 },
+    );
+  }
+
+  const verification = await verifyWalletOwnership(auth, chain);
+  if (!verification.valid) {
+    return NextResponse.json({ error: verification.error }, { status: 401 });
+  }
+
+  // Verify the authenticated wallet matches the claimed consigner address
+  const normalizedAuthAddress = chain === "solana" ? auth.address : auth.address.toLowerCase();
+  const normalizedConsigner =
+    chain === "solana" ? consignerAddress : consignerAddress.toLowerCase();
+
+  if (normalizedAuthAddress !== normalizedConsigner) {
+    return NextResponse.json(
+      { error: "Authenticated wallet does not match consigner address" },
+      { status: 403 },
+    );
+  }
 
   console.log("[Consignments] Creating consignment:", {
     tokenId,

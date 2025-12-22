@@ -5,6 +5,33 @@ import {
   SolanaRpcHealthResponseSchema,
 } from "@/types/validation/api-schemas";
 
+// Allowed Solana RPC methods - only read operations needed by the frontend
+const ALLOWED_SOLANA_RPC_METHODS = [
+  "getBalance",
+  "getAccountInfo",
+  "getTokenAccountsByOwner",
+  "getTokenAccountBalance",
+  "getTransaction",
+  "getSignatureStatuses",
+  "getLatestBlockhash",
+  "getBlockHeight",
+  "getSlot",
+  "getMinimumBalanceForRentExemption",
+  "getProgramAccounts",
+  "getMultipleAccounts",
+  "simulateTransaction",
+  "sendTransaction",
+  "getRecentPrioritizationFees",
+] as const;
+
+type AllowedSolanaMethod = (typeof ALLOWED_SOLANA_RPC_METHODS)[number];
+
+function isAllowedSolanaMethod(method: unknown): method is AllowedSolanaMethod {
+  return (
+    typeof method === "string" && ALLOWED_SOLANA_RPC_METHODS.includes(method as AllowedSolanaMethod)
+  );
+}
+
 // Proxy RPC requests to Helius to keep API key server-side
 // This prevents the Helius API key from being exposed in the browser
 
@@ -19,13 +46,21 @@ export async function POST(request: NextRequest) {
 
   const HELIUS_URL = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
 
-  let body;
+  let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
     const errorResponse = { error: "Invalid JSON body" };
     const validatedError = RpcProxyErrorResponseSchema.parse(errorResponse);
     return NextResponse.json(validatedError, { status: 400 });
+  }
+
+  // Validate method is in whitelist
+  const { method } = body;
+  if (!isAllowedSolanaMethod(method)) {
+    const errorResponse = { error: `RPC method "${method}" is not allowed` };
+    const validatedError = RpcProxyErrorResponseSchema.parse(errorResponse);
+    return NextResponse.json(validatedError, { status: 403 });
   }
 
   const response = await fetch(HELIUS_URL, {

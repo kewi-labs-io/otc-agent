@@ -24,39 +24,30 @@
       "correctness": {
         "noUnusedVariables": "warn",
         "noUnusedImports": "error",
-        "noUnusedFunctionParameters": "off",
         "useExhaustiveDependencies": "warn",
-        "useHookAtTopLevel": "off",
-        "noUnreachable": "warn"
-      },
-      "suspicious": {
-        "noExplicitAny": "warn",
-        "noImplicitAnyLet": "off",
-        "noArrayIndexKey": "off",
-        "useIterableCallbackReturn": "off"
+        "noUnreachable": "warn",
+        "useHookAtTopLevel": "warn"
       },
       "style": {
-        "noUnusedTemplateLiteral": "off",
-        "useTemplate": "off",
-        "noNonNullAssertion": "off"
+        "noNonNullAssertion": "warn"
       },
-      "a11y": {
-        "useAltText": "off",
-        "noSvgWithoutTitle": "off",
-        "useButtonType": "warn",
-        "noLabelWithoutControl": "off",
-        "noStaticElementInteractions": "off",
-        "useKeyWithClickEvents": "off",
-        "useSemanticElements": "off",
-        "noRedundantRoles": "off",
-        "useHtmlLang": "off"
+      "suspicious": {
+        "noImplicitAnyLet": "warn",
+        "noArrayIndexKey": "warn",
+        "useIterableCallbackReturn": "warn"
       },
       "complexity": {
-        "noForEach": "off",
-        "noStaticOnlyClass": "off"
+        "noStaticOnlyClass": "warn"
+      },
+      "a11y": {
+        "noSvgWithoutTitle": "warn",
+        "noLabelWithoutControl": "warn",
+        "useHtmlLang": "warn",
+        "noStaticElementInteractions": "warn",
+        "useKeyWithClickEvents": "warn"
       },
       "performance": {
-        "noImgElement": "off"
+        "noImgElement": "warn"
       }
     }
   },

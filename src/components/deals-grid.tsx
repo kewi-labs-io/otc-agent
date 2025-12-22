@@ -210,6 +210,7 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -265,7 +266,13 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
             disabled={currentPage === 1}
             className="!px-3 !py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -343,7 +350,13 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
             disabled={currentPage === totalPages}
             className="!px-3 !py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </Button>

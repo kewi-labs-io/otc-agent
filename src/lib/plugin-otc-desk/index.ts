@@ -30,7 +30,7 @@ import { tokenProvider as shawProvider } from "./providers/shaw";
 import { tokenProvider as elizaTokenProvider } from "./providers/token";
 import QuoteService from "./services/quoteService";
 import { UserSessionStorageService } from "./services/userSessionStorage";
-import type { EntitySourceMetadata, PaymentCurrency, QuoteMemory } from "./types";
+import type { EntitySourceMetadata, PaymentCurrency } from "./types";
 
 // Helper function to safely get entity metadata for a source
 function getEntitySourceMetadata(entity: Entity | null, source: string): EntitySourceMetadata {
@@ -292,6 +292,7 @@ const messageReceivedHandler = async ({
     const maxRetries = 3;
 
     while (retries < maxRetries) {
+      // biome-ignore lint/correctness/useHookAtTopLevel: Not a React hook - Eliza runtime method
       const response = await runtime.useModel(ModelType.TEXT_LARGE, {
         prompt,
       });
@@ -350,13 +351,15 @@ const messageReceivedHandler = async ({
     }
 
     // Parse and save quote if present in response (don't trigger action handler)
+    // SECURITY: Route through QuoteService to ensure proper cryptographic signatures
     const quoteMatch = responseContent.match(/<quote>([\s\S]*?)<\/quote>/i);
     if (quoteMatch) {
-      console.log("[MessageHandler] Detected <quote> XML in response, parsing and saving");
+      console.log(
+        "[MessageHandler] Detected <quote> XML in response, validating through QuoteService",
+      );
       // Worst possible deal defaults (lowest discount, longest lockup)
       const DEFAULT_MIN_DISCOUNT_BPS = 100; // 1% - lowest discount
       const DEFAULT_MAX_LOCKUP_MONTHS = 12; // 12 months - longest lockup
-      const DEFAULT_MAX_LOCKUP_DAYS = 365;
 
       // Simple regex-based parsing (server-side compatible)
       const quoteXml = quoteMatch[0];
@@ -369,88 +372,69 @@ const messageReceivedHandler = async ({
         return val ? parseFloat(val) : defaultVal;
       };
 
-      const quoteId = getTag("quoteId");
-      if (quoteId) {
-        const { walletToEntityId } = await import("@/lib/entityId");
-        const entityId = message.entityId.toString();
+      const { walletToEntityId } = await import("@/lib/entityId");
+      const entityId = message.entityId.toString();
 
-        const paymentCurrencyRaw = getTag("paymentCurrency");
-        const paymentCurrency: PaymentCurrency = paymentCurrencyRaw === "USDC" ? "USDC" : "ETH";
+      const paymentCurrencyRaw = getTag("paymentCurrency");
+      const paymentCurrency: PaymentCurrency = paymentCurrencyRaw === "USDC" ? "USDC" : "ETH";
 
-        // FAIL-FAST: Required token metadata must be present
-        // Extract and validate token metadata before creating quote
-        const tokenChain = getTag("tokenChain") || "base"; // Default to "base" if not specified
-        const tokenId = getTag("tokenId");
-        const tokenSymbol = getTag("tokenSymbol");
-        const tokenName = getTag("tokenName");
-        const tokenAmount = getTag("tokenAmount");
+      // FAIL-FAST: Required token metadata must be present
+      // Extract and validate token metadata before creating quote
+      const tokenChain = getTag("tokenChain") || "base"; // Default to "base" if not specified
+      const tokenId = getTag("tokenId");
+      const tokenSymbol = getTag("tokenSymbol");
+      const tokenName = getTag("tokenName");
+      const tokenAmount = getTag("tokenAmount");
+      const discountBps = getNumTag("discountBps", DEFAULT_MIN_DISCOUNT_BPS);
+      const lockupMonths = getNumTag("lockupMonths", DEFAULT_MAX_LOCKUP_MONTHS);
 
-        if (!tokenId) {
-          throw new Error("Quote missing required tokenId field");
+      if (!tokenId) {
+        console.error("[MessageHandler] Quote XML missing required tokenId field");
+        // Don't save invalid quote - fail silently to avoid breaking the response flow
+      } else if (!tokenSymbol) {
+        console.error("[MessageHandler] Quote XML missing required tokenSymbol field");
+      } else if (!tokenName) {
+        console.error("[MessageHandler] Quote XML missing required tokenName field");
+      } else if (!tokenAmount) {
+        console.error("[MessageHandler] Quote XML missing required tokenAmount field");
+      } else {
+        // Get QuoteService to create a properly signed quote
+        const quoteService = runtime.getService<QuoteService>("QuoteService");
+        if (!quoteService) {
+          console.error("[MessageHandler] QuoteService not available - cannot create signed quote");
+        } else {
+          try {
+            // Use QuoteService.createQuote which generates proper cryptographic signatures
+            const validatedQuote = await quoteService.createQuote({
+              entityId: walletToEntityId(entityId),
+              beneficiary: entityId.toLowerCase(),
+              tokenAmount,
+              discountBps,
+              apr: 0,
+              lockupMonths,
+              paymentCurrency,
+              priceUsdPerToken: getNumTag("pricePerToken"),
+              totalUsd: 0,
+              discountUsd: 0,
+              discountedUsd: 0,
+              paymentAmount: "0",
+              tokenId,
+              tokenSymbol,
+              tokenName,
+              tokenLogoUrl: getTag("tokenLogoUrl") || "",
+              chain: tokenChain as "evm" | "solana" | "base" | "bsc" | "ethereum",
+              consignmentId: getTag("consignmentId") || "",
+              agentCommissionBps: 0, // P2P quote from LLM - no commission
+            });
+
+            console.log(
+              `[MessageHandler] Created properly signed quote: ${validatedQuote.quoteId} (signature: ${validatedQuote.signature.substring(0, 16)}...)`,
+            );
+          } catch (error) {
+            console.error("[MessageHandler] Failed to create signed quote:", error);
+            // Don't save quote without proper signature - security violation
+          }
         }
-        if (!tokenSymbol) {
-          throw new Error("Quote missing required tokenSymbol field");
-        }
-        if (!tokenName) {
-          throw new Error("Quote missing required tokenName field");
-        }
-        if (!tokenAmount) {
-          throw new Error("Quote missing required tokenAmount field");
-        }
-
-        const quoteData: QuoteMemory = {
-          id: (await import("uuid")).v4(),
-          quoteId,
-          entityId: walletToEntityId(entityId),
-          beneficiary: entityId.toLowerCase(),
-          tokenAmount,
-          discountBps: getNumTag("discountBps", DEFAULT_MIN_DISCOUNT_BPS),
-          apr: 0,
-          lockupMonths: getNumTag("lockupMonths", DEFAULT_MAX_LOCKUP_MONTHS),
-          lockupDays: getNumTag("lockupDays", DEFAULT_MAX_LOCKUP_DAYS),
-          paymentCurrency,
-          priceUsdPerToken: getNumTag("pricePerToken"),
-          totalUsd: 0,
-          discountUsd: 0,
-          discountedUsd: 0,
-          paymentAmount: "0",
-          signature: "",
-          status: "active",
-          createdAt: Date.now(),
-          executedAt: 0,
-          rejectedAt: 0,
-          approvedAt: 0,
-          offerId: "",
-          transactionHash: "",
-          blockNumber: 0,
-          rejectionReason: "",
-          approvalNote: "",
-          chain: tokenChain as QuoteMemory["chain"],
-          tokenId: tokenId,
-          tokenSymbol: tokenSymbol,
-          tokenName: tokenName,
-          tokenLogoUrl: getTag("tokenLogoUrl") || "",
-          consignmentId: getTag("consignmentId") || "",
-          agentCommissionBps: 0, // P2P quote from LLM - no commission
-        };
-
-        await runtime.setCache(`quote:${quoteId}`, quoteData);
-
-        const allQuotes = (await runtime.getCache<string[]>("all_quotes")) || [];
-        if (!allQuotes.includes(quoteId)) {
-          allQuotes.push(quoteId);
-          await runtime.setCache("all_quotes", allQuotes);
-        }
-
-        const quoteEntityId = walletToEntityId(entityId);
-        const entityQuoteIds =
-          (await runtime.getCache<string[]>(`entity_quotes:${quoteEntityId}`)) || [];
-        if (!entityQuoteIds.includes(quoteId)) {
-          entityQuoteIds.push(quoteId);
-          await runtime.setCache(`entity_quotes:${quoteEntityId}`, entityQuoteIds);
-        }
-
-        console.log("[MessageHandler] Quote saved to cache and indexed:", quoteId);
       }
     }
 

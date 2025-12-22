@@ -8,23 +8,54 @@ import {
 } from "@/types/validation/service-schemas";
 import { MarketDataDB, type TokenMarketData } from "./database";
 
-interface CoinGeckoPrice {
-  [key: string]: {
-    usd: number;
-    usd_market_cap: number;
-    usd_24h_vol: number;
-    usd_24h_change: number;
-  };
+// Price sanity threshold: $1 billion - reject obviously manipulated prices
+const MAX_SANE_PRICE_USD = 1_000_000_000;
+
+// CoinGecko response validation schema
+const CoinGeckoPriceDataSchema = z.object({
+  usd: z.number().positive("Price must be positive"),
+  usd_market_cap: z.number().nonnegative().optional(),
+  usd_24h_vol: z.number().nonnegative().optional(),
+  usd_24h_change: z.number().optional(),
+});
+
+const CoinGeckoPriceSchema = z.record(z.string(), CoinGeckoPriceDataSchema);
+
+// Birdeye response validation schema
+const BirdeyeResponseSchema = z.object({
+  success: z.boolean().optional(),
+  data: z.object({
+    value: z.number().positive("Price must be positive"),
+    updateUnixTime: z.number(),
+    updateHumanTime: z.string().optional(),
+    liquidity: z.number().nonnegative().optional().default(0),
+    volume24h: z.number().nonnegative().optional().default(0),
+    priceChange24hPercent: z.number().optional().default(0),
+  }),
+});
+
+/**
+ * Validate external API response with detailed error reporting
+ */
+function validateApiResponse<T>(schema: z.ZodSchema<T>, data: unknown, apiName: string): T {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    const errors = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    throw new Error(`Invalid ${apiName} response: ${errors}`);
+  }
+  return result.data;
 }
 
-interface BirdeyeResponse {
-  data: {
-    value: number;
-    updateUnixTime: number;
-    liquidity: number;
-    volume24h: number;
-    priceChange24hPercent: number;
-  };
+/**
+ * Validate price is within sane bounds to detect manipulation
+ */
+function validatePriceSanity(price: number, source: string): void {
+  if (price > MAX_SANE_PRICE_USD) {
+    throw new Error(`${source} price ${price} exceeds sanity threshold of ${MAX_SANE_PRICE_USD}`);
+  }
+  if (price < 0) {
+    throw new Error(`${source} price ${price} is negative`);
+  }
 }
 
 export class MarketDataService {
@@ -69,16 +100,21 @@ export class MarketDataService {
     const response = await fetch(url, { headers });
     if (!response.ok) throw new Error(`CoinGecko API error: ${response.status}`);
 
-    const data: CoinGeckoPrice = await response.json();
+    const rawData: unknown = await response.json();
+    const data = validateApiResponse(CoinGeckoPriceSchema, rawData, "CoinGecko");
+
     const tokenData = data[tokenAddress.toLowerCase()];
     if (!tokenData) throw new Error("Token data not found");
+
+    // Validate price sanity to detect manipulation
+    validatePriceSanity(tokenData.usd, "CoinGecko");
 
     return {
       tokenId: `token-${chain}-${tokenAddress.toLowerCase()}`,
       priceUsd: tokenData.usd,
-      marketCap: tokenData.usd_market_cap,
-      volume24h: tokenData.usd_24h_vol,
-      priceChange24h: tokenData.usd_24h_change,
+      marketCap: tokenData.usd_market_cap ?? 0,
+      volume24h: tokenData.usd_24h_vol ?? 0,
+      priceChange24h: tokenData.usd_24h_change ?? 0,
       liquidity: 0,
       lastUpdated: Date.now(),
     };
@@ -122,7 +158,11 @@ export class MarketDataService {
 
     if (!response.ok) throw new Error(`Birdeye API error: ${response.status}`);
 
-    const data: BirdeyeResponse = await response.json();
+    const rawData: unknown = await response.json();
+    const data = validateApiResponse(BirdeyeResponseSchema, rawData, "Birdeye");
+
+    // Validate price sanity to detect manipulation
+    validatePriceSanity(data.data.value, "Birdeye");
 
     return {
       tokenId: `token-solana-${tokenAddress}`,

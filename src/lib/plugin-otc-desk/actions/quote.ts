@@ -334,11 +334,13 @@ export const quoteAction: Action = {
 
   validate: async () => true,
 
+  // Handler signature matches Eliza's Action interface
+  // _options uses {[key: string]: unknown} per Eliza's framework type definition
   handler: async (
     runtime: IAgentRuntime,
     message: Memory,
     _state: State | undefined,
-    _options?: { [key: string]: unknown },
+    _options?: { [key: string]: unknown }, // Eliza framework type - cannot change
     callback?: HandlerCallback,
   ): Promise<ActionResult> => {
     console.log("[CREATE_OTC_QUOTE] Action handler called");
@@ -549,7 +551,7 @@ export const quoteAction: Action = {
 
       if (callback) {
         await callback({
-          text: textResponse + "\n\n<!-- XML_START -->\n" + xmlResponse + "\n<!-- XML_END -->",
+          text: `${textResponse}\n\n<!-- XML_START -->\n${xmlResponse}\n<!-- XML_END -->`,
           action: "QUOTE_NEGOTIATED",
           content: { xml: xmlResponse, quote, type: "otc_quote" } as Content,
         });
@@ -674,7 +676,7 @@ export const quoteAction: Action = {
 
     if (callback) {
       await callback({
-        text: textResponse + "\n\n<!-- XML_START -->\n" + xmlResponse + "\n<!-- XML_END -->",
+        text: `${textResponse}\n\n<!-- XML_START -->\n${xmlResponse}\n<!-- XML_END -->`,
         action: "QUOTE_GENERATED",
         content: { xml: xmlResponse, quote, type: "otc_quote" } as Content,
       });

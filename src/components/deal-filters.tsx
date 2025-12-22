@@ -59,6 +59,7 @@ export const DealFilters = memo(function DealFilters({
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -75,11 +76,15 @@ export const DealFilters = memo(function DealFilters({
         />
 
         <div className="flex items-center gap-2">
-          <label className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
+          <label
+            htmlFor="type-filter"
+            className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-nowrap"
+          >
             Type:
           </label>
           <div className="relative">
             <select
+              id="type-filter"
               value={currentType}
               onChange={handleTypeSelectChange}
               className="appearance-none rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 pl-3 pr-9 py-2 text-sm cursor-pointer"
@@ -93,6 +98,7 @@ export const DealFilters = memo(function DealFilters({
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -121,6 +127,7 @@ export const DealFilters = memo(function DealFilters({
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"

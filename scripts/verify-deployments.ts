@@ -16,7 +16,12 @@ const DEPLOYMENTS = {
   },
 };
 
-async function checkDeployment(name: string, chain: Parameters<typeof createPublicClient>[0]["chain"], rpc: string, addresses: { otc: string; registrationHelper: string }) {
+async function checkDeployment(
+  name: string,
+  chain: Parameters<typeof createPublicClient>[0]["chain"],
+  rpc: string,
+  addresses: { otc: string; registrationHelper: string },
+) {
   console.log(`\n📍 ${name.toUpperCase()}`);
   const client = createPublicClient({
     chain,

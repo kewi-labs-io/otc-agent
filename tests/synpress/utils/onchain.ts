@@ -356,7 +356,7 @@ export async function getSolanaTokenBalance(owner: string, mint: string): Promis
 
   const connection = solanaConnection();
 
-  let accounts;
+  let accounts: Awaited<ReturnType<Connection["getParsedTokenAccountsByOwner"]>>;
   try {
     accounts = await connection.getParsedTokenAccountsByOwner(new PublicKey(owner), {
       mint: new PublicKey(mint),

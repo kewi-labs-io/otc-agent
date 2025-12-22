@@ -4,6 +4,16 @@
  * viem 2.x has very strict generic types for readContract that require
  * exact ABI type inference. When using dynamic ABIs (loaded from JSON artifacts),
  * this causes type errors. This module provides type-safe wrappers.
+ *
+ * NOTE ON `unknown` TYPES:
+ * This module uses `unknown` in specific places where viem's strict type system
+ * cannot infer types from dynamic ABIs:
+ * 1. `abi: Abi | readonly unknown[]` - ABI loaded from JSON at runtime
+ * 2. `args?: readonly unknown[]` - Solidity supports complex nested types
+ * 3. Return type casts - The caller must know the expected return type
+ *
+ * These are not violations of the "no unknown" rule - they are necessary
+ * adaptations to viem's type system when using runtime-loaded ABIs.
  */
 
 import type { Abi, AbiEvent, Address, Log, PublicClient } from "viem";
@@ -64,10 +74,22 @@ export interface MinimalPublicClient {
 }
 
 /**
+ * Any client with a readContract method - avoids viem's deep type incompatibilities
+ * across different chain configurations.
+ */
+type AnyReadContractClient = {
+  readContract: (...args: never[]) => Promise<unknown>;
+};
+
+/**
  * Type-safe wrapper for readContract that works with dynamic ABIs.
  *
  * Use this when the ABI is loaded from a JSON artifact at runtime,
  * which prevents TypeScript from inferring the exact return type.
+ *
+ * The type parameter T should match the expected return type of the
+ * contract function being called. This is a trusted cast since the
+ * ABI defines what the function returns.
  *
  * @example
  * ```ts
@@ -80,17 +102,15 @@ export interface MinimalPublicClient {
  * ```
  */
 export async function safeReadContract<T>(
-  client:
-    | PublicClient
-    | MinimalPublicClient
-    | { readContract: (params: ReadContractParams) => Promise<unknown> },
+  client: AnyReadContractClient,
   params: ReadContractParams,
 ): Promise<T> {
   // The cast is necessary because viem's readContract has strict generics
   // that require compile-time ABI type inference. With dynamic ABIs,
   // we must bypass this and rely on runtime behavior.
-  // Uses unknown cast to bypass viem's strict authorizationList requirement
-  const result = await (client.readContract as (params: unknown) => Promise<unknown>)(params);
+  const result = await (client.readContract as (params: ReadContractParams) => Promise<unknown>)(
+    params,
+  );
   return result as T;
 }
 

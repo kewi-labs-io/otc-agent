@@ -220,7 +220,7 @@ async function main() {
   results.Solana = await verifySolana();
 
   // Summary
-  console.log("\n" + "═".repeat(70));
+  console.log(`\n${"═".repeat(70)}`);
   console.log("  DEPLOYMENT SUMMARY");
   console.log("═".repeat(70));
 
@@ -231,7 +231,7 @@ async function main() {
   }
 
   // P2P Feature Verification
-  console.log("\n" + "═".repeat(70));
+  console.log(`\n${"═".repeat(70)}`);
   console.log("  P2P AUTO-APPROVAL FEATURE STATUS");
   console.log("═".repeat(70));
   console.log(`

@@ -152,7 +152,7 @@ describe("Service Layer E2E Tests", () => {
         if (skipIfNoServer()) return;
         if (skipIfNoServer()) return;
 
-        const tokenAddress = "0x" + Math.random().toString(16).slice(2, 42).padEnd(40, "0");
+        const tokenAddress = `0x${Math.random().toString(16).slice(2, 42).padEnd(40, "0")}`;
 
         const { status, data } = await apiCall<{
           success: boolean;
@@ -166,7 +166,7 @@ describe("Service Layer E2E Tests", () => {
           };
           error?: string;
         }>("POST", "/api/tokens", {
-          symbol: "TEST" + Date.now().toString(36).slice(-4).toUpperCase(),
+          symbol: `TEST${Date.now().toString(36).slice(-4).toUpperCase()}`,
           name: "Test Token",
           contractAddress: tokenAddress,
           chain: "base",
@@ -476,9 +476,8 @@ describe("Service Layer E2E Tests", () => {
       async () => {
         if (skipIfNoServer()) return;
         // First create a test token
-        const tokenAddress =
-          "0x" + Math.random().toString(16).slice(2, 42).padEnd(40, "0").toLowerCase();
-        const tokenSymbol = "CSN" + Date.now().toString(36).slice(-4).toUpperCase();
+        const tokenAddress = `0x${Math.random().toString(16).slice(2, 42).padEnd(40, "0").toLowerCase()}`;
+        const tokenSymbol = `CSN${Date.now().toString(36).slice(-4).toUpperCase()}`;
 
         await apiCall("POST", "/api/tokens", {
           symbol: tokenSymbol,
@@ -596,7 +595,7 @@ describe("Service Layer E2E Tests", () => {
       "validateQuotePrice - validates through deal-completion API",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await apiCall<{ error?: string }>("POST", "/api/deal-completion", {
+        const { status } = await apiCall<{ error?: string }>("POST", "/api/deal-completion", {
           quoteId: "nonexistent-quote",
           action: "complete",
           tokenId: "token-base-test",
@@ -647,9 +646,8 @@ describe("Service Layer E2E Tests", () => {
         "createToken and getToken roundtrip",
         async () => {
           if (skipIfNoServer()) return;
-          const tokenAddress =
-            "0x" + Math.random().toString(16).slice(2, 42).padEnd(40, "0").toLowerCase();
-          const tokenSymbol = "DB" + Date.now().toString(36).slice(-4).toUpperCase();
+          const tokenAddress = `0x${Math.random().toString(16).slice(2, 42).padEnd(40, "0").toLowerCase()}`;
+          const tokenSymbol = `DB${Date.now().toString(36).slice(-4).toUpperCase()}`;
 
           // Create
           const createRes = await apiCall<{

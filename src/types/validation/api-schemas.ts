@@ -63,17 +63,31 @@ export const CreateConsignmentRequestSchema = z
       .union([BigIntStringSchema, z.number(), z.string()])
       .transform((val) => {
         if (typeof val === "number") {
-          return Math.floor(val).toString();
+          if (!Number.isInteger(val)) {
+            throw new Error(
+              "Amount must be a whole number - decimals are not allowed. Use the smallest unit (e.g., wei for ETH).",
+            );
+          }
+          if (val < 0) {
+            throw new Error("Amount must be non-negative");
+          }
+          return val.toString();
         }
         if (typeof val === "string") {
+          // Reject decimal inputs
+          if (val.includes(".")) {
+            throw new Error(
+              "Amount must be a whole number - decimals are not allowed. Use the smallest unit (e.g., wei for ETH).",
+            );
+          }
           const num = Number(val);
           if (Number.isNaN(num) || !Number.isFinite(num)) {
             throw new Error(`Invalid number: ${val}`);
           }
-          if (!val.includes(".") && !val.toLowerCase().includes("e")) {
-            return BigInt(val).toString();
+          if (num < 0) {
+            throw new Error("Amount must be non-negative");
           }
-          return Math.floor(num).toString();
+          return BigInt(val).toString();
         }
         return val;
       })
@@ -97,17 +111,31 @@ export const CreateConsignmentRequestSchema = z
       .transform((val) => {
         if (val === undefined) return undefined;
         if (typeof val === "number") {
-          return Math.floor(val).toString();
+          if (!Number.isInteger(val)) {
+            throw new Error(
+              "minDealAmount must be a whole number - decimals are not allowed. Use the smallest unit (e.g., wei for ETH).",
+            );
+          }
+          if (val < 0) {
+            throw new Error("minDealAmount must be non-negative");
+          }
+          return val.toString();
         }
         if (typeof val === "string") {
+          // Reject decimal inputs
+          if (val.includes(".")) {
+            throw new Error(
+              "minDealAmount must be a whole number - decimals are not allowed. Use the smallest unit (e.g., wei for ETH).",
+            );
+          }
           const num = Number(val);
           if (Number.isNaN(num) || !Number.isFinite(num)) {
             throw new Error(`Invalid number: ${val}`);
           }
-          if (!val.includes(".") && !val.toLowerCase().includes("e")) {
-            return BigInt(val).toString();
+          if (num < 0) {
+            throw new Error("minDealAmount must be non-negative");
           }
-          return Math.floor(num).toString();
+          return BigInt(val).toString();
         }
         return val;
       }),
@@ -117,17 +145,31 @@ export const CreateConsignmentRequestSchema = z
       .transform((val) => {
         if (val === undefined) return undefined;
         if (typeof val === "number") {
-          return Math.floor(val).toString();
+          if (!Number.isInteger(val)) {
+            throw new Error(
+              "maxDealAmount must be a whole number - decimals are not allowed. Use the smallest unit (e.g., wei for ETH).",
+            );
+          }
+          if (val < 0) {
+            throw new Error("maxDealAmount must be non-negative");
+          }
+          return val.toString();
         }
         if (typeof val === "string") {
+          // Reject decimal inputs
+          if (val.includes(".")) {
+            throw new Error(
+              "maxDealAmount must be a whole number - decimals are not allowed. Use the smallest unit (e.g., wei for ETH).",
+            );
+          }
           const num = Number(val);
           if (Number.isNaN(num) || !Number.isFinite(num)) {
             throw new Error(`Invalid number: ${val}`);
           }
-          if (!val.includes(".") && !val.toLowerCase().includes("e")) {
-            return BigInt(val).toString();
+          if (num < 0) {
+            throw new Error("maxDealAmount must be non-negative");
           }
-          return Math.floor(num).toString();
+          return BigInt(val).toString();
         }
         return val;
       }),

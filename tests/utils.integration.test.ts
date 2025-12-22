@@ -272,30 +272,37 @@ describe("Retry Cache Utilities", () => {
   });
 
   describe("fetchJsonWithRetryAndCache", () => {
-    test("fetches real JSON and caches it", async () => {
-      const { fetchJsonWithRetryAndCache, getCached } = await import("@/utils/retry-cache");
+    // Skip external API tests in CI to avoid rate limit flakiness
+    const skipInCI = process.env.CI === "true";
 
-      // Use httpbin.org which is more reliable for testing
-      const url = "https://httpbin.org/json";
-      const cacheKey = `json-test-${Date.now()}`;
+    test.skipIf(skipInCI)(
+      "fetches real JSON and caches it",
+      async () => {
+        const { fetchJsonWithRetryAndCache, getCached } = await import("@/utils/retry-cache");
 
-      interface HttpBinResponse {
-        slideshow: { title: string };
-      }
+        // Use httpbin.org which is more reliable for testing
+        const url = "https://httpbin.org/json";
+        const cacheKey = `json-test-${Date.now()}`;
 
-      const data = await fetchJsonWithRetryAndCache<HttpBinResponse>(url, undefined, {
-        cacheKey,
-        cacheTtlMs: 60000,
-      });
+        interface HttpBinResponse {
+          slideshow: { title: string };
+        }
 
-      expect(data.slideshow).toBeDefined();
-      expect(data.slideshow.title).toBeDefined();
+        const data = await fetchJsonWithRetryAndCache<HttpBinResponse>(url, undefined, {
+          cacheKey,
+          cacheTtlMs: 60000,
+        });
 
-      // Should be cached
-      const cached = getCached<HttpBinResponse>(cacheKey);
-      expect(cached).toBeDefined();
-      expect(cached!.slideshow.title).toBe(data.slideshow.title);
-    }, 15_000);
+        expect(data.slideshow).toBeDefined();
+        expect(data.slideshow.title).toBeDefined();
+
+        // Should be cached
+        const cached = getCached<HttpBinResponse>(cacheKey);
+        expect(cached).toBeDefined();
+        expect(cached?.slideshow.title).toBe(data.slideshow.title);
+      },
+      15_000,
+    );
   });
 });
 
@@ -860,10 +867,13 @@ describe("Address Utils - Comprehensive", () => {
 // VIEM UTILS TESTS - Real Integration
 // =============================================================================
 describe("Viem Utils - Real Integration", () => {
-  const TIMEOUT = 15_000;
+  const TIMEOUT = 30_000;
+
+  // Skip integration tests in CI to avoid rate limit flakiness
+  const skipInCI = process.env.CI === "true";
 
   describe("safeReadContract", () => {
-    test(
+    test.skipIf(skipInCI)(
       "reads real ERC20 data from Ethereum mainnet (USDC)",
       async () => {
         const { createPublicClient, http } = await import("viem");
@@ -1979,7 +1989,7 @@ describe("Data Verification - Inspect Actual Outputs", () => {
 
       const rawOffer = [
         5n, // consignmentId
-        "0x" + "ab".repeat(32), // tokenId (32 bytes)
+        `0x${"ab".repeat(32)}`, // tokenId (32 bytes)
         "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", // beneficiary
         1500000000000000000n, // tokenAmount (1.5e18)
         750n, // discountBps (7.5%)
@@ -2002,7 +2012,7 @@ describe("Data Verification - Inspect Actual Outputs", () => {
 
       // Verify each field
       expect(parsed.consignmentId).toBe(5n);
-      expect(parsed.tokenId).toBe("0x" + "ab".repeat(32));
+      expect(parsed.tokenId).toBe(`0x${"ab".repeat(32)}`);
       expect(parsed.beneficiary).toBe("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
       expect(parsed.tokenAmount).toBe(1500000000000000000n);
       expect(parsed.discountBps).toBe(750n);

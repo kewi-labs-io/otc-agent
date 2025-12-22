@@ -156,13 +156,13 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
     }
 
     // For local development, BSC is not available (no local BSC fork)
-    // Provide a stub config with mainnet RPC - safe for read-only operations
+    // Provide a stub config with proxy RPC - safe for read-only operations
     // but contracts.otc is undefined so writes will fail-fast
     if (isLocal) {
       return {
         id: chain.id.toString(),
         name: "BSC (Not Available Locally)",
-        rpcUrl: "https://bsc-dataseed1.binance.org", // Public mainnet RPC (read-only)
+        rpcUrl: "/api/rpc/bsc", // Use proxy for all BSC RPC (keeps API key server-side)
         explorerUrl: "https://bscscan.com",
         nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
         contracts: {
@@ -187,9 +187,7 @@ export const SUPPORTED_CHAINS: Record<Chain, ChainConfig> = {
     return {
       id: chain.id.toString(),
       name: isMainnet ? "BSC" : "BSC Testnet",
-      rpcUrl: isMainnet
-        ? "https://bsc-dataseed1.binance.org"
-        : "https://data-seed-prebsc-1-s1.binance.org:8545",
+      rpcUrl: "/api/rpc/bsc", // Use proxy for all BSC RPC (keeps API key server-side)
       explorerUrl: isMainnet ? "https://bscscan.com" : "https://testnet.bscscan.com",
       nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
       contracts: {
@@ -286,10 +284,17 @@ export function getChainFromNumericId(chainId: number): Chain | null {
 }
 
 /**
+ * Type guard to check if config has viemChain
+ */
+function hasViemChain(config: ChainConfig): config is ChainConfig & { viemChain: ViemChain } {
+  return config.viemChain !== undefined;
+}
+
+/**
  * Get all viem chains for wagmi configuration
  */
 export function getAllViemChains(): ViemChain[] {
   return Object.values(SUPPORTED_CHAINS)
-    .filter((config) => config.viemChain)
-    .map((config) => config.viemChain!);
+    .filter(hasViemChain)
+    .map((config) => config.viemChain);
 }

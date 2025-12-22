@@ -8,6 +8,8 @@
  *
  * Set to true to enable render tracking during development.
  */
+import type React from "react";
+
 const RENDER_TRACKING_ENABLED = false;
 
 type RenderRecord = {
@@ -17,6 +19,23 @@ type RenderRecord = {
   lastProps?: Record<string, string>;
   lastState?: Record<string, string>;
 };
+
+/**
+ * React prop/state value types - the common types that appear in component props and state.
+ * This is more specific than `unknown` but covers the practical reality of React components.
+ */
+type ReactValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | ReactValue[]
+  | { [key: string]: ReactValue }
+  // Function props (event handlers, callbacks, render props)
+  | ((...args: ReactValue[]) => ReactValue | undefined)
+  // React nodes (JSX elements, fragments, portals)
+  | React.ReactNode;
 
 const renderCounts = new Map<string, RenderRecord>();
 
@@ -46,14 +65,17 @@ const CONFIG = {
 };
 
 /**
- * Get a serializable summary of a value for debugging
+ * Get a serializable summary of a value for debugging.
+ * Accepts ReactValue which covers all common prop/state types.
  */
-function summarizeValue(value: unknown): string {
+function summarizeValue(value: ReactValue): string {
   if (value === null) return "null";
   if (value === undefined) return "undefined";
   if (typeof value === "function") return `fn:${value.name || "anonymous"}`;
   if (typeof value === "object") {
     if (Array.isArray(value)) return `array[${value.length}]`;
+    // React elements have a $$typeof property
+    if ("$$typeof" in value) return "ReactNode";
     const keys = Object.keys(value);
     if (keys.length === 0) return "{}";
     if (keys.length <= 3) return `{${keys.join(",")}}`;
@@ -68,7 +90,7 @@ function summarizeValue(value: unknown): string {
 /**
  * Get a props summary for debugging
  */
-function getPropsSnapshot(props: Record<string, unknown>): Record<string, string> {
+function getPropsSnapshot(props: Record<string, ReactValue>): Record<string, string> {
   const snapshot: Record<string, string> = {};
   for (const [key, value] of Object.entries(props)) {
     if (key === "children") {
@@ -118,8 +140,8 @@ function findChanges(
  */
 export function trackRender(
   componentName: string,
-  props?: Record<string, unknown>,
-  state?: Record<string, unknown>,
+  props?: Record<string, ReactValue>,
+  state?: Record<string, ReactValue>,
 ): void {
   // Render tracking disabled
   if (!RENDER_TRACKING_ENABLED) return;
@@ -217,8 +239,8 @@ export function trackRender(
  */
 export function useRenderTracker(
   componentName: string,
-  props?: Record<string, unknown>,
-  state?: Record<string, unknown>,
+  props?: Record<string, ReactValue>,
+  state?: Record<string, ReactValue>,
 ): void {
   trackRender(componentName, props, state);
 }

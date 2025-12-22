@@ -247,3 +247,56 @@ export const OfferSchema = z.object({
   agentCommissionBps: z.number().int().min(0).max(150), // 0 for P2P, 25-150 for negotiated
 });
 export type Offer = z.infer<typeof OfferSchema>;
+
+//==============================================================================
+// DEAL QUOTE HOOK
+//==============================================================================
+
+// DealQuote schema for executed quotes (from deal-completion component)
+export const DealQuoteSchema = z.object({
+  quoteId: z.string().min(1),
+  entityId: z.string().min(1),
+  beneficiary: AddressSchema,
+  tokenAmount: BigIntStringSchema,
+  lockupMonths: z.number().int().min(0),
+  discountBps: BpsSchema,
+  totalUsd: NonNegativeNumberSchema,
+  discountUsd: NonNegativeNumberSchema,
+  discountedUsd: NonNegativeNumberSchema,
+  paymentAmount: BigIntStringSchema,
+  paymentCurrency: PaymentCurrencySchema,
+  transactionHash: z.string().optional(),
+  offerId: z.string().optional(),
+  status: QuoteStatusSchema.optional(),
+  chain: z.enum(["evm", "solana"]).optional(),
+});
+export type DealQuoteValidated = z.infer<typeof DealQuoteSchema>;
+
+//==============================================================================
+// POOL CHECK HOOK
+//==============================================================================
+
+// Pool info schema
+export const PoolCheckPoolSchema = z.object({
+  address: z.string().min(1),
+  protocol: z.string().min(1),
+  tvlUsd: NonNegativeNumberSchema,
+  priceUsd: NonNegativeNumberSchema.optional(),
+  baseToken: z.enum(["USDC", "WETH"]),
+});
+
+// Pool check result schema
+export const PoolCheckResultSchema = z.object({
+  success: z.boolean(),
+  tokenAddress: AddressSchema,
+  chain: ChainSchema,
+  isRegistered: z.boolean(),
+  hasPool: z.boolean(),
+  pool: PoolCheckPoolSchema.optional(),
+  allPools: z.array(PoolCheckPoolSchema).optional(),
+  registrationFee: BigIntStringSchema.optional(),
+  registrationFeeEth: z.string().optional(),
+  warning: z.string().optional(),
+  error: z.string().optional(),
+});
+export type PoolCheckResultValidated = z.infer<typeof PoolCheckResultSchema>;

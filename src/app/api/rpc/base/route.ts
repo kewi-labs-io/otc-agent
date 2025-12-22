@@ -7,6 +7,31 @@ import {
   RpcRequestSchema,
 } from "@/types/validation/api-schemas";
 
+// Allowed EVM RPC methods - only read operations needed by the frontend
+const ALLOWED_EVM_RPC_METHODS = [
+  "eth_chainId",
+  "eth_blockNumber",
+  "eth_getBalance",
+  "eth_getCode",
+  "eth_call",
+  "eth_estimateGas",
+  "eth_gasPrice",
+  "eth_maxPriorityFeePerGas",
+  "eth_getTransactionCount",
+  "eth_getTransactionByHash",
+  "eth_getTransactionReceipt",
+  "eth_getLogs",
+  "eth_sendRawTransaction",
+  "eth_getBlockByNumber",
+  "eth_getBlockByHash",
+] as const;
+
+type AllowedEvmMethod = (typeof ALLOWED_EVM_RPC_METHODS)[number];
+
+function isAllowedEvmMethod(method: unknown): method is AllowedEvmMethod {
+  return typeof method === "string" && ALLOWED_EVM_RPC_METHODS.includes(method as AllowedEvmMethod);
+}
+
 // Proxy RPC requests to Alchemy to keep API key server-side
 // This prevents the Alchemy API key from being exposed in the browser
 
@@ -21,7 +46,7 @@ export async function POST(request: NextRequest) {
 
   const ALCHEMY_BASE_URL = `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`;
 
-  let body;
+  let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
@@ -35,6 +60,14 @@ export async function POST(request: NextRequest) {
     return validationErrorResponse(parseResult.error, 400);
   }
   const data = parseResult.data;
+
+  // Validate method is in whitelist
+  const { method } = data;
+  if (!isAllowedEvmMethod(method)) {
+    const errorResponse = { error: `RPC method "${method}" is not allowed` };
+    const validatedError = RpcProxyErrorResponseSchema.parse(errorResponse);
+    return NextResponse.json(validatedError, { status: 403 });
+  }
 
   const response = await fetch(ALCHEMY_BASE_URL, {
     method: "POST",

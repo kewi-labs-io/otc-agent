@@ -7,7 +7,75 @@
  * - Jupiter: Solana token prices
  */
 
+import { z } from "zod";
 import type { Chain } from "@/config/chains";
+
+// Price sanity threshold: $1 billion - reject obviously manipulated prices
+const MAX_SANE_PRICE_USD = 1_000_000_000;
+
+// =============================================================================
+// Zod Schemas for External API Response Validation
+// =============================================================================
+
+// CoinGecko simple price response (native tokens and token prices)
+const CoinGeckoPriceDataSchema = z.object({
+  usd: z.number().positive("Price must be positive").optional(),
+});
+
+const CoinGeckoSimplePriceSchema = z.record(z.string(), CoinGeckoPriceDataSchema);
+
+// DeFiLlama price response
+const DeFiLlamaPriceDataSchema = z.object({
+  price: z.number().positive("Price must be positive").optional(),
+  symbol: z.string().optional(),
+  timestamp: z.number().optional(),
+  confidence: z.number().optional(),
+});
+
+const DeFiLlamaResponseSchema = z.object({
+  coins: z.record(z.string(), DeFiLlamaPriceDataSchema).optional(),
+});
+
+// Jupiter price response
+const JupiterPriceDataSchema = z.object({
+  id: z.string().optional(),
+  mintSymbol: z.string().optional(),
+  vsToken: z.string().optional(),
+  vsTokenSymbol: z.string().optional(),
+  price: z.string().optional(),
+});
+
+const JupiterResponseSchema = z.object({
+  data: z.record(z.string(), JupiterPriceDataSchema).optional(),
+  timeTaken: z.number().optional(),
+});
+
+/**
+ * Validate external API response with detailed error reporting
+ */
+function validateApiResponse<T>(schema: z.ZodSchema<T>, data: unknown, apiName: string): T {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    const errors = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    throw new Error(`Invalid ${apiName} response: ${errors}`);
+  }
+  return result.data;
+}
+
+/**
+ * Validate price is within sane bounds to detect manipulation
+ */
+function validatePriceSanity(price: number, source: string, identifier: string): void {
+  if (price > MAX_SANE_PRICE_USD) {
+    console.warn(
+      `[Price Fetcher] ${source} price for ${identifier} (${price}) exceeds sanity threshold, skipping`,
+    );
+    throw new Error(`${source} price exceeds sanity threshold`);
+  }
+  if (price <= 0) {
+    throw new Error(`${source} price must be positive`);
+  }
+}
 
 /** CoinGecko platform IDs for each chain */
 export const COINGECKO_PLATFORMS: Record<string, string> = {
@@ -69,19 +137,20 @@ export async function fetchNativePrices(
     return prices;
   }
 
-  const data = await response.json();
-
-  interface CoinGeckoPriceData {
-    usd?: number;
-  }
+  const rawData: unknown = await response.json();
+  const data = validateApiResponse(CoinGeckoSimplePriceSchema, rawData, "CoinGecko Native");
 
   for (const [coinId, priceData] of Object.entries(data)) {
     const symbolEntry = Object.entries(NATIVE_TOKEN_IDS).find(([, id]) => id === coinId);
     if (!symbolEntry) continue;
     const symbol = symbolEntry[0];
-    const priceDataTyped = priceData as CoinGeckoPriceData;
-    if (priceDataTyped.usd !== undefined && typeof priceDataTyped.usd === "number") {
-      prices[symbol] = priceDataTyped.usd;
+    if (priceData.usd !== undefined) {
+      try {
+        validatePriceSanity(priceData.usd, "CoinGecko", symbol);
+        prices[symbol] = priceData.usd;
+      } catch {
+        // Skip this price if sanity check fails
+      }
     }
   }
 
@@ -125,17 +194,19 @@ export async function fetchCoinGeckoPrices(
     return {};
   }
 
-  interface CoinGeckoTokenPriceData {
-    usd?: number;
-  }
-
-  const data = (await response.json()) as Record<string, CoinGeckoTokenPriceData>;
+  const rawData: unknown = await response.json();
+  const data = validateApiResponse(CoinGeckoSimplePriceSchema, rawData, "CoinGecko Token");
   const prices: Record<string, number> = {};
 
   for (const [address, priceData] of Object.entries(data)) {
     const usd = priceData.usd;
-    if (usd !== undefined && typeof usd === "number") {
-      prices[address.toLowerCase()] = usd;
+    if (usd !== undefined) {
+      try {
+        validatePriceSanity(usd, "CoinGecko", address);
+        prices[address.toLowerCase()] = usd;
+      } catch {
+        // Skip this price if sanity check fails
+      }
     }
   }
 
@@ -166,15 +237,8 @@ export async function fetchDeFiLlamaPrices(
     throw new Error(`DeFiLlama API error: HTTP ${response.status}`);
   }
 
-  interface DeFiLlamaPriceData {
-    price?: number;
-  }
-
-  interface DeFiLlamaResponse {
-    coins?: Record<string, DeFiLlamaPriceData>;
-  }
-
-  const data = (await response.json()) as DeFiLlamaResponse;
+  const rawData: unknown = await response.json();
+  const data = validateApiResponse(DeFiLlamaResponseSchema, rawData, "DeFiLlama");
   const prices: Record<string, number> = {};
 
   if (!data.coins) {
@@ -185,8 +249,13 @@ export async function fetchDeFiLlamaPrices(
     if (parts.length < 2) continue;
     const address = parts[1].toLowerCase();
     const price = priceData.price;
-    if (typeof price === "number" && price > 0) {
-      prices[address] = price;
+    if (price !== undefined) {
+      try {
+        validatePriceSanity(price, "DeFiLlama", address);
+        prices[address] = price;
+      } catch {
+        // Skip this price if sanity check fails
+      }
     }
   }
 
@@ -223,25 +292,23 @@ export async function fetchJupiterPrices(
       continue; // Skip this chunk, return what we have
     }
 
-    interface JupiterPriceData {
-      price?: string;
-    }
-
-    interface JupiterResponse {
-      data?: Record<string, JupiterPriceData>;
-    }
-
-    const data = (await response.json()) as JupiterResponse;
+    const rawData: unknown = await response.json();
+    const data = validateApiResponse(JupiterResponseSchema, rawData, "Jupiter");
 
     if (!data.data) {
       continue;
     }
     for (const [mint, priceData] of Object.entries(data.data)) {
       const price = priceData.price;
-      if (price && typeof price === "string") {
-        const parsedPrice = parseFloat(price);
+      if (price) {
+        const parsedPrice = Number.parseFloat(price);
         if (!Number.isNaN(parsedPrice)) {
-          allPrices[mint] = parsedPrice;
+          try {
+            validatePriceSanity(parsedPrice, "Jupiter", mint);
+            allPrices[mint] = parsedPrice;
+          } catch {
+            // Skip this price if sanity check fails
+          }
         }
       }
     }

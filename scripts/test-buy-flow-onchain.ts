@@ -79,9 +79,9 @@ function log(emoji: string, message: string, data?: Record<string, unknown>) {
 }
 
 function section(title: string) {
-  console.log("\n" + "═".repeat(70));
+  console.log(`\n${"═".repeat(70)}`);
   console.log(`  ${title}`);
-  console.log("═".repeat(70) + "\n");
+  console.log(`${"═".repeat(70)}\n`);
 }
 
 async function startAnvil(): Promise<() => void> {
@@ -609,10 +609,10 @@ async function runBuyFlowTest() {
   const expectedCommission = (requiredUsdcNeg * BigInt(commissionBps)) / 10000n;
 
   log("💰", "Commission verification:", {
-    agentBalanceBefore: formatUnits(agentBalanceBefore, 6) + " USDC",
-    agentBalanceAfter: formatUnits(agentBalanceAfter, 6) + " USDC",
-    commissionPaid: formatUnits(commissionPaid, 6) + " USDC",
-    expectedCommission: formatUnits(expectedCommission, 6) + " USDC",
+    agentBalanceBefore: `${formatUnits(agentBalanceBefore, 6)} USDC`,
+    agentBalanceAfter: `${formatUnits(agentBalanceAfter, 6)} USDC`,
+    commissionPaid: `${formatUnits(commissionPaid, 6)} USDC`,
+    expectedCommission: `${formatUnits(expectedCommission, 6)} USDC`,
     commissionCorrect: commissionPaid === expectedCommission ? "✅ YES" : "❌ NO",
   });
 

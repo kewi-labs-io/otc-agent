@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { agentRuntime } from "@/lib/agent-runtime";
 import type { OTCConsignment, Token } from "@/types";
 
@@ -23,7 +23,19 @@ async function tokenExists(tokenId: string): Promise<boolean> {
  * This endpoint removes consignments that reference tokens that don't exist.
  * Useful for cleaning up test data or fixing data integrity issues.
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
+  // Require admin authentication
+  const adminSecret = process.env.ADMIN_SECRET;
+  const authHeader = request.headers.get("authorization");
+
+  if (!adminSecret) {
+    return NextResponse.json({ error: "Admin endpoint not configured" }, { status: 503 });
+  }
+
+  if (!authHeader || authHeader !== `Bearer ${adminSecret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const runtime = await agentRuntime.getRuntime();
 
   // Get all consignment IDs
@@ -95,7 +107,19 @@ export async function POST() {
  * GET /api/admin/cleanup-orphaned
  * Check for orphaned consignments without cleaning them up
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Require admin authentication
+  const adminSecret = process.env.ADMIN_SECRET;
+  const authHeader = request.headers.get("authorization");
+
+  if (!adminSecret) {
+    return NextResponse.json({ error: "Admin endpoint not configured" }, { status: 503 });
+  }
+
+  if (!authHeader || authHeader !== `Bearer ${adminSecret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const runtime = await agentRuntime.getRuntime();
 
   // Get all consignment IDs

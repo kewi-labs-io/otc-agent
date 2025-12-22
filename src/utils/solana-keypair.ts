@@ -129,7 +129,9 @@ export function createAnchorWallet(keypair: Keypair): AnchorWallet {
       return tx;
     },
     signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]) => {
-      txs.forEach((tx) => (tx as Transaction).partialSign(keypair));
+      for (const tx of txs) {
+        (tx as Transaction).partialSign(keypair);
+      }
       return txs;
     },
   };

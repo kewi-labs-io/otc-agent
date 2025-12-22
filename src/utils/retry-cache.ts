@@ -70,10 +70,22 @@ function calculateDelay(attempt: number): number {
 }
 
 /**
- * Check if an error is retryable (rate limit, network error, etc.)
+ * Type guard to check if a caught value is an Error instance.
+ * JavaScript catch blocks can receive any value, so we need this guard.
  */
-function isRetryableError(error: unknown): boolean {
-  if (error instanceof Error) {
+function isError(value: Error | string | null | undefined): value is Error {
+  return value instanceof Error;
+}
+
+/**
+ * Check if an error is retryable (rate limit, network error, etc.)
+ * Accepts the union of common error types from catch blocks.
+ *
+ * Note: JavaScript catch blocks can receive any value (not just Error),
+ * so this function accepts the common caught value types.
+ */
+function isRetryableError(error: Error | string | null | undefined): boolean {
+  if (isError(error)) {
     const message = error.message.toLowerCase();
     // Rate limit errors
     if (message.includes("429") || message.includes("rate limit")) return true;
@@ -83,6 +95,12 @@ function isRetryableError(error: unknown): boolean {
     // RPC specific errors
     if (message.includes("too many requests")) return true;
     if (message.includes("secondary index")) return true; // Solana specific
+  }
+  // String errors (less common but possible)
+  if (typeof error === "string") {
+    const message = error.toLowerCase();
+    if (message.includes("429") || message.includes("rate limit")) return true;
+    if (message.includes("network") || message.includes("timeout")) return true;
   }
   return false;
 }
@@ -126,11 +144,14 @@ export async function withRetryAndCache<T>(
         setCache(cacheKey, result, cacheTtlMs);
       }
       return result;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
+    } catch (caughtError) {
+      // Normalize error to Error instance (caughtError can be anything thrown)
+      const errorValue = caughtError as Error | string | null | undefined;
+      lastError =
+        errorValue instanceof Error ? errorValue : new Error(String(errorValue ?? "Unknown"));
 
       // FAIL-FAST: Don't retry on non-retryable errors - throw immediately
-      if (!isRetryableError(error)) {
+      if (!isRetryableError(errorValue)) {
         throw lastError;
       }
 

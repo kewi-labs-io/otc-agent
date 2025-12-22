@@ -502,7 +502,13 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
           {withdrawTxHash && !withdrawError && (
             <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
               <div className="flex items-center gap-2 text-green-800 dark:text-green-200">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -525,6 +531,7 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"

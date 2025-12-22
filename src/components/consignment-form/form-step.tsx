@@ -706,9 +706,12 @@ export function FormStep({
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-zinc-500 mb-1 block">Max Price Volatility</label>
+                <label htmlFor="max-price-volatility" className="text-xs text-zinc-500 mb-1 block">
+                  Max Price Volatility
+                </label>
                 <div className="relative">
                   <input
+                    id="max-price-volatility"
                     type="number"
                     value={formData.maxPriceVolatilityBps / 100}
                     onChange={(e) =>
@@ -724,9 +727,12 @@ export function FormStep({
                 </div>
               </div>
               <div>
-                <label className="text-xs text-zinc-500 mb-1 block">Max Execute Time</label>
+                <label htmlFor="max-execute-time" className="text-xs text-zinc-500 mb-1 block">
+                  Max Execute Time
+                </label>
                 <div className="relative">
                   <input
+                    id="max-execute-time"
                     type="number"
                     value={formData.maxTimeToExecuteSeconds / 60}
                     onChange={(e) =>
@@ -752,8 +758,13 @@ export function FormStep({
           <div className="flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
             <div className="space-y-1">
+              {/* Using index as key is acceptable for validation error lists -
+                 errors are derived from form state and don't reorder */}
               {validationErrors.map((error, i) => (
-                <p key={i} className="text-sm text-red-600 dark:text-red-400">
+                <p
+                  key={`${error.slice(0, 30)}-${i}`}
+                  className="text-sm text-red-600 dark:text-red-400"
+                >
                   {error}
                 </p>
               ))}

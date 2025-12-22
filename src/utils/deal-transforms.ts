@@ -28,7 +28,29 @@ export interface OfferWithMetadata {
   chain: string;
 }
 
-function validateDeal(deal: DealFromAPI, type: "Solana" | "EVM"): void {
+/**
+ * Validated deal with all required fields guaranteed to be defined.
+ * This type is returned by validateDeal after runtime validation.
+ * Note: Most fields are already required in DealFromAPI via QuoteMemory,
+ * but payer is optional in DealFromAPI, so we make it required here.
+ */
+interface ValidatedDeal extends DealFromAPI {
+  // Override optional field from DealFromAPI to be required
+  payer: string;
+}
+
+/**
+ * Validated EVM deal with ethUsdPrice guaranteed.
+ */
+interface ValidatedEvmDeal extends ValidatedDeal {
+  ethUsdPrice: number;
+}
+
+/**
+ * Validates a deal has all required fields and returns typed result.
+ * Throws descriptive errors if any required field is missing.
+ */
+function validateDeal(deal: DealFromAPI, type: "Solana" | "EVM"): ValidatedDeal {
   const id = deal.quoteId || deal.offerId || "unknown";
   if (deal.lockupDays === undefined) throw new Error(`${type} deal ${id}: missing lockupDays`);
   if (!deal.offerId) throw new Error(`${type} deal ${id}: missing offerId`);
@@ -43,73 +65,85 @@ function validateDeal(deal: DealFromAPI, type: "Solana" | "EVM"): void {
     throw new Error(`${type} deal ${id}: missing priceUsdPerToken`);
   if (!deal.tokenSymbol) throw new Error(`${type} deal ${id}: missing tokenSymbol`);
   if (!deal.tokenName) throw new Error(`${type} deal ${id}: missing tokenName`);
+
+  // After validation, we can safely cast - all required fields verified above
+  return deal as ValidatedDeal;
 }
 
 export function transformSolanaDeal(deal: DealFromAPI): OfferWithMetadata {
-  validateDeal(deal, "Solana");
+  const validated = validateDeal(deal, "Solana");
 
-  const createdTs = deal.createdAt ? new Date(deal.createdAt).getTime() / 1000 : Date.now() / 1000;
+  const createdTs = validated.createdAt
+    ? new Date(validated.createdAt).getTime() / 1000
+    : Date.now() / 1000;
 
   return {
-    id: BigInt(deal.offerId!),
-    beneficiary: deal.beneficiary!,
-    tokenAmount: BigInt(Math.floor(parseFloat(deal.tokenAmount!))),
-    discountBps: BigInt(deal.discountBps!),
+    id: BigInt(validated.offerId),
+    beneficiary: validated.beneficiary,
+    tokenAmount: BigInt(Math.floor(parseFloat(validated.tokenAmount))),
+    discountBps: BigInt(validated.discountBps),
     createdAt: BigInt(Math.floor(createdTs)),
-    unlockTime: BigInt(Math.floor(createdTs + deal.lockupDays! * 86400)),
-    priceUsdPerToken: BigInt(Math.floor(deal.priceUsdPerToken! * 1e8)),
+    unlockTime: BigInt(Math.floor(createdTs + validated.lockupDays * 86400)),
+    priceUsdPerToken: BigInt(Math.floor(validated.priceUsdPerToken * 1e8)),
     ethUsdPrice: 0n,
-    currency: deal.paymentCurrency === "SOL" || deal.paymentCurrency === "ETH" ? 0 : 1,
+    currency: validated.paymentCurrency === "SOL" || validated.paymentCurrency === "ETH" ? 0 : 1,
     approved: true,
     paid: true,
     fulfilled: false,
     cancelled: false,
-    payer: deal.payer!,
-    amountPaid: BigInt(deal.paymentAmount!),
-    quoteId: deal.quoteId,
-    tokenSymbol: deal.tokenSymbol!,
-    tokenName: deal.tokenName!,
-    tokenLogoUrl: deal.tokenLogoUrl,
-    tokenId: deal.tokenId,
-    chain: deal.chain!,
+    payer: validated.payer,
+    amountPaid: BigInt(validated.paymentAmount),
+    quoteId: validated.quoteId,
+    tokenSymbol: validated.tokenSymbol,
+    tokenName: validated.tokenName,
+    tokenLogoUrl: validated.tokenLogoUrl,
+    tokenId: validated.tokenId,
+    chain: validated.chain,
   };
 }
 
 export function transformEvmDeal(deal: DealFromAPI): OfferWithMetadata {
-  validateDeal(deal, "EVM");
+  const validated = validateDeal(deal, "EVM");
 
-  const id = deal.quoteId || deal.offerId!;
-  if (deal.ethUsdPrice === undefined || deal.ethUsdPrice <= 0) {
-    throw new Error(`EVM deal ${id}: invalid ethUsdPrice ${deal.ethUsdPrice}`);
+  // Additional EVM-specific validation
+  if (validated.ethUsdPrice === undefined || validated.ethUsdPrice <= 0) {
+    throw new Error(`EVM deal ${validated.offerId}: invalid ethUsdPrice ${validated.ethUsdPrice}`);
   }
-  if (deal.priceUsdPerToken! <= 0) {
-    throw new Error(`EVM deal ${id}: invalid priceUsdPerToken ${deal.priceUsdPerToken}`);
+  if (validated.priceUsdPerToken <= 0) {
+    throw new Error(
+      `EVM deal ${validated.offerId}: invalid priceUsdPerToken ${validated.priceUsdPerToken}`,
+    );
   }
 
-  const createdTs = deal.createdAt ? new Date(deal.createdAt).getTime() / 1000 : Date.now() / 1000;
+  // After validation, ethUsdPrice is guaranteed to be a valid positive number
+  const evmDeal = validated as ValidatedEvmDeal;
+
+  const createdTs = evmDeal.createdAt
+    ? new Date(evmDeal.createdAt).getTime() / 1000
+    : Date.now() / 1000;
 
   return {
-    id: BigInt(deal.offerId!),
-    beneficiary: deal.beneficiary!,
-    tokenAmount: BigInt(Math.floor(parseFloat(deal.tokenAmount!))),
-    discountBps: BigInt(deal.discountBps!),
+    id: BigInt(evmDeal.offerId),
+    beneficiary: evmDeal.beneficiary,
+    tokenAmount: BigInt(Math.floor(parseFloat(evmDeal.tokenAmount))),
+    discountBps: BigInt(evmDeal.discountBps),
     createdAt: BigInt(Math.floor(createdTs)),
-    unlockTime: BigInt(Math.floor(createdTs + deal.lockupDays! * 86400)),
-    priceUsdPerToken: BigInt(Math.floor(deal.priceUsdPerToken! * 1e8)),
-    ethUsdPrice: BigInt(Math.floor(deal.ethUsdPrice * 1e8)),
-    currency: deal.paymentCurrency === "ETH" ? 0 : 1,
+    unlockTime: BigInt(Math.floor(createdTs + evmDeal.lockupDays * 86400)),
+    priceUsdPerToken: BigInt(Math.floor(evmDeal.priceUsdPerToken * 1e8)),
+    ethUsdPrice: BigInt(Math.floor(evmDeal.ethUsdPrice * 1e8)),
+    currency: evmDeal.paymentCurrency === "ETH" ? 0 : 1,
     approved: true,
     paid: true,
     fulfilled: false,
     cancelled: false,
-    payer: deal.payer!,
-    amountPaid: BigInt(deal.paymentAmount!),
-    quoteId: deal.quoteId,
-    tokenSymbol: deal.tokenSymbol!,
-    tokenName: deal.tokenName!,
-    tokenLogoUrl: deal.tokenLogoUrl,
-    tokenId: deal.tokenId,
-    chain: deal.chain!,
+    payer: evmDeal.payer,
+    amountPaid: BigInt(evmDeal.paymentAmount),
+    quoteId: evmDeal.quoteId,
+    tokenSymbol: evmDeal.tokenSymbol,
+    tokenName: evmDeal.tokenName,
+    tokenLogoUrl: evmDeal.tokenLogoUrl,
+    tokenId: evmDeal.tokenId,
+    chain: evmDeal.chain,
   };
 }
 
@@ -175,21 +209,22 @@ export function mergeDealsWithOffers(
   }
 
   // Add contract offers not in database (only if they have required metadata)
-  const contractOnlyOffers = contractOffers.filter((o) => {
-    if (processedOfferIds.has(o.id.toString())) return false;
-    if (!o.tokenSymbol || !o.tokenName || !o.chain) return false;
-    return o.tokenAmount > 0n && o.paid && !o.fulfilled && !o.cancelled;
-  });
+  // Filter first, then map - this ensures TypeScript knows the fields are defined
+  for (const offer of contractOffers) {
+    if (processedOfferIds.has(offer.id.toString())) continue;
+    if (!offer.tokenSymbol || !offer.tokenName || !offer.chain) continue;
+    if (offer.tokenAmount <= 0n || !offer.paid || offer.fulfilled || offer.cancelled) continue;
 
-  result.push(
-    ...contractOnlyOffers.map((o) => ({
-      ...o,
+    // At this point, tokenSymbol, tokenName, and chain are guaranteed to be defined
+    result.push({
+      ...offer,
       quoteId: undefined,
-      tokenSymbol: o.tokenSymbol!,
-      tokenName: o.tokenName!,
-      chain: o.chain!,
-    })),
-  );
+      tokenSymbol: offer.tokenSymbol,
+      tokenName: offer.tokenName,
+      chain: offer.chain,
+    });
+  }
+
   return result;
 }
 

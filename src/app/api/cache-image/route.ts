@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { head, put } from "@vercel/blob";
+import { type HeadBlobResult, head, put } from "@vercel/blob";
 import { type NextRequest, NextResponse } from "next/server";
 import { CacheImageResponseSchema } from "@/types/validation/api-schemas";
 
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   }
   const blobPath = `token-images/${urlHash}.${extension}`;
 
-  let existing;
+  let existing: HeadBlobResult | null;
   try {
     existing = await head(blobPath);
   } catch (err) {

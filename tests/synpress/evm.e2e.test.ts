@@ -172,10 +172,10 @@ test.describe("EVM Additional Scenarios", () => {
   });
 
   test("verifies on-chain contract deployment", async ({
-    context,
-    page,
-    metamaskPage,
-    extensionId,
+    _context,
+    _page,
+    _metamaskPage,
+    _extensionId,
   }) => {
     log("EVM-Contract", "Verifying contract deployment...");
 

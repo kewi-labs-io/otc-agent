@@ -5,6 +5,7 @@ import { getOtcAddress } from "@/config/contracts";
 import { getHeliusRpcUrl, getNetwork } from "@/config/env";
 import otcArtifact from "@/contracts/artifacts/contracts/OTC.sol/OTC.json";
 import { agentRuntime } from "@/lib/agent-runtime";
+import { validateCSRF } from "@/lib/csrf";
 import { walletToEntityId } from "@/lib/entityId";
 import { getChain, getRpcUrl } from "@/lib/getChain";
 import type QuoteService from "@/lib/plugin-otc-desk/services/quoteService";
@@ -18,9 +19,12 @@ import {
 } from "@/types/validation/api-schemas";
 
 export async function POST(request: NextRequest) {
+  const csrfError = validateCSRF(request);
+  if (csrfError) return csrfError;
+
   await agentRuntime.getRuntime();
 
-  let body;
+  let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
@@ -73,25 +77,34 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      await consignmentService.reserveAmount(consignmentId, body.tokenAmount);
+      if (typeof body.tokenAmount !== "string") {
+        throw new Error("tokenAmount is required and must be a string");
+      }
+      const tokenAmountForReserve: string = body.tokenAmount;
+      await consignmentService.reserveAmount(consignmentId, tokenAmountForReserve);
       if (!body.beneficiary || typeof body.beneficiary !== "string") {
         throw new Error("beneficiary is required and must be a string");
       }
+      const buyerAddressStr: string = body.beneficiary;
       if (typeof body.discountBps !== "number") {
         throw new Error("discountBps is required and must be a number");
       }
+      const discountBpsNum: number = body.discountBps;
       if (typeof body.lockupDays !== "number") {
         throw new Error("lockupDays is required and must be a number");
       }
+      const lockupDaysNum: number = body.lockupDays;
+      const offerIdStr: string | undefined =
+        typeof body.offerId === "string" ? body.offerId : undefined;
       await consignmentService.recordDeal({
         consignmentId,
         quoteId,
         tokenId,
-        buyerAddress: body.beneficiary,
-        amount: body.tokenAmount,
-        discountBps: body.discountBps,
-        lockupDays: body.lockupDays,
-        offerId: body.offerId,
+        buyerAddress: buyerAddressStr,
+        amount: tokenAmountForReserve,
+        discountBps: discountBpsNum,
+        lockupDays: lockupDaysNum,
+        offerId: offerIdStr,
       });
     }
 
@@ -136,7 +149,7 @@ export async function POST(request: NextRequest) {
     const quote = await quoteService.getQuoteByQuoteId(quoteId);
 
     // Update beneficiary AND entityId if provided (for Solana wallets)
-    if (beneficiaryOverride) {
+    if (beneficiaryOverride && typeof beneficiaryOverride === "string") {
       const normalizedBeneficiary = beneficiaryOverride.toLowerCase();
       if (quote.beneficiary !== normalizedBeneficiary) {
         console.log("[DealCompletion] Updating beneficiary and entityId:", {
@@ -509,6 +522,8 @@ export async function POST(request: NextRequest) {
       throw new Error("blockNumber is required for updateQuoteExecution");
     }
 
+    const lockupDaysValue: number | undefined =
+      typeof body.lockupDays === "number" ? body.lockupDays : undefined;
     const updated = await quoteService.updateQuoteExecution(quoteId, {
       tokenAmount: tokenAmountStr,
       totalUsd,
@@ -520,7 +535,7 @@ export async function POST(request: NextRequest) {
       transactionHash,
       blockNumber,
       priceUsdPerToken,
-      lockupDays: body.lockupDays,
+      lockupDays: lockupDaysValue,
     });
 
     // VERIFY status changed
@@ -587,7 +602,8 @@ export async function POST(request: NextRequest) {
     const shareData = await DealCompletionService.generateShareData(quoteId);
 
     // platform is optional - default to "general" if not provided
-    const platform = body.platform?.trim() || "general";
+    const platform =
+      typeof body.platform === "string" ? body.platform.trim() || "general" : "general";
     console.log("[Deal Completion] Deal shared", {
       quoteId,
       platform,

@@ -391,10 +391,11 @@ export function TokenSelectionStep({
                 <ExternalLink className="w-3 h-3" />
                 Token found by address (not in your wallet)
               </p>
-              <div
+              <button
+                type="button"
                 onClick={() => handleTokenClick(searchedToken)}
                 onMouseEnter={() => handleTokenHover(searchedToken)}
-                className="p-3 rounded-lg bg-brand-500/5 border border-brand-500/20 cursor-pointer transition-all hover:bg-brand-500/10"
+                className="w-full text-left p-3 rounded-lg bg-brand-500/5 border border-brand-500/20 cursor-pointer transition-all hover:bg-brand-500/10"
               >
                 <div className="flex items-center gap-3">
                   <TokenAvatar
@@ -419,6 +420,7 @@ export function TokenSelectionStep({
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
+                    aria-hidden="true"
                   >
                     <path
                       strokeLinecap="round"
@@ -428,7 +430,7 @@ export function TokenSelectionStep({
                     />
                   </svg>
                 </div>
-              </div>
+              </button>
             </div>
           ) : addressSearchError ? (
             <p className="text-sm text-brand-600 dark:text-brand-400 text-center py-6">
@@ -469,12 +471,13 @@ export function TokenSelectionStep({
         )}
         {!loading &&
           filteredTokens.map((token) => (
-            <div
+            <button
+              type="button"
               key={token.id}
               data-testid={`token-row-${token.id}`}
               onClick={() => handleTokenClick(token)}
               onMouseEnter={() => handleTokenHover(token)}
-              className={`p-3 rounded-lg cursor-pointer transition-all ${
+              className={`w-full text-left p-3 rounded-lg cursor-pointer transition-all ${
                 formData.tokenId === token.id
                   ? "bg-brand-500/10 ring-1 ring-brand-500/30"
                   : "bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -503,6 +506,7 @@ export function TokenSelectionStep({
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -512,7 +516,7 @@ export function TokenSelectionStep({
                   />
                 </svg>
               </div>
-            </div>
+            </button>
           ))}
       </div>
     </div>

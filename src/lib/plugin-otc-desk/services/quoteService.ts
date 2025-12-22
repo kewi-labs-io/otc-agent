@@ -143,6 +143,11 @@ export class QuoteService extends Service {
 
     const normalizedBeneficiary = data.beneficiary.toLowerCase();
 
+    // SECURITY: Never save a quote with an empty signature
+    if (!signature || signature.length === 0) {
+      throw new Error("Cannot save quote without signature - security violation");
+    }
+
     const quoteData: QuoteMemory = {
       id: existing ? existing.id : uuidv4(), // Keep same internal ID if updating
       quoteId,
@@ -307,6 +312,14 @@ export class QuoteService extends Service {
     },
   ): Promise<QuoteMemory> {
     const quote = await this.getQuoteByQuoteId(quoteId);
+
+    // SECURITY: Verify signature before allowing critical status changes
+    if (status === "approved" || status === "executed") {
+      if (!this.verifyQuoteSignature(quote)) {
+        throw new Error(`Quote ${quoteId} signature verification failed - possible tampering`);
+      }
+    }
+
     const now = Date.now();
 
     // Status update fields: prefer new data if provided (non-empty), else keep existing
@@ -353,6 +366,11 @@ export class QuoteService extends Service {
 
     const quote = await this.getQuoteByQuoteId(quoteId);
     console.log("[QuoteService] Current quote status:", quote.status);
+
+    // SECURITY: Verify signature before allowing quote execution
+    if (!this.verifyQuoteSignature(quote)) {
+      throw new Error(`Quote ${quoteId} signature verification failed - possible tampering`);
+    }
 
     const updatedQuote: QuoteMemory = {
       ...quote,
@@ -464,6 +482,12 @@ export class QuoteService extends Service {
   }
 
   verifyQuoteSignature(quote: QuoteMemory): boolean {
+    // SECURITY: Reject empty signatures immediately - they indicate bypassed security
+    if (!quote.signature || quote.signature.length === 0) {
+      console.error(`[QuoteService] SECURITY: Quote ${quote.quoteId} has empty signature`);
+      return false;
+    }
+
     const expectedSignature = this.generateQuoteSignature({
       quoteId: quote.quoteId,
       entityId: quote.entityId,

@@ -1748,7 +1748,7 @@ export default function FlowTestClient() {
                 ) : (
                   testState.logs.map((log, idx) => (
                     <div
-                      key={idx}
+                      key={`${log.slice(0, 50)}-${idx}`}
                       className={`py-1 ${
                         log.includes("failed") || log.includes("error")
                           ? "text-red-400"
@@ -1805,7 +1805,7 @@ export default function FlowTestClient() {
 
             {/* Manual Consignment ID Override */}
             <div className="mt-4 pt-4 border-t border-zinc-800">
-              <label className="text-sm text-zinc-500">
+              <label htmlFor="manual-consignment-id" className="text-sm text-zinc-500">
                 Manual Consignment ID (for resuming tests):
               </label>
               <div className="flex gap-2 mt-1">

@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { agentRuntime } from "@/lib/agent-runtime";
 import { validateRouteParams } from "@/lib/validation/helpers";
 import { QuoteDB } from "@/services/database";
+import type { QuoteMemory } from "@/types";
 import {
   ExecutedQuoteResponseSchema,
   GetExecutedQuoteParamsSchema,
@@ -16,7 +17,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const { id: quoteId } = validatedParams;
 
   // Lookup quote - handle not found at boundary
-  let quote;
+  let quote: QuoteMemory;
   try {
     quote = await QuoteDB.getQuoteByQuoteId(quoteId);
   } catch (err) {

@@ -38,12 +38,17 @@ export class PriceProtectionService {
     const marketData = await MarketDataDB.getMarketData(tokenId);
 
     let currentPrice: number;
-    if (!marketData || Date.now() - marketData.lastUpdated > 300000) {
+    // Reduced stale threshold from 5 min to 60 sec to prevent arbitrage during volatility
+    if (!marketData || Date.now() - marketData.lastUpdated > 60_000) {
       currentPrice = await this.marketDataService.fetchTokenPrice(tokenAddress, chain);
     } else {
       currentPrice = marketData.priceUsd;
     }
 
+    // Prevent division by zero vulnerability
+    if (priceAtQuote <= 0) {
+      throw new Error("priceAtQuote must be positive");
+    }
     const deviation = Math.abs(currentPrice - priceAtQuote);
     const deviationBps = Math.floor((deviation / priceAtQuote) * 10000);
 

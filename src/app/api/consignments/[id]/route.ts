@@ -1,18 +1,18 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { invalidateConsignmentCache } from "@/lib/cache";
 import { validationErrorResponse } from "@/lib/validation/helpers";
+import { getAuthHeaders, verifyWalletOwnership } from "@/lib/wallet-auth";
 import { ConsignmentService } from "@/services/consignmentService";
 import { ConsignmentDB } from "@/services/database";
+import type { OTCConsignment } from "@/types";
 import {
   ConsignmentByIdResponseSchema,
-  DeleteConsignmentQuerySchema,
   DeleteConsignmentResponseSchema,
   GetConsignmentByIdParamsSchema,
   GetConsignmentByIdQuerySchema,
   UpdateConsignmentRequestSchema,
   UpdateConsignmentResponseSchema,
 } from "@/types/validation/api-schemas";
-import { AddressSchema } from "@/types/validation/schemas";
 import { isConsignmentOwner, sanitizeConsignmentForBuyer } from "@/utils/consignment-sanitizer";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const callerAddress = queryCallerAddress || headerCallerAddress || undefined;
 
   // Consignment lookup - return 404 if not found
-  let consignment;
+  let consignment: OTCConsignment;
   try {
     consignment = await ConsignmentDB.getConsignment(id);
   } catch (err) {
@@ -81,7 +81,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   const { id } = paramsResult.data;
 
-  let body;
+  let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
@@ -97,8 +97,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   const { callerAddress, ...updates } = data;
 
-  // Consignment lookup - return 404 if not found
-  let consignment;
+  // Consignment lookup - return 404 if not found (needed for chain detection)
+  let consignment: OTCConsignment;
   try {
     consignment = await ConsignmentDB.getConsignment(id);
   } catch (err) {
@@ -111,9 +111,26 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     throw err;
   }
 
+  // Verify wallet ownership via cryptographic signature
+  const auth = getAuthHeaders(request);
+  if (!auth) {
+    return NextResponse.json(
+      {
+        error:
+          "Authorization headers required (x-wallet-address, x-wallet-signature, x-auth-message, x-auth-timestamp)",
+      },
+      { status: 401 },
+    );
+  }
+
+  const verification = await verifyWalletOwnership(auth, consignment.chain);
+  if (!verification.valid) {
+    return NextResponse.json({ error: verification.error }, { status: 401 });
+  }
+
   // Normalize addresses for comparison (Solana is case-sensitive, EVM is not)
   const normalizedCaller =
-    consignment.chain === "solana" ? callerAddress : callerAddress.toLowerCase();
+    consignment.chain === "solana" ? auth.address : auth.address.toLowerCase();
   const normalizedConsigner =
     consignment.chain === "solana"
       ? consignment.consignerAddress
@@ -121,7 +138,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   if (normalizedCaller !== normalizedConsigner) {
     return NextResponse.json(
-      { error: "Only the consigner can update this consignment" },
+      { error: "Not authorized - you are not the consigner" },
       { status: 403 },
     );
   }
@@ -151,42 +168,8 @@ export async function DELETE(
 
   const { id } = paramsResult.data;
 
-  const { searchParams } = new URL(request.url);
-
-  // Validate query params - return 400 on invalid params
-  const queryResult = DeleteConsignmentQuerySchema.safeParse(
-    Object.fromEntries(searchParams.entries()),
-  );
-  if (!queryResult.success) {
-    return validationErrorResponse(queryResult.error, 400);
-  }
-  const query = queryResult.data;
-
-  // callerAddress can come from query param or header (check both)
-  const queryCallerAddress =
-    typeof query.callerAddress === "string" && query.callerAddress.trim() !== ""
-      ? query.callerAddress
-      : undefined;
-  const headerCallerAddress = request.headers.get("x-caller-address");
-  const callerAddress = queryCallerAddress || headerCallerAddress || undefined;
-
-  if (!callerAddress) {
-    return NextResponse.json(
-      {
-        error: "callerAddress query param or x-caller-address header is required",
-      },
-      { status: 400 },
-    );
-  }
-
-  // Validate address format - return 400 if invalid
-  const addressResult = AddressSchema.safeParse(callerAddress);
-  if (!addressResult.success) {
-    return validationErrorResponse(addressResult.error, 400);
-  }
-
-  // Consignment lookup - return 404 if not found
-  let consignment;
+  // Consignment lookup - return 404 if not found (needed for chain detection)
+  let consignment: OTCConsignment;
   try {
     consignment = await ConsignmentDB.getConsignment(id);
   } catch (err) {
@@ -199,9 +182,26 @@ export async function DELETE(
     throw err;
   }
 
+  // Verify wallet ownership via cryptographic signature
+  const auth = getAuthHeaders(request);
+  if (!auth) {
+    return NextResponse.json(
+      {
+        error:
+          "Authorization headers required (x-wallet-address, x-wallet-signature, x-auth-message, x-auth-timestamp)",
+      },
+      { status: 401 },
+    );
+  }
+
+  const verification = await verifyWalletOwnership(auth, consignment.chain);
+  if (!verification.valid) {
+    return NextResponse.json({ error: verification.error }, { status: 401 });
+  }
+
   // Normalize addresses for comparison (Solana is case-sensitive, EVM is not)
   const normalizedCaller =
-    consignment.chain === "solana" ? callerAddress : callerAddress.toLowerCase();
+    consignment.chain === "solana" ? auth.address : auth.address.toLowerCase();
   const normalizedConsigner =
     consignment.chain === "solana"
       ? consignment.consignerAddress
@@ -209,7 +209,7 @@ export async function DELETE(
 
   if (normalizedCaller !== normalizedConsigner) {
     return NextResponse.json(
-      { error: "Only the consigner can withdraw this consignment" },
+      { error: "Not authorized - you are not the consigner" },
       { status: 403 },
     );
   }

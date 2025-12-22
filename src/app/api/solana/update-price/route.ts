@@ -148,7 +148,7 @@ function parseTokenRegistryPrice(data: Buffer): ParsedTokenRegistry {
 }
 
 export async function POST(request: NextRequest) {
-  let body;
+  let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {

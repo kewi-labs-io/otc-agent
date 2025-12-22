@@ -6,7 +6,7 @@
  */
 
 import crypto from "node:crypto";
-import { head, put } from "@vercel/blob";
+import { type HeadBlobResult, head, put } from "@vercel/blob";
 
 /**
  * Check if blob storage is available (BLOB_READ_WRITE_TOKEN is set)
@@ -144,7 +144,7 @@ export async function checkBlobCache(imageUrl: string): Promise<string | null> {
   if (!isBlobStorageAvailable()) return null;
 
   const blobPath = getBlobPath(imageUrl);
-  let existing;
+  let existing: HeadBlobResult | null;
   try {
     existing = await head(blobPath);
   } catch (err) {
@@ -188,7 +188,7 @@ export async function cacheImageToBlob(imageUrl: string | null): Promise<string 
 
   // Check if already cached in blob storage
   // FAIL-FAST: head() throws if blob doesn't exist - handle "not found" explicitly
-  let existing;
+  let existing: HeadBlobResult | null;
   try {
     existing = await head(blobPath);
   } catch (err) {

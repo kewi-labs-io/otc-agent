@@ -193,9 +193,9 @@ function log(category: string, message: string, data?: Record<string, unknown>) 
 }
 
 function section(title: string) {
-  console.log("\n" + "═".repeat(70));
+  console.log(`\n${"═".repeat(70)}`);
   console.log(`  ${title}`);
-  console.log("═".repeat(70) + "\n");
+  console.log(`${"═".repeat(70)}\n`);
 }
 
 // =============================================================================
@@ -275,10 +275,10 @@ async function runE2ETests() {
   log("INFO", "Contract State:", {
     nextConsignmentId: nextConsignmentId.toString(),
     nextOfferId: nextOfferId.toString(),
-    minUsdAmount: formatUnits(minUsdAmount, 8) + " USD",
+    minUsdAmount: `${formatUnits(minUsdAmount, 8)} USD`,
     agent,
     requiredApprovals: requiredApprovals.toString(),
-    gasDeposit: formatEther(gasDeposit) + " ETH",
+    gasDeposit: `${formatEther(gasDeposit)} ETH`,
   });
 
   // =============================================================================
@@ -321,7 +321,7 @@ async function runE2ETests() {
 
       log("INFO", `Consignment #${i}:`, {
         isNegotiable: isNegotiable ? "YES (Agent Required)" : "NO (P2P Auto-Approved)",
-        consigner: consigner.slice(0, 10) + "...",
+        consigner: `${consigner.slice(0, 10)}...`,
         totalAmount: formatEther(totalAmount),
         remainingAmount: formatEther(remainingAmount),
         isActive: isActive ? "ACTIVE" : "INACTIVE",
@@ -329,7 +329,7 @@ async function runE2ETests() {
           ? {}
           : {
               fixedDiscountBps: `${Number(fixedDiscountBps) / 100}%`,
-              fixedLockupDays: fixedLockupDays.toString() + " days",
+              fixedLockupDays: `${fixedLockupDays.toString()} days`,
             }),
       });
     }

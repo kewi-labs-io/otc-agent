@@ -299,7 +299,7 @@ async function main() {
     consignmentId: Number(offer[0]),
     beneficiary: offer[1],
     tokenAmount: Number(offer[2]) / 10 ** TOKEN_DECIMALS,
-    discountBps: Number(offer[3]) / 100 + "%",
+    discountBps: `${Number(offer[3]) / 100}%`,
     approved: offer[8],
     paid: offer[9],
     fulfilled: offer[10],

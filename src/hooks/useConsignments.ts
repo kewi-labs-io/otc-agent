@@ -12,10 +12,14 @@ async function fetchConsignments(filters: ConsignmentsFilters): Promise<OTCConsi
   const params = new URLSearchParams();
 
   if (filters.chains && Array.isArray(filters.chains)) {
-    filters.chains.forEach((chain) => params.append("chains", chain));
+    for (const chain of filters.chains) {
+      params.append("chains", chain);
+    }
   }
   if (filters.negotiableTypes && Array.isArray(filters.negotiableTypes)) {
-    filters.negotiableTypes.forEach((type) => params.append("negotiableTypes", type));
+    for (const type of filters.negotiableTypes) {
+      params.append("negotiableTypes", type);
+    }
   }
   if (filters.tokenId) params.set("tokenId", filters.tokenId);
   if (filters.consigner) params.set("consigner", filters.consigner);

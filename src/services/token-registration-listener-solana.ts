@@ -9,6 +9,32 @@ import { getHeliusRpcUrl, getNetwork } from "@/config/env";
 import type { SolanaRegistrationEvent } from "@/utils/solana-otc";
 import { TokenDB } from "./database";
 
+// Protected symbols that can only be registered from verified mint addresses
+const PROTECTED_SYMBOLS = ["USDC", "USDT", "SOL", "WSOL", "WBTC", "ETH", "BTC"];
+
+const VERIFIED_SOLANA_MINTS: Record<string, string> = {
+  USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+  SOL: "So11111111111111111111111111111111111111112",
+  WSOL: "So11111111111111111111111111111111111111112",
+};
+
+/**
+ * Check if a symbol is protected and the mint address doesn't match the verified address
+ * Returns true if the registration should be BLOCKED
+ */
+function isProtectedSymbol(symbol: string, mintAddress: string): boolean {
+  const upperSymbol = symbol.toUpperCase();
+  if (!PROTECTED_SYMBOLS.includes(upperSymbol)) {
+    return false; // Not a protected symbol, allow registration
+  }
+
+  const verifiedMint = VERIFIED_SOLANA_MINTS[upperSymbol];
+  if (!verifiedMint) return true; // Block if symbol not in verified list
+
+  return mintAddress !== verifiedMint;
+}
+
 let isListening = false;
 let connection: Connection | null = null;
 
@@ -233,6 +259,14 @@ async function registerTokenToDatabase(parsed: ParsedRegistration): Promise<void
 
   // Fetch token metadata from Metaplex
   const { symbol, name } = await fetchTokenMetadata(parsed.tokenMint);
+
+  // Security check: block impersonation of protected symbols
+  if (isProtectedSymbol(symbol, parsed.tokenMint)) {
+    console.warn(
+      `[Solana Listener] Blocked unverified ${symbol} token at ${parsed.tokenMint} - possible impersonation attempt`,
+    );
+    return;
+  }
 
   // Find pool vault addresses for PumpSwap pools
   let solVault: string | undefined;

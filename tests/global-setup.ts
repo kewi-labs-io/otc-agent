@@ -69,7 +69,7 @@ async function ensurePostgres(): Promise<void> {
     stdio: "inherit",
   });
 
-  logSetup("PostgreSQL ready on port " + POSTGRES_PORT);
+  logSetup(`PostgreSQL ready on port ${POSTGRES_PORT}`);
 }
 
 async function startAnvil(): Promise<{ process: ChildProcess; shouldStop: boolean }> {
@@ -131,7 +131,7 @@ async function startAnvil(): Promise<{ process: ChildProcess; shouldStop: boolea
     throw new Error(`Anvil started but deployer nonce is ${nonce}, expected 0`);
   }
 
-  logSetup("Anvil started successfully on port " + ANVIL_PORT);
+  logSetup(`Anvil started successfully on port ${ANVIL_PORT}`);
   return { process: anvil, shouldStop: true };
 }
 
@@ -258,7 +258,7 @@ async function startSolana(): Promise<{ pid?: number; shouldStop: boolean }> {
   const pidStr = execSync("lsof -nP -iTCP:8899 -sTCP:LISTEN -t | head -n1").toString().trim();
   const pid: number | undefined = pidStr ? Number(pidStr) : undefined;
 
-  logSetup("Solana validator ready on port " + SOLANA_PORT);
+  logSetup(`Solana validator ready on port ${SOLANA_PORT}`);
   return { pid, shouldStop: true };
 }
 

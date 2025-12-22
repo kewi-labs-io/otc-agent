@@ -95,9 +95,8 @@ describe("Mutation Hooks E2E Tests", () => {
     test("creates consignment with valid EVM data", async () => {
       if (skipIfNoServer()) return;
 
-      const tokenAddress =
-        "0x" + Math.random().toString(16).slice(2, 42).padEnd(40, "0").toLowerCase();
-      const tokenSymbol = "MUT" + Date.now().toString(36).slice(-4).toUpperCase();
+      const tokenAddress = `0x${Math.random().toString(16).slice(2, 42).padEnd(40, "0").toLowerCase()}`;
+      const tokenSymbol = `MUT${Date.now().toString(36).slice(-4).toUpperCase()}`;
 
       const { status, data } = await apiCall<{
         success: boolean;

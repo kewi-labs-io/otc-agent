@@ -11,35 +11,17 @@
  */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { parseOrThrow } from "@/lib/validation/helpers";
 import type { Chain, PoolCheckResult } from "@/types";
+import { PoolCheckResultSchema } from "@/types/validation/hook-schemas";
 import { poolKeys } from "./queryKeys";
 
 /**
- * Validate pool check response has required fields
- * Throws if validation fails
+ * Validate pool check response using Zod schema
+ * Throws with detailed error message if validation fails
  */
-function validatePoolCheckResult(data: unknown): PoolCheckResult {
-  if (typeof data !== "object" || data === null) {
-    throw new Error("Invalid pool check response: expected object");
-  }
-
-  const obj = data as Record<string, unknown>;
-
-  // Validate required fields
-  if (typeof obj.success !== "boolean") {
-    throw new Error("Invalid pool check response: missing success field");
-  }
-  if (typeof obj.tokenAddress !== "string") {
-    throw new Error("Invalid pool check response: missing tokenAddress field");
-  }
-  if (typeof obj.chain !== "string") {
-    throw new Error("Invalid pool check response: missing chain field");
-  }
-  if (typeof obj.hasPool !== "boolean") {
-    throw new Error("Invalid pool check response: missing hasPool field");
-  }
-
-  return data as PoolCheckResult;
+function validatePoolCheckResult(data: Record<string, unknown>): PoolCheckResult {
+  return parseOrThrow(PoolCheckResultSchema, data);
 }
 
 /**
@@ -54,8 +36,9 @@ async function fetchPoolCheck(address: string, chain: Chain): Promise<PoolCheckR
     throw new Error(`Pool check failed: ${response.status} ${response.statusText}`);
   }
 
-  const data = await response.json();
-  return validatePoolCheckResult(data);
+  // Validate response structure with Zod schema
+  const rawData: Record<string, unknown> = await response.json();
+  return validatePoolCheckResult(rawData);
 }
 
 /**

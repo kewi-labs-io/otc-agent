@@ -50,9 +50,15 @@ export const ChainSelector = memo(function ChainSelector({
 
   return (
     <div className="flex items-center gap-2">
-      <label className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-nowrap">Chain:</label>
+      <label
+        htmlFor="chain-selector"
+        className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-nowrap"
+      >
+        Chain:
+      </label>
       <div className="relative">
         <select
+          id="chain-selector"
           value={currentValue}
           onChange={handleChange}
           className="appearance-none rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 pl-3 pr-9 py-2 text-sm cursor-pointer"
@@ -69,6 +75,7 @@ export const ChainSelector = memo(function ChainSelector({
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>

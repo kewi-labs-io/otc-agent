@@ -796,7 +796,7 @@ describe("API Routes Integration Tests", () => {
       "returns 400 for invalid Solana address format",
       async () => {
         if (skipIfNoServer()) return;
-        const { status, data } = await fetchJson<ApiErrorResponse>(
+        const { status } = await fetchJson<ApiErrorResponse>(
           `${BASE_URL}/api/solana/update-price?tokenMint=invalid-address`,
         );
         // Invalid address will throw when creating PublicKey
@@ -1302,7 +1302,7 @@ describe("API Routes Integration Tests", () => {
       "handles very long addresses gracefully",
       async () => {
         if (skipIfNoServer()) return;
-        const longAddress = "0x" + "a".repeat(100);
+        const longAddress = `0x${"a".repeat(100)}`;
         const { status } = await fetchJson<ApiErrorResponse>(
           `${BASE_URL}/api/tokens/decimals?address=${longAddress}&chain=ethereum`,
         );

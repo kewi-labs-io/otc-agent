@@ -318,7 +318,7 @@ async function main() {
   // 2. Simulating transactions to verify they would succeed
   // =========================================================================
 
-  console.log("\n" + "═".repeat(70));
+  console.log(`\n${"═".repeat(70)}`);
   console.log("  Testing Contract Read Functions");
   console.log("═".repeat(70));
 
@@ -333,7 +333,7 @@ async function main() {
   // P2P vs Negotiable Logic Verification
   // =========================================================================
 
-  console.log("\n" + "═".repeat(70));
+  console.log(`\n${"═".repeat(70)}`);
   console.log("  P2P Auto-Approval Feature Verification");
   console.log("═".repeat(70));
 
@@ -351,7 +351,7 @@ async function main() {
   // =========================================================================
 
   if (nextConsignmentId > 1n) {
-    console.log("\n" + "═".repeat(70));
+    console.log(`\n${"═".repeat(70)}`);
     console.log("  Existing Consignment Analysis");
     console.log("═".repeat(70));
 
@@ -373,7 +373,7 @@ async function main() {
   }
 
   if (nextOfferId > 1n) {
-    console.log("\n" + "═".repeat(70));
+    console.log(`\n${"═".repeat(70)}`);
     console.log("  Existing Offer Analysis");
     console.log("═".repeat(70));
 
@@ -401,13 +401,13 @@ async function main() {
   // Summary
   // =========================================================================
 
-  console.log("\n" + "═".repeat(70));
+  console.log(`\n${"═".repeat(70)}`);
   console.log("  E2E Verification Summary");
   console.log("═".repeat(70));
 
   console.log("\n📋 Contract Deployment Status:");
-  console.log("   ✅ OTC Contract deployed at: " + OTC_ADDRESS);
-  console.log("   ✅ Owner/Agent configured: " + owner);
+  console.log(`   ✅ OTC Contract deployed at: ${OTC_ADDRESS}`);
+  console.log(`   ✅ Owner/Agent configured: ${owner}`);
   console.log("   ✅ Contract state readable");
 
   console.log("\n📋 P2P Feature Status:");
@@ -426,7 +426,7 @@ async function main() {
     console.log("\n⚠️  Low USDC balance - need USDC to fulfill offers");
   }
 
-  console.log("\n" + "═".repeat(70));
+  console.log(`\n${"═".repeat(70)}`);
   console.log("  To run a full E2E transaction test:");
   console.log("═".repeat(70));
   console.log(`

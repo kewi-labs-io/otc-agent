@@ -213,9 +213,9 @@ export const ChatMessage = memo(function ChatMessage({
 
               {isSourcesExpanded && (
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {uniqueCitations.map((citation, index) => (
+                  {uniqueCitations.map((citation) => (
                     <a
-                      key={index}
+                      key={citation.url}
                       href={citation.url}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -224,7 +224,7 @@ export const ChatMessage = memo(function ChatMessage({
                       <LinkIcon className="w-3.5 h-3.5 flex-shrink-0" />
                       <div className="flex-1 truncate">
                         <MemoizedMarkdown
-                          id={`citation-${message.id}-${index}`}
+                          id={`citation-${message.id}-${citation.url}`}
                           content={citation.title}
                           options={{
                             wrapper: "span",
@@ -259,7 +259,7 @@ export const ChatMessage = memo(function ChatMessage({
             {followUpPrompts.map((prompt: string, index: number) => (
               <button
                 type="button"
-                key={index}
+                key={`${prompt.slice(0, 30)}-${index}`}
                 onClick={() => onFollowUpClick?.(prompt)}
                 className={clsx([
                   "flex items-center justify-between",

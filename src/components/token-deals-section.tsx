@@ -67,8 +67,9 @@ export function TokenDealsSection({ token, consignments }: TokenDealsSectionProp
 
   return (
     <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
-      <div
-        className="bg-zinc-50 dark:bg-zinc-900/50 p-4 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors"
+      <button
+        type="button"
+        className="w-full text-left bg-zinc-50 dark:bg-zinc-900/50 p-4 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center justify-between">
@@ -120,6 +121,7 @@ export function TokenDealsSection({ token, consignments }: TokenDealsSectionProp
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -130,7 +132,7 @@ export function TokenDealsSection({ token, consignments }: TokenDealsSectionProp
             </svg>
           </div>
         </div>
-      </div>
+      </button>
 
       {isExpanded && (
         <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -140,9 +142,10 @@ export function TokenDealsSection({ token, consignments }: TokenDealsSectionProp
             const isNegotiable = consignment.isNegotiable;
 
             return (
-              <div
+              <button
+                type="button"
                 key={consignment.id}
-                className="p-4 hover:bg-zinc-50 dark:hover:bg-zinc-900/30 transition-colors cursor-pointer group"
+                className="w-full text-left p-4 hover:bg-zinc-50 dark:hover:bg-zinc-900/30 transition-colors cursor-pointer group"
                 onClick={() => router.push(`/token/${token.id}`)}
                 onMouseEnter={handleMouseEnter}
               >
@@ -172,6 +175,7 @@ export function TokenDealsSection({ token, consignments }: TokenDealsSectionProp
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
+                      aria-hidden="true"
                     >
                       <path
                         strokeLinecap="round"
@@ -182,7 +186,7 @@ export function TokenDealsSection({ token, consignments }: TokenDealsSectionProp
                     </svg>
                   </div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
