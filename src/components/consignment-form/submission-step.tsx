@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useCreateConsignment } from "@/hooks/mutations";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { formatTokenAmountFull } from "@/utils/format";
-import { Button } from "../button";
+import { Button } from "@/components/button";
 
 /**
  * Submission step progress tracking (local to this component)

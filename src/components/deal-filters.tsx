@@ -3,7 +3,7 @@
 import { memo, useCallback } from "react";
 import type { DealType, FiltersState } from "@/types";
 import { useRenderTracker } from "@/utils/render-tracker";
-import { ChainSelector } from "./chain-selector";
+import { ChainSelector } from "@/components/chain-selector";
 
 interface DealFiltersProps {
   filters: FiltersState;

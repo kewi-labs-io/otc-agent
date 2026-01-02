@@ -23,7 +23,7 @@ import {
   SOLANA_DESK,
   SOLANA_RPC,
 } from "@/utils/solana-otc";
-import { Button } from "./button";
+import { Button } from "@/components/button";
 
 interface ConsignmentRowProps {
   consignment: OTCConsignment;

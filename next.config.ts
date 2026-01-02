@@ -21,7 +21,7 @@ const nextConfig: NextConfig = {
   // Turbopack config with resolve aliases (doesn't inherit from webpack)
   turbopack: {
     resolveAlias: {
-      '@/*': ['./src/*'],
+      '@': path.resolve(__dirname, 'src'),
     },
     resolveExtensions: ['.tsx', '.ts', '.jsx', '.js', '.json'],
   },

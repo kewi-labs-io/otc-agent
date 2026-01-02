@@ -5,8 +5,8 @@ import { useTradingDeskConsignments } from "@/hooks/useConsignments";
 import { useTokenBatch } from "@/hooks/useTokenBatch";
 import type { Chain, OTCConsignment, Token } from "@/types";
 import { useRenderTracker } from "@/utils/render-tracker";
-import { Button } from "./button";
-import { TokenDealsSection } from "./token-deals-section";
+import { Button } from "@/components/button";
+import { TokenDealsSection } from "@/components/token-deals-section";
 
 const PAGE_SIZE = 10;
 

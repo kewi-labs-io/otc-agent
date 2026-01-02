@@ -21,7 +21,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePoolCheck } from "@/hooks/usePoolCheck";
 import { parseTokenId } from "@/utils/token-utils";
-import { Button } from "../button";
+import { Button } from "@/components/button";
 
 interface FormStepProps {
   formData: {

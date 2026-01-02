@@ -14,7 +14,7 @@ import { useTokenLookup } from "@/hooks/useTokenLookup";
 import { useRefetchWalletTokens, useWalletTokens, type WalletToken } from "@/hooks/useWalletTokens";
 import { isContractAddress, isSolanaAddress } from "@/utils/address-utils";
 import { formatRawTokenAmount, formatUsdCompact } from "@/utils/format";
-import { Button } from "../button";
+import { Button } from "@/components/button";
 
 // Token avatar component with fallback on image error
 function TokenAvatar({

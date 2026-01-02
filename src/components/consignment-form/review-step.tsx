@@ -7,7 +7,7 @@ import { useChain, useWalletConnection } from "@/contexts";
 import { usePoolCheck } from "@/hooks/usePoolCheck";
 import { formatAddress, formatTokenAmountFull } from "@/utils/format";
 import { parseTokenId } from "@/utils/token-utils";
-import { Button } from "../button";
+import { Button } from "@/components/button";
 
 interface ReviewStepProps {
   formData: {
