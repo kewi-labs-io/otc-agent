@@ -1,5 +1,5 @@
 {
-  "buildCommand": "NEXT_PUBLIC_NETWORK=mainnet NETWORK=mainnet POSTGRES_URL=placeholder_for_build bun run build:next-only",
+  "buildCommand": "NEXT_PUBLIC_NETWORK=mainnet NETWORK=mainnet bun run build:next-only",
   "crons": [
     {
       "path": "/api/cron/reconcile",
