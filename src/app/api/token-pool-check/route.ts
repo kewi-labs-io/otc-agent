@@ -3,6 +3,7 @@ import { type Abi, type Address, createPublicClient, encodePacked, http, keccak2
 import { base, bsc, mainnet } from "viem/chains";
 import { type Chain, SUPPORTED_CHAINS } from "../../../config/chains";
 import { getCurrentNetwork } from "../../../config/contracts";
+import { getAlchemyApiKey } from "../../../config/env";
 import { validationErrorResponse } from "../../../lib/validation/helpers";
 import { safeReadContract } from "../../../lib/viem-utils";
 import type { PoolCheckResult } from "../../../types";
@@ -114,14 +115,27 @@ export async function GET(request: NextRequest) {
   }
 
   const viemChain = getViemChain(chain);
-  const rpcUrl = chainConfig.rpcUrl.startsWith("/")
-    ? (() => {
-        if (!process.env.PORT) {
-          throw new Error("PORT environment variable not set for local RPC URL");
-        }
-        return `http://localhost:${process.env.PORT}${chainConfig.rpcUrl}`;
-      })()
-    : chainConfig.rpcUrl;
+  
+  // Server-side: use direct Alchemy URL instead of proxy for internal API calls
+  const alchemyKey = getAlchemyApiKey();
+  let rpcUrl: string;
+  if (chainConfig.rpcUrl.startsWith("/")) {
+    // Proxy URL - construct direct Alchemy URL based on chain
+    if (!alchemyKey) {
+      throw new Error("ALCHEMY_API_KEY not configured");
+    }
+    const alchemyUrls: Record<string, string> = {
+      ethereum: `https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+      base: `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+      bsc: `https://bnb-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+    };
+    rpcUrl = alchemyUrls[chain];
+    if (!rpcUrl) {
+      throw new Error(`No Alchemy URL configured for chain: ${chain}`);
+    }
+  } else {
+    rpcUrl = chainConfig.rpcUrl;
+  }
 
   const client = createPublicClient({
     chain: viemChain,
