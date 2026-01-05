@@ -784,7 +784,7 @@ export async function GET(request: NextRequest) {
 
   console.log(`[Solana Balances] Got metadata for ${Object.keys(metadata).length} tokens`);
 
-  // Step 3: Get prices from cache first, then fetch missing from Jupiter
+  // Step 3: Get prices from cache first, then fetch missing from Birdeye
   const mints = tokensWithBalance.map((t) => t.mint);
   const cachedPrices = await getSolanaPriceCache();
   const prices: Record<string, number> = { ...cachedPrices };
@@ -795,47 +795,53 @@ export async function GET(request: NextRequest) {
     `[Solana Balances] ${Object.keys(cachedPrices).length} prices cached, ${mintsNeedingPrices.length} need fetch`,
   );
 
-  // Jupiter price API - fetch in batches of 100
-  // Note: Jupiter v2 API now requires authentication, gracefully handle 401s
-  let jupiterAvailable = true;
-  if (mintsNeedingPrices.length > 0) {
-    for (let i = 0; i < mintsNeedingPrices.length && jupiterAvailable; i += 100) {
+  // Birdeye multi-price API - fetch in batches of 100
+  const birdeyeApiKey = process.env.BIRDEYE_API_KEY;
+  if (mintsNeedingPrices.length > 0 && birdeyeApiKey) {
+    for (let i = 0; i < mintsNeedingPrices.length; i += 100) {
       const batch = mintsNeedingPrices.slice(i, i + 100);
       try {
-        const priceResponse = await fetch(`https://api.jup.ag/price/v2?ids=${batch.join(",")}`, {
-          signal: AbortSignal.timeout(10000),
-        });
+        const priceResponse = await fetch(
+          `https://public-api.birdeye.so/defi/multi_price?list_address=${batch.join(",")}`,
+          {
+            headers: {
+              "X-API-KEY": birdeyeApiKey,
+              Accept: "application/json",
+            },
+            signal: AbortSignal.timeout(10000),
+          },
+        );
 
         if (!priceResponse.ok) {
-          // Jupiter API may require authentication (401) or be rate limited
           console.warn(
-            `[Solana Balances] Jupiter price API returned ${priceResponse.status} - continuing without prices`,
+            `[Solana Balances] Birdeye price API returned ${priceResponse.status} - continuing without prices`,
           );
-          jupiterAvailable = false;
-          continue;
+          break;
         }
 
-        interface JupiterPriceData {
-          price?: string;
+        interface BirdeyePriceData {
+          value?: number;
+          priceChange24h?: number;
         }
 
-        interface JupiterResponse {
-          data?: Record<string, JupiterPriceData>;
+        interface BirdeyeResponse {
+          success?: boolean;
+          data?: Record<string, BirdeyePriceData>;
         }
 
-        const priceData = (await priceResponse.json()) as JupiterResponse;
-        if (priceData.data) {
+        const priceData = (await priceResponse.json()) as BirdeyeResponse;
+        if (priceData.success && priceData.data) {
           for (const [mint, data] of Object.entries(priceData.data)) {
-            const price = data.price;
-            if (price) prices[mint] = parseFloat(price);
+            const price = data.value;
+            if (price && price > 0) prices[mint] = price;
           }
         }
       } catch (err) {
         // Network errors, timeouts, etc - continue without prices
         console.warn(
-          `[Solana Balances] Jupiter price fetch error: ${err instanceof Error ? err.message : String(err)}`,
+          `[Solana Balances] Birdeye price fetch error: ${err instanceof Error ? err.message : String(err)}`,
         );
-        jupiterAvailable = false;
+        break;
       }
     }
 
@@ -845,6 +851,8 @@ export async function GET(request: NextRequest) {
       const merged = { ...existing, ...prices };
       await setSolanaPriceCache(merged);
     }
+  } else if (mintsNeedingPrices.length > 0 && !birdeyeApiKey) {
+    console.warn("[Solana Balances] BIRDEYE_API_KEY not set - prices unavailable");
   }
   console.log(`[Solana Balances] Have prices for ${Object.keys(prices).length} tokens`);
 
