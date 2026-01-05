@@ -872,6 +872,15 @@ export async function GET(request: NextRequest) {
   }
   console.log(`[Solana Balances] Have prices for ${Object.keys(prices).length} tokens`);
 
+  // Check if elizaOS mint got a price (for debugging)
+  const elizaOsMint = "DuMbhu7mvQvqQHGcnikDgb4XegXJRyhUBfdU22uELiZA";
+  const elizaOsPrice = prices[elizaOsMint];
+  const elizaOsInMints = mints.includes(elizaOsMint);
+  const elizaOsInNeeding = mintsNeedingPrices.includes(elizaOsMint);
+  console.log(
+    `[Solana Balances DEBUG] elizaOS: inMints=${elizaOsInMints}, inNeedingPrices=${elizaOsInNeeding}, price=${elizaOsPrice}`,
+  );
+
   // Step 4: Check blob cache for unreliable image URLs (parallel)
   const unreliableUrls = Object.values(metadata)
     .map((m) => m.logoURI)
@@ -1009,8 +1018,23 @@ export async function GET(request: NextRequest) {
     const response = { tokens: enrichedTokens };
     const validatedResponse = SolanaBalancesResponseSchema.parse(response);
 
+    // Include debug info if requested (outside of validated schema)
+    const responseWithDebug = forceRefresh
+      ? {
+          ...validatedResponse,
+          _debug: {
+            elizaOsMint,
+            elizaOsInMints,
+            elizaOsInNeeding,
+            elizaOsPrice,
+            totalPricesFound: Object.keys(prices).length,
+            totalMintsRequested: mintsNeedingPrices.length,
+          },
+        }
+      : validatedResponse;
+
     // Cache for 60 seconds - balances can change but short cache is fine for UX
-    return NextResponse.json(validatedResponse, {
+    return NextResponse.json(responseWithDebug, {
       headers: {
         "Cache-Control": "private, s-maxage=60, stale-while-revalidate=300",
       },
