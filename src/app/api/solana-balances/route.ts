@@ -801,13 +801,15 @@ export async function GET(request: NextRequest) {
   // Birdeye multi-price API - fetch in batches of 50 (smaller batches to avoid URL length issues)
   const birdeyeApiKey = process.env.BIRDEYE_API_KEY;
   const BIRDEYE_BATCH_SIZE = 50;
+  const batchErrors: string[] = [];
   if (mintsNeedingPrices.length > 0 && birdeyeApiKey) {
     console.log(
       `[Solana Balances] Fetching prices for ${mintsNeedingPrices.length} tokens from Birdeye`,
     );
     for (let i = 0; i < mintsNeedingPrices.length; i += BIRDEYE_BATCH_SIZE) {
       const batch = mintsNeedingPrices.slice(i, i + BIRDEYE_BATCH_SIZE);
-      console.log(`[Solana Balances] Birdeye batch ${i / BIRDEYE_BATCH_SIZE + 1}: ${batch.length} mints`);
+      const batchNum = Math.floor(i / BIRDEYE_BATCH_SIZE) + 1;
+      console.log(`[Solana Balances] Birdeye batch ${batchNum}: ${batch.length} mints`);
       try {
         const priceResponse = await fetch(
           `https://public-api.birdeye.so/defi/multi_price?list_address=${batch.join(",")}`,
@@ -821,10 +823,10 @@ export async function GET(request: NextRequest) {
         );
 
         if (!priceResponse.ok) {
-          console.warn(
-            `[Solana Balances] Birdeye price API returned ${priceResponse.status} - continuing without prices`,
-          );
-          break;
+          const errMsg = `Batch ${batchNum}: HTTP ${priceResponse.status}`;
+          console.warn(`[Solana Balances] Birdeye error: ${errMsg}`);
+          batchErrors.push(errMsg);
+          continue; // Try next batch instead of breaking
         }
 
         interface BirdeyePriceData {
@@ -838,9 +840,8 @@ export async function GET(request: NextRequest) {
         }
 
         const priceData = (await priceResponse.json()) as BirdeyeResponse;
-        console.log(
-          `[Solana Balances] Birdeye returned prices for ${priceData.data ? Object.keys(priceData.data).length : 0} tokens`,
-        );
+        const returnedCount = priceData.data ? Object.keys(priceData.data).length : 0;
+        console.log(`[Solana Balances] Birdeye batch ${batchNum} returned ${returnedCount} tokens`);
         if (priceData.success && priceData.data) {
           let pricesFound = 0;
           for (const [mint, data] of Object.entries(priceData.data)) {
@@ -850,14 +851,16 @@ export async function GET(request: NextRequest) {
               pricesFound++;
             }
           }
-          console.log(`[Solana Balances] Extracted ${pricesFound} non-zero prices`);
+          console.log(`[Solana Balances] Batch ${batchNum}: extracted ${pricesFound} non-zero prices`);
+        } else if (!priceData.success) {
+          batchErrors.push(`Batch ${batchNum}: success=false`);
         }
       } catch (err) {
-        // Network errors, timeouts, etc - continue without prices
-        console.warn(
-          `[Solana Balances] Birdeye price fetch error: ${err instanceof Error ? err.message : String(err)}`,
-        );
-        break;
+        // Network errors, timeouts, etc - continue with other batches
+        const errMsg = `Batch ${batchNum}: ${err instanceof Error ? err.message : String(err)}`;
+        console.warn(`[Solana Balances] Birdeye fetch error: ${errMsg}`);
+        batchErrors.push(errMsg);
+        continue; // Try next batch instead of breaking
       }
     }
 
@@ -1029,6 +1032,7 @@ export async function GET(request: NextRequest) {
             elizaOsPrice,
             totalPricesFound: Object.keys(prices).length,
             totalMintsRequested: mintsNeedingPrices.length,
+            batchErrors: batchErrors.length > 0 ? batchErrors : undefined,
           },
         }
       : validatedResponse;
