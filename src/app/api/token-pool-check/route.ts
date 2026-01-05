@@ -56,19 +56,20 @@ function getViemChain(chain: Chain) {
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
+  try {
+    const { searchParams } = new URL(request.url);
 
-  // Validate query params - return 400 on missing/invalid params
-  const parseResult = TokenPoolCheckQuerySchema.safeParse({
-    chain: searchParams.get("chain"),
-    tokenAddress: searchParams.get("address") ?? searchParams.get("tokenAddress"),
-  });
+    // Validate query params - return 400 on missing/invalid params
+    const parseResult = TokenPoolCheckQuerySchema.safeParse({
+      chain: searchParams.get("chain"),
+      tokenAddress: searchParams.get("address") ?? searchParams.get("tokenAddress"),
+    });
 
-  if (!parseResult.success) {
-    return validationErrorResponse(parseResult.error, 400);
-  }
+    if (!parseResult.success) {
+      return validationErrorResponse(parseResult.error, 400);
+    }
 
-  const { tokenAddress, chain } = parseResult.data;
+    const { tokenAddress, chain } = parseResult.data;
 
   // Only EVM chains have pool-based registration
   if (chain === "solana") {
@@ -225,10 +226,24 @@ export async function GET(request: NextRequest) {
     result.registrationFeeEth = registrationFeeEth;
   }
 
-  const validatedResponse = TokenPoolCheckResponseSchema.parse(result);
-  return NextResponse.json(validatedResponse, {
-    headers: {
-      "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
-    },
-  });
+    const validatedResponse = TokenPoolCheckResponseSchema.parse(result);
+    return NextResponse.json(validatedResponse, {
+      headers: {
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+      },
+    });
+  } catch (error) {
+    // FAIL-FAST: Log error details for debugging
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error("[Token Pool Check API Error]", errorMessage);
+    if (errorStack) {
+      console.error("[Token Pool Check API Stack]", errorStack);
+    }
+
+    return NextResponse.json(
+      { success: false, error: errorMessage },
+      { status: 500 },
+    );
+  }
 }
