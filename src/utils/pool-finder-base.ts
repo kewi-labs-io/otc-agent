@@ -288,18 +288,37 @@ async function fetchAllPoolsInternal(tokenAddress: string, chainId: number): Pro
 
   // Determine which RPC URL to use:
   // - In browser: use relative proxy route (e.g., "/api/rpc/base")
-  // - Server-side: prepend localhost to make it a full URL
+  // - Server-side local dev: prepend localhost to make it a full URL
+  // - Server-side Vercel: use direct Alchemy URL (no PORT env on Vercel)
   const isBrowser = typeof window !== "undefined";
-  // FAIL-FAST: PORT must be configured for server-side requests
-  if (!isBrowser && !process.env.PORT) {
-    throw new Error("PORT environment variable is required for server-side RPC requests");
+  let effectiveRpcUrl: string;
+  if (config.rpcUrl.startsWith("/")) {
+    if (isBrowser) {
+      // Browser uses relative proxy route
+      effectiveRpcUrl = config.rpcUrl;
+    } else if (process.env.PORT) {
+      // Local dev server - use localhost proxy
+      effectiveRpcUrl = `http://localhost:${process.env.PORT}${config.rpcUrl}`;
+    } else {
+      // Vercel serverless - use direct Alchemy URL
+      const alchemyKey = process.env.ALCHEMY_API_KEY;
+      if (!alchemyKey) {
+        throw new Error("ALCHEMY_API_KEY not configured for server-side RPC requests");
+      }
+      const alchemyUrls: Record<number, string> = {
+        1: `https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+        8453: `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+        56: `https://bnb-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+      };
+      const alchemyUrl = alchemyUrls[chainId];
+      if (!alchemyUrl) {
+        throw new Error(`No Alchemy URL configured for chainId: ${chainId}`);
+      }
+      effectiveRpcUrl = alchemyUrl;
+    }
+  } else {
+    effectiveRpcUrl = config.rpcUrl;
   }
-  // PORT is guaranteed to exist here (checked above for server-side)
-  const port = process.env.PORT ?? "4444";
-  const baseUrl = isBrowser ? "" : `http://localhost:${port}`;
-  const effectiveRpcUrl = config.rpcUrl.startsWith("/")
-    ? `${baseUrl}${config.rpcUrl}`
-    : config.rpcUrl;
 
   if (process.env.NODE_ENV === "development") {
     console.log(`[PoolFinder] Using RPC: ${effectiveRpcUrl} (browser: ${isBrowser})`);
@@ -824,21 +843,25 @@ async function findGeckoTerminalV4Pools(
     console.log(`[PoolFinder] Checking GeckoTerminal for V4 pools on ${network}: ${tokenAddress}`);
   }
 
-  // Use backend proxy to avoid CSP violations
-  // In browser: use relative URL. Server-side: prepend localhost
+  // Use backend proxy in browser (CSP), call GeckoTerminal directly on server
   const isBrowser = typeof window !== "undefined";
-  // FAIL-FAST: PORT must be configured for server-side requests
-  if (!isBrowser && !process.env.PORT) {
-    throw new Error("PORT environment variable is required for server-side GeckoTerminal requests");
+  let fetchUrl: string;
+  if (isBrowser) {
+    // Browser uses proxy to avoid CSP violations
+    fetchUrl = `/api/pool-prices/geckoterminal?network=${network}&token=${tokenAddress.toLowerCase()}`;
+  } else if (process.env.PORT) {
+    // Local dev server - use localhost proxy
+    fetchUrl = `http://localhost:${process.env.PORT}/api/pool-prices/geckoterminal?network=${network}&token=${tokenAddress.toLowerCase()}`;
+  } else {
+    // Vercel serverless - call GeckoTerminal directly
+    const geckoNetwork = network === "ethereum" ? "eth" : network.toLowerCase();
+    fetchUrl = `https://api.geckoterminal.com/api/v2/networks/${geckoNetwork}/tokens/${tokenAddress.toLowerCase()}/pools`;
   }
-  // PORT is guaranteed to exist here (checked above for server-side)
-  const port = process.env.PORT ?? "4444";
-  const baseUrl = isBrowser ? "" : `http://localhost:${port}`;
-  const proxyUrl = `${baseUrl}/api/pool-prices/geckoterminal?network=${network}&token=${tokenAddress.toLowerCase()}`;
 
-  const response = await fetch(proxyUrl, {
+  const response = await fetch(fetchUrl, {
     headers: {
       Accept: "application/json",
+      "User-Agent": "OTC-Desk/1.0",
     },
   });
 
@@ -956,19 +979,22 @@ async function findGeckoTerminalAllPools(
     console.log(`[PoolFinder] Checking GeckoTerminal for ALL pools on ${network}: ${tokenAddress}`);
   }
 
+  // Use backend proxy in browser (CSP), call GeckoTerminal directly on server
   const isBrowser = typeof window !== "undefined";
-  // FAIL-FAST: PORT must be configured for server-side requests
-  if (!isBrowser && !process.env.PORT) {
-    throw new Error("PORT environment variable is required for server-side GeckoTerminal requests");
+  let geckoFetchUrl: string;
+  if (isBrowser) {
+    geckoFetchUrl = `/api/pool-prices/geckoterminal?network=${network}&token=${tokenAddress.toLowerCase()}`;
+  } else if (process.env.PORT) {
+    geckoFetchUrl = `http://localhost:${process.env.PORT}/api/pool-prices/geckoterminal?network=${network}&token=${tokenAddress.toLowerCase()}`;
+  } else {
+    const geckoNetwork = network === "ethereum" ? "eth" : network.toLowerCase();
+    geckoFetchUrl = `https://api.geckoterminal.com/api/v2/networks/${geckoNetwork}/tokens/${tokenAddress.toLowerCase()}/pools`;
   }
-  // PORT is guaranteed to exist here (checked above for server-side)
-  const port = process.env.PORT ?? "4444";
-  const baseUrl = isBrowser ? "" : `http://localhost:${port}`;
-  const proxyUrl = `${baseUrl}/api/pool-prices/geckoterminal?network=${network}&token=${tokenAddress.toLowerCase()}`;
 
-  const response = await fetch(proxyUrl, {
+  const response = await fetch(geckoFetchUrl, {
     headers: {
       Accept: "application/json",
+      "User-Agent": "OTC-Desk/1.0",
     },
   });
 
@@ -1156,22 +1182,37 @@ async function findCoinGeckoPrice(
     console.log(`[PoolFinder] Checking CoinGecko for price: ${tokenAddress}`);
   }
 
-  // Use backend proxy to avoid CSP violations
-  // In browser: use relative URL. Server-side: prepend localhost
+  // Use backend proxy in browser (CSP), call CoinGecko directly on server
   const isBrowser = typeof window !== "undefined";
-  // FAIL-FAST: PORT must be configured for server-side requests
-  if (!isBrowser && !process.env.PORT) {
-    throw new Error("PORT environment variable is required for server-side CoinGecko requests");
+  let coingeckoFetchUrl: string;
+  const coingeckoHeaders: HeadersInit = {
+    Accept: "application/json",
+    "User-Agent": "OTC-Desk/1.0",
+  };
+  if (isBrowser) {
+    coingeckoFetchUrl = `/api/pool-prices/coingecko-token?network=${network}&token=${tokenAddress.toLowerCase()}`;
+  } else if (process.env.PORT) {
+    coingeckoFetchUrl = `http://localhost:${process.env.PORT}/api/pool-prices/coingecko-token?network=${network}&token=${tokenAddress.toLowerCase()}`;
+  } else {
+    // Vercel serverless - call CoinGecko directly
+    const platformMap: Record<string, string> = {
+      ethereum: "ethereum",
+      eth: "ethereum",
+      base: "base",
+      bsc: "binance-smart-chain",
+    };
+    const platformId = platformMap[network.toLowerCase()] ?? "base";
+    const apiKey = process.env.COINGECKO_API_KEY;
+    coingeckoFetchUrl = apiKey
+      ? `https://pro-api.coingecko.com/api/v3/coins/${platformId}/contract/${tokenAddress.toLowerCase()}`
+      : `https://api.coingecko.com/api/v3/coins/${platformId}/contract/${tokenAddress.toLowerCase()}`;
+    if (apiKey) {
+      coingeckoHeaders["X-Cg-Pro-Api-Key"] = apiKey;
+    }
   }
-  // PORT is guaranteed to exist here (checked above for server-side)
-  const port = process.env.PORT ?? "4444";
-  const baseUrl = isBrowser ? "" : `http://localhost:${port}`;
-  const proxyUrl = `${baseUrl}/api/pool-prices/coingecko-token?network=${network}&token=${tokenAddress.toLowerCase()}`;
 
-  const response = await fetch(proxyUrl, {
-    headers: {
-      Accept: "application/json",
-    },
+  const response = await fetch(coingeckoFetchUrl, {
+    headers: coingeckoHeaders,
   });
 
   if (!response.ok) {
