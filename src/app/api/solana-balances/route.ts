@@ -801,8 +801,12 @@ export async function GET(request: NextRequest) {
   // Birdeye multi-price API - fetch in batches of 100
   const birdeyeApiKey = process.env.BIRDEYE_API_KEY;
   if (mintsNeedingPrices.length > 0 && birdeyeApiKey) {
+    console.log(
+      `[Solana Balances] Fetching prices for ${mintsNeedingPrices.length} tokens from Birdeye`,
+    );
     for (let i = 0; i < mintsNeedingPrices.length; i += 100) {
       const batch = mintsNeedingPrices.slice(i, i + 100);
+      console.log(`[Solana Balances] Birdeye batch ${i / 100 + 1}: ${batch.length} mints`);
       try {
         const priceResponse = await fetch(
           `https://public-api.birdeye.so/defi/multi_price?list_address=${batch.join(",")}`,
@@ -833,11 +837,19 @@ export async function GET(request: NextRequest) {
         }
 
         const priceData = (await priceResponse.json()) as BirdeyeResponse;
+        console.log(
+          `[Solana Balances] Birdeye returned prices for ${priceData.data ? Object.keys(priceData.data).length : 0} tokens`,
+        );
         if (priceData.success && priceData.data) {
+          let pricesFound = 0;
           for (const [mint, data] of Object.entries(priceData.data)) {
             const price = data.value;
-            if (price && price > 0) prices[mint] = price;
+            if (price && price > 0) {
+              prices[mint] = price;
+              pricesFound++;
+            }
           }
+          console.log(`[Solana Balances] Extracted ${pricesFound} non-zero prices`);
         }
       } catch (err) {
         // Network errors, timeouts, etc - continue without prices
