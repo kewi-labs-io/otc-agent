@@ -832,6 +832,7 @@ export async function GET(request: NextRequest) {
         interface BirdeyePriceData {
           value?: number;
           priceChange24h?: number;
+          updateUnixTime?: number;
         }
 
         interface BirdeyeResponse {
@@ -842,16 +843,31 @@ export async function GET(request: NextRequest) {
         const priceData = (await priceResponse.json()) as BirdeyeResponse;
         const returnedCount = priceData.data ? Object.keys(priceData.data).length : 0;
         console.log(`[Solana Balances] Birdeye batch ${batchNum} returned ${returnedCount} tokens`);
+        
+        // Only accept prices updated within the last 24 hours to filter stale data
+        const MAX_PRICE_AGE_SECONDS = 24 * 60 * 60; // 24 hours
+        const nowUnix = Math.floor(Date.now() / 1000);
+        
         if (priceData.success && priceData.data) {
           let pricesFound = 0;
+          let staleCount = 0;
           for (const [mint, data] of Object.entries(priceData.data)) {
             // Birdeye returns null for tokens without price data
             if (data && typeof data.value === "number" && data.value > 0) {
+              // Check if price is stale (older than 24 hours)
+              const updateTime = data.updateUnixTime ?? 0;
+              const ageSeconds = nowUnix - updateTime;
+              if (ageSeconds > MAX_PRICE_AGE_SECONDS) {
+                staleCount++;
+                continue; // Skip stale prices
+              }
               prices[mint] = data.value;
               pricesFound++;
             }
           }
-          console.log(`[Solana Balances] Batch ${batchNum}: extracted ${pricesFound} non-zero prices`);
+          console.log(
+            `[Solana Balances] Batch ${batchNum}: ${pricesFound} fresh prices, ${staleCount} stale (>24h old)`,
+          );
         } else if (!priceData.success) {
           batchErrors.push(`Batch ${batchNum}: success=false`);
         }
