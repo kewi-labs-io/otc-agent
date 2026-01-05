@@ -782,40 +782,55 @@ export async function GET(request: NextRequest) {
   );
 
   // Jupiter price API - fetch in batches of 100
+  // Note: Jupiter v2 API now requires authentication, gracefully handle 401s
+  let jupiterAvailable = true;
   if (mintsNeedingPrices.length > 0) {
-    for (let i = 0; i < mintsNeedingPrices.length; i += 100) {
+    for (let i = 0; i < mintsNeedingPrices.length && jupiterAvailable; i += 100) {
       const batch = mintsNeedingPrices.slice(i, i + 100);
-      const priceResponse = await fetch(`https://api.jup.ag/price/v2?ids=${batch.join(",")}`, {
-        signal: AbortSignal.timeout(10000),
-      });
+      try {
+        const priceResponse = await fetch(`https://api.jup.ag/price/v2?ids=${batch.join(",")}`, {
+          signal: AbortSignal.timeout(10000),
+        });
 
-      if (!priceResponse.ok) {
-        throw new Error(`Jupiter price fetch failed: ${priceResponse.status}`);
-      }
+        if (!priceResponse.ok) {
+          // Jupiter API may require authentication (401) or be rate limited
+          console.warn(
+            `[Solana Balances] Jupiter price API returned ${priceResponse.status} - continuing without prices`,
+          );
+          jupiterAvailable = false;
+          continue;
+        }
 
-      interface JupiterPriceData {
-        price?: string;
-      }
+        interface JupiterPriceData {
+          price?: string;
+        }
 
-      interface JupiterResponse {
-        data?: Record<string, JupiterPriceData>;
-      }
+        interface JupiterResponse {
+          data?: Record<string, JupiterPriceData>;
+        }
 
-      const priceData = (await priceResponse.json()) as JupiterResponse;
-      if (!priceData.data) {
-        throw new Error("Jupiter price response missing data");
-      }
-
-      for (const [mint, data] of Object.entries(priceData.data)) {
-        const price = data.price;
-        if (price) prices[mint] = parseFloat(price);
+        const priceData = (await priceResponse.json()) as JupiterResponse;
+        if (priceData.data) {
+          for (const [mint, data] of Object.entries(priceData.data)) {
+            const price = data.price;
+            if (price) prices[mint] = parseFloat(price);
+          }
+        }
+      } catch (err) {
+        // Network errors, timeouts, etc - continue without prices
+        console.warn(
+          `[Solana Balances] Jupiter price fetch error: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        jupiterAvailable = false;
       }
     }
 
-    // Update bulk price cache (merge with existing to handle concurrent requests)
-    const existing = await getSolanaPriceCache();
-    const merged = { ...existing, ...prices };
-    await setSolanaPriceCache(merged);
+    // Update bulk price cache if we got any prices
+    if (Object.keys(prices).length > Object.keys(cachedPrices).length) {
+      const existing = await getSolanaPriceCache();
+      const merged = { ...existing, ...prices };
+      await setSolanaPriceCache(merged);
+    }
   }
   console.log(`[Solana Balances] Have prices for ${Object.keys(prices).length} tokens`);
 
