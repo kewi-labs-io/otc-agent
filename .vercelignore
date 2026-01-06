@@ -2,7 +2,8 @@
 *.log
 
 # Solana program (not needed for web deployment)
-solana/
+# Use explicit path to avoid matching src/app/api/solana/
+/solana/
 
 # Contracts build output (keep source/artifacts in src/contracts/)
 contracts/out/
