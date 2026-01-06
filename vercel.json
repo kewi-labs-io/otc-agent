@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/poll-token-registrations",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/update-solana-prices",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

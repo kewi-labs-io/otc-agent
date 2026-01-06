@@ -1484,26 +1484,27 @@ export function AcceptQuoteModal({
         );
       }
 
-      if (priceData.updated) {
-        console.log(
-          `✅ Price updated: $${priceData.oldPrice} → $${priceData.newPrice} (method: ${priceData.method})`,
-        );
-      } else if (priceData.price && priceData.price > 0) {
-        console.log(`✅ Price available: $${priceData.price}`);
-      } else if (priceData.stale) {
+      // IMPORTANT: Check stale FIRST - if on-chain price couldn't be updated, we can't proceed
+      // even if we have a price from pool data
+      if (priceData.stale) {
         // Price was fetched but couldn't be written on-chain
         // price is optional - use "?" if not available
         const priceDisplay = typeof priceData.price === "number" ? priceData.price.toFixed(8) : "?";
         // reason is optional - use empty string if not provided
         const reasonText =
           typeof priceData.reason === "string" && priceData.reason.trim() !== ""
-            ? priceData.reason
+            ? priceData.reason + " "
             : "";
         throw new Error(
-          `Token price ($${priceDisplay}) could not be set on-chain. ` +
-            reasonText +
-            "Please contact support to configure pricing.",
+          `Token price ($${priceDisplay}) could not be set on-chain. ${reasonText}` +
+            "The SOLANA_PRIVATE_KEY must be the desk owner to update prices for non-PumpSwap pools.",
         );
+      } else if (priceData.updated) {
+        console.log(
+          `✅ Price updated: $${priceData.oldPrice} → $${priceData.newPrice} (method: ${priceData.method})`,
+        );
+      } else if (priceData.price && priceData.price > 0) {
+        console.log(`✅ Price available: $${priceData.price}`);
       }
 
       // Validate we have a consignment address for Solana
