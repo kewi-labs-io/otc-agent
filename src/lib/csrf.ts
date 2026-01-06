@@ -20,11 +20,22 @@ export function validateCSRF(request: NextRequest): NextResponse | null {
 
   // Get allowed origins from environment
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
+  
+  // Build list of allowed origins
+  // Include localhost, VERCEL_URL, and custom domains
   const allowedOrigins = [
+    // Local development
     "http://localhost:4444",
     "http://127.0.0.1:4444",
+    // Vercel preview URLs
     appUrl ? `https://${appUrl}` : null,
     appUrl,
+    // Production custom domains
+    "https://tradingdesk.fun",
+    "https://www.tradingdesk.fun",
+    "https://otc-agent.vercel.app",
+    // Additional custom origins from environment
+    ...(process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()) || []),
   ].filter(Boolean) as string[];
 
   // Check origin
