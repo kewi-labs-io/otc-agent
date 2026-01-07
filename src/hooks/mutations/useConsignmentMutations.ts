@@ -72,6 +72,8 @@ interface CreateConsignmentResponse {
 interface WithdrawConsignmentInput {
   consignmentId: string;
   callerAddress: string;
+  // Wallet auth for API authentication (required in non-local environments)
+  walletAuth?: WalletAuthHeaders;
 }
 
 /**
@@ -139,9 +141,20 @@ async function createConsignment(input: CreateConsignmentInput): Promise<OTCCons
  * Withdraw a consignment (mark as withdrawn in DB)
  */
 async function withdrawConsignment(input: WithdrawConsignmentInput): Promise<void> {
+  // Build headers with wallet auth if provided
+  const headers: Record<string, string> = {};
+
+  // Add wallet authentication headers for API authorization
+  if (input.walletAuth) {
+    headers["x-wallet-address"] = input.walletAuth.address;
+    headers["x-wallet-signature"] = input.walletAuth.signature;
+    headers["x-auth-message"] = input.walletAuth.message;
+    headers["x-auth-timestamp"] = input.walletAuth.timestamp;
+  }
+
   const response = await fetch(
     `/api/consignments/${encodeURIComponent(input.consignmentId)}?callerAddress=${encodeURIComponent(input.callerAddress)}`,
-    { method: "DELETE" },
+    { method: "DELETE", headers },
   );
 
   if (!response.ok) {

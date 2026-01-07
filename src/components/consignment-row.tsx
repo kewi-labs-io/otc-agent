@@ -13,6 +13,7 @@ import { useWalletConnection } from "../contexts";
 import { useOTC } from "../hooks/contracts/useOTC";
 import { useSolanaWithdrawConsignment, useWithdrawConsignment } from "../hooks/mutations";
 import { useToken } from "../hooks/useToken";
+import { useWalletAuth } from "../hooks/useWalletAuth";
 import type { OTCConsignment } from "../services/database";
 // Shared Solana OTC utilities
 import { formatRawTokenAmount } from "../utils/format";
@@ -47,6 +48,9 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
   // Mutation hooks for withdrawal operations
   const solanaWithdrawMutation = useSolanaWithdrawConsignment();
   const evmWithdrawMutation = useWithdrawConsignment();
+  
+  // Wallet auth for API authentication
+  const { getAuthHeaders } = useWalletAuth();
 
   // Check chain compatibility for withdrawal
   const consignmentChain = consignment.chain as Chain;
@@ -339,9 +343,12 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
 
         // Update database status after successful on-chain withdrawal
         // Uses mutation for automatic cache invalidation
+        // Get wallet auth headers for API authentication
+        const walletAuth = await getAuthHeaders();
         await evmWithdrawMutation.mutateAsync({
           consignmentId: consignment.id,
           callerAddress: solanaPublicKey,
+          walletAuth,
         });
 
         setIsWithdrawn(true);
@@ -424,9 +431,12 @@ export function ConsignmentRow({ consignment, onUpdate }: ConsignmentRowProps) {
         if (!address) {
           throw new Error("EVM wallet address is undefined - this should never happen");
         }
+        // Get wallet auth headers for API authentication
+        const walletAuth = await getAuthHeaders();
         await evmWithdrawMutation.mutateAsync({
           consignmentId: consignment.id,
           callerAddress: address,
+          walletAuth,
         });
 
         setIsWithdrawn(true);
