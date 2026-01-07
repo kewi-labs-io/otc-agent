@@ -1,5 +1,3 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import * as anchor from "@coral-xyz/anchor";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
 import {
@@ -26,6 +24,8 @@ import {
 } from "viem";
 import { type PrivateKeyAccount, privateKeyToAccount } from "viem/accounts";
 import { getOtcAddress, getSolanaConfig } from "../../../../config/contracts";
+// Import bundled IDL - do not read from filesystem (fails on Vercel)
+import solanaIdlJson from "../../../../contracts/solana-otc.idl.json";
 import {
   getAlchemyApiKey,
   getEvmPrivateKey,
@@ -102,32 +102,32 @@ export async function POST(request: NextRequest) {
   const csrfError = validateCSRF(request);
   if (csrfError) return csrfError;
 
-  return await handleApproval(request);
+  try {
+    return await handleApproval(request);
+  } catch (error) {
+    // FAIL-FAST: Log full error details for debugging
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error("[Approve API] Unhandled error:", errorMessage);
+    if (errorStack) {
+      console.error("[Approve API] Stack:", errorStack);
+    }
+
+    // Return structured error response so client can display the actual error
+    return NextResponse.json(
+      {
+        error: errorMessage,
+        success: false,
+      },
+      { status: 500 },
+    );
+  }
 }
 
 async function handleApproval(request: NextRequest) {
-  // FAIL-FAST: Contract address must be configured
-  const resolveOtcAddress = async (): Promise<Address> => {
-    return getOtcAddress() as Address;
-  };
-
-  const OTC_ADDRESS = await resolveOtcAddress();
-
   // Check if we're running on local Anvil (use impersonation)
   const network = getNetwork();
   const isLocalNetwork = network === "local";
-
-  // Only use EVM_PRIVATE_KEY in production, not on local Anvil
-  const evmKey = isLocalNetwork ? undefined : getEvmPrivateKey();
-  if (evmKey && !/^0x[0-9a-fA-F]{64}$/.test(evmKey)) {
-    throw new Error(
-      "EVM_PRIVATE_KEY has invalid format - must be 64 hex characters with 0x prefix",
-    );
-  }
-  const EVM_PRIVATE_KEY = evmKey ? (evmKey as `0x${string}`) : undefined;
-  if (isLocalNetwork) {
-    console.log("[Approve API] Local network detected, using impersonation");
-  }
 
   // Content-Type header is required for JSON parsing
   const contentType = request.headers.get("content-type");
@@ -231,9 +231,8 @@ async function handleApproval(request: NextRequest) {
 
     const connection = new Connection(SOLANA_RPC, "confirmed");
 
-    // Load owner/approver keypair from environment or fallback to id.json
-    const idlPath = path.join(process.cwd(), "solana/otc-program/target/idl/otc.json");
-    const idl = JSON.parse(await fs.readFile(idlPath, "utf8"));
+    // Use bundled IDL (works on Vercel - filesystem paths fail in serverless)
+    const idl = solanaIdlJson;
 
     let approverKeypair: InstanceType<typeof Keypair>;
     const solanaPrivateKey = process.env.SOLANA_MAINNET_PRIVATE_KEY;
@@ -529,6 +528,22 @@ async function handleApproval(request: NextRequest) {
   }
 
   console.log("[Approve API] ENTERING EVM approval path (chainType was:", chainType, ")");
+
+  // FAIL-FAST: Contract address must be configured (EVM only)
+  const resolveOtcAddress = async (): Promise<Address> => {
+    return getOtcAddress() as Address;
+  };
+  const OTC_ADDRESS = await resolveOtcAddress();
+
+  // EVM key validation - only needed for EVM path
+  const evmKey = isLocalNetwork ? undefined : getEvmPrivateKey();
+  if (evmKey && !/^0x[0-9a-fA-F]{64}$/.test(evmKey)) {
+    throw new Error(
+      "EVM_PRIVATE_KEY has invalid format - must be 64 hex characters with 0x prefix",
+    );
+  }
+  const EVM_PRIVATE_KEY = evmKey ? (evmKey as `0x${string}`) : undefined;
+
   const chain = chainType && chainType !== "solana" ? getViemChainForType(chainType) : getChain();
 
   // For EVM approval, we need a direct RPC URL (not the proxy) to send transactions

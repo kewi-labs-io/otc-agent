@@ -1,5 +1,3 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import * as anchor from "@coral-xyz/anchor";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
 import { Connection, PublicKey } from "@solana/web3.js";
@@ -13,6 +11,8 @@ import {
 } from "../../../../types/validation/api-schemas";
 import { createAnchorWallet, loadDeskKeypair } from "../../../../utils/solana-keypair";
 import { getTokenProgramId } from "../../../../utils/solana-otc";
+// Import bundled IDL - do not read from filesystem (fails on Vercel)
+import idlJson from "../../../../contracts/solana-otc.idl.json";
 
 export async function POST(request: NextRequest) {
   let body: Record<string, unknown>;
@@ -62,9 +62,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Desk keypair mismatch" }, { status: 500 });
   }
 
-  // Load IDL
-  const idlPath = path.join(process.cwd(), "solana/otc-program/target/idl/otc.json");
-  const idl = JSON.parse(await fs.readFile(idlPath, "utf8"));
+  // Use bundled IDL (works on Vercel - filesystem paths fail in serverless)
+  const idl = idlJson;
 
   const connection = new Connection(SOLANA_RPC, "confirmed");
 

@@ -1,5 +1,3 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import * as anchor from "@coral-xyz/anchor";
 import { Connection, PublicKey, Transaction } from "@solana/web3.js";
 import { type NextRequest, NextResponse } from "next/server";
@@ -11,6 +9,8 @@ import {
   SolanaWithdrawConsignmentResponseSchema,
 } from "../../../../types/validation/api-schemas";
 import { createAnchorWallet, loadDeskKeypair } from "../../../../utils/solana-keypair";
+// Import bundled IDL - do not read from filesystem (fails on Vercel)
+import idlJson from "../../../../contracts/solana-otc.idl.json";
 
 export async function POST(request: NextRequest) {
   let body: Record<string, unknown>;
@@ -50,9 +50,8 @@ export async function POST(request: NextRequest) {
   console.log("[Withdraw Consignment API] Loaded desk keypair:", deskKeypair.publicKey.toBase58());
   const desk = new PublicKey(SOLANA_DESK);
 
-  // Load IDL
-  const idlPath = path.join(process.cwd(), "solana/otc-program/target/idl/otc.json");
-  const idl = JSON.parse(await fs.readFile(idlPath, "utf8"));
+  // Use bundled IDL (works on Vercel - filesystem paths fail in serverless)
+  const idl = idlJson;
 
   // Deserialize the signed transaction from the client
   const transaction = Transaction.from(Buffer.from(signedTransaction, "base64"));
