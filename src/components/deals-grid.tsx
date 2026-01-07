@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useTradingDeskConsignments } from "../hooks/useConsignments";
+import { useLazySolanaPriceUpdate } from "../hooks/useLazySolanaPriceUpdate";
 import { useTokenBatch } from "../hooks/useTokenBatch";
 import type { Chain, OTCConsignment, Token } from "../types";
 import { useRenderTracker } from "../utils/render-tracker";
@@ -119,6 +120,18 @@ export function DealsGrid({ filters, searchQuery = "" }: DealsGridProps) {
     isLoading: isLoadingTokens,
     error: tokensError,
   } = useTokenBatch(tokenIds);
+
+  // Extract Solana token contract addresses for lazy price updates
+  const solanaMints = useMemo(() => {
+    if (!tokensData) return [];
+    return Object.values(tokensData)
+      .filter((token) => token.chain === "solana" && token.contractAddress)
+      .map((token) => token.contractAddress);
+  }, [tokensData]);
+
+  // Lazy-load Solana on-chain prices in background (stale-while-revalidate)
+  // This ensures prices are fresh by the time user clicks to buy
+  useLazySolanaPriceUpdate(solanaMints);
 
   // Filter token groups by search query (memoized)
   const filteredGroups = useMemo(() => {

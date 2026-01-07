@@ -35,6 +35,7 @@ import type {
   TransactionError,
 } from "../types";
 import { getExplorerTxUrl } from "../utils/format";
+import { triggerLazyPriceUpdate } from "../hooks/useLazySolanaPriceUpdate";
 // Shared Solana OTC utilities
 import {
   createSolanaConnection,
@@ -608,6 +609,15 @@ export function AcceptQuoteModal({
       });
     }
   }, [isOpen, initialTokenAmount, isSolanaToken, quoteChain]);
+
+  // Trigger lazy price update when modal opens for Solana tokens
+  // This gives a head start on the background update while user reviews terms
+  useEffect(() => {
+    if (isOpen && isSolanaToken && initialQuote.tokenAddress) {
+      console.log("[AcceptQuote] Triggering lazy price update for:", initialQuote.tokenAddress);
+      triggerLazyPriceUpdate(initialQuote.tokenAddress);
+    }
+  }, [isOpen, isSolanaToken, initialQuote.tokenAddress]);
 
   // Clamp token amount when consignment data loads and reveals a lower max
   useEffect(() => {
@@ -1454,82 +1464,21 @@ export function AcceptQuoteModal({
       const tokenRegistryPda = deriveTokenRegistryPda(desk, tokenMintPk, program.programId);
       console.log("Token registry PDA:", tokenRegistryPda.toString());
 
-      // CRITICAL: Ensure token has a price set on-chain before creating offer
-      // Without this, the Solana program will reject with "NoPrice" error
-      console.log("Ensuring token price is set before offer...");
-      const priceRes = await fetch("/api/solana/update-price", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tokenMint: tokenMintAddress,
-          forceUpdate: true,
-        }),
-      });
-      const priceData = await priceRes.json();
-
-      console.log("[AcceptQuote] Price update response:", priceData);
-
-      if (!priceRes.ok) {
-        // If we have a price but couldn't update on-chain, show detailed error
-        const poolInfo = priceData.pool ? ` (found pool: ${priceData.pool.slice(0, 8)}...)` : "";
-        const priceInfo = priceData.priceUsd ? ` Price: $${priceData.priceUsd.toFixed(8)}` : "";
-        // error message is optional - use default if not provided
-        const errorMsg =
-          typeof priceData.error === "string" && priceData.error.trim() !== ""
-            ? priceData.error
-            : "Price update failed";
-        throw new Error(
-          `${errorMsg}${poolInfo}${priceInfo}. ` +
-            "Token may need to be registered with pool type and address on the OTC desk.",
-        );
-      }
-
-      // IMPORTANT: Check stale FIRST - if on-chain price couldn't be updated, we can't proceed
-      // even if we have a price from pool data
-      if (priceData.stale) {
-        // Price was fetched but couldn't be written on-chain
-        // price is optional - use "?" if not available
-        const priceDisplay = typeof priceData.price === "number" ? priceData.price.toFixed(8) : "?";
-        // reason is optional - use empty string if not provided
-        const reasonText =
-          typeof priceData.reason === "string" && priceData.reason.trim() !== ""
-            ? priceData.reason + " "
-            : "";
-        throw new Error(
-          `Token price ($${priceDisplay}) could not be set on-chain. ${reasonText}` +
-            "The SOLANA_PRIVATE_KEY must be the desk owner to update prices for non-PumpSwap pools.",
-        );
-      } else if (priceData.updated) {
-        console.log(
-          `✅ Price updated: $${priceData.oldPrice} → $${priceData.newPrice} (method: ${priceData.method})`,
-        );
-      } else if (priceData.price && priceData.price > 0) {
-        console.log(`✅ Price available: $${priceData.price}`);
-      }
-
       // Validate we have a consignment address for Solana
       // Use ref to get latest value, avoiding stale closure issues
       const currentContractConsignmentId = contractConsignmentIdRef.current;
-      console.log(
-        `[AcceptQuote] At transaction time, contractConsignmentId: ${currentContractConsignmentId}`,
-      );
       if (!initialQuote.tokenChain) throw new Error("Quote missing tokenChain");
       if (!initialQuote.tokenSymbol) throw new Error("Quote missing tokenSymbol");
-      console.log(`[AcceptQuote] Quote data:`, {
-        consignmentId: initialQuote.consignmentId, // Optional field
-        tokenAddress: initialQuote.tokenAddress, // Optional field
-        tokenSymbol: initialQuote.tokenSymbol, // Required field
-        tokenChain: initialQuote.tokenChain, // Required field
-      });
       if (!currentContractConsignmentId) {
         throw new Error(
           "No consignment available for this token. Please ensure the seller has deposited tokens to the OTC desk.",
         );
       }
-
-      // Fetch consignment's numeric ID from on-chain account
       const consignmentPubkey = new SolPubkey(currentContractConsignmentId);
-      console.log(`[AcceptQuote] Fetching consignment account: ${currentContractConsignmentId}`);
+
+      // OPTIMIZATION: Run price check and consignment fetch in parallel
+      // Price check is fast (GET), only update if stale (slow POST)
+      console.log("[AcceptQuote] Checking price freshness and fetching consignment in parallel...");
 
       interface ConsignmentAccountProgram {
         consignment: {
@@ -1537,11 +1486,71 @@ export function AcceptQuoteModal({
         };
       }
 
-      const consignmentAccount = await (
-        program.account as ConsignmentAccountProgram
-      ).consignment.fetch(consignmentPubkey);
+      const [priceCheckRes, consignmentAccount] = await Promise.all([
+        // Fast price check (GET) - no on-chain transaction
+        fetch(
+          `/api/solana/update-price?tokenMint=${encodeURIComponent(tokenMintAddress)}`,
+        ).then((r) => r.json()),
+        // Fetch consignment account in parallel
+        (program.account as ConsignmentAccountProgram).consignment.fetch(consignmentPubkey),
+      ]);
+
       const consignmentId = new anchor.BN(consignmentAccount.id.toString());
       console.log(`[AcceptQuote] Consignment numeric ID: ${consignmentId.toString()}`);
+
+      // Check if price needs updating (only triggers slow on-chain tx if stale)
+      let priceData = priceCheckRes;
+      console.log("[AcceptQuote] Price check response:", priceData);
+
+      if (priceData.isStale || !priceData.price || priceData.price <= 0) {
+        // Price is stale or missing - need to update on-chain (slow path)
+        console.log("[AcceptQuote] Price is stale/missing, triggering on-chain update...");
+        const priceRes = await fetch("/api/solana/update-price", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tokenMint: tokenMintAddress,
+            forceUpdate: true,
+          }),
+        });
+        priceData = await priceRes.json();
+        console.log("[AcceptQuote] Price update response:", priceData);
+
+        if (!priceRes.ok) {
+          const poolInfo = priceData.pool ? ` (found pool: ${priceData.pool.slice(0, 8)}...)` : "";
+          const priceInfo = priceData.priceUsd ? ` Price: $${priceData.priceUsd.toFixed(8)}` : "";
+          const errorMsg =
+            typeof priceData.error === "string" && priceData.error.trim() !== ""
+              ? priceData.error
+              : "Price update failed";
+          throw new Error(
+            `${errorMsg}${poolInfo}${priceInfo}. ` +
+              "Token may need to be registered with pool type and address on the OTC desk.",
+          );
+        }
+
+        if (priceData.stale) {
+          const priceDisplay =
+            typeof priceData.price === "number" ? priceData.price.toFixed(8) : "?";
+          const reasonText =
+            typeof priceData.reason === "string" && priceData.reason.trim() !== ""
+              ? priceData.reason + " "
+              : "";
+          throw new Error(
+            `Token price ($${priceDisplay}) could not be set on-chain. ${reasonText}` +
+              "The SOLANA_PRIVATE_KEY must be the desk owner to update prices for non-PumpSwap pools.",
+          );
+        }
+
+        if (priceData.updated) {
+          console.log(
+            `✅ Price updated: $${priceData.oldPrice} → $${priceData.newPrice} (method: ${priceData.method})`,
+          );
+        }
+      } else {
+        // Price is fresh - skip on-chain update (fast path)
+        console.log(`✅ Price is fresh: $${priceData.price} (age: ${priceData.priceAge}s)`);
+      }
 
       // Get agent commission from quote (0 for P2P, 25-150 for negotiated)
       const agentCommissionBps =

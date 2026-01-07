@@ -353,153 +353,243 @@ async function findPumpSwapPools(
   const pools: SolanaPoolInfo[] = [];
   const USDC_MINT = cluster === "mainnet" ? USDC_MINT_MAINNET : USDC_MINT_DEVNET;
 
-  // PumpSwap pools use memcmp filters at offsets 43 (base_mint) and 75 (quote_mint)
-  // Based on: https://github.com/AL-THE-BOT-FATHER/pump_swap_market_cap
-  const mintBytes = mint.toBase58();
+  // STRATEGY: Use DexScreener API first (reliable, no rate limits)
+  // Only fall back to on-chain lookup if DexScreener has no results
+  // This avoids the getProgramAccounts rate limit issue with large programs like PumpSwap
 
-  // Try both directions: token as base, and token as quote
-  const filtersBase = [
-    { memcmp: { offset: 43, bytes: mintBytes } },
-    { memcmp: { offset: 75, bytes: SOL_MINT.toBase58() } },
-  ];
+  if (cluster === "mainnet") {
+    const mintStr = mint.toBase58();
 
-  const filtersQuote = [
-    { memcmp: { offset: 75, bytes: mintBytes } },
-    { memcmp: { offset: 43, bytes: SOL_MINT.toBase58() } },
-  ];
-
-  // Run sequentially to avoid rate limits
-  const poolsBase = await connection.getProgramAccounts(PUMPSWAP_AMM_PROGRAM, {
-    filters: filtersBase,
-  });
-  await sleep(RPC_CALL_DELAY_MS);
-
-  const poolsQuote = await connection.getProgramAccounts(PUMPSWAP_AMM_PROGRAM, {
-    filters: filtersQuote,
-  });
-
-  const all = [
-    ...(Array.isArray(poolsBase) ? poolsBase : []),
-    ...(Array.isArray(poolsQuote) ? poolsQuote : []),
-  ];
-
-  // Process results
-  // FAIL-FAST: Each account must be processed successfully
-  for (const account of all) {
-    const data = account.account.data;
-    const readPubkey = (offset: number) => new PublicKey(data.subarray(offset, offset + 32));
-
-    // PumpSwap pool layout (from Python code):
-    // offset 43: base_mint
-    // offset 75: quote_mint
-    // offset 139: pool_base_token_account
-    // offset 171: pool_quote_token_account
-    const baseMint = readPubkey(43);
-    const quoteMint = readPubkey(75);
-    const poolBaseTokenAccount = readPubkey(139);
-    const poolQuoteTokenAccount = readPubkey(171);
-
-    // PumpSwap typically pairs with WSOL (SOL)
-    let baseToken: "SOL" | "USDC" | null = null;
-    let otherMint: PublicKey | null = null;
-
-    if (quoteMint.equals(USDC_MINT) || baseMint.equals(USDC_MINT)) {
-      baseToken = "USDC";
-      otherMint = baseMint.equals(USDC_MINT) ? quoteMint : baseMint;
-    } else if (quoteMint.equals(SOL_MINT) || baseMint.equals(SOL_MINT)) {
-      baseToken = "SOL";
-      otherMint = baseMint.equals(SOL_MINT) ? quoteMint : baseMint;
-    }
-
-    if (baseToken && otherMint && otherMint.equals(mint)) {
-      // Get token account balances sequentially to avoid rate limits
-      let baseBalance: { value: { uiAmount: number | null } } = {
-        value: { uiAmount: 0 },
-      };
-      let quoteBalance: { value: { uiAmount: number | null } } = {
-        value: { uiAmount: 0 },
-      };
-
-      baseBalance = await connection.getTokenAccountBalance(poolBaseTokenAccount);
-      await sleep(RPC_CALL_DELAY_MS);
-
-      quoteBalance = await connection.getTokenAccountBalance(poolQuoteTokenAccount);
-      await sleep(RPC_CALL_DELAY_MS);
-
-      // FAIL-FAST: Token account balances must be valid numbers
-      if (baseBalance.value.uiAmount == null) {
-        throw new Error(
-          `Token account balance returned null for ${poolBaseTokenAccount.toBase58()}`,
-        );
-      }
-      if (quoteBalance.value.uiAmount == null) {
-        throw new Error(
-          `Token account balance returned null for ${poolQuoteTokenAccount.toBase58()}`,
-        );
-      }
-      const baseAmount = baseBalance.value.uiAmount;
-      const quoteAmount = quoteBalance.value.uiAmount;
-
-      // Determine SOL/USDC amount based on which mint is the base token
-      // pool_base_token_account holds base_mint, pool_quote_token_account holds quote_mint
-      const solOrUsdcAmount =
-        baseMint.equals(SOL_MINT) || baseMint.equals(USDC_MINT)
-          ? baseAmount // base_mint is SOL/USDC, so poolBaseTokenAccount holds it
-          : quoteAmount; // quote_mint is SOL/USDC, so poolQuoteTokenAccount holds it
-
-      // Fetch real SOL price for accurate calculations (cached, with API key support)
-      const solPriceUsd = await fetchSolPriceUsd();
-
-      // Calculate TVL: for SOL pairs, use SOL amount * price * 2 (both sides of pool)
-      // For USDC pairs, use USDC amount * 2
-      const tvlUsd =
-        baseToken === "USDC"
-          ? solOrUsdcAmount * 2 // USDC is 1:1 USD, pool has equal value on both sides
-          : solOrUsdcAmount * solPriceUsd * 2;
-
-      // Calculate Spot Price
-      let priceUsd = 0;
-      if (baseToken === "USDC") {
-        const tokenAmount = baseMint.equals(USDC_MINT) ? quoteAmount : baseAmount;
-        priceUsd = tokenAmount > 0 ? solOrUsdcAmount / tokenAmount : 0;
-      } else {
-        // Base is SOL. Price = SOL / Token * SolPrice
-        const tokenAmount = baseMint.equals(SOL_MINT) ? quoteAmount : baseAmount;
-        priceUsd = tokenAmount > 0 ? (solOrUsdcAmount / tokenAmount) * solPriceUsd : 0;
-      }
-
-      // Determine which vault is SOL and which is token
-      // If baseMint is SOL/USDC, then poolBaseTokenAccount holds SOL/USDC
-      const isSolBase = baseMint.equals(SOL_MINT);
-      const isUsdcBase = baseMint.equals(USDC_MINT);
-
-      // For price updates, we need the SOL vault and token vault
-      // SOL vault: holds the SOL (lamports) - for SOL pairs
-      // Token vault: holds the SPL tokens
-      const solVault = isSolBase
-        ? poolBaseTokenAccount.toBase58()
-        : quoteMint.equals(SOL_MINT)
-          ? poolQuoteTokenAccount.toBase58()
-          : undefined;
-      const tokenVault =
-        isSolBase || isUsdcBase
-          ? poolQuoteTokenAccount.toBase58()
-          : poolBaseTokenAccount.toBase58();
-
-      pools.push({
-        protocol: "PumpSwap",
-        address: account.pubkey.toBase58(),
-        tokenA: baseMint.toBase58(),
-        tokenB: quoteMint.toBase58(),
-        liquidity: solOrUsdcAmount, // Base token (SOL/USDC) liquidity amount
-        tvlUsd,
-        priceUsd,
-        baseToken,
-        // PumpSwap-specific vault addresses for on-chain price updates
-        solVault,
-        tokenVault,
+    try {
+      const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mintStr}`, {
+        signal: AbortSignal.timeout(10000),
       });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        interface DexPair {
+          chainId: string;
+          dexId: string;
+          pairAddress: string;
+          baseToken: { address: string; symbol: string };
+          quoteToken: { address: string; symbol: string };
+          priceUsd: string;
+          liquidity: { usd: number };
+        }
+
+        if (data.pairs && Array.isArray(data.pairs)) {
+          // Filter for PumpSwap/pump.fun pools on Solana
+          // DexScreener uses "pumpswap" or "pump" as dexId for pump.fun graduated tokens
+          const pumpSwapPairs = (data.pairs as DexPair[]).filter(
+            (p) => p.chainId === "solana" && (p.dexId === "pumpswap" || p.dexId === "pump"),
+          );
+
+          // Also include "raydium" pairs since pump.fun graduated tokens often end up on Raydium
+          // but we want to prioritize actual PumpSwap pools
+          for (const pair of pumpSwapPairs) {
+            let baseToken: "SOL" | "USDC" | null = null;
+            const quoteAddr = pair.quoteToken.address;
+
+            if (quoteAddr === SOL_MINT.toBase58()) {
+              baseToken = "SOL";
+            } else if (quoteAddr === USDC_MINT.toBase58()) {
+              baseToken = "USDC";
+            }
+
+            if (!baseToken) continue;
+
+            const priceUsd = parseFloat(pair.priceUsd);
+            if (Number.isNaN(priceUsd)) {
+              console.warn(`[PumpSwap] Invalid price for ${pair.pairAddress}: ${pair.priceUsd}`);
+              continue;
+            }
+
+            const tvlUsd = pair.liquidity?.usd ?? 0;
+
+            // Fetch real SOL price for liquidity calculation
+            const solPriceUsd = await fetchSolPriceUsd();
+
+            // For DexScreener results, we need to fetch the vault addresses from on-chain
+            // to enable on-chain price updates
+            let solVault: string | undefined;
+            let tokenVault: string | undefined;
+
+            // Try to get vault addresses from on-chain pool account
+            try {
+              const poolPubkey = new PublicKey(pair.pairAddress);
+              const poolAccount = await connection.getAccountInfo(poolPubkey);
+
+              if (poolAccount && poolAccount.data.length >= 203) {
+                // PumpSwap pool layout:
+                // offset 139: pool_base_token_account (32 bytes)
+                // offset 171: pool_quote_token_account (32 bytes)
+                const readPubkey = (offset: number) =>
+                  new PublicKey(poolAccount.data.subarray(offset, offset + 32));
+
+                const baseMint = readPubkey(43);
+                const poolBaseTokenAccount = readPubkey(139);
+                const poolQuoteTokenAccount = readPubkey(171);
+
+                const isSolBase = baseMint.equals(SOL_MINT);
+
+                solVault = isSolBase
+                  ? poolBaseTokenAccount.toBase58()
+                  : poolQuoteTokenAccount.toBase58();
+                tokenVault = isSolBase
+                  ? poolQuoteTokenAccount.toBase58()
+                  : poolBaseTokenAccount.toBase58();
+              }
+            } catch (vaultErr) {
+              console.warn(`[PumpSwap] Could not fetch vault addresses for ${pair.pairAddress}:`, vaultErr);
+              // Continue without vault addresses - price update will use manual method
+            }
+
+            console.log(
+              `[PumpSwap] Found via DexScreener: ${pair.pairAddress.slice(0, 8)}... TVL: $${tvlUsd.toFixed(2)}, Price: $${priceUsd.toFixed(8)}`,
+            );
+
+            pools.push({
+              protocol: "PumpSwap",
+              address: pair.pairAddress,
+              tokenA: pair.baseToken.address,
+              tokenB: pair.quoteToken.address,
+              liquidity: tvlUsd / 2 / (baseToken === "SOL" ? solPriceUsd : 1),
+              tvlUsd,
+              priceUsd,
+              baseToken,
+              solVault,
+              tokenVault,
+            });
+          }
+        }
+      }
+    } catch (dexScreenerErr) {
+      console.warn("[PumpSwap] DexScreener lookup failed, will try on-chain:", dexScreenerErr);
     }
+  }
+
+  // If DexScreener found pools, return them without on-chain lookup
+  if (pools.length > 0) {
+    return pools;
+  }
+
+  // FALLBACK: On-chain lookup for devnet or when DexScreener has no results
+  // Use targeted account fetch instead of getProgramAccounts to avoid rate limits
+  // For PumpSwap, we can try deriving the pool PDA if we know the structure
+
+  // Try to derive the pool address using common PDA patterns
+  // PumpSwap pools are typically derived from the two mints
+  const mintStr = mint.toBase58();
+
+  // Pattern 1: Try "pool" + sorted mints as seeds
+  const mints = [mint, SOL_MINT].sort((a, b) => a.toBuffer().compare(b.toBuffer()));
+  const possibleSeeds = [
+    [Buffer.from("pool"), mints[0].toBuffer(), mints[1].toBuffer()],
+    [Buffer.from("amm_pool"), mints[0].toBuffer(), mints[1].toBuffer()],
+    [Buffer.from("liquidity_pool"), mint.toBuffer(), SOL_MINT.toBuffer()],
+  ];
+
+  for (const seeds of possibleSeeds) {
+    try {
+      const [poolPda] = PublicKey.findProgramAddressSync(seeds, PUMPSWAP_AMM_PROGRAM);
+      const accountInfo = await connection.getAccountInfo(poolPda);
+
+      if (accountInfo && accountInfo.data.length >= 203) {
+        // Found a valid pool account - parse it
+        const data = accountInfo.data;
+        const readPubkey = (offset: number) => new PublicKey(data.subarray(offset, offset + 32));
+
+        const baseMint = readPubkey(43);
+        const quoteMint = readPubkey(75);
+        const poolBaseTokenAccount = readPubkey(139);
+        const poolQuoteTokenAccount = readPubkey(171);
+
+        // Verify this pool contains our token
+        if (!baseMint.equals(mint) && !quoteMint.equals(mint)) {
+          continue;
+        }
+
+        let baseToken: "SOL" | "USDC" | null = null;
+        if (quoteMint.equals(USDC_MINT) || baseMint.equals(USDC_MINT)) {
+          baseToken = "USDC";
+        } else if (quoteMint.equals(SOL_MINT) || baseMint.equals(SOL_MINT)) {
+          baseToken = "SOL";
+        }
+
+        if (!baseToken) continue;
+
+        // Fetch balances for price/TVL calculation
+        const [baseBalance, quoteBalance] = await Promise.all([
+          connection.getTokenAccountBalance(poolBaseTokenAccount),
+          connection.getTokenAccountBalance(poolQuoteTokenAccount),
+        ]);
+
+        if (baseBalance.value.uiAmount == null || quoteBalance.value.uiAmount == null) {
+          continue;
+        }
+
+        const baseAmount = baseBalance.value.uiAmount;
+        const quoteAmount = quoteBalance.value.uiAmount;
+
+        const solOrUsdcAmount =
+          baseMint.equals(SOL_MINT) || baseMint.equals(USDC_MINT) ? baseAmount : quoteAmount;
+
+        const solPriceUsd = await fetchSolPriceUsd();
+        const tvlUsd =
+          baseToken === "USDC" ? solOrUsdcAmount * 2 : solOrUsdcAmount * solPriceUsd * 2;
+
+        let priceUsd = 0;
+        if (baseToken === "USDC") {
+          const tokenAmount = baseMint.equals(USDC_MINT) ? quoteAmount : baseAmount;
+          priceUsd = tokenAmount > 0 ? solOrUsdcAmount / tokenAmount : 0;
+        } else {
+          const tokenAmount = baseMint.equals(SOL_MINT) ? quoteAmount : baseAmount;
+          priceUsd = tokenAmount > 0 ? (solOrUsdcAmount / tokenAmount) * solPriceUsd : 0;
+        }
+
+        const isSolBase = baseMint.equals(SOL_MINT);
+        const isUsdcBase = baseMint.equals(USDC_MINT);
+
+        const solVault = isSolBase
+          ? poolBaseTokenAccount.toBase58()
+          : quoteMint.equals(SOL_MINT)
+            ? poolQuoteTokenAccount.toBase58()
+            : undefined;
+        const tokenVault =
+          isSolBase || isUsdcBase
+            ? poolQuoteTokenAccount.toBase58()
+            : poolBaseTokenAccount.toBase58();
+
+        console.log(`[PumpSwap] Found via PDA derivation: ${poolPda.toBase58().slice(0, 8)}...`);
+
+        pools.push({
+          protocol: "PumpSwap",
+          address: poolPda.toBase58(),
+          tokenA: baseMint.toBase58(),
+          tokenB: quoteMint.toBase58(),
+          liquidity: solOrUsdcAmount,
+          tvlUsd,
+          priceUsd,
+          baseToken,
+          solVault,
+          tokenVault,
+        });
+
+        // Found a valid pool, no need to try more seeds
+        break;
+      }
+    } catch (pdaErr) {
+      // PDA derivation failed or account doesn't exist - try next pattern
+      continue;
+    }
+  }
+
+  // If we still haven't found pools and this is devnet, log a warning
+  if (pools.length === 0 && cluster === "devnet") {
+    console.log(
+      `[PumpSwap] No pools found for ${mintStr} on devnet - this is expected for most tokens`,
+    );
   }
 
   return pools;

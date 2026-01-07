@@ -73,13 +73,32 @@ export async function getTokenProgramId(
   return TOKEN_PROGRAM_ID;
 }
 
+// IDL cache - avoid repeated fetches (IDL is static during a session)
+let cachedIdl: Idl | null = null;
+let idlFetchPromise: Promise<Idl> | null = null;
+
 /**
- * Fetch the Solana IDL from the API
+ * Fetch the Solana IDL from the API (cached in memory)
  */
 export async function fetchSolanaIdl(): Promise<Idl> {
-  const res = await fetch("/api/solana/idl");
-  if (!res.ok) throw new Error("Failed to load Solana IDL");
-  return (await res.json()) as Idl;
+  // Return cached IDL immediately if available
+  if (cachedIdl) return cachedIdl;
+
+  // Deduplicate concurrent requests
+  if (idlFetchPromise) return idlFetchPromise;
+
+  idlFetchPromise = (async () => {
+    const res = await fetch("/api/solana/idl");
+    if (!res.ok) throw new Error("Failed to load Solana IDL");
+    cachedIdl = (await res.json()) as Idl;
+    return cachedIdl;
+  })();
+
+  try {
+    return await idlFetchPromise;
+  } finally {
+    idlFetchPromise = null;
+  }
 }
 
 /**

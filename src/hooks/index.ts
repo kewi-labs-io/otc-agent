@@ -73,6 +73,12 @@ export {
   useSolBalance,
   useSplTokenBalance,
 } from "./useSolanaBalance";
+// Solana lazy price updates (stale-while-revalidate)
+export {
+  triggerLazyPriceUpdate,
+  useLazySolanaPriceUpdate,
+  useLazySolanaPriceUpdateSingle,
+} from "./useLazySolanaPriceUpdate";
 // Token data
 export {
   useInvalidateToken,
